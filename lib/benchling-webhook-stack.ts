@@ -126,7 +126,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 requestTemplates: {
                     'application/json': `{
                         "stateMachineArn": "${this.stateMachine.stateMachineArn}",
-                        "input": $input.json('$')
+                        "input": "$util.escapeJavaScript($input.json('$'))"
                     }`
                 },
                 integrationResponses: [
