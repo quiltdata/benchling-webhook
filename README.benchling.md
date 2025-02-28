@@ -59,7 +59,15 @@ path underneath that:
 - request: /event
 - workflow: /event
 
-### **Step 2: Add App To Your Tenant**
+### **Step 2: Webhook Testing**
+
+1. Go to the **"Webhook Testing"** tab.
+2. Under "**Preview**", select one of the "/event" options.
+3. Click **"Send Test"**.
+4. Confirm that the "**Test**" tab shows "Success"
+5. Verify that a package was properly created.
+
+### **Step 3: Add App To Your Tenant**
 
 1. Go back to Home (the Benchling jellyfish logo in the upper right).
 2. Go to the Tenant Admin Console (from your profile icon).
@@ -67,44 +75,3 @@ path underneath that:
 4. Select Apps under your organization (NOT from your Tenant)
 
 ---
-
-## **4. Granting the App Access to Data**
-
-By default, the new app has **no access** to data. You need to grant it permissions.
-
-1. **Navigate to the App's Access Settings**:
-   - In the app's settings, go to **"Access"**.
-2. **Assign the App to Relevant Projects or Teams**:
-   - Add the app to the projects or teams it needs to access.
-   - Follow **least privilege** principles.
-
----
-
-## **5. Testing the Webhook Integration**
-
-Before deploying, verify that the integration is working.
-
-### **Step 1: Trigger an Event**
-
-Perform an action in Benchling that corresponds to a subscribed event (e.g., create a new entry).
-
-### **Step 2: Monitor Your Webhook**
-
-- Ensure your server **receives** the POST request.
-- Validate the **JSON payload**:
-
-```json
-{
-  "event": "entry.updated",
-  "timestamp": "2024-02-18T12:34:56Z",
-  "data": {
-    "id": "etr_1234567890abcdef",
-    "schema": "Notebook Entry",
-    "modifiedBy": "user@example.com",
-    "fields": {
-      "title": "Updated Experiment",
-      "status": "Finalized"
-    }
-  }
-}
-```
