@@ -81,8 +81,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 MessageBody: {
                     'source_prefix': `s3://${this.bucket.bucketName}/${this.prefix}/`,
                     'registry': this.bucket.bucketName,
-                    'package_name': 'benchling-webhook/api_payload',
-                    'commit_message': 'Benchling webhook payload',
+                    'package_name': `${this.prefix}/`,
+                    'commit_message': `Benchling webhook payload - ${new Date().toISOString()}`,
                     'metadata.$': '$.input.metadata'
                 }
             },
