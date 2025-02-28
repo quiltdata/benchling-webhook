@@ -55,8 +55,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
             action: 'putObject',
             parameters: {
                 Bucket: this.bucket.bucketName,
-                Key: 'test/benchling-webhook/api_payload.json',
-                Body: '$'
+                Key: stepfunctions.JsonPath.stringAt('$.objectKey'),
+                Body: stepfunctions.JsonPath.stringAt('$.body')
             },
             iamResources: [this.bucket.arnForObjects('*')],
             resultPath: '$.putResult'
@@ -126,7 +126,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 requestTemplates: {
                     'application/json': `{
                         "stateMachineArn": "${this.stateMachine.stateMachineArn}",
-                        "input": "{\\\"body\\\":$input.body,\\\"objectKey\\\":\\\"test/benchling-webhook/api_payload.json\\\"}"
+                        "input": "{\\\"body\\\":$input.json('$'),\\\"objectKey\\\":\\\"test/benchling-webhook/api_payload.json\\\"}"
                     }`
                 },
                 integrationResponses: [
