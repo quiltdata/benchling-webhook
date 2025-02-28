@@ -23,12 +23,12 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
     constructor(scope: Construct, id: string, props: BenchlingWebhookStackProps) {
         super(scope, id, props);
+        this.prefix = props.prefix;
+        this.queueName = props.queueName;
 
         this.bucket = this.createS3Bucket(props.bucketName);
         this.stateMachine = this.createStateMachine();
         this.api = this.createApiGateway();
-        const { prefix, queueName } = props;
-
         this.createOutputs();
     }
 
