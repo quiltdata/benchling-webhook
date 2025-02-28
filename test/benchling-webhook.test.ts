@@ -42,24 +42,23 @@ describe('BenchlingWebhookStack', () => {
             '',
             [
               'arn:',
-              {
-                'Fn::Select': [
-                  1,
-                  {
-                    'Fn::Split': [
-                      ':',
-                      {
-                        'Fn::GetAtt': ['BenchlingWebhookStateMachine177934B3', 'Arn']
-                      }
-                    ]
-                  }
-                ]
-              }
+              { 'Ref': 'AWS::Partition' },
+              ':apigateway:',
+              { 'Ref': 'AWS::Region' },
+              ':states:action/StartExecution'
             ]
           ]
         },
         RequestTemplates: {
-          'application/json': Match.stringLikeRegexp('.*"stateMachineArn".*"input".*body.*objectKey.*')
+          'application/json': {
+            'Fn::Join': [
+              '',
+              Match.arrayWith([
+                Match.stringLikeRegexp('.*"stateMachineArn".*'),
+                Match.stringLikeRegexp('.*"input".*body.*objectKey.*')
+              ])
+            ]
+          }
         }
       }
     });
