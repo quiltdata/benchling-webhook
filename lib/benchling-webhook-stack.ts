@@ -33,11 +33,14 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
     private createStateMachine(): stepfunctions.StateMachine {
         const writeToS3Task = this.createS3WriteTask();
+        const sendToSQSTask = this.createSQSSendTask();
         
-        const definition = writeToS3Task.addCatch(new stepfunctions.Fail(this, 'FailState', {
-            cause: 'S3 Write Failed',
-            error: 'WriteError'
-        }));
+        const definition = writeToS3Task
+            .next(sendToSQSTask)
+            .addCatch(new stepfunctions.Fail(this, 'FailState', {
+                cause: 'Task Failed',
+                error: 'TaskError'
+            }));
 
         return new stepfunctions.StateMachine(this, 'BenchlingWebhookStateMachine', {
             definitionBody: stepfunctions.DefinitionBody.fromChainable(definition),
