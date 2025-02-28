@@ -7,6 +7,5 @@ new BenchlingWebhookStack(app, 'BenchlingWebhookStack', {
     bucketName: 'quilt-ernest-staging',
     environment: 'prod',
     prefix: 'test/benchling-webhook',
-    queueName: 'quilt-staging-PackagerQueue-d5NmglefXjDn',
-    queueRegion: 'us-east-1'
+    queueName: 'quilt-staging-PackagerQueue-d5NmglefXjDn'
 });
