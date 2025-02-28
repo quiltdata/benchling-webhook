@@ -19,7 +19,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             action: 'putObject',
             parameters: {
                 Bucket: bucket.bucketName,
-                Key: 'benchling_webhook_payload.json',
+                Key: 'test/benchling-webhook/api_payload.json',
                 Body: stepfunctions.JsonPath.stringAt('$')
             },
             iamResources: [bucket.arnForObjects('*')],
@@ -27,7 +27,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         // 3. Create Step Function State Machine
         const stateMachine = new stepfunctions.StateMachine(this, 'BenchlingWebhookStateMachine', {
-            definition: writeToS3Task,
+            definitionBody: stepfunctions.DefinitionBody.fromChainable(writeToS3Task),
             stateMachineType: stepfunctions.StateMachineType.STANDARD,
         });
 
