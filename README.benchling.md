@@ -22,18 +22,19 @@ Benchling requires an **app** to manage webhook subscriptions. Follow these step
 
 1. **Log in to Benchling**.
 2. **Navigate to the Developer Console**:
-   - Click on your **profile icon** (top-right corner).
+   - Click on your **profile icon** (lower-left corner).
    - Select **"Feature Settings"**.
    - Click on **"Developer Console"**.
 
 ### **Step 2: Create a New App**
 
-1. In the **"Apps"** section, click **"Create"**.
+1. In the **"Apps"** section, click **"Create app"**.
 2. Choose **"From scratch"**.
 3. Provide the following details:
-   - **App Name**: A descriptive name (e.g., `Notebook Webhook Listener`).
+   - **Name**: A short label (e.b., "entry-webhook").
    - **Description**: A brief summary of the app's purpose.
-4. Click **"Create"**.
+4. Leave it as Private, or make Public.
+5. Click **"Create"**.
 
 ---
 
@@ -43,23 +44,17 @@ Now, configure the app to send data to your webhook.
 
 ### **Step 1: Define Event Subscriptions**
 
-1. In the app's settings, go to **"Subscriptions"**.
-2. Click **"Add Subscription"**.
-3. Configure the subscription:
-   - **Delivery Method**: Select **"WEBHOOK"**.
-   - **Webhook URL**: Enter your existing webhook endpoint (e.g., `https://your-webhook-endpoint.com`).
-   - **Events**: Select relevant events, such as:
-     - `entry.created` – Triggered when a notebook entry is created.
-     - `entry.updated` – Triggered when an entry is modified.
-     - `entry.completed` – Triggered when an entry is finalized.
-4. Click **"Save"**.
+1. In the app's settings, find "Webhook URL" (under Overview -> Global Information).
+2. Click the edit icon
+3. Paste in your webhook URL.
+4. Click checkmark to save.
 
-### **Step 2: Set Up Security (Optional)**
+### **Step 2: Add App To Your Tenant**
 
-For **secure communication** between Benchling and your webhook:
-
-- **Secret Token**: Define a token in the app settings. Benchling will include this in webhook requests, allowing verification.
-- **Restrict Webhook Access**: Use firewall rules to allow only Benchling IPs.
+1. Go back to Home (the Benchling jellyfish logo in the upper right).
+2. Go to the Tenant Admin Console (from your profile icon).
+3. Select your organization.
+4. Select Apps under your organization (NOT from your Tenant)
 
 ---
 
