@@ -10,12 +10,14 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
     readonly environment: string;
+    readonly prefix: string; // New parameter
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
     private readonly bucket: s3.IBucket;
     private readonly stateMachine: stepfunctions.StateMachine;
     private readonly api: apigateway.RestApi;
+    private readonly prefix: string; // New property
 
     constructor(scope: Construct, id: string, props: BenchlingWebhookStackProps) {
         super(scope, id, props);
@@ -23,6 +25,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         this.bucket = this.createS3Bucket(props.bucketName);
         this.stateMachine = this.createStateMachine();
         this.api = this.createApiGateway();
+        this.prefix = props.prefix; // Initialize new property
 
         this.createOutputs();
     }
@@ -58,7 +61,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             action: 'putObject',
             parameters: {
                 Bucket: this.bucket.bucketName,
-                Key: 'test/benchling-webhook/api_payload.json',
+                Key: `${this.prefix}/api_payload.json`,
                 'Body.$': '$.input.metadata'
             },
             iamResources: [this.bucket.arnForObjects('*')],
@@ -76,7 +79,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             parameters: {
                 QueueUrl: queueUrl,
                 MessageBody: {
-                    'source_prefix': `s3://${this.bucket.bucketName}/test/benchling-webhook/api_payload.json`,
+                    'source_prefix': `s3://${this.bucket.bucketName}/${this.prefix}/`,
                     'registry': this.bucket.bucketName,
                     'package_name': 'benchling-webhook/api_payload',
                     'commit_message': 'Benchling webhook payload',
