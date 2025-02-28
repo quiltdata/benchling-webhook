@@ -56,7 +56,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             parameters: {
                 Bucket: this.bucket.bucketName,
                 Key: 'test/benchling-webhook/api_payload.json',
-                Body: '$'
+                'Body.$': '$'
             },
             iamResources: [this.bucket.arnForObjects('*')],
             resultPath: '$.putResult'
