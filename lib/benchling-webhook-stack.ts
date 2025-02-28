@@ -62,7 +62,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             parameters: {
                 Bucket: this.bucket.bucketName,
                 Key: `${this.prefix}/api_payload.json`,
-                'Body.$': '$.input.metadata'
+                'Body.$': '$.input'
             },
             iamResources: [this.bucket.arnForObjects('*')],
             resultPath: '$.putResult'
@@ -72,6 +72,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
     private createSQSSendTask(): tasks.CallAwsService {
         const queueUrl = 'https://sqs.us-east-1.amazonaws.com/712023778557/quilt-staging-PackagerQueue-d5NmglefXjDn';
         const queueArn = 'arn:aws:sqs:us-east-1:712023778557:quilt-staging-PackagerQueue-d5NmglefXjDn';
+        const timestamp = new Date().toISOString();
         
         return new tasks.CallAwsService(this, 'SendToSQS', {
             service: 'sqs',
@@ -82,8 +83,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
                     'source_prefix': `s3://${this.bucket.bucketName}/${this.prefix}/`,
                     'registry': this.bucket.bucketName,
                     'package_name': `${this.prefix}/`,
-                    'commit_message': `Benchling webhook payload - ${new Date().toISOString()}`,
-                    'metadata.$': '$.input.metadata'
+                    'commit_message': `Benchling webhook payload - ${timestamp}`,
+                    'metadata': `{"timestamp": ${timestamp}}`
                 }
             },
             iamResources: [queueArn],
