@@ -28,13 +28,12 @@ export class BenchlingWebhookStack extends cdk.Stack {
     }
 
     private createS3Bucket(bucketName: string): s3.IBucket {
-        return s3.Bucket.fromBucketName(this, 'XXXXXXXXXXXX', bucketName);
+        return s3.Bucket.fromBucketName(this, 'BWBucket', bucketName);
     }
 
     private createStateMachine(): stepfunctions.StateMachine {
         const writeToS3Task = this.createS3WriteTask();
         
-        // Add error handling
         const definition = writeToS3Task.addCatch(new stepfunctions.Fail(this, 'FailState', {
             cause: 'S3 Write Failed',
             error: 'WriteError'
