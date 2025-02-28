@@ -1,17 +1,79 @@
-// import * as cdk from 'aws-cdk-lib';
-// import { Template } from 'aws-cdk-lib/assertions';
-// import * as BenchlingWebhook from '../lib/benchling-webhook-stack';
+import * as cdk from 'aws-cdk-lib';
+import { Template, Match } from 'aws-cdk-lib/assertions';
+import * as BenchlingWebhook from '../lib/benchling-webhook-stack';
 
-// example test. To run these tests, uncomment this file along with the
-// example resource in lib/benchling-webhook-stack.ts
-test('SQS Queue Created', () => {
-//   const app = new cdk.App();
-//     // WHEN
-//   const stack = new BenchlingWebhook.BenchlingWebhookStack(app, 'MyTestStack');
-//     // THEN
-//   const template = Template.fromStack(stack);
+describe('BenchlingWebhookStack', () => {
+  let app: cdk.App;
+  let stack: BenchlingWebhook.BenchlingWebhookStack;
+  let template: Template;
 
-//   template.hasResourceProperties('AWS::SQS::Queue', {
-//     VisibilityTimeout: 300
-//   });
+  beforeEach(() => {
+    app = new cdk.App();
+    stack = new BenchlingWebhook.BenchlingWebhookStack(app, 'TestStack', {
+      bucketName: 'test-bucket',
+      environment: 'test'
+    });
+    template = Template.fromStack(stack);
+  });
+
+  test('creates API Gateway with correct configuration', () => {
+    template.hasResourceProperties('AWS::ApiGateway::RestApi', {
+      Name: 'BenchlingWebhookAPI'
+    });
+
+    template.hasResourceProperties('AWS::ApiGateway::Stage', {
+      StageName: 'prod',
+      LoggingLevel: 'INFO',
+      DataTraceEnabled: true
+    });
+
+    template.hasResourceProperties('AWS::ApiGateway::Method', {
+      HttpMethod: 'POST',
+      AuthorizationType: 'NONE'
+    });
+  });
+
+  test('creates Step Function with correct configuration', () => {
+    template.hasResourceProperties('AWS::StepFunctions::StateMachine', {
+      StateMachineType: 'STANDARD',
+      LoggingConfiguration: Match.objectLike({
+        Level: 'ALL'
+      })
+    });
+  });
+
+  test('creates IAM role with correct permissions', () => {
+    template.hasResourceProperties('AWS::IAM::Role', {
+      AssumeRolePolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: 'sts:AssumeRole',
+            Effect: 'Allow',
+            Principal: {
+              Service: 'apigateway.amazonaws.com'
+            }
+          })
+        ])
+      })
+    });
+
+    template.hasResourceProperties('AWS::IAM::Policy', {
+      PolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: 'states:StartExecution',
+            Effect: 'Allow'
+          })
+        ])
+      })
+    });
+  });
+
+  test('creates CloudWatch log groups', () => {
+    template.resourceCountIs('AWS::Logs::LogGroup', 2); // One for API Gateway, one for Step Functions
+  });
+
+  test('creates output for API URL', () => {
+    template.hasOutput('ApiUrl', {});
+  });
 });
