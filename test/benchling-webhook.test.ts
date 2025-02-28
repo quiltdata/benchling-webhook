@@ -11,7 +11,9 @@ describe('BenchlingWebhookStack', () => {
     app = new cdk.App();
     stack = new BenchlingWebhook.BenchlingWebhookStack(app, 'TestStack', {
       bucketName: 'test-bucket',
-      environment: 'test'
+      environment: 'test',
+      prefix: 'test/benchling-webhook',
+      queueName: 'test-queue'
     });
     template = Template.fromStack(stack);
   });

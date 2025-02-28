@@ -4,6 +4,8 @@ import { BenchlingWebhookStack } from '../lib/benchling-webhook-stack';
 
 const app = new cdk.App();
 new BenchlingWebhookStack(app, 'BenchlingWebhookStack', {
-    bucketName: process.env.BUCKET_NAME || 'quilt-ernest-staging',
-    environment: process.env.ENVIRONMENT || 'prod'
+    bucketName: process.env.BUCKET_NAME || 'my-bucket-name',
+    queueName: process.env.QUEUE_NAME || 'my-queue-name',
+    environment: process.env.STAGE || 'prod',
+    prefix: process.env.PREFIX || 'test/benchling-webhook'
 });
