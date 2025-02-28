@@ -5,41 +5,53 @@ import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
+import * as logs from 'aws-cdk-lib/aws-logs';
 
 export class BenchlingWebhookStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
 
         // 1. Reference the S3 Bucket (Assuming it already exists)
-        const bucket = s3.Bucket.fromBucketName(this, 'TargetBucket', 'quilt-ernest-staging');
+        const bucket: s3.IBucket = s3.Bucket.fromBucketName(this, 'TargetBucket', 'quilt-ernest-staging');
 
         // 2. Step Function Task to Write to S3
-        const writeToS3Task = new tasks.CallAwsService(this, 'WriteToS3', {
+        const writeToS3Task: tasks.CallAwsService = new tasks.CallAwsService(this, 'WriteToS3', {
             service: 's3',
             action: 'putObject',
             parameters: {
                 Bucket: bucket.bucketName,
                 Key: 'test/benchling-webhook/api_payload.json',
-                Body: stepfunctions.JsonPath.stringAt('$')
             },
             iamResources: [bucket.arnForObjects('*')],
         });
 
         // 3. Create Step Function State Machine
-        const stateMachine = new stepfunctions.StateMachine(this, 'BenchlingWebhookStateMachine', {
+        const stateMachine: stepfunctions.StateMachine = new stepfunctions.StateMachine(this, 'BenchlingWebhookStateMachine', {
             definitionBody: stepfunctions.DefinitionBody.fromChainable(writeToS3Task),
             stateMachineType: stepfunctions.StateMachineType.STANDARD,
         });
 
         // 4. IAM Role for API Gateway to invoke Step Function
-        const apiRole = new iam.Role(this, 'ApiGatewayStepFunctionsRole', {
+        const logGroup: logs.LogGroup = new logs.LogGroup(this, 'ApiGatewayAccessLogs');
+
+        const logRole: iam.Role = new iam.Role(this, 'ApiGatewayLogsRole', {
             assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+            managedPolicies: [
+                iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonAPIGatewayPushToCloudWatchLogs')
+            ]
+        });
+
+        const apiRole: iam.Role = new iam.Role(this, 'ApiGatewayStepFunctionsRole', {
+            assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+            managedPolicies: [
+                iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaRole')
+            ]
         });
 
         stateMachine.grantStartExecution(apiRole);
 
         // 5. Create API Gateway
-        const api = new apigateway.RestApi(this, 'BenchlingWebhookAPI', {
+        const api: apigateway.RestApi = new apigateway.RestApi(this, 'BenchlingWebhookAPI', {
             restApiName: 'BenchlingWebhookAPI',
             deployOptions: {
                 stageName: 'prod',
@@ -49,7 +61,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         });
 
         // 6. Create API Resource and Method
-        const sfnIntegration = new apigateway.AwsIntegration({
+        const sfnIntegration: apigateway.AwsIntegration = new apigateway.AwsIntegration({
             service: 'states',
             action: 'StartExecution',
             integrationHttpMethod: 'POST',
@@ -65,7 +77,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             }
         });
 
-        const resource = api.root.addResource('benchling-webhook');
+        const resource: apigateway.Resource = api.root.addResource('benchling-webhook');
         resource.addMethod('POST', sfnIntegration, {
             methodResponses: [{ statusCode: '200' }]
         });
