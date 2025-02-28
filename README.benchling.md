@@ -49,6 +49,8 @@ Now, configure the app to send data to your webhook.
 3. Paste in your webhook URL.
 4. Click checkmark to save.
 
+> NOTE: Use the top-level endpoint; Benchling will send to "/event" under that.
+
 ### **Step 2: Add App To Your Tenant**
 
 1. Go back to Home (the Benchling jellyfish logo in the upper right).
