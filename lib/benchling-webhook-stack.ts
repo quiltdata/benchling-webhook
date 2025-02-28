@@ -10,14 +10,14 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
     readonly environment: string;
-    readonly prefix: string; // New parameter
+    readonly prefix: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
     private readonly bucket: s3.IBucket;
     private readonly stateMachine: stepfunctions.StateMachine;
     private readonly api: apigateway.RestApi;
-    private readonly prefix: string; // New property
+    private readonly prefix: string;
 
     constructor(scope: Construct, id: string, props: BenchlingWebhookStackProps) {
         super(scope, id, props);
@@ -25,7 +25,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         this.bucket = this.createS3Bucket(props.bucketName);
         this.stateMachine = this.createStateMachine();
         this.api = this.createApiGateway();
-        this.prefix = props.prefix; // Initialize new property
+        this.prefix = props.prefix;
 
         this.createOutputs();
     }
@@ -62,7 +62,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             parameters: {
                 Bucket: this.bucket.bucketName,
                 Key: `${this.prefix}/api_payload.json`,
-                'Body.$': '$.input'
+                'Body.$': '$'
             },
             iamResources: [this.bucket.arnForObjects('*')],
             resultPath: '$.putResult'
@@ -100,7 +100,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             ]
         });
 
-        // Create the account-level settings for API Gateway
         new apigateway.CfnAccount(this, 'ApiGatewayAccount', {
             cloudWatchRoleArn: cloudWatchRole.roleArn
         });
@@ -136,7 +135,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com')
         });
 
-        // More specific permissions instead of using managed policy
         role.addToPolicy(new iam.PolicyStatement({
             actions: ['states:StartExecution'],
             resources: [this.stateMachine.stateMachineArn]
