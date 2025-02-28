@@ -2,17 +2,38 @@
 
 API Gateway for processing Benchling Events
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+## Configuration
+
+Create a `.env` file with the following content:
 
 ```bash
-curl -X POST https://gtju7dq18a.execute-api.us-west-1.amazonaws.com/prod/benchling-webhook \
+export CDK_DEFAULT_ACCOUNT=XXXXXXXXXXXX
+export CDK_DEFAULT_REGION=us-west-2
+export BUCKET_NAME=bucket-in-that-region
+export PREFIX=test/benchling-webhook
+export QUEUE_NAME=STACK_NAME-PackagerQueue-XXXXXXX
+export QUEUE_URL=https://sqs.$CDK_DEFAULT_REGION.amazonaws.com/$CDK_DEFAULT_ACCOUNT/$QUEUE_NAME
+```
+
+## Deployment
+
+```bash
+source .env
+npx cdk bootstrap aws://$CDK_DEFAULT_ACCOUNT/$CDK_DEFAULT_REGION
+npx cdk deploy
+```
+
+## Usage
+
+```bash
+curl -X POST $QUEUE_URL \
      -H "Content-Type: application/json" \
      -d '{
            "message": "Hello from Benchling webhook!",
            "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
          }'
-aws s3 cp s3://quilt-ernest-staging/test/benchling-webhook/api_payload.json -
-open https://nightly.quilttest.com/b/quilt-ernest-staging/tree/test/benchling-webhook/api_payload.json
+aws s3 cp s3://$BUCKET_NAME/$PREFIX$/api_payload.json -
+open https://$QUILT_CATALOG/b/$BUCKET_NAME/tree/$PREFIX/
 ```
 
 ## Useful commands
