@@ -11,6 +11,8 @@ interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
     readonly environment: string;
     readonly prefix: string;
+    readonly queueName: string;
+    readonly queueRegion: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
@@ -18,6 +20,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
     private readonly stateMachine: stepfunctions.StateMachine;
     private readonly api: apigateway.RestApi;
     private readonly prefix: string;
+    private readonly queueName: string;
+    private readonly queueRegion: string;
 
     constructor(scope: Construct, id: string, props: BenchlingWebhookStackProps) {
         super(scope, id, props);
@@ -25,7 +29,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         this.bucket = this.createS3Bucket(props.bucketName);
         this.stateMachine = this.createStateMachine();
         this.api = this.createApiGateway();
-        this.prefix = props.prefix;
+        const { prefix, queueName, queueRegion } = props;
 
         this.createOutputs();
     }
@@ -70,8 +74,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
     }
 
     private createSQSSendTask(): tasks.CallAwsService {
-        const queueUrl = 'https://sqs.us-east-1.amazonaws.com/712023778557/quilt-staging-PackagerQueue-d5NmglefXjDn';
-        const queueArn = 'arn:aws:sqs:us-east-1:712023778557:quilt-staging-PackagerQueue-d5NmglefXjDn';
+        const queueArn = `arn:aws:sqs:${this.queueRegion}:${this.account}:${this.queueName}`;
+        const queueUrl = `https://sqs.${this.queueRegion}.amazonaws.com/${this.account}/${this.queueName}`;
         const timestamp = new Date().toISOString();
         
         return new tasks.CallAwsService(this, 'SendToSQS', {

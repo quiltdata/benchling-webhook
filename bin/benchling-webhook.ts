@@ -6,5 +6,7 @@ const app = new cdk.App();
 new BenchlingWebhookStack(app, 'BenchlingWebhookStack', {
     bucketName: process.env.BUCKET_NAME || 'quilt-ernest-staging',
     environment: process.env.ENVIRONMENT || 'prod',
-    prefix: 'test/benchling-webhook'
+    prefix: process.env.PACKAGE_NAME || 'test/benchling-webhook',
+    queueName: process.env.QUEUE_NAME || 'quilt-staging-PackagerQueue-d5NmglefXjDn',
+    queueRegion: process.env.QUEUE_REGION || 'us-east-1'
 });
