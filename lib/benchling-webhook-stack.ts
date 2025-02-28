@@ -182,7 +182,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             }
         });
 
-        const resource = api.root.addResource('benchling-webhook');
+        const resource = api.root.addResource('event');
         resource.addMethod('POST', sfnIntegration, {
             methodResponses: [
                 { statusCode: '200' },
