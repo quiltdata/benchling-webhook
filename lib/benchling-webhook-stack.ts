@@ -29,6 +29,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
         super(scope, id, props);
         this.prefix = props.prefix;
         this.queueName = props.queueName;
+        if (this.prefix.includes('/')) {
+            throw new Error("Prefix should not contain a '/' character.");
+        }
 
         this.bucket = this.createS3Bucket(props.bucketName);
         this.stateMachine = this.createStateMachine();
@@ -75,7 +78,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             action: "putObject",
             parameters: {
                 Bucket: this.bucket.bucketName,
-                Key: `${this.prefix}/api_payload.json`,
+                Key: `${this.prefix}/entryId/api_payload.json`,
                 "Body.$": "$",
             },
             iamResources: [this.bucket.arnForObjects("*")],
@@ -97,9 +100,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 QueueUrl: queueUrl,
                 MessageBody: {
                     "source_prefix":
-                        `s3://${this.bucket.bucketName}/${this.prefix}/`,
+                        `s3://${this.bucket.bucketName}/${this.prefix}/entryId/`,
                     "registry": this.bucket.bucketName,
-                    "package_name": `${this.prefix}`,
+                    "package_name": `${this.prefix}/entryId`,
                     "commit_message":
                         `Benchling webhook payload - ${timestamp}`,
                 },
