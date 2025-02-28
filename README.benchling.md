@@ -49,7 +49,15 @@ Now, configure the app to send data to your webhook.
 3. Paste in your webhook URL.
 4. Click checkmark to save.
 
-> NOTE: Use the top-level endpoint; Benchling will send to "/event" under that.
+NOTE: Enter the top-level endpoint; Benchling will send to the appropriate
+path underneath that:
+
+- assayRun: /event
+- configuration: /lifecycle
+- canvas: /canvas
+- entry: /event
+- request: /event
+- workflow: /event
 
 ### **Step 2: Add App To Your Tenant**
 
