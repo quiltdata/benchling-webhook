@@ -12,7 +12,9 @@ describe('BenchlingWebhookStack', () => {
     stack = new BenchlingWebhook.BenchlingWebhookStack(app, 'TestStack', {
       bucketName: 'test-bucket',
       environment: 'test',
-      prefix: 'test/benchling-webhook'
+      prefix: 'test/benchling-webhook',
+      queueName: 'test-queue',
+      queueRegion: 'us-east-1'
     });
     template = Template.fromStack(stack);
   });
