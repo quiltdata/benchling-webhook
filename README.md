@@ -27,7 +27,7 @@ npx cdk deploy
 
 ```bash
 export ENDPOINT_ID=4sdc7ph31f
-export ENDPOINT_URL=https://$ENDPOINT_ID.execute-api.$CDK_DEFAULT_REGION.amazonaws.com/$STAGE/benchling-webhook
+export ENDPOINT_URL=https://$ENDPOINT_ID.execute-api.$CDK_DEFAULT_REGION.amazonaws.com/$STAGE/event
 
 curl -X POST $ENDPOINT_URL \
      -H "Content-Type: application/json" \
