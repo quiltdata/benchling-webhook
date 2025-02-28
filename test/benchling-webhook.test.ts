@@ -23,8 +23,12 @@ describe('BenchlingWebhookStack', () => {
 
     template.hasResourceProperties('AWS::ApiGateway::Stage', {
       StageName: 'prod',
-      LoggingLevel: 'INFO',
-      DataTraceEnabled: true
+      MethodSettings: [{
+        LoggingLevel: 'INFO',
+        DataTraceEnabled: true,
+        HttpMethod: '*',
+        ResourcePath: '/*'
+      }]
     });
 
     template.hasResourceProperties('AWS::ApiGateway::Method', {
