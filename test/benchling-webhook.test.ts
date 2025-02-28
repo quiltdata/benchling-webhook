@@ -33,7 +33,35 @@ describe('BenchlingWebhookStack', () => {
 
     template.hasResourceProperties('AWS::ApiGateway::Method', {
       HttpMethod: 'POST',
-      AuthorizationType: 'NONE'
+      AuthorizationType: 'NONE',
+      Integration: {
+        IntegrationHttpMethod: 'POST',
+        Type: 'AWS',
+        Uri: {
+          'Fn::Join': [
+            '',
+            [
+              'arn:',
+              {
+                'Fn::Select': [
+                  1,
+                  {
+                    'Fn::Split': [
+                      ':',
+                      {
+                        'Fn::GetAtt': ['BenchlingWebhookStateMachine177934B3', 'Arn']
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        RequestTemplates: {
+          'application/json': Match.stringLikeRegexp('.*"stateMachineArn".*"input".*body.*objectKey.*')
+        }
+      }
     });
   });
 
