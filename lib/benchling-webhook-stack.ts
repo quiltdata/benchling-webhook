@@ -63,9 +63,26 @@ export class BenchlingWebhookStack extends cdk.Stack {
         });
     }
 
+    private createCloudWatchRole(): iam.Role {
+        const cloudWatchRole = new iam.Role(this, 'ApiGatewayCloudWatchRole', {
+            assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+            managedPolicies: [
+                iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonAPIGatewayPushToCloudWatchLogs')
+            ]
+        });
+
+        // Create the account-level settings for API Gateway
+        new apigateway.CfnAccount(this, 'ApiGatewayAccount', {
+            cloudWatchRoleArn: cloudWatchRole.roleArn
+        });
+
+        return cloudWatchRole;
+    }
+
     private createApiGateway(): apigateway.RestApi {
         const logGroup = new logs.LogGroup(this, 'ApiGatewayAccessLogs');
         const apiRole = this.createApiRole();
+        const cloudWatchRole = this.createCloudWatchRole();
         
         const api = new apigateway.RestApi(this, 'BenchlingWebhookAPI', {
             restApiName: 'BenchlingWebhookAPI',
