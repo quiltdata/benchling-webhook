@@ -55,7 +55,9 @@ describe('BenchlingWebhookStack', () => {
               '',
               Match.arrayWith([
                 Match.stringLikeRegexp('.*"stateMachineArn".*'),
-                Match.stringLikeRegexp('.*"input".*body.*objectKey.*')
+                Match.stringLikeRegexp('.*"input".*'),
+                Match.stringLikeRegexp('.*"body".*'),
+                Match.stringLikeRegexp('.*"objectKey".*test/benchling-webhook/api_payload.json.*')
               ])
             ]
           }
