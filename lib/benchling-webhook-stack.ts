@@ -10,20 +10,25 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
     readonly environment: string;
+    readonly prefix: string;
+    readonly queueName: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
     private readonly bucket: s3.IBucket;
     private readonly stateMachine: stepfunctions.StateMachine;
     private readonly api: apigateway.RestApi;
+    private readonly prefix: string;
+    private readonly queueName: string;
 
     constructor(scope: Construct, id: string, props: BenchlingWebhookStackProps) {
         super(scope, id, props);
+        this.prefix = props.prefix;
+        this.queueName = props.queueName;
 
         this.bucket = this.createS3Bucket(props.bucketName);
         this.stateMachine = this.createStateMachine();
         this.api = this.createApiGateway();
-
         this.createOutputs();
     }
 
@@ -33,11 +38,14 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
     private createStateMachine(): stepfunctions.StateMachine {
         const writeToS3Task = this.createS3WriteTask();
+        const sendToSQSTask = this.createSQSSendTask();
         
-        const definition = writeToS3Task.addCatch(new stepfunctions.Fail(this, 'FailState', {
-            cause: 'S3 Write Failed',
-            error: 'WriteError'
+        writeToS3Task.addCatch(new stepfunctions.Fail(this, 'FailState', {
+            cause: 'Task Failed',
+            error: 'TaskError'
         }));
+
+        const definition = writeToS3Task.next(sendToSQSTask);
 
         return new stepfunctions.StateMachine(this, 'BenchlingWebhookStateMachine', {
             definitionBody: stepfunctions.DefinitionBody.fromChainable(definition),
@@ -55,11 +63,33 @@ export class BenchlingWebhookStack extends cdk.Stack {
             action: 'putObject',
             parameters: {
                 Bucket: this.bucket.bucketName,
-                Key: 'test/benchling-webhook/api_payload.json',
+                Key: `${this.prefix}/api_payload.json`,
                 'Body.$': '$'
             },
             iamResources: [this.bucket.arnForObjects('*')],
             resultPath: '$.putResult'
+        });
+    }
+
+    private createSQSSendTask(): tasks.CallAwsService {
+        const queueArn = `arn:aws:sqs:${this.region}:${this.account}:${this.queueName}`;
+        const queueUrl = `https://sqs.${this.region}.amazonaws.com/${this.account}/${this.queueName}`;
+        const timestamp = new Date().toISOString();
+        
+        return new tasks.CallAwsService(this, 'SendToSQS', {
+            service: 'sqs',
+            action: 'sendMessage',
+            parameters: {
+                QueueUrl: queueUrl,
+                MessageBody: {
+                    'source_prefix': `s3://${this.bucket.bucketName}/${this.prefix}/`,
+                    'registry': this.bucket.bucketName,
+                    'package_name': `${this.prefix}`,
+                    'commit_message': `Benchling webhook payload - ${timestamp}`
+                }
+            },
+            iamResources: [queueArn],
+            resultPath: '$.sqsResult'
         });
     }
 
@@ -71,7 +101,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             ]
         });
 
-        // Create the account-level settings for API Gateway
         new apigateway.CfnAccount(this, 'ApiGatewayAccount', {
             cloudWatchRoleArn: cloudWatchRole.roleArn
         });
@@ -107,7 +136,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com')
         });
 
-        // More specific permissions instead of using managed policy
         role.addToPolicy(new iam.PolicyStatement({
             actions: ['states:StartExecution'],
             resources: [this.stateMachine.stateMachineArn]

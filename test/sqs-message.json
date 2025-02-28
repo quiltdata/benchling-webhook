@@ -1,0 +1,7 @@
+{
+    "source_prefix": "s3://quilt-bake/test/benchling-webhook/",
+    "registry": "quilt-bake",
+    "package_name": "test/benchling-webhook",
+    "commit_message": "Benchling webhook payload - 2025-02-28T21:18:34.583Z",
+    "metadata": {"timestamp": "2025-02-28T21:18:34.583Z"}
+}
