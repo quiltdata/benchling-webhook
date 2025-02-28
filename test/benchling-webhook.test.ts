@@ -53,12 +53,11 @@ describe('BenchlingWebhookStack', () => {
           'application/json': {
             'Fn::Join': [
               '',
-              Match.arrayWith([
+              [
                 Match.stringLikeRegexp('.*"stateMachineArn".*'),
-                Match.stringLikeRegexp('.*"input".*'),
-                Match.stringLikeRegexp('.*"body".*'),
-                Match.stringLikeRegexp('.*"objectKey".*test/benchling-webhook/api_payload.json.*')
-              ])
+                { 'Ref': 'BenchlingWebhookStateMachine177934B3' },
+                Match.stringLikeRegexp('.*"input".*\\$input\\.json\\(\'\\$\'\\).*')
+              ]
             ]
           }
         }
