@@ -7,84 +7,150 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 
+interface BenchlingWebhookStackProps extends cdk.StackProps {
+    readonly bucketName: string;
+    readonly environment: string;
+}
+
 export class BenchlingWebhookStack extends cdk.Stack {
-    constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+    private readonly bucket: s3.IBucket;
+    private readonly stateMachine: stepfunctions.StateMachine;
+    private readonly api: apigateway.RestApi;
+
+    constructor(scope: Construct, id: string, props: BenchlingWebhookStackProps) {
         super(scope, id, props);
 
-        // 1. Reference the S3 Bucket (Assuming it already exists)
-        const bucket: s3.IBucket = s3.Bucket.fromBucketName(this, 'TargetBucket', 'quilt-ernest-staging');
+        this.bucket = this.createS3Bucket(props.bucketName);
+        this.stateMachine = this.createStateMachine();
+        this.api = this.createApiGateway();
 
-        // 2. Step Function Task to Write to S3
-        const writeToS3Task: tasks.CallAwsService = new tasks.CallAwsService(this, 'WriteToS3', {
+        this.createOutputs();
+    }
+
+    private createS3Bucket(bucketName: string): s3.IBucket {
+        return s3.Bucket.fromBucketName(this, 'XXXXXXXXXXXX', bucketName);
+    }
+
+    private createStateMachine(): stepfunctions.StateMachine {
+        const writeToS3Task = this.createS3WriteTask();
+        
+        // Add error handling
+        const definition = writeToS3Task.addCatch(new stepfunctions.Fail(this, 'FailState', {
+            cause: 'S3 Write Failed',
+            error: 'WriteError'
+        }));
+
+        return new stepfunctions.StateMachine(this, 'BenchlingWebhookStateMachine', {
+            definitionBody: stepfunctions.DefinitionBody.fromChainable(definition),
+            stateMachineType: stepfunctions.StateMachineType.STANDARD,
+            logs: {
+                destination: new logs.LogGroup(this, 'StateMachineLogs'),
+                level: stepfunctions.LogLevel.ALL
+            }
+        });
+    }
+
+    private createS3WriteTask(): tasks.CallAwsService {
+        return new tasks.CallAwsService(this, 'WriteToS3', {
             service: 's3',
             action: 'putObject',
             parameters: {
-                Bucket: bucket.bucketName,
-                Key: 'test/benchling-webhook/api_payload.json',
+                Bucket: this.bucket.bucketName,
+                Key: stepfunctions.JsonPath.stringAt('$.objectKey'),
+                Body: stepfunctions.JsonPath.stringAt('$.body')
             },
-            iamResources: [bucket.arnForObjects('*')],
+            iamResources: [this.bucket.arnForObjects('*')],
+            resultPath: '$.putResult'
         });
+    }
 
-        // 3. Create Step Function State Machine
-        const stateMachine: stepfunctions.StateMachine = new stepfunctions.StateMachine(this, 'BenchlingWebhookStateMachine', {
-            definitionBody: stepfunctions.DefinitionBody.fromChainable(writeToS3Task),
-            stateMachineType: stepfunctions.StateMachineType.STANDARD,
-        });
-
-        // 4. IAM Role for API Gateway to invoke Step Function
-        const logGroup: logs.LogGroup = new logs.LogGroup(this, 'ApiGatewayAccessLogs');
-
-        const logRole: iam.Role = new iam.Role(this, 'ApiGatewayLogsRole', {
-            assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com'),
-            managedPolicies: [
-                iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonAPIGatewayPushToCloudWatchLogs')
-            ]
-        });
-
-        const apiRole: iam.Role = new iam.Role(this, 'ApiGatewayStepFunctionsRole', {
-            assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com'),
-            managedPolicies: [
-                iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaRole')
-            ]
-        });
-
-        stateMachine.grantStartExecution(apiRole);
-
-        // 5. Create API Gateway
-        const api: apigateway.RestApi = new apigateway.RestApi(this, 'BenchlingWebhookAPI', {
+    private createApiGateway(): apigateway.RestApi {
+        const logGroup = new logs.LogGroup(this, 'ApiGatewayAccessLogs');
+        const apiRole = this.createApiRole();
+        
+        const api = new apigateway.RestApi(this, 'BenchlingWebhookAPI', {
             restApiName: 'BenchlingWebhookAPI',
             deployOptions: {
                 stageName: 'prod',
                 loggingLevel: apigateway.MethodLoggingLevel.INFO,
                 dataTraceEnabled: true,
-            },
+                accessLogDestination: new apigateway.LogGroupLogDestination(logGroup)
+            }
         });
 
-        // 6. Create API Resource and Method
-        const sfnIntegration: apigateway.AwsIntegration = new apigateway.AwsIntegration({
+        this.addWebhookEndpoint(api, apiRole);
+        return api;
+    }
+
+    private createApiRole(): iam.Role {
+        const role = new iam.Role(this, 'ApiGatewayStepFunctionsRole', {
+            assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com')
+        });
+
+        // More specific permissions instead of using managed policy
+        role.addToPolicy(new iam.PolicyStatement({
+            actions: ['states:StartExecution'],
+            resources: [this.stateMachine.stateMachineArn]
+        }));
+
+        return role;
+    }
+
+    private addWebhookEndpoint(api: apigateway.RestApi, apiRole: iam.Role): void {
+        const sfnIntegration = new apigateway.AwsIntegration({
             service: 'states',
             action: 'StartExecution',
             integrationHttpMethod: 'POST',
             options: {
                 credentialsRole: apiRole,
                 requestTemplates: {
-                    'application/json': `{
-                        "stateMachineArn": "${stateMachine.stateMachineArn}",
-                        "input": "$util.escapeJavaScript($input.body)"
-                    }`
+                    'application/json': JSON.stringify({
+                        stateMachineArn: this.stateMachine.stateMachineArn,
+                        input: {
+                            body: '$util.escapeJavaScript($input.body)',
+                            objectKey: 'test/benchling-webhook/api_payload.json'
+                        }
+                    })
                 },
-                integrationResponses: [{ statusCode: '200' }]
+                integrationResponses: [
+                    {
+                        statusCode: '200',
+                        responseTemplates: {
+                            'application/json': JSON.stringify({ status: 'success' })
+                        }
+                    },
+                    {
+                        selectionPattern: '4\\d{2}',
+                        statusCode: '400',
+                        responseTemplates: {
+                            'application/json': JSON.stringify({ error: 'Bad request' })
+                        }
+                    },
+                    {
+                        selectionPattern: '5\\d{2}',
+                        statusCode: '500',
+                        responseTemplates: {
+                            'application/json': JSON.stringify({ error: 'Internal server error' })
+                        }
+                    }
+                ]
             }
         });
 
-        const resource: apigateway.Resource = api.root.addResource('benchling-webhook');
+        const resource = api.root.addResource('benchling-webhook');
         resource.addMethod('POST', sfnIntegration, {
-            methodResponses: [{ statusCode: '200' }]
+            methodResponses: [
+                { statusCode: '200' },
+                { statusCode: '400' },
+                { statusCode: '500' }
+            ]
         });
+    }
 
-        // 7. Output API URL
+    private createOutputs(): void {
         new cdk.CfnOutput(this, 'ApiUrl', {
-            value: api.url,
+            value: this.api.url,
+            description: 'API Gateway endpoint URL'
         });
     }
 }
