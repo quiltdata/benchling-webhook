@@ -71,9 +71,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
             restApiName: 'BenchlingWebhookAPI',
             deployOptions: {
                 stageName: 'prod',
-                loggingLevel: apigateway.MethodLoggingLevel.INFO,
-                dataTraceEnabled: true,
-                accessLogDestination: new apigateway.LogGroupLogDestination(logGroup)
+                accessLogDestination: new apigateway.LogGroupLogDestination(logGroup),
+                methodOptions: {
+                    '/*/*': {
+                        loggingLevel: apigateway.MethodLoggingLevel.INFO,
+                        dataTraceEnabled: true
+                    }
+                }
             }
         });
 
