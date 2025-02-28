@@ -59,10 +59,32 @@ export class BenchlingWebhookStack extends cdk.Stack {
             parameters: {
                 Bucket: this.bucket.bucketName,
                 Key: 'test/benchling-webhook/api_payload.json',
-                'Body.$': '$'
+                'Body.$': '$.input.metadata'
             },
             iamResources: [this.bucket.arnForObjects('*')],
             resultPath: '$.putResult'
+        });
+    }
+
+    private createSQSSendTask(): tasks.CallAwsService {
+        const queueUrl = 'https://sqs.us-east-1.amazonaws.com/712023778557/quilt-staging-PackagerQueue-d5NmglefXjDn';
+        const queueArn = 'arn:aws:sqs:us-east-1:712023778557:quilt-staging-PackagerQueue-d5NmglefXjDn';
+        
+        return new tasks.CallAwsService(this, 'SendToSQS', {
+            service: 'sqs',
+            action: 'sendMessage',
+            parameters: {
+                QueueUrl: queueUrl,
+                MessageBody: {
+                    'source_prefix': `s3://${this.bucket.bucketName}/test/benchling-webhook/api_payload.json`,
+                    'registry': this.bucket.bucketName,
+                    'package_name': 'benchling-webhook/api_payload',
+                    'commit_message': 'Benchling webhook payload',
+                    'metadata.$': '$.input.metadata'
+                }
+            },
+            iamResources: [queueArn],
+            resultPath: '$.sqsResult'
         });
     }
 
