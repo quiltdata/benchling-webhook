@@ -109,7 +109,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 QueueUrl: queueUrl,
                 MessageBody: {
                     "source_prefix.$": 
-                        `States.Format('s3://${this.bucket.bucketName}/{}/','$.packageName')`,
+                        `States.Format('s3://${this.bucket.bucketName}/{}/',$.packageName)`,
                     "registry": this.bucket.bucketName,
                     "package_name.$": "$.packageName",
                     "commit_message":
