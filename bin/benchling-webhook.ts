@@ -7,5 +7,5 @@ new BenchlingWebhookStack(app, 'BenchlingWebhookStack', {
     bucketName: process.env.BUCKET_NAME || 'my-bucket-name',
     queueName: process.env.QUEUE_NAME || 'my-queue-name',
     environment: process.env.STAGE || 'prod',
-    prefix: process.env.PREFIX || 'test/benchling-webhook'
+    prefix: process.env.PREFIX || 'benchling',
 });

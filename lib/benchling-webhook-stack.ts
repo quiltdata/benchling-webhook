@@ -29,6 +29,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
         super(scope, id, props);
         this.prefix = props.prefix;
         this.queueName = props.queueName;
+        if (this.prefix.includes("/")) {
+            throw new Error("Prefix should not contain a '/' character.");
+        }
 
         this.bucket = this.createS3Bucket(props.bucketName);
         this.stateMachine = this.createStateMachine();
@@ -41,6 +44,20 @@ export class BenchlingWebhookStack extends cdk.Stack {
     }
 
     private createStateMachine(): stepfunctions.StateMachine {
+        const setupVariablesTask = new stepfunctions.Pass(
+            this,
+            "SetupVariables",
+            {
+                parameters: {
+                    "packageName.$":
+                        `States.Format('${this.prefix}/{}', $.message.id)`,
+                    "entity.$": "$.message.id",
+                    "typeFields.$": "States.StringSplit($.message.type, '.')",
+                },
+                resultPath: "$.var",
+            },
+        );
+
         const writeToS3Task = this.createS3WriteTask();
         const sendToSQSTask = this.createSQSSendTask();
 
@@ -51,7 +68,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
             }),
         );
 
-        const definition = writeToS3Task.next(sendToSQSTask);
+        const definition = setupVariablesTask
+            .next(writeToS3Task)
+            .next(sendToSQSTask);
 
         return new stepfunctions.StateMachine(
             this,
@@ -75,8 +94,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
             action: "putObject",
             parameters: {
                 Bucket: this.bucket.bucketName,
-                Key: `${this.prefix}/api_payload.json`,
-                "Body.$": "$",
+                "Key.$":
+                    `States.Format('{}/event_message.json', $.var.packageName)`,
+                "Body.$": "$.message",
             },
             iamResources: [this.bucket.arnForObjects("*")],
             resultPath: "$.putResult",
@@ -96,10 +116,10 @@ export class BenchlingWebhookStack extends cdk.Stack {
             parameters: {
                 QueueUrl: queueUrl,
                 MessageBody: {
-                    "source_prefix":
-                        `s3://${this.bucket.bucketName}/${this.prefix}/`,
+                    "source_prefix.$":
+                        `States.Format('s3://${this.bucket.bucketName}/{}/',$.var.packageName)`,
                     "registry": this.bucket.bucketName,
-                    "package_name": `${this.prefix}`,
+                    "package_name.$": "$.var.packageName",
                     "commit_message":
                         `Benchling webhook payload - ${timestamp}`,
                 },
