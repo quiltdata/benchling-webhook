@@ -44,6 +44,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
     }
 
     private createStateMachine(): stepfunctions.StateMachine {
+        const createPackageNameTask = new stepfunctions.Pass(this, "CreatePackageName", {
+            parameters: {
+                "packageName.$": `States.Format('${this.prefix}/{}', $.message.id)`,
+            },
+            resultPath: "$.packageName",
+        });
+
         const writeToS3Task = this.createS3WriteTask();
         const sendToSQSTask = this.createSQSSendTask();
 
@@ -54,7 +61,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
             }),
         );
 
-        const definition = writeToS3Task.next(sendToSQSTask);
+        const definition = createPackageNameTask
+            .next(writeToS3Task)
+            .next(sendToSQSTask);
 
         return new stepfunctions.StateMachine(
             this,
@@ -78,7 +87,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             action: "putObject",
             parameters: {
                 Bucket: this.bucket.bucketName,
-                "Key.$": `States.Format('${this.prefix}/{}/api_payload.json', $.message.id)`,
+                "Key.$": `States.Format('{}/api_payload.json', $.packageName)`,
                 "Body.$": "$",
             },
             iamResources: [this.bucket.arnForObjects("*")],
@@ -100,9 +109,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 QueueUrl: queueUrl,
                 MessageBody: {
                     "source_prefix.$": 
-                        `States.Format('s3://${this.bucket.bucketName}/${this.prefix}/{}/',$.message.id)`,
+                        `States.Format('s3://${this.bucket.bucketName}/{}/','$.packageName')`,
                     "registry": this.bucket.bucketName,
-                    "package_name.$": `States.Format('${this.prefix}/{}',$.message.id)`,
+                    "package_name.$": "$.packageName",
                     "commit_message":
                         `Benchling webhook payload - ${timestamp}`,
                 },
