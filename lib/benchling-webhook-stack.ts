@@ -54,7 +54,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
                     "entity.$": "$.message.id",
                     "typeFields.$": "States.StringSplit($.message.type, '.')",
                 },
-                resultPath: "$.packageName",
+                resultPath: "$.var",
             },
         );
 
@@ -95,7 +95,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             parameters: {
                 Bucket: this.bucket.bucketName,
                 "Key.$":
-                    `States.Format('{}/event_message.json', $.packageName)`,
+                    `States.Format('{}/event_message.json', $.var.packageName)`,
                 "Body.$": "$.message",
             },
             iamResources: [this.bucket.arnForObjects("*")],
@@ -117,9 +117,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 QueueUrl: queueUrl,
                 MessageBody: {
                     "source_prefix.$":
-                        `States.Format('s3://${this.bucket.bucketName}/{}/',$.packageName)`,
+                        `States.Format('s3://${this.bucket.bucketName}/{}/',$.var.packageName)`,
                     "registry": this.bucket.bucketName,
-                    "package_name.$": "$.packageName",
+                    "package_name.$": "$.var.packageName",
                     "commit_message":
                         `Benchling webhook payload - ${timestamp}`,
                 },
