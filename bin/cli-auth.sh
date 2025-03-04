@@ -17,6 +17,6 @@ TOKEN=$(curl -s -X POST "https://quilt-dtt.benchling.com/api/v2/token" \
 echo "TOKEN: $TOKEN"
 
 # Use the token to call the API
-curl -X GET "https://quilt-dtt.benchling.com/api/v2/plates" \
+curl -X GET "https://quilt-dtt.benchling.com/api/v2/entries" \
      -H "Authorization: Bearer $TOKEN" \
      -H "Content-Type: application/json"
