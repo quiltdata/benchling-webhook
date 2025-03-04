@@ -5,7 +5,6 @@ import * as tasks from "aws-cdk-lib/aws-stepfunctions-tasks";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
-import * as connections from "aws-cdk-lib/aws-events-connections";
 import { Construct } from "constructs";
 import * as logs from "aws-cdk-lib/aws-logs";
 
@@ -25,7 +24,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
     private readonly api: apigateway.RestApi;
     private readonly prefix: string;
     private readonly queueName: string;
-    private readonly benchlingConnection: connections.Connection;
+    private readonly benchlingConnection: events.Connection;
 
     constructor(
         scope: Construct,
@@ -253,14 +252,14 @@ export class BenchlingWebhookStack extends cdk.Stack {
         });
     }
 
-    private createBenchlingConnection(props: BenchlingWebhookStackProps): connections.Connection {
-        return new connections.Connection(this, 'BenchlingConnection', {
-            authorization: connections.Authorization.oauth({
+    private createBenchlingConnection(props: BenchlingWebhookStackProps): events.Connection {
+        return new events.Connection(this, 'BenchlingConnection', {
+            authorization: events.Authorization.oauth({
                 clientId: props.benchlingClientId,
                 clientSecret: cdk.SecretValue.unsafePlainText(props.benchlingClientSecret),
             }),
             description: 'Connection to Benchling API',
-            baseUrl: `https://${props.benchlingTenant}.benchling.com/api/v2`,
+            url: `https://${props.benchlingTenant}.benchling.com/api/v2`,
         });
     }
 
