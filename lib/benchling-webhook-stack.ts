@@ -5,6 +5,7 @@ import * as tasks from "aws-cdk-lib/aws-stepfunctions-tasks";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
+
 import { Construct } from "constructs";
 import * as logs from "aws-cdk-lib/aws-logs";
 
@@ -24,7 +25,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
     private readonly api: apigateway.RestApi;
     private readonly prefix: string;
     private readonly queueName: string;
-    private readonly benchlingConnection: events.Connection;
+    private readonly benchlingConnection: events.CfnConnection;
 
     constructor(
         scope: Construct,
@@ -252,21 +253,37 @@ export class BenchlingWebhookStack extends cdk.Stack {
         });
     }
 
-    private createBenchlingConnection(props: BenchlingWebhookStackProps): events.Connection {
-        return new events.Connection(this, 'BenchlingConnection', {
-            authorization: events.Authorization.oauth({
-                clientId: props.benchlingClientId,
-                clientSecret: cdk.SecretValue.unsafePlainText(props.benchlingClientSecret),
-            }),
-            description: 'Connection to Benchling API',
-            url: `https://${props.benchlingTenant}.benchling.com/api/v2`,
-        });
+    private createBenchlingConnection(
+        props: BenchlingWebhookStackProps,
+    ): events.CfnConnection {
+        const benchlingConnection = new events.CfnConnection(
+            this,
+            "BenchlingOAuthConnection",
+            {
+                authorizationType: "OAUTH_CLIENT_CREDENTIALS",
+                authParameters: {
+                    oAuthParameters: {
+                        authorizationEndpoint:
+                            `https://${props.benchlingTenant}.benchling.com/api/v2/token`,
+                        clientParameters: {
+                            clientId: props.benchlingClientId,
+                            clientSecret: props.benchlingClientSecret,
+                        },
+                        httpMethod: "POST",
+                    },
+                },
+            },
+        );
+        return benchlingConnection;
     }
 
     private createOutputs(): void {
         new cdk.CfnOutput(this, "ApiUrl", {
             value: this.api.url,
             description: "API Gateway endpoint URL",
+        });
+        new cdk.CfnOutput(this, "ConnectionArn", {
+            value: this.benchlingConnection.attrArn,
         });
     }
 }

@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@aws-cdk/aws-apigateway": "^1.203.0",
+    "@aws-cdk/aws-events": "^1.204.0",
     "@aws-cdk/aws-iam": "^1.203.0",
     "@aws-cdk/aws-s3": "^1.203.0",
     "@aws-cdk/aws-stepfunctions": "^1.203.0",
