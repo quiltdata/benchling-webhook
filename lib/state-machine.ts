@@ -114,7 +114,7 @@ export class WebhookStateMachine extends Construct {
                     },
                 },
                 ResultSelector: {
-                    "entryData.$": "$.Body",
+                    "entryData.$": "$.ResponseBody.entry",
                 },
                 ResultPath: "$.entryData",
             },
