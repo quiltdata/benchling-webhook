@@ -35,6 +35,21 @@ describe("BenchlingWebhookStack", () => {
         template.resourceCountIs("AWS::StepFunctions::StateMachine", 1);
     });
 
+    test("creates CloudWatch log groups", () => {
+        template.resourceCountIs("AWS::Logs::LogGroup", 2); // One for API Gateway, one for Step Functions
+        
+        template.hasResourceProperties("AWS::ApiGateway::Stage", {
+            AccessLogSetting: {
+                DestinationArn: {
+                    "Fn::GetAtt": [
+                        Match.stringLikeRegexp("ApiGatewayAccessLogs.*"),
+                        "Arn"
+                    ]
+                }
+            }
+        });
+    });
+
     test("creates API Gateway with correct configuration", () => {
         template.hasResourceProperties("AWS::ApiGateway::RestApi", {
             Name: "BenchlingWebhookAPI"
@@ -97,5 +112,32 @@ describe("BenchlingWebhookStack", () => {
                 benchlingTenant: "test-tenant",
             });
         }).toThrow("Prefix should not contain a '/' character.");
+    });
+
+    test("creates IAM role with correct permissions", () => {
+        template.hasResourceProperties("AWS::IAM::Role", {
+            AssumeRolePolicyDocument: Match.objectLike({
+                Statement: Match.arrayWith([
+                    Match.objectLike({
+                        Action: "sts:AssumeRole",
+                        Effect: "Allow",
+                        Principal: {
+                            Service: "apigateway.amazonaws.com"
+                        }
+                    })
+                ])
+            })
+        });
+
+        template.hasResourceProperties("AWS::IAM::Policy", {
+            PolicyDocument: Match.objectLike({
+                Statement: Match.arrayWith([
+                    Match.objectLike({
+                        Action: "states:StartExecution",
+                        Effect: "Allow"
+                    })
+                ])
+            })
+        });
     });
 });
