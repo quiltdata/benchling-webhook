@@ -158,6 +158,7 @@ export class WebhookStateMachine extends Construct {
                     "source_prefix.$": `States.Format('s3://${props.bucket.bucketName}/{}/',$.var.packageName)`,
                     registry: props.bucket.bucketName,
                     "package_name.$": "$.var.packageName",
+                    metadata_uri: "event.json",
                     commit_message: `Benchling webhook payload - ${timestamp}`,
                 },
             },
