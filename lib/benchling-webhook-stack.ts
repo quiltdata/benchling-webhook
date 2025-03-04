@@ -109,15 +109,24 @@ export class BenchlingWebhookStack extends cdk.Stack {
         );
     }
 
-    private createFetchEntryTask(): tasks.CallApiGatewayRestApi {
-        return new tasks.CallApiGatewayRestApi(this, "FetchEntry", {
-            api: this.benchlingConnection,
-            apiMethod: "GET",
-            pathParametersJson: {
-                "entry_id.$": "$.message.resourceId"
-            },
-            apiPath: "/entries/{entry_id}",
-            resultPath: "$.entryData"
+    private createFetchEntryTask(): stepfunctions.CustomState {
+        return new stepfunctions.CustomState(this, "FetchEntry", {
+            stateJson: {
+                Type: "Task",
+                Resource: "arn:aws:states:::http:invoke",
+                Parameters: {
+                    "ApiEndpoint.$": "$.baseURL",
+                    "Method": "GET",
+                    "Path.$": "States.Format('/api/v2/entries/{}', $.message.resourceId)",
+                    "Authentication": {
+                        "ConnectionArn": this.benchlingConnection.attrArn
+                    }
+                },
+                ResultSelector: {
+                    "entryData.$": "$.Body"
+                },
+                ResultPath: "$.entryData"
+            }
         });
     }
 
