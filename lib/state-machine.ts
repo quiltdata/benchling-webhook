@@ -13,6 +13,7 @@ export interface StateMachineProps {
     region: string;
     account: string;
     benchlingConnection: events.CfnConnection;
+    benchlingTenant: string;
 }
 
 export class WebhookStateMachine extends Construct {
