@@ -90,12 +90,18 @@ export class WebhookApi {
                         statusCode: "200",
                         responseTemplates: {
                             "application/json": `
-                            #set($result = $util.parseJson($input.json('$.output')))
-                            #if($result.error)
-                                #set($context.responseOverride.status = 400)
-                                {"error": "$result.error", "cause": "$result.cause"}
+                            #set($output = $input.json('$.output'))
+                            #if($output == null)
+                                #set($context.responseOverride.status = 500)
+                                {"error": "State machine execution failed", "cause": "Check CloudWatch logs for details"}
                             #else
-                                {"status": "success", "executionArn": "$input.json('$.executionArn')"}
+                                #set($result = $util.parseJson($output))
+                                #if($result.error)
+                                    #set($context.responseOverride.status = 400)
+                                    {"error": "$result.error", "cause": "$result.cause"}
+                                #else
+                                    {"status": "success", "executionArn": "$input.json('$.executionArn')"}
+                                #end
                             #end
                             `
                         },
