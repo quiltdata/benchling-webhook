@@ -1,5 +1,5 @@
 import * as cdk from "aws-cdk-lib";
-import { Template } from "aws-cdk-lib/assertions";
+import { Template, Match } from "aws-cdk-lib/assertions";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
 import { WebhookStateMachine } from "../lib/state-machine";
@@ -43,22 +43,23 @@ describe("WebhookStateMachine", () => {
 
     test("creates log group", () => {
         template.hasResourceProperties("AWS::Logs::LogGroup", {
-            RetentionInDays: expect.any(Number),
+            RetentionInDays: 731,
         });
     });
 
     test("state machine has correct states", () => {
         template.hasResourceProperties("AWS::StepFunctions::StateMachine", {
             DefinitionString: {
-                "Fn::Join": expect.arrayContaining([
-                    expect.arrayContaining([
-                        expect.stringContaining("SetupVariables"),
-                        expect.stringContaining("WriteToMessageS3"),
-                        expect.stringContaining("FetchEntry"),
-                        expect.stringContaining("WriteToEntryDataS3"),
-                        expect.stringContaining("SendToSQS"),
-                    ]),
-                ]),
+                "Fn::Join": [
+                    "",
+                    Match.arrayWith([
+                        Match.stringLikeRegexp(".*SetupVariables.*"),
+                        Match.stringLikeRegexp(".*WriteToMessageS3.*"),
+                        Match.stringLikeRegexp(".*FetchEntry.*"),
+                        Match.stringLikeRegexp(".*WriteToEntryDataS3.*"),
+                        Match.stringLikeRegexp(".*SendToSQS.*")
+                    ])
+                ]
             },
         });
     });
@@ -66,11 +67,12 @@ describe("WebhookStateMachine", () => {
     test("state machine has HTTP task", () => {
         template.hasResourceProperties("AWS::StepFunctions::StateMachine", {
             DefinitionString: {
-                "Fn::Join": expect.arrayContaining([
-                    expect.arrayContaining([
-                        expect.stringContaining("arn:aws:states:::http:invoke"),
-                    ]),
-                ]),
+                "Fn::Join": [
+                    "",
+                    Match.arrayWith([
+                        Match.stringLikeRegexp(".*arn:aws:states:::http:invoke.*")
+                    ])
+                ]
             },
         });
     });
