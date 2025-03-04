@@ -274,16 +274,16 @@ export class BenchlingWebhookStack extends cdk.Stack {
                             headerParameters: [
                                 {
                                     key: "Content-Type",
-                                    value: "application/x-www-form-urlencoded"
-                                }
+                                    value: "application/x-www-form-urlencoded",
+                                },
                             ],
                             bodyParameters: [
                                 {
                                     key: "grant_type",
-                                    value: "client_credentials"
-                                }
-                            ]
-                        }
+                                    value: "client_credentials",
+                                },
+                            ],
+                        },
                     },
                 },
             },
