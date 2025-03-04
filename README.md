@@ -44,7 +44,7 @@ export ENTRY_ID=etr_bl4xp2YJ
 curl -X POST $ENDPOINT_URL -H "Content-Type: application/json" -d @test/entry-created.json
 
 aws s3 cp s3://$BUCKET_NAME/$PREFIX/$ENTRY_ID/api_payload.json -
-open https://$QUILT_CATALOG/b/$BUCKET_NAME/tree/$PREFIX/
+open https://$QUILT_CATALOG/b/$BUCKET_NAME/tree/$PREFIX/$ENTRY_ID
 ```
 
 ## Useful commands
