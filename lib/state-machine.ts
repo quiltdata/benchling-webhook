@@ -45,9 +45,21 @@ export class WebhookStateMachine extends Construct {
             resultPath: "$.var",
         });
 
-        const writeToS3Task = this.createS3WriteTask(props.bucket);
+        const writeToS3Task = this.createS3WriteTask(
+            props.bucket,
+            "WriteToS3",
+            "event_message.json",
+            "$.message",
+            "$.putResult"
+        );
         const fetchEntryTask = this.createFetchEntryTask(props.benchlingConnection);
-        const writeEntryToS3Task = this.createEntryS3WriteTask(props.bucket);
+        const writeEntryToS3Task = this.createS3WriteTask(
+            props.bucket,
+            "WriteEntryToS3",
+            "entry.json",
+            "$.entryData",
+            "$.putEntryResult"
+        );
         const sendToSQSTask = this.createSQSTask(props);
 
         writeToS3Task.addCatch(
@@ -87,31 +99,23 @@ export class WebhookStateMachine extends Construct {
         });
     }
 
-    private createS3WriteTask(bucket: s3.IBucket): tasks.CallAwsService {
-        return new tasks.CallAwsService(this, "WriteToS3", {
+    private createS3WriteTask(
+        bucket: s3.IBucket,
+        taskId: string,
+        filename: string,
+        bodyPath: string,
+        resultPath: string
+    ): tasks.CallAwsService {
+        return new tasks.CallAwsService(this, taskId, {
             service: "s3",
             action: "putObject",
             parameters: {
                 Bucket: bucket.bucketName,
-                "Key.$": "States.Format('{}/event_message.json', $.var.packageName)",
-                "Body.$": "$.message",
+                "Key.$": `States.Format('{}/{}', $.var.packageName, '${filename}')`,
+                "Body.$": bodyPath,
             },
             iamResources: [bucket.arnForObjects("*")],
-            resultPath: "$.putResult",
-        });
-    }
-
-    private createEntryS3WriteTask(bucket: s3.IBucket): tasks.CallAwsService {
-        return new tasks.CallAwsService(this, "WriteEntryToS3", {
-            service: "s3",
-            action: "putObject",
-            parameters: {
-                Bucket: bucket.bucketName,
-                "Key.$": "States.Format('{}/entry.json', $.var.packageName)",
-                "Body.$": "$.entryData",
-            },
-            iamResources: [bucket.arnForObjects("*")],
-            resultPath: "$.putEntryResult",
+            resultPath: resultPath,
         });
     }
 
