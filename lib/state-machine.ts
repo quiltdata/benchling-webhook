@@ -28,7 +28,10 @@ export class WebhookStateMachine extends Construct {
 
         role.addToPolicy(
             new iam.PolicyStatement({
-                actions: ["states:InvokeHTTPEndpoint"],
+                actions: [
+                    "states:InvokeHTTPEndpoint",
+                    "events:RetrieveConnectionCredentials"
+                ],
                 resources: ["*"],
                 effect: iam.Effect.ALLOW,
             })
