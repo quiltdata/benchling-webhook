@@ -39,7 +39,7 @@ npx cdk deploy
 ```bash
 export ENDPOINT_ID=4sdc7ph31f
 export ENDPOINT_URL=https://$ENDPOINT_ID.execute-api.$CDK_DEFAULT_REGION.amazonaws.com/$STAGE/event
-export ENTRY_ID=evt_dVhELK94T1Jy
+export ENTRY_ID=etr_bl4xp2YJ
 
 curl -X POST $ENDPOINT_URL -H "Content-Type: application/json" -d @test/entry-created.json
 

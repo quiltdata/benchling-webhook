@@ -60,7 +60,7 @@ export class WebhookStateMachine extends Construct {
         const setupVariablesTask = new stepfunctions.Pass(this, "SetupVariables", {
             parameters: {
                 "packageName.$": `States.Format('${props.prefix}/{}', $.message.id)`,
-                "entity.$": "$.message.id",
+                "entity": "etr_bl4xp2YJ",
                 "typeFields.$": "States.StringSplit($.message.type, '.')",
                 "baseURL": `https://${props.benchlingTenant}.benchling.com`,
             },
