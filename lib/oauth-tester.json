@@ -1,0 +1,35 @@
+{
+  "Comment": "OAuth 2.0 with EventBridge Connection in Step Functions",
+  "StartAt": "RequestAccessToken",
+  "States": {
+    "RequestAccessToken": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::http:invoke",
+      "Parameters": {
+        "Method": "POST",
+        "ApiEndpoint": "https://quilt-dtt.benchling.com/api/v2/token",
+        "Authentication": {
+          "ConnectionArn": "arn:aws:events:us-east-1:123456789012:connection/BenchlingOAuthConnection"
+        }
+      },
+      "ResultSelector": {
+        "access_token": "$.Body.access_token"
+      },
+      "ResultPath": "$.auth",
+      "Next": "CallListEntries"
+    },
+    "CallListEntries": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::http:invoke",
+      "Parameters": {
+        "Method": "GET",
+        "ApiEndpoint": "https://quilt-dtt.benchling.com/api/v2/entries",
+        "Headers": {
+          "Authorization.$": "States.Format('Bearer {}', $.auth.access_token)",
+          "Content-Type": "application/json"
+        }
+      },
+      "End": true
+    }
+  }
+}
