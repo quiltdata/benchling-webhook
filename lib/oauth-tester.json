@@ -1,0 +1,48 @@
+{
+  "Comment": "OAuth 2.0 in Step Functions",
+  "StartAt": "GetOAuthSecrets",
+  "States": {
+    "GetOAuthSecrets": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:secretsmanager:getSecretValue",
+      "Parameters": {
+        "SecretId": "prod/benchling/nurix-demo-app"
+      },
+      "ResultPath": "$.secrets",
+      "Next": "RequestAccessToken"
+    },
+    "RequestAccessToken": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:apigateway:invoke",
+      "Parameters": {
+        "ApiEndpoint": "https://quilt-dtt.benchling.com/api/v2/token",
+        "Method": "POST",
+        "Headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "RequestBody": {
+          "grant_type": "client_credentials",
+          "client_id": "dUmcAocyzQ",
+          "client_secret": "$.secrets.SecretString.client_secret"
+        }
+      },
+      "ResultSelector": {
+        "access_token": "$.ResponseBody.access_token"
+      },
+      "ResultPath": "$.auth",
+      "Next": "CallListEntriesUsingHttp"
+    },
+    "CallListEntriesUsingHttp": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:apigateway:invoke",
+      "Parameters": {
+        "ApiEndpoint": "https://quilt-dtt.benchling.com/v2/entries",
+        "Method": "GET",
+        "Headers": {
+          "Authorization": "Bearer $.auth.access_token"
+        }
+      },
+      "End": true
+    }
+  }
+}
