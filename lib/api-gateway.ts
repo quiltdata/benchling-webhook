@@ -90,8 +90,8 @@ export class WebhookApi {
                         statusCode: "200",
                         responseTemplates: {
                             "application/json": `
-                            #set($execution = $input.json('$'))
-                            #if($execution.executionArn)
+                            #set($execution = $util.parseJson($input.body))
+                            #if($context.requestId)
                                 {"status": "success", "executionArn": "$execution.executionArn"}
                             #else
                                 #set($context.responseOverride.status = 500)
