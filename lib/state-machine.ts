@@ -82,7 +82,7 @@ export class WebhookStateMachine extends Construct {
                 Parameters: {
                     "ApiEndpoint.$": "$.baseURL",
                     Method: "GET",
-                    "Path.$": "States.Format('/api/v2/entries/{}', $.message.resourceId)",
+                    "RequestPath.$": "States.Format('/api/v2/entries/{}', $.message.resourceId)",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
                     },
