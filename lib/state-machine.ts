@@ -50,6 +50,7 @@ export class WebhookStateMachine extends Construct {
                     destination: new logs.LogGroup(scope, "StateMachineLogs"),
                     level: stepfunctions.LogLevel.ALL,
                 },
+                tracingEnabled: true,
                 role: role,
             }
         );
