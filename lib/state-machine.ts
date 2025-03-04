@@ -47,18 +47,14 @@ export class WebhookStateMachine extends Construct {
 
         const writeToS3Task = this.createS3WriteTask(
             props.bucket,
-            "WriteToS3",
             "event_message.json",
-            "$.message",
-            "$.putResult"
+            "$.message"
         );
         const fetchEntryTask = this.createFetchEntryTask(props.benchlingConnection);
         const writeEntryToS3Task = this.createS3WriteTask(
             props.bucket,
-            "WriteEntryToS3",
             "entry.json",
-            "$.entryData",
-            "$.putEntryResult"
+            "$.entryData"
         );
         const sendToSQSTask = this.createSQSTask(props);
 
@@ -101,11 +97,14 @@ export class WebhookStateMachine extends Construct {
 
     private createS3WriteTask(
         bucket: s3.IBucket,
-        taskId: string,
         filename: string,
-        bodyPath: string,
-        resultPath: string
+        bodyPath: string
     ): tasks.CallAwsService {
+        // Infer taskId from bodyPath by taking the part after $ and capitalizing
+        const taskId = `WriteTo${bodyPath.split('.')[1][0].toUpperCase()}${bodyPath.split('.')[1].slice(1)}S3`;
+        // Infer resultPath by replacing body with put and adding Result
+        const resultPath = bodyPath.replace('Body', 'put') + 'Result';
+        
         return new tasks.CallAwsService(this, taskId, {
             service: "s3",
             action: "putObject",
