@@ -3,6 +3,7 @@ import * as tasks from "aws-cdk-lib/aws-stepfunctions-tasks";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
+import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
 export interface StateMachineProps {
@@ -21,6 +22,18 @@ export class WebhookStateMachine extends Construct {
         super(scope, id);
         const definition = this.createDefinition(props);
 
+        const role = new iam.Role(scope, "StateMachineRole", {
+            assumedBy: new iam.ServicePrincipal("states.amazonaws.com"),
+        });
+
+        role.addToPolicy(
+            new iam.PolicyStatement({
+                actions: ["states:InvokeHTTPEndpoint"],
+                resources: ["*"],
+                effect: iam.Effect.ALLOW,
+            })
+        );
+
         this.stateMachine = new stepfunctions.StateMachine(
             scope,
             "BenchlingWebhookStateMachine",
@@ -31,6 +44,7 @@ export class WebhookStateMachine extends Construct {
                     destination: new logs.LogGroup(scope, "StateMachineLogs"),
                     level: stepfunctions.LogLevel.ALL,
                 },
+                role: role,
             }
         );
     }
