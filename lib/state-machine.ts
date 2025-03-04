@@ -14,10 +14,11 @@ export interface StateMachineProps {
     benchlingConnection: events.CfnConnection;
 }
 
-export class WebhookStateMachine {
+export class WebhookStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
 
     constructor(scope: Construct, id: string, props: StateMachineProps) {
+        super(scope, id);
         const definition = this.createDefinition(props);
 
         this.stateMachine = new stepfunctions.StateMachine(
