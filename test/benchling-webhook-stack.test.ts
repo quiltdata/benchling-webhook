@@ -35,8 +35,53 @@ describe("BenchlingWebhookStack", () => {
         template.resourceCountIs("AWS::StepFunctions::StateMachine", 1);
     });
 
-    test("creates API Gateway", () => {
-        template.resourceCountIs("AWS::ApiGateway::RestApi", 1);
+    test("creates API Gateway with correct configuration", () => {
+        template.hasResourceProperties("AWS::ApiGateway::RestApi", {
+            Name: "BenchlingWebhookAPI"
+        });
+
+        template.hasResourceProperties("AWS::ApiGateway::Stage", {
+            StageName: "prod",
+            MethodSettings: [{
+                LoggingLevel: "INFO",
+                DataTraceEnabled: true,
+                HttpMethod: "*",
+                ResourcePath: "/*"
+            }]
+        });
+
+        template.hasResourceProperties("AWS::ApiGateway::Method", {
+            HttpMethod: "POST",
+            AuthorizationType: "NONE",
+            Integration: {
+                IntegrationHttpMethod: "POST",
+                Type: "AWS",
+                Uri: {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "arn:",
+                            { "Ref": "AWS::Partition" },
+                            ":apigateway:",
+                            { "Ref": "AWS::Region" },
+                            ":states:action/StartExecution"
+                        ]
+                    ]
+                },
+                RequestTemplates: {
+                    "application/json": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                Match.stringLikeRegexp(".*\"stateMachineArn\".*"),
+                                { "Ref": "BenchlingWebhookStateMachine177934B3" },
+                                Match.stringLikeRegexp(".*\"input\".*\\$input\\.json\\('\\$'\\).*")
+                            ]
+                        ]
+                    }
+                }
+            }
+        });
     });
 
     test("throws error for invalid prefix", () => {
