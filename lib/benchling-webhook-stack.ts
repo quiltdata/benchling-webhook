@@ -270,6 +270,20 @@ export class BenchlingWebhookStack extends cdk.Stack {
                             clientSecret: props.benchlingClientSecret,
                         },
                         httpMethod: "POST",
+                        oAuthHttpParameters: {
+                            headerParameters: [
+                                {
+                                    key: "Content-Type",
+                                    value: "application/x-www-form-urlencoded"
+                                }
+                            ],
+                            bodyParameters: [
+                                {
+                                    key: "grant_type",
+                                    value: "client_credentials"
+                                }
+                            ]
+                        }
                     },
                 },
             },
