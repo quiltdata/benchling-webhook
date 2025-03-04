@@ -81,14 +81,23 @@ export class WebhookApi {
                 requestTemplates: {
                     "application/json": `{
                         "stateMachineArn": "${stateMachine.stateMachineArn}",
-                        "input": "$util.escapeJavaScript($input.json('$'))"
+                        "input": "$util.escapeJavaScript($input.json('$'))",
+                        "name": "$context.requestId"
                     }`,
                 },
                 integrationResponses: [
                     {
                         statusCode: "200",
                         responseTemplates: {
-                            "application/json": JSON.stringify({ status: "success" }),
+                            "application/json": `
+                            #set($result = $util.parseJson($input.json('$.output')))
+                            #if($result.error)
+                                #set($context.responseOverride.status = 400)
+                                {"error": "$result.error", "cause": "$result.cause"}
+                            #else
+                                {"status": "success", "executionArn": "$input.json('$.executionArn')"}
+                            #end
+                            `
                         },
                     },
                     {

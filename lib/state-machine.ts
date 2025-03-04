@@ -75,12 +75,17 @@ export class WebhookStateMachine extends Construct {
         );
         const sendToSQSTask = this.createSQSTask(props);
 
-        writeToS3Task.addCatch(
-            new stepfunctions.Fail(this, "FailState", {
-                cause: "Task Failed",
-                error: "TaskError",
-            })
-        );
+        const errorHandler = new stepfunctions.Pass(this, "HandleError", {
+            parameters: {
+                "error.$": "$.error",
+                "cause.$": "$.cause",
+            },
+        });
+
+        writeToS3Task.addCatch(errorHandler);
+        fetchEntryTask.addCatch(errorHandler);
+        writeEntryToS3Task.addCatch(errorHandler);
+        sendToSQSTask.addCatch(errorHandler);
 
         return setupVariablesTask
             .next(writeToS3Task)
