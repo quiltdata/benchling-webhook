@@ -60,6 +60,7 @@ export class WebhookStateMachine extends Construct {
                 "packageName.$": `States.Format('${props.prefix}/{}', $.message.id)`,
                 "entity.$": "$.message.id",
                 "typeFields.$": "States.StringSplit($.message.type, '.')",
+                "baseURL": `https://${props.benchlingTenant}.benchling.com`,
             },
             resultPath: "$.var",
         });
@@ -104,7 +105,7 @@ export class WebhookStateMachine extends Construct {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": "States.Format('{}/api/v2/entries/{}', $.baseURL, $.message.resourceId)",
+                    "ApiEndpoint.$": "States.Format('{}/api/v2/entries/{}', $.var.baseURL, $.message.resourceId)",
                     Method: "GET",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
