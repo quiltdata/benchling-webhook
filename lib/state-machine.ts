@@ -30,7 +30,9 @@ export class WebhookStateMachine extends Construct {
             new iam.PolicyStatement({
                 actions: [
                     "states:InvokeHTTPEndpoint",
-                    "events:RetrieveConnectionCredentials"
+                    "events:RetrieveConnectionCredentials",
+                    "secretsmanager:DescribeSecret",
+                    "secretsmanager:GetSecretValue"
                 ],
                 resources: ["*"],
                 effect: iam.Effect.ALLOW,
