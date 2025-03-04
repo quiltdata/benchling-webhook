@@ -40,12 +40,8 @@ npx cdk deploy
 export ENDPOINT_ID=4sdc7ph31f
 export ENDPOINT_URL=https://$ENDPOINT_ID.execute-api.$CDK_DEFAULT_REGION.amazonaws.com/$STAGE/event
 
-curl -X POST $ENDPOINT_URL \
-     -H "Content-Type: application/json" \
-     -d '{
-           "message": "Hello from Benchling webhook!",
-           "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
-         }'
+curl -X POST $ENDPOINT_URL -H "Content-Type: application/json" -d @test/entry-created.json
+
 aws s3 cp s3://$BUCKET_NAME/$PREFIX/api_payload.json -
 open https://$QUILT_CATALOG/b/$BUCKET_NAME/tree/$PREFIX/
 ```
