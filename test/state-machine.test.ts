@@ -32,6 +32,7 @@ describe("WebhookStateMachine", () => {
             region: "us-west-2",
             account: "123456789012",
             benchlingConnection,
+            benchlingTenant: "test-tenant",
         });
 
         template = Template.fromStack(stack);
