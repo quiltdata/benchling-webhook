@@ -66,6 +66,18 @@ export class BenchlingWebhookStack extends cdk.Stack {
         );
 
         const writeToS3Task = this.createS3WriteTask();
+        const fetchEntryTask = this.createFetchEntryTask();
+        const writeEntryToS3Task = new tasks.CallAwsService(this, "WriteEntryToS3", {
+            service: "s3",
+            action: "putObject",
+            parameters: {
+                Bucket: this.bucket.bucketName,
+                "Key.$": "States.Format('{}/entry.json', $.var.packageName)",
+                "Body.$": "$.entryData",
+            },
+            iamResources: [this.bucket.arnForObjects("*")],
+            resultPath: "$.putEntryResult",
+        });
         const sendToSQSTask = this.createSQSSendTask();
 
         writeToS3Task.addCatch(
@@ -77,6 +89,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         const definition = setupVariablesTask
             .next(writeToS3Task)
+            .next(fetchEntryTask)
+            .next(writeEntryToS3Task)
             .next(sendToSQSTask);
 
         return new stepfunctions.StateMachine(
@@ -93,6 +107,18 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 },
             },
         );
+    }
+
+    private createFetchEntryTask(): tasks.CallApiGatewayRestApi {
+        return new tasks.CallApiGatewayRestApi(this, "FetchEntry", {
+            api: this.benchlingConnection,
+            apiMethod: "GET",
+            pathParametersJson: {
+                "entry_id.$": "$.message.resourceId"
+            },
+            apiPath: "/entries/{entry_id}",
+            resultPath: "$.entryData"
+        });
     }
 
     private createS3WriteTask(): tasks.CallAwsService {
