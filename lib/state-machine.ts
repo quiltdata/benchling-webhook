@@ -77,8 +77,8 @@ export class WebhookStateMachine extends Construct {
 
         const errorHandler = new stepfunctions.Pass(this, "HandleError", {
             parameters: {
-                "error.$": "$.error",
-                "cause.$": "$.cause",
+                "error.$": "$.Error",
+                "cause.$": "$.Cause",
             },
         });
 
