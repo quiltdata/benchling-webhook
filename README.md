@@ -2,6 +2,16 @@
 
 API Gateway for processing Benchling Events
 
+## Architecture
+
+This project implements a serverless webhook processor for Benchling events using AWS services:
+- API Gateway receives webhook events
+- Step Functions orchestrates the processing
+- S3 stores event data and entry details
+- SQS handles notifications
+
+See [lib/README.md](lib/README.md) for detailed architecture documentation.
+
 ## Configuration
 
 Create a `.env` file with the following content:
