@@ -80,9 +80,8 @@ export class WebhookStateMachine extends Construct {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": "$.baseURL",
+                    "ApiEndpoint.$": "States.Format('{}/api/v2/entries/{}', $.baseURL, $.message.resourceId)",
                     Method: "GET",
-                    "RequestPath.$": "States.Format('/api/v2/entries/{}', $.message.resourceId)",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
                     },
