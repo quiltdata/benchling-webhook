@@ -91,7 +91,7 @@ export class WebhookApi {
                         responseTemplates: {
                             "application/json": `
                             #set($execution = $input.json('$'))
-                            #if($execution.status == "RUNNING")
+                            #if($execution.executionArn)
                                 {"status": "success", "executionArn": "$execution.executionArn"}
                             #else
                                 #set($context.responseOverride.status = 500)
