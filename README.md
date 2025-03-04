@@ -2,6 +2,17 @@
 
 API Gateway for processing Benchling Events
 
+## Architecture
+
+This project implements a serverless webhook processor for Benchling events using AWS services:
+
+- API Gateway receives webhook events
+- Step Functions orchestrates the processing
+- S3 stores event data and entry details
+- SQS handles notifications
+
+See [lib/README.md](lib/README.md) for detailed architecture documentation.
+
 ## Configuration
 
 Create a `.env` file with the following content:
@@ -28,22 +39,19 @@ npx cdk deploy
 ```bash
 export ENDPOINT_ID=4sdc7ph31f
 export ENDPOINT_URL=https://$ENDPOINT_ID.execute-api.$CDK_DEFAULT_REGION.amazonaws.com/$STAGE/event
+export ENTRY_ID=etr_bl4xp2YJ
 
-curl -X POST $ENDPOINT_URL \
-     -H "Content-Type: application/json" \
-     -d '{
-           "message": "Hello from Benchling webhook!",
-           "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
-         }'
-aws s3 cp s3://$BUCKET_NAME/$PREFIX/api_payload.json -
-open https://$QUILT_CATALOG/b/$BUCKET_NAME/tree/$PREFIX/
+curl -X POST $ENDPOINT_URL -H "Content-Type: application/json" -d @test/entry-created.json
+
+aws s3 cp s3://$BUCKET_NAME/$PREFIX/$ENTRY_ID/api_payload.json -
+open https://$QUILT_CATALOG/b/$BUCKET_NAME/tree/$PREFIX/$ENTRY_ID
 ```
 
 ## Useful commands
 
-* `npm run build`   compile typescript to js
-* `npm run watch`   watch for changes and compile
-* `npm run test`    perform the jest unit tests
-* `npx cdk deploy`  deploy this stack to your default AWS account/region
-* `npx cdk diff`    compare deployed stack with current state
-* `npx cdk synth`   emits the synthesized CloudFormation template
+- `npm run build`   compile typescript to js
+- `npm run watch`   watch for changes and compile
+- `npm run test`    perform the jest unit tests
+- `npx cdk deploy`  deploy this stack to your default AWS account/region
+- `npx cdk diff`    compare deployed stack with current state
+- `npx cdk synth`   emits the synthesized CloudFormation template
