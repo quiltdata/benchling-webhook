@@ -62,7 +62,7 @@ export class WebhookStateMachine extends Construct {
             parameters: {
                 "registry": props.bucket.bucketName,
                 "packageName.$": `States.Format('${props.prefix}/{}', $.message.resourceId)`,
-                "entity": "$.message.resourceId",
+                "entity.$": "$.message.resourceId",
                 "typeFields.$": "States.StringSplit($.message.type, '.')",
                 "baseURL": `https://${props.benchlingTenant}.benchling.com`,
             },
