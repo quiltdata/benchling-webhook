@@ -60,8 +60,9 @@ export class WebhookStateMachine extends Construct {
     private createDefinition(props: StateMachineProps): stepfunctions.IChainable {
         const setupVariablesTask = new stepfunctions.Pass(this, "SetupVariables", {
             parameters: {
-                "packageName.$": `States.Format('${props.prefix}/{}', $.message.id)`,
-                "entity": "etr_bl4xp2YJ",
+                "registry": props.bucket.bucketName,
+                "packageName.$": `States.Format('${props.prefix}/{}', $.message.resourceId)`,
+                "entity": " $.message.resourceId",
                 "typeFields.$": "States.StringSplit($.message.type, '.')",
                 "baseURL": `https://${props.benchlingTenant}.benchling.com`,
             },
