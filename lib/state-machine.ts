@@ -33,52 +33,63 @@ export class WebhookStateMachine extends Construct {
                     "states:InvokeHTTPEndpoint",
                     "events:RetrieveConnectionCredentials",
                     "secretsmanager:DescribeSecret",
-                    "secretsmanager:GetSecretValue"
+                    "secretsmanager:GetSecretValue",
                 ],
                 resources: ["*"],
                 effect: iam.Effect.ALLOW,
-            })
+            }),
         );
 
         this.stateMachine = new stepfunctions.StateMachine(
             scope,
             "BenchlingWebhookStateMachine",
             {
-                definitionBody: stepfunctions.DefinitionBody.fromChainable(definition),
+                definitionBody: stepfunctions.DefinitionBody.fromChainable(
+                    definition,
+                ),
                 stateMachineType: stepfunctions.StateMachineType.STANDARD,
                 logs: {
                     destination: new logs.LogGroup(scope, "StateMachineLogs"),
                     level: stepfunctions.LogLevel.ALL,
-                    includeExecutionData: true
+                    includeExecutionData: true,
                 },
                 tracingEnabled: true,
                 role: role,
-            }
+            },
         );
     }
 
-    private createDefinition(props: StateMachineProps): stepfunctions.IChainable {
-        const setupVariablesTask = new stepfunctions.Pass(this, "SetupVariables", {
-            parameters: {
-                "registry": props.bucket.bucketName,
-                "packageName.$": `States.Format('${props.prefix}/{}', $.message.resourceId)`,
-                "entity.$": "$.message.resourceId",
-                "typeFields.$": "States.StringSplit($.message.type, '.')",
-                "baseURL": `https://${props.benchlingTenant}.benchling.com`,
+    private createDefinition(
+        props: StateMachineProps,
+    ): stepfunctions.IChainable {
+        const setupVariablesTask = new stepfunctions.Pass(
+            this,
+            "SetupVariables",
+            {
+                parameters: {
+                    "registry": props.bucket.bucketName,
+                    "packageName.$":
+                        `States.Format('${props.prefix}/{}', $.message.resourceId)`,
+                    "entity.$": "$.message.resourceId",
+                    "typeFields.$": "States.StringSplit($.message.type, '.')",
+                    "baseURL": `https://${props.benchlingTenant}.benchling.com`,
+                },
+                resultPath: "$.var",
             },
-            resultPath: "$.var",
-        });
-
-        const writeToS3Task = this.createS3WriteTask(
-            props.bucket,
-            "ro-crate-metadata.json",
-            "$.message"
         );
-        const fetchEntryTask = this.createFetchEntryTask(props.benchlingConnection);
+
+        const fetchEntryTask = this.createFetchEntryTask(
+            props.benchlingConnection,
+        );
         const writeEntryToS3Task = this.createS3WriteTask(
             props.bucket,
             "entry.json",
-            "$.entryData"
+            "$.entryData",
+        );
+        const writeMetadataTask = this.createS3WriteTask(
+            props.bucket,
+            "ro-crate-metadata.json",
+            "$.message",
         );
         const sendToSQSTask = this.createSQSTask(props);
 
@@ -89,27 +100,28 @@ export class WebhookStateMachine extends Construct {
             },
         });
 
-        writeToS3Task.addCatch(errorHandler);
         fetchEntryTask.addCatch(errorHandler);
         writeEntryToS3Task.addCatch(errorHandler);
+        writeMetadataTask.addCatch(errorHandler);
         sendToSQSTask.addCatch(errorHandler);
 
         return setupVariablesTask
-            .next(writeToS3Task)
             .next(fetchEntryTask)
             .next(writeEntryToS3Task)
+            .next(writeMetadataTask)
             .next(sendToSQSTask);
     }
 
     private createFetchEntryTask(
-        benchlingConnection: events.CfnConnection
+        benchlingConnection: events.CfnConnection,
     ): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "FetchEntry", {
             stateJson: {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": "States.Format('{}/api/v2/entries/{}', $.var.baseURL, $.var.entity)",
+                    "ApiEndpoint.$":
+                        "States.Format('{}/api/v2/entries/{}', $.var.baseURL, $.var.entity)",
                     Method: "GET",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
@@ -126,19 +138,22 @@ export class WebhookStateMachine extends Construct {
     private createS3WriteTask(
         bucket: s3.IBucket,
         filename: string,
-        bodyPath: string
+        bodyPath: string,
     ): tasks.CallAwsService {
         // Infer taskId from bodyPath by taking the part after $ and capitalizing
-        const taskId = `WriteTo${bodyPath.split('.')[1][0].toUpperCase()}${bodyPath.split('.')[1].slice(1)}S3`;
+        const taskId = `WriteTo${bodyPath.split(".")[1][0].toUpperCase()}${
+            bodyPath.split(".")[1].slice(1)
+        }S3`;
         // Infer resultPath by replacing body with put and adding Result
-        const resultPath = bodyPath.replace('Body', 'put') + 'Result';
-        
+        const resultPath = bodyPath.replace("Body", "put") + "Result";
+
         return new tasks.CallAwsService(this, taskId, {
             service: "s3",
             action: "putObject",
             parameters: {
                 Bucket: bucket.bucketName,
-                "Key.$": `States.Format('{}/{}', $.var.packageName, '${filename}')`,
+                "Key.$":
+                    `States.Format('{}/{}', $.var.packageName, '${filename}')`,
                 "Body.$": bodyPath,
             },
             iamResources: [bucket.arnForObjects("*")],
@@ -147,8 +162,10 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createSQSTask(props: StateMachineProps): tasks.CallAwsService {
-        const queueArn = `arn:aws:sqs:${props.region}:${props.account}:${props.queueName}`;
-        const queueUrl = `https://sqs.${props.region}.amazonaws.com/${props.account}/${props.queueName}`;
+        const queueArn =
+            `arn:aws:sqs:${props.region}:${props.account}:${props.queueName}`;
+        const queueUrl =
+            `https://sqs.${props.region}.amazonaws.com/${props.account}/${props.queueName}`;
         const timestamp = new Date().toISOString();
 
         return new tasks.CallAwsService(this, "SendToSQS", {
@@ -157,7 +174,8 @@ export class WebhookStateMachine extends Construct {
             parameters: {
                 QueueUrl: queueUrl,
                 MessageBody: {
-                    "source_prefix.$": `States.Format('s3://${props.bucket.bucketName}/{}/',$.var.packageName)`,
+                    "source_prefix.$":
+                        `States.Format('s3://${props.bucket.bucketName}/{}/',$.var.packageName)`,
                     registry: props.bucket.bucketName,
                     "package_name.$": "$.var.packageName",
                     metadata_uri: "event.json",
