@@ -1,0 +1,11 @@
+manifestVersion: 1
+info:
+  name: webhook-private
+  description: Local version
+  version: 0.0.1
+subscriptions:
+  deliveryMethod: WEBHOOK
+  messages:
+    - type: v2.entry.created
+    - type: v2.entry.updated.fields
+    - type: v2.entry.updated.reviewRecord
