@@ -71,7 +71,7 @@ export class WebhookStateMachine extends Construct {
 
         const writeToS3Task = this.createS3WriteTask(
             props.bucket,
-            "event_message.json",
+            "ro-crate-metadata.json",
             "$.message"
         );
         const fetchEntryTask = this.createFetchEntryTask(props.benchlingConnection);
