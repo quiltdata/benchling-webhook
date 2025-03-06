@@ -1,11 +1,20 @@
 manifestVersion: 1
 info:
-  name: webhook-private
-  description: Local version
+  name: package-with-quilt
+  description: Uses Quilt Package Engine
   version: 0.0.1
 subscriptions:
   deliveryMethod: WEBHOOK
   messages:
+    - type: v2-beta.app.configuration.updated
+    - type: v2-beta.canvas.created
+    - type: v2.app.activateRequested
+    - type: v2.app.deactivated
+    - type: v2.app.installed
+    - type: v2.canvas.initialized
+    - type: v2.canvas.userInteracted
+    - type: v2.entity.registered
     - type: v2.entry.created
     - type: v2.entry.updated.fields
     - type: v2.entry.updated.reviewRecord
+    - type: v2.request.created
