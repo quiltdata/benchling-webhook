@@ -87,7 +87,7 @@ export class WebhookStateMachine extends Construct {
         const writeEntryToS3Task = this.createS3WriteTask(
             props.bucket,
             WebhookStateMachine.ENTRY_JSON,
-            "$.entryData",
+            "$.entry.entryData",
         );
         const writeMetadataTask = this.createS3WriteTask(
             props.bucket,
@@ -133,7 +133,7 @@ export class WebhookStateMachine extends Construct {
                 ResultSelector: {
                     "entryData.$": "$.ResponseBody.entry",
                 },
-                ResultPath: "$.entryData",
+                ResultPath: "$.entry",
             },
         });
     }
