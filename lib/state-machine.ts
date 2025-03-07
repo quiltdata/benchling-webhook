@@ -128,7 +128,7 @@ export class WebhookStateMachine extends Construct {
                     },
                 },
                 ResultSelector: {
-                    "entryData.$": "$.ResponseBody.entry",
+                    "entryData.$": "$.ResponseBody.entry.entryData",
                 },
                 ResultPath: "$.entryData",
             },
@@ -175,10 +175,10 @@ export class WebhookStateMachine extends Construct {
                 QueueUrl: queueUrl,
                 MessageBody: {
                     "source_prefix.$":
-                        `States.Format('s3://${props.bucket.bucketName}/{}/',$.var.packageName)`,
-                    registry: props.bucket.bucketName,
+                        "States.Format('s3://${}/{}/',$.var.registry,$.var.packageName)",
+                    "registry.$": "$.var.registry",
                     "package_name.$": "$.var.packageName",
-                    metadata_uri: "event.json",
+                    metadata_uri: "entry.json",
                     commit_message: `Benchling webhook payload - ${timestamp}`,
                 },
             },
