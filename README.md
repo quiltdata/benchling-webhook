@@ -34,12 +34,38 @@ npx cdk bootstrap aws://$CDK_DEFAULT_ACCOUNT/$CDK_DEFAULT_REGION
 npx cdk deploy
 ```
 
+## Benchling Setup
+
+1. Create an [App Manifest](./app-manifest.yaml) that subscribes to the desired events
+2. In Benchling, go to lower left Profile -> Feature Settings -> Developer Console
+3. Apps -> Create app -> From manifest
+   1. Select Public
+   2. Add app manifest
+   3. Create
+4. Create Client Secret
+5. Copy `BENCHLING_CLIENT_ID` and `BENCHLING_CLIENT_SECRET` to `.env`
+6. Go to Overview -> Webhook URL
+   1. Click edit
+   2. Paste in the API Gateway URL from cdk
+   3. Save
+7. Go to Version History -> Install
+8. Click "View app in workspace"
+9. Click "Activate"
+10. Go to Profile -> Tenant Admin console
+    1. Verify it is in Apps
+    2. Go to Organizations -> "your org"
+11. Go to "Apps" tab
+    1. Start typing 'package-with-quilt' in the search box
+    2. Click "Add app"
+    3. Select the app
+    4. Change the 'Role' to 'Admin'
+
 ## Usage
 
 ```bash
-export ENDPOINT_ID=4sdc7ph31f
+export ENDPOINT_ID=4abcdef123
 export ENDPOINT_URL=https://$ENDPOINT_ID.execute-api.$CDK_DEFAULT_REGION.amazonaws.com/$STAGE/event
-export ENTRY_ID=etr_bl4xp2YJ
+export ENTRY_ID=etr_XXXXXX
 
 curl -X POST $ENDPOINT_URL -H "Content-Type: application/json" -d @test/entry-created.json
 
