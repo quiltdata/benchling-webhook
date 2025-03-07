@@ -18,6 +18,7 @@ export interface StateMachineProps {
 
 export class WebhookStateMachine extends Construct {
     private static readonly ENTRY_JSON = "entry.json";
+    private static readonly README_MD = "README.md";
     private static readonly RO_CRATE_METADATA_JSON = "ro-crate-metadata.json";
 
     public readonly stateMachine: stepfunctions.StateMachine;
@@ -89,6 +90,11 @@ export class WebhookStateMachine extends Construct {
             WebhookStateMachine.ENTRY_JSON,
             "$.entry.entryData",
         );
+        const writeReadmeToS3Task = this.createS3WriteTask(
+            props.bucket,
+            WebhookStateMachine.README_MD,
+            "$.var",
+        );
         const writeMetadataTask = this.createS3WriteTask(
             props.bucket,
             WebhookStateMachine.RO_CRATE_METADATA_JSON,
@@ -105,12 +111,14 @@ export class WebhookStateMachine extends Construct {
 
         fetchEntryTask.addCatch(errorHandler);
         writeEntryToS3Task.addCatch(errorHandler);
+        writeReadmeToS3Task.addCatch(errorHandler);
         writeMetadataTask.addCatch(errorHandler);
         sendToSQSTask.addCatch(errorHandler);
 
         return setupVariablesTask
             .next(fetchEntryTask)
             .next(writeEntryToS3Task)
+            .next(writeReadmeToS3Task)
             .next(writeMetadataTask)
             .next(sendToSQSTask);
     }
@@ -181,8 +189,9 @@ export class WebhookStateMachine extends Construct {
                         "States.Format('s3://${}/{}/',$.var.registry,$.var.packageName)",
                     "registry.$": "$.var.registry",
                     "package_name.$": "$.var.packageName",
-                    metadata_uri: WebhookStateMachine.ENTRY_JSON,
-                    commit_message: `Benchling webhook payload - ${timestamp}`,
+                    "metadata_uri": WebhookStateMachine.ENTRY_JSON,
+                    "commit_message":
+                        `Benchling webhook payload - ${timestamp}`,
                 },
             },
             iamResources: [queueArn],
