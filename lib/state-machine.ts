@@ -17,6 +17,9 @@ export interface StateMachineProps {
 }
 
 export class WebhookStateMachine extends Construct {
+    private static readonly ENTRY_JSON = "entry.json";
+    private static readonly RO_CRATE_METADATA_JSON = "ro-crate-metadata.json";
+
     public readonly stateMachine: stepfunctions.StateMachine;
 
     constructor(scope: Construct, id: string, props: StateMachineProps) {
@@ -83,12 +86,12 @@ export class WebhookStateMachine extends Construct {
         );
         const writeEntryToS3Task = this.createS3WriteTask(
             props.bucket,
-            "entry.json",
+            WebhookStateMachine.ENTRY_JSON,
             "$.entryData",
         );
         const writeMetadataTask = this.createS3WriteTask(
             props.bucket,
-            "ro-crate-metadata.json",
+            WebhookStateMachine.RO_CRATE_METADATA_JSON,
             "$.message",
         );
         const sendToSQSTask = this.createSQSTask(props);
@@ -128,7 +131,7 @@ export class WebhookStateMachine extends Construct {
                     },
                 },
                 ResultSelector: {
-                    "entryData.$": "$.ResponseBody.entry.entryData",
+                    "entryData.$": "$.ResponseBody.entry",
                 },
                 ResultPath: "$.entryData",
             },
@@ -178,7 +181,7 @@ export class WebhookStateMachine extends Construct {
                         "States.Format('s3://${}/{}/',$.var.registry,$.var.packageName)",
                     "registry.$": "$.var.registry",
                     "package_name.$": "$.var.packageName",
-                    metadata_uri: "entry.json",
+                    metadata_uri: WebhookStateMachine.ENTRY_JSON,
                     commit_message: `Benchling webhook payload - ${timestamp}`,
                 },
             },
