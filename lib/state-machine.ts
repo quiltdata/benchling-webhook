@@ -18,9 +18,19 @@ export interface StateMachineProps {
 
 export class WebhookStateMachine extends Construct {
     private static readonly ENTRY_JSON = "entry.json";
-    private static readonly README_MD = "README.md";
     private static readonly RO_CRATE_METADATA_JSON = "ro-crate-metadata.json";
+    private static readonly README_MD = "README.md";
+    private static readonly README_TEXT = `
+# Quilt Package Engine for Benchling Notebooks.
 
+This package contains the data and metadata for a Benchling Notebook entry.
+
+## Files
+
+- ${WebhookStateMachine.ENTRY_JSON}: Entry data
+- ${WebhookStateMachine.RO_CRATE_METADATA_JSON}: Webhook event message
+- ${WebhookStateMachine.README_MD}: This README file
+`;
     public readonly stateMachine: stepfunctions.StateMachine;
 
     constructor(scope: Construct, id: string, props: StateMachineProps) {
@@ -71,12 +81,13 @@ export class WebhookStateMachine extends Construct {
             "SetupVariables",
             {
                 parameters: {
-                    "registry": props.bucket.bucketName,
+                    "baseURL": `https://${props.benchlingTenant}.benchling.com`,
+                    "entity.$": "$.message.resourceId",
                     "packageName.$":
                         `States.Format('${props.prefix}/{}', $.message.resourceId)`,
-                    "entity.$": "$.message.resourceId",
+                    "readme": WebhookStateMachine.README_TEXT,
+                    "registry": props.bucket.bucketName,
                     "typeFields.$": "States.StringSplit($.message.type, '.')",
-                    "baseURL": `https://${props.benchlingTenant}.benchling.com`,
                 },
                 resultPath: "$.var",
             },
@@ -93,7 +104,7 @@ export class WebhookStateMachine extends Construct {
         const writeReadmeToS3Task = this.createS3WriteTask(
             props.bucket,
             WebhookStateMachine.README_MD,
-            "$.var",
+            "$.var.readme",
         );
         const writeMetadataTask = this.createS3WriteTask(
             props.bucket,
