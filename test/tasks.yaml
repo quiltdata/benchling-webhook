@@ -1,5 +1,133 @@
 # Query: tasks.yaml
 # ContextLines: 1
+  /tasks/{task_id}:
+    get:
+      description: Get a task by id
+      operationId: getTask
+      parameters:
+      - description: UUID of the task
+        example: f438d656-c2c3-40a4-b3fd-d7e58db78242
+        in: path
+        name: task_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                AA Sequences - Bulk Create:
+                  $ref: '#/components/examples/BulkOperateAaSequencesTaskResponse'
+                AA Sequences - Bulk Update:
+                  $ref: '#/components/examples/BulkOperateAaSequencesTaskResponse'
+                AA Sequences - Find Matching Region:
+                  $ref: '#/components/examples/AaSequencesFindMatchingRegionTaskResponse'
+                Audit - Export Audit Log:
+                  $ref: '#/components/examples/AuditLogTaskResponse'
+                Containers - Bulk Create:
+                  $ref: '#/components/examples/BulkOperateContainersTaskResponse'
+                Containers - Bulk Update:
+                  $ref: '#/components/examples/BulkOperateContainersTaskResponse'
+                Containers - Transfers:
+                  $ref: '#/components/examples/TransfersTaskResponse'
+                Custom Entities - Bulk Create:
+                  $ref: '#/components/examples/BulkOperateCustomEntitiesTaskResponse'
+                Custom Entities - Bulk Update:
+                  $ref: '#/components/examples/BulkOperateCustomEntitiesTaskResponse'
+                DNA Alignments - Create Consensus Alignment:
+                  $ref: '#/components/examples/DnaCreateAlignmentTaskResponse'
+                DNA Alignments - Create Template Alignment:
+                  $ref: '#/components/examples/DnaCreateAlignmentTaskResponse'
+                DNA Oligos - Bulk Create:
+                  $ref: '#/components/examples/BulkOperateDnaOligosTaskResponse'
+                DNA Oligos - Bulk Update:
+                  $ref: '#/components/examples/BulkOperateDnaOligosTaskResponse'
+                DNA Sequences - Auto Annotate:
+                  $ref: '#/components/examples/EmptySuccessTaskResponse'
+                DNA Sequences - Autofill Parts:
+                  $ref: '#/components/examples/EmptySuccessTaskResponse'
+                DNA Sequences - Autofill Transcriptions:
+                  $ref: '#/components/examples/EmptySuccessTaskResponse'
+                DNA Sequences - Autofill Translations:
+                  $ref: '#/components/examples/EmptySuccessTaskResponse'
+                DNA Sequences - Bulk Create:
+                  $ref: '#/components/examples/BulkOperateDnaSequencesTaskResponse'
+                DNA Sequences - Bulk Update:
+                  $ref: '#/components/examples/BulkOperateDnaSequencesTaskResponse'
+                Exports - Export Item:
+                  $ref: '#/components/examples/ExportsTaskResponse'
+                Features - Bulk Create:
+                  $ref: '#/components/examples/BulkOperateFeaturesTaskResponse'
+                Lab Automation - Generate Input:
+                  $ref: '#/components/examples/AIGGenerateInputTaskResponse'
+                Lab Automation - Process Output:
+                  $ref: '#/components/examples/AOPProcessOutputTaskResponse'
+                RNA Oligos - Bulk Create:
+                  $ref: '#/components/examples/BulkOperateRnaOligosTaskResponse'
+                RNA Oligos - Bulk Update:
+                  $ref: '#/components/examples/BulkOperateRnaOligosTaskResponse'
+                RNA Sequences - Auto Annotate:
+                  $ref: '#/components/examples/EmptySuccessTaskResponse'
+                RNA Sequences - Autofill Parts:
+                  $ref: '#/components/examples/EmptySuccessTaskResponse'
+                RNA Sequences - Autofill Translations:
+                  $ref: '#/components/examples/EmptySuccessTaskResponse'
+                RNA Sequences - Bulk Create:
+                  $ref: '#/components/examples/BulkOperateRnaSequencesTaskResponse'
+                RNA Sequences - Bulk Update:
+                  $ref: '#/components/examples/BulkOperateRnaSequencesTaskResponse'
+                Registry - Bulk Register Entities:
+                  $ref: '#/components/examples/EmptySuccessTaskResponse'
+                Task Failed:
+                  $ref: '#/components/examples/TaskFailed'
+                Task Failed (Bulk):
+                  $ref: '#/components/examples/BulkTaskFailed'
+                Task Running:
+                  $ref: '#/components/examples/TaskRunning'
+              schema:
+                oneOf:
+                - $ref: '#/components/schemas/AsyncTask'
+                - $ref: '#/components/schemas/CreateTemplateAlignmentAsyncTask'
+                - $ref: '#/components/schemas/CreateConsensusAlignmentAsyncTask'
+                - $ref: '#/components/schemas/CreateNucleotideTemplateAlignmentAsyncTask'
+                - $ref: '#/components/schemas/CreateNucleotideConsensusAlignmentAsyncTask'
+                - $ref: '#/components/schemas/BulkCreateDnaSequencesAsyncTask'
+                - $ref: '#/components/schemas/BulkUpdateDnaSequencesAsyncTask'
+                - $ref: '#/components/schemas/BulkCreateRnaSequencesAsyncTask'
+                - $ref: '#/components/schemas/BulkUpdateRnaSequencesAsyncTask'
+                - $ref: '#/components/schemas/AutofillPartsAsyncTask'
+                - $ref: '#/components/schemas/AutofillTranscriptionsAsyncTask'
+                - $ref: '#/components/schemas/AutofillTranslationsAsyncTask'
+                - $ref: '#/components/schemas/BulkRegisterEntitiesAsyncTask'
+                - $ref: '#/components/schemas/BulkCreateDnaOligosAsyncTask'
+                - $ref: '#/components/schemas/BulkUpdateDnaOligosAsyncTask'
+                - $ref: '#/components/schemas/BulkCreateRnaOligosAsyncTask'
+                - $ref: '#/components/schemas/BulkCreateAaSequencesAsyncTask'
+                - $ref: '#/components/schemas/BulkCreateCustomEntitiesAsyncTask'
+                - $ref: '#/components/schemas/BulkUpdateCustomEntitiesAsyncTask'
+                - $ref: '#/components/schemas/BulkCreateContainersAsyncTask'
+                - $ref: '#/components/schemas/BulkUpdateContainersAsyncTask'
+                - $ref: '#/components/schemas/BulkUpdateAaSequencesAsyncTask'
+                - $ref: '#/components/schemas/BulkUpdateRnaOligosAsyncTask'
+                - $ref: '#/components/schemas/TransfersAsyncTask'
+                - $ref: '#/components/schemas/AOPProcessOutputAsyncTask'
+                - $ref: '#/components/schemas/AIGGenerateInputAsyncTask'
+                - $ref: '#/components/schemas/ExportsAsyncTask'
+                - $ref: '#/components/schemas/ExportAuditLogAsyncTask'
+                - $ref: '#/components/schemas/BulkCreateFeaturesAsyncTask'
+                - $ref: '#/components/schemas/FindMatchingRegionsAsyncTask'
+                - $ref: '#/components/schemas/FindMatchingRegionsDnaAsyncTask'
+          description: OK
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+          description: Not Found
+      summary: Get a task by id
+      tags:
+      - Tasks
 
   /exports:
     post:
@@ -74,3 +202,27 @@
   name: Workflow Task Groups
 - description: Workflow tasks encapsulate a single unit of work
   name: Workflow Tasks
+    ExportItemRequest:
+      additionalProperties: false
+      properties:
+        id:
+          description: ID of the item to export
+          example: etr_1X1AlQPD
+          type: string
+      required:
+      - id
+      type: object
+    ExportsAsyncTask:
+      allOf:
+      - $ref: '#/components/schemas/AsyncTask'
+      - additionalProperties: false
+        properties:
+          response:
+            additionalProperties: false
+            properties:
+              downloadURL:
+                format: uri
+                type: string
+            type: object
+        type: object
+      type: object
