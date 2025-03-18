@@ -1,6 +1,6 @@
 import { S3Event } from 'aws-lambda';
-import * as AWS from 'aws-sdk';
-import * as AdmZip from 'adm-zip';
+import AWS from 'aws-sdk';
+import AdmZip from 'adm-zip';
 
 const s3 = new AWS.S3();
 
