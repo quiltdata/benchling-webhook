@@ -1,6 +1,9 @@
 import * as cdk from "aws-cdk-lib";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as nodejs from "aws-cdk-lib/aws-lambda-nodejs";
+import * as path from "path";
 import { Construct } from "constructs";
 import { WebhookApi } from "./api-gateway";
 import { WebhookStateMachine } from "./state-machine";
@@ -19,6 +22,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
     private readonly bucket: s3.IBucket;
     private readonly stateMachine: WebhookStateMachine;
     private readonly api: WebhookApi;
+    private readonly exportProcessor: lambda.IFunction;
 
     constructor(
         scope: Construct,
@@ -31,6 +35,22 @@ export class BenchlingWebhookStack extends cdk.Stack {
         }
 
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", props.bucketName);
+        
+        // Create the export processor Lambda
+        this.exportProcessor = new nodejs.NodejsFunction(this, 'ExportProcessor', {
+            entry: path.join(__dirname, 'lambda/process-export.ts'),
+            handler: 'handler',
+            runtime: lambda.Runtime.NODEJS_18_X,
+            timeout: cdk.Duration.minutes(5),
+            memorySize: 1024,
+            environment: {
+                NODE_OPTIONS: '--enable-source-maps'
+            },
+        });
+        
+        // Grant the Lambda function access to the S3 bucket
+        this.bucket.grantReadWrite(this.exportProcessor);
+        
         const benchlingConnection = this.createBenchlingConnection(props);
         
         this.stateMachine = new WebhookStateMachine(this, "StateMachine", {

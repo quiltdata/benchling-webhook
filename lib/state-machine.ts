@@ -209,7 +209,8 @@ This package contains the data and metadata for a Benchling Notebook entry.
                 },
                 ResultSelector: {
                     "status.$": "$.ResponseBody.status",
-                    "response.$": "$.ResponseBody"
+                    "response.$": "$.ResponseBody",
+                    "downloadURL.$": "$.ResponseBody.downloadURL"
                 },
                 ResultPath: "$.exportStatus",
             },
