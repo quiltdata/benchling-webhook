@@ -1,0 +1,76 @@
+# Query: tasks.yaml
+# ContextLines: 1
+
+  /exports:
+    post:
+      description: 'This endpoint launches a [long-running task](#/Tasks/getTask)
+        and returns the Task ID of the launched task.
+
+        The task response contains a link to download the exported item from Amazon
+        S3. The download is a ZIP file that contains the exported PDFs.
+
+        '
+      operationId: exportItem
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportItemRequest'
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncTaskLink'
+          description: 'This endpoint launches a [long-running task](#/Tasks/getTask)
+            and returns the Task ID of the launched task.
+
+            The task response contains a link to download the exported item from Amazon
+            S3.
+
+            The download is a ZIP file that contains the exported PDFs.
+
+            '
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+          description: Bad Request
+      summary: Export Item
+      tags:
+      - Exports
+- description: '
+
+    Endpoints that perform expensive computations launch long-running tasks. These
+    endpoints return the task ID (a UUID) in the response body.
+
+
+    After launching a task, periodically invoke the [Get a task](#/Tasks/getTask)
+    endpoint with the task UUID (e.g., every 10 seconds), until the status is no longer
+    RUNNING.
+
+
+    You can access a task for up to 30 minutes after its completion, after which its
+    data will no longer be available.
+
+    '
+  name: Tasks
+- description: View team objects.
+  name: Teams
+- description: Manage user objects.
+  name: Users
+- description: Manage warehouse credentials.
+  name: Warehouse
+- description: Workflow flowchart config versions are versioned graphs of flowchart
+    configurations.
+  name: Workflow Flowchart Config Versions
+- description: Workflow flowcharts represent the nodes and edges that a flowchart
+    is comprised of.
+  name: Workflow Flowcharts
+- description: Workflow outputs are outputs of a workflow task
+  name: Workflow Outputs
+- description: Workflow task groups are groups of workflow tasks of the same schema
+  name: Workflow Task Groups
+- description: Workflow tasks encapsulate a single unit of work
+  name: Workflow Tasks
