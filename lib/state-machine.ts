@@ -167,7 +167,7 @@ This package contains the data and metadata for a Benchling Notebook entry.
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
                     },
-                    "Body": {
+                    "RequestBody": {
                         "id.$": "$.var.entity"
                     }
                 },
