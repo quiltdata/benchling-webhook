@@ -46,6 +46,16 @@ export class BenchlingWebhookStack extends cdk.Stack {
             environment: {
                 NODE_OPTIONS: '--enable-source-maps'
             },
+            bundling: {
+                minify: true,
+                sourceMap: true,
+                externalModules: [
+                    'aws-sdk'  // Available in Lambda runtime
+                ],
+                nodeModules: [
+                    'adm-zip'  // Bundle this dependency
+                ]
+            }
         });
         
         // Grant the Lambda function access to the S3 bucket
