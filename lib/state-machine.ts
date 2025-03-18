@@ -136,14 +136,28 @@ This package contains the data and metadata for a Benchling Notebook entry.
         pollExportTask.addCatch(errorHandler);
 
         // Create export polling loop with proper state transitions
+        const extractDownloadURL = new stepfunctions.Pass(this, "ExtractDownloadURL", {
+            parameters: {
+                "status.$": "$.exportStatus.status",
+                "downloadURL.$": "$.exportStatus.response.response.downloadURL"
+            },
+            resultPath: "$.exportStatus"
+        });
+
         const exportChoice = new stepfunctions.Choice(this, "CheckExportStatus")
             .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", "RUNNING"), 
                 waitState.next(pollExportTask))
-            .otherwise(
-                writeEntryToS3Task
+            .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", "SUCCEEDED"),
+                extractDownloadURL
+                    .next(writeEntryToS3Task)
                     .next(writeReadmeToS3Task)
                     .next(writeMetadataTask)
-                    .next(sendToSQSTask)
+                    .next(sendToSQSTask))
+            .otherwise(
+                new stepfunctions.Fail(this, "ExportFailed", {
+                    cause: "Export task did not succeed",
+                    error: "ExportFailure"
+                })
             );
 
         // Main workflow
