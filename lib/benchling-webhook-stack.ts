@@ -54,7 +54,19 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 ],
                 nodeModules: [
                     'adm-zip'  // Bundle this dependency
-                ]
+                ],
+                forceDockerBundling: false,
+                commandHooks: {
+                    beforeBundling(inputDir: string, outputDir: string): string[] {
+                        return [];
+                    },
+                    beforeInstall(inputDir: string, outputDir: string): string[] {
+                        return [];
+                    },
+                    afterBundling(inputDir: string, outputDir: string): string[] {
+                        return [];
+                    },
+                }
             }
         });
         
