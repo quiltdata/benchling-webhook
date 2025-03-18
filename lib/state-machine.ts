@@ -1,4 +1,5 @@
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
+import { Duration } from "aws-cdk-lib";
 import * as tasks from "aws-cdk-lib/aws-stepfunctions-tasks";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as s3 from "aws-cdk-lib/aws-s3";
@@ -126,12 +127,86 @@ This package contains the data and metadata for a Benchling Notebook entry.
         writeMetadataTask.addCatch(errorHandler);
         sendToSQSTask.addCatch(errorHandler);
 
+        // Create export polling loop
+        const exportTask = this.createExportTask(props.benchlingConnection);
+        const pollExportTask = this.createPollExportTask(props.benchlingConnection);
+        const waitState = this.createWaitState();
+        
+        exportTask.addCatch(errorHandler);
+        pollExportTask.addCatch(errorHandler);
+
+        // Create export polling loop with proper state transitions
+        const exportChoice = new stepfunctions.Choice(this, "CheckExportStatus")
+            .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", "RUNNING"), 
+                waitState.next(pollExportTask))
+            .otherwise(
+                writeEntryToS3Task
+                    .next(writeReadmeToS3Task)
+                    .next(writeMetadataTask)
+                    .next(sendToSQSTask)
+            );
+
+        // Main workflow
         return setupVariablesTask
             .next(fetchEntryTask)
-            .next(writeEntryToS3Task)
-            .next(writeReadmeToS3Task)
-            .next(writeMetadataTask)
-            .next(sendToSQSTask);
+            .next(exportTask)
+            .next(pollExportTask)
+            .next(exportChoice);
+    }
+
+    private createExportTask(
+        benchlingConnection: events.CfnConnection,
+    ): stepfunctions.CustomState {
+        return new stepfunctions.CustomState(this, "ExportEntry", {
+            stateJson: {
+                Type: "Task",
+                Resource: "arn:aws:states:::http:invoke",
+                Parameters: {
+                    "ApiEndpoint.$": "States.Format('{}/api/v2/exports', $.var.baseURL)",
+                    Method: "POST",
+                    Authentication: {
+                        ConnectionArn: benchlingConnection.attrArn,
+                    },
+                    "Body": {
+                        "id.$": "$.var.entity"
+                    }
+                },
+                ResultSelector: {
+                    "taskId.$": "$.ResponseBody.taskId"
+                },
+                ResultPath: "$.exportTask",
+            },
+        });
+    }
+
+    private createPollExportTask(
+        benchlingConnection: events.CfnConnection,
+    ): stepfunctions.CustomState {
+        return new stepfunctions.CustomState(this, "PollExportStatus", {
+            stateJson: {
+                Type: "Task",
+                Resource: "arn:aws:states:::http:invoke",
+                Parameters: {
+                    "ApiEndpoint.$": "States.Format('{}/api/v2/tasks/{}', $.var.baseURL, $.exportTask.taskId)",
+                    Method: "GET",
+                    Authentication: {
+                        ConnectionArn: benchlingConnection.attrArn,
+                    },
+                },
+                ResultSelector: {
+                    "status.$": "$.ResponseBody.status",
+                    "downloadURL.$": "$.ResponseBody.response.downloadURL"
+                },
+                ResultPath: "$.exportStatus",
+            },
+        });
+    }
+
+    private createWaitState(): stepfunctions.Wait {
+        return new stepfunctions.Wait(this, "WaitForExport", {
+            time: stepfunctions.WaitTime.duration(Duration.seconds(30)),
+            comment: "Wait for the export to complete",
+        });
     }
 
     private createFetchEntryTask(
