@@ -52,9 +52,11 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 sourceMap: process.env.NODE_ENV === 'test',
                 nodeModules: [],  // Bundle everything
                 forceDockerBundling: false,
-                format: lambda.OutputFormat.ESM,
-                target: 'node18',
-                treeShaking: true,
+                target: 'es2020',
+                esbuildArgs: {
+                    '--tree-shaking': 'true',
+                    '--format': 'esm'
+                },
                 define: process.env.NODE_ENV === 'test' ? {
                     'process.env.NODE_ENV': JSON.stringify('test')
                 } : undefined
