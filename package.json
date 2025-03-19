@@ -6,7 +6,7 @@
   },
   "scripts": {
     "clean": "rm -rf cdk.out */{*.js,*.d.ts}",
-    "test": "NODE_ENV=test jest",
+    "test": "NODE_ENV=test node --max-old-space-size=4096 ./node_modules/.bin/jest",
     "cdk": "cdk",
     "lint": "eslint . --ext .ts --fix"
   },
