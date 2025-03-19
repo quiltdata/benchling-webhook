@@ -46,6 +46,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             environment: {
                 NODE_OPTIONS: "--enable-source-maps",
             },
+            architecture: lambda.Architecture.ARM_64,
             bundling: {
                 minify: process.env.NODE_ENV === 'test',
                 sourceMap: process.env.NODE_ENV !== 'test',
