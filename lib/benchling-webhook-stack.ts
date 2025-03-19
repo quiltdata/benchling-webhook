@@ -46,17 +46,18 @@ export class BenchlingWebhookStack extends cdk.Stack {
             environment: {
                 NODE_OPTIONS: "--enable-source-maps",
             },
+            architecture: lambda.Architecture.ARM_64,
             bundling: {
-                minify: process.env.NODE_ENV === 'test',
-                sourceMap: process.env.NODE_ENV !== 'test',
-                nodeModules: process.env.NODE_ENV === 'test' ? [] : [
-                    "adm-zip",
-                    "aws-sdk",
+                minify: true,
+                sourceMap: false,
+                externalModules: [
+                    "@aws-sdk/client-s3",
                 ],
                 forceDockerBundling: false,
-                define: process.env.NODE_ENV === 'test' ? {
-                    'process.env.NODE_ENV': JSON.stringify('test')
-                } : undefined
+                target: "node18",
+                define: {
+                    "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "production"),
+                },
             },
         });
 
