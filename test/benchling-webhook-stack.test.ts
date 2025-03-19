@@ -37,22 +37,22 @@ describe("BenchlingWebhookStack", () => {
 
     test("creates CloudWatch log groups", () => {
         template.resourceCountIs("AWS::Logs::LogGroup", 2); // One for API Gateway, one for Step Functions
-        
+
         template.hasResourceProperties("AWS::ApiGateway::Stage", {
             AccessLogSetting: {
                 DestinationArn: {
                     "Fn::GetAtt": [
                         Match.stringLikeRegexp("ApiGatewayAccessLogs.*"),
-                        "Arn"
-                    ]
-                }
-            }
+                        "Arn",
+                    ],
+                },
+            },
         });
     });
 
     test("creates API Gateway with correct configuration", () => {
         template.hasResourceProperties("AWS::ApiGateway::RestApi", {
-            Name: "BenchlingWebhookAPI"
+            Name: "BenchlingWebhookAPI",
         });
 
         template.hasResourceProperties("AWS::ApiGateway::Stage", {
@@ -61,8 +61,8 @@ describe("BenchlingWebhookStack", () => {
                 LoggingLevel: "INFO",
                 DataTraceEnabled: true,
                 HttpMethod: "*",
-                ResourcePath: "/*"
-            }]
+                ResourcePath: "/*",
+            }],
         });
 
         template.hasResourceProperties("AWS::ApiGateway::Method", {
@@ -79,9 +79,9 @@ describe("BenchlingWebhookStack", () => {
                             { "Ref": "AWS::Partition" },
                             ":apigateway:",
                             { "Ref": "AWS::Region" },
-                            ":states:action/StartExecution"
-                        ]
-                    ]
+                            ":states:action/StartExecution",
+                        ],
+                    ],
                 },
                 RequestTemplates: {
                     "application/json": {
@@ -90,12 +90,12 @@ describe("BenchlingWebhookStack", () => {
                             [
                                 Match.stringLikeRegexp(".*\"stateMachineArn\".*"),
                                 { "Ref": "BenchlingWebhookStateMachine177934B3" },
-                                Match.stringLikeRegexp(".*\"input\".*\\$input\\.json\\('\\$'\\).*")
-                            ]
-                        ]
-                    }
-                }
-            }
+                                Match.stringLikeRegexp(".*\"input\".*\\$input\\.json\\('\\$'\\).*"),
+                            ],
+                        ],
+                    },
+                },
+            },
         });
     });
 
@@ -122,11 +122,11 @@ describe("BenchlingWebhookStack", () => {
                         Action: "sts:AssumeRole",
                         Effect: "Allow",
                         Principal: {
-                            Service: "apigateway.amazonaws.com"
-                        }
-                    })
-                ])
-            })
+                            Service: "apigateway.amazonaws.com",
+                        },
+                    }),
+                ]),
+            }),
         });
 
         template.hasResourceProperties("AWS::IAM::Policy", {
@@ -134,10 +134,10 @@ describe("BenchlingWebhookStack", () => {
                 Statement: Match.arrayWith([
                     Match.objectLike({
                         Action: "states:StartExecution",
-                        Effect: "Allow"
-                    })
-                ])
-            })
+                        Effect: "Allow",
+                    }),
+                ]),
+            }),
         });
     });
 });
