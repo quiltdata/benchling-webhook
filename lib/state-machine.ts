@@ -8,7 +8,8 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
 import { StateMachineProps, ExportStatus } from "./types";
-import { EXPORT_STATUS } from "./constants";
+import { EXPORT_STATUS, FILES } from "./constants";
+import { README_TEMPLATE } from "./templates/readme";
 
 export class WebhookStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
@@ -65,7 +66,7 @@ export class WebhookStateMachine extends Construct {
                     "entity.$": "$.message.resourceId",
                     "packageName.$":
                         `States.Format('${props.prefix}/{}', $.message.resourceId)`,
-                    "readme": WebhookStateMachine.README_TEXT,
+                    "readme": README_TEMPLATE,
                     "registry": props.bucket.bucketName,
                     "typeFields.$": "States.StringSplit($.message.type, '.')",
                 },
@@ -78,17 +79,17 @@ export class WebhookStateMachine extends Construct {
         );
         const writeEntryToS3Task = this.createS3WriteTask(
             props.bucket,
-            WebhookStateMachine.ENTRY_JSON,
+            FILES.ENTRY_JSON,
             "$.entry.entryData",
         );
         const writeReadmeToS3Task = this.createS3WriteTask(
             props.bucket,
-            WebhookStateMachine.README_MD,
+            FILES.README_MD,
             "$.var.readme",
         );
         const writeMetadataTask = this.createS3WriteTask(
             props.bucket,
-            WebhookStateMachine.RO_CRATE_METADATA_JSON,
+            FILES.RO_CRATE_METADATA_JSON,
             "$.message",
         );
         const sendToSQSTask = this.createSQSTask(props);
@@ -281,7 +282,7 @@ export class WebhookStateMachine extends Construct {
                         "States.Format('s3://${}/{}/',$.var.registry,$.var.packageName)",
                     "registry.$": "$.var.registry",
                     "package_name.$": "$.var.packageName",
-                    "metadata_uri": WebhookStateMachine.ENTRY_JSON,
+                    "metadata_uri": FILES.ENTRY_JSON,
                     "commit_message":
                         `Benchling webhook payload - ${timestamp}`,
                 },
