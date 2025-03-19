@@ -11,20 +11,7 @@ import { Construct } from "constructs";
 import { StateMachineProps } from "./types";
 
 export class WebhookStateMachine extends Construct {
-    private static readonly ENTRY_JSON = "entry.json";
-    private static readonly RO_CRATE_METADATA_JSON = "ro-crate-metadata.json";
-    private static readonly README_MD = "README.md";
-    private static readonly README_TEXT = `
-# Quilt Package Engine for Benchling Notebooks.
-
-This package contains the data and metadata for a Benchling Notebook entry.
-
-## Files
-
-- ${WebhookStateMachine.ENTRY_JSON}: Entry data
-- ${WebhookStateMachine.RO_CRATE_METADATA_JSON}: Webhook event message
-- ${WebhookStateMachine.README_MD}: This README file
-`;
+import { FILES, README_TEMPLATE, EXPORT_STATUS } from "./constants";
     public readonly stateMachine: stepfunctions.StateMachine;
 
     constructor(scope: Construct, id: string, props: StateMachineProps) {
@@ -150,9 +137,9 @@ This package contains the data and metadata for a Benchling Notebook entry.
         });
 
         const exportChoice = new stepfunctions.Choice(this, "CheckExportStatus")
-            .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", "RUNNING"),
+            .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", EXPORT_STATUS.RUNNING),
                 waitState.next(pollExportTask))
-            .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", "SUCCEEDED"),
+            .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", EXPORT_STATUS.SUCCEEDED),
                 extractDownloadURL
                     .next(processExportTask)
                     .next(writeEntryToS3Task)

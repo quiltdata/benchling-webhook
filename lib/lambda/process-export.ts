@@ -74,19 +74,21 @@ function downloadFile(url: string): Promise<Buffer> {
     });
 }
 
+import { MIME_TYPES } from "../constants";
+
 function getContentType(fileName: string): string {
     const extension = fileName.split(".").pop()?.toLowerCase();
     switch (extension) {
-    case "html": return "text/html";
-    case "css": return "text/css";
-    case "js": return "application/javascript";
-    case "json": return "application/json";
-    case "png": return "image/png";
+    case "html": return MIME_TYPES.HTML;
+    case "css": return MIME_TYPES.CSS;
+    case "js": return MIME_TYPES.JS;
+    case "json": return MIME_TYPES.JSON;
+    case "png": return MIME_TYPES.PNG;
     case "jpg":
-    case "jpeg": return "image/jpeg";
-    case "gif": return "image/gif";
-    case "txt": return "text/plain";
-    case "pdf": return "application/pdf";
-    default: return "application/octet-stream";
+    case "jpeg": return MIME_TYPES.JPEG;
+    case "gif": return MIME_TYPES.GIF;
+    case "txt": return MIME_TYPES.TXT;
+    case "pdf": return MIME_TYPES.PDF;
+    default: return MIME_TYPES.DEFAULT;
     }
 }
