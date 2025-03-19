@@ -40,7 +40,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         this.exportProcessor = new nodejs.NodejsFunction(this, "ExportProcessor", {
             entry: path.join(__dirname, "lambda/process-export.ts"),
             handler: "handler",
-            runtime: lambda.Runtime.NODEJS_16_X,
+            runtime: lambda.Runtime.NODEJS_18_X,
             timeout: cdk.Duration.minutes(5),
             memorySize: 1024,
             environment: {
@@ -50,7 +50,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
             bundling: {
                 minify: true,
                 sourceMap: false,
-                externalModules: ["aws-sdk"],
+                externalModules: [
+                    '@aws-sdk/client-s3'
+                ],
                 forceDockerBundling: false,
                 target: "node18",
                 define: {
