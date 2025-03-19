@@ -5,9 +5,7 @@
     "benchling-webhook": "bin/benchling-webhook.js"
   },
   "scripts": {
-    "build": "tsc",
     "clean": "rm -rf cdk.out */{*.js,*.d.ts}",
-    "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk",
     "lint": "eslint . --ext .ts --fix"
