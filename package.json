@@ -9,7 +9,8 @@
     "clean": "rm -rf cdk.out */{*.js,*.d.ts}",
     "watch": "tsc -w",
     "test": "jest",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "lint": "eslint . --ext .ts"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
