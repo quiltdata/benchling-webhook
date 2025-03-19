@@ -48,13 +48,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
             },
             architecture: lambda.Architecture.ARM_64,
             bundling: {
-                minify: process.env.NODE_ENV === 'test',
-                sourceMap: process.env.NODE_ENV !== 'test',
-                nodeModules: process.env.NODE_ENV === 'test' ? [] : [
-                    "adm-zip",
-                    "aws-sdk",
-                ],
+                minify: true,
+                sourceMap: process.env.NODE_ENV === 'test',
+                nodeModules: [],  // Bundle everything
                 forceDockerBundling: false,
+                format: lambda.OutputFormat.ESM,
+                target: 'node18',
+                treeShaking: true,
                 define: process.env.NODE_ENV === 'test' ? {
                     'process.env.NODE_ENV': JSON.stringify('test')
                 } : undefined
