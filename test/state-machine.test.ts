@@ -35,7 +35,7 @@ describe("WebhookStateMachine", () => {
             benchlingConnection,
             benchlingTenant: "test-tenant",
             exportProcessor: new lambda.Function(stack, "TestExportProcessor", {
-                runtime: lambda.Runtime.NODEJS_18_X,
+                runtime: lambda.Runtime.NODEJS_16_X,
                 handler: "index.handler",
                 code: lambda.Code.fromInline("exports.handler = async () => {};"),
             }),

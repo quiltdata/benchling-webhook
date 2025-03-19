@@ -40,7 +40,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         this.exportProcessor = new nodejs.NodejsFunction(this, "ExportProcessor", {
             entry: path.join(__dirname, "lambda/process-export.ts"),
             handler: "handler",
-            runtime: lambda.Runtime.NODEJS_18_X,
+            runtime: lambda.Runtime.NODEJS_16_X,
             timeout: cdk.Duration.minutes(5),
             memorySize: 1024,
             environment: {
