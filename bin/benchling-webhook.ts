@@ -4,11 +4,11 @@ import { BenchlingWebhookStack } from '../lib/benchling-webhook-stack';
 
 const app = new cdk.App();
 new BenchlingWebhookStack(app, 'BenchlingWebhookStack', {
-    bucketName: process.env.BUCKET_NAME || 'my-bucket-name',
-    queueName: process.env.QUEUE_NAME || 'my-queue-name',
-    environment: process.env.STAGE || 'prod',
-    prefix: process.env.PREFIX || 'benchling',
-    benchlingClientId: process.env.BENCHLING_CLIENT_ID || '',
-    benchlingClientSecret: process.env.BENCHLING_CLIENT_SECRET || '',
-    benchlingTenant: process.env.BENCHLING_TENANT || '',
+    bucketName: process.env.BUCKET_NAME || "my-bucket-name",
+    queueName: process.env.QUEUE_NAME || "my-queue-name",
+    environment: process.env.STAGE || "prod",
+    prefix: process.env.PREFIX || "benchling",
+    benchlingClientId: process.env.BENCHLING_CLIENT_ID || "",
+    benchlingClientSecret: process.env.BENCHLING_CLIENT_SECRET || "",
+    benchlingTenant: process.env.BENCHLING_TENANT || "",
 });

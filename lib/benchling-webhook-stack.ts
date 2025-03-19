@@ -37,14 +37,14 @@ export class BenchlingWebhookStack extends cdk.Stack {
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", props.bucketName);
         
         // Create the export processor Lambda
-        this.exportProcessor = new nodejs.NodejsFunction(this, 'ExportProcessor', {
-            entry: path.join(__dirname, 'lambda/process-export.ts'),
-            handler: 'handler',
+        this.exportProcessor = new nodejs.NodejsFunction(this, "ExportProcessor", {
+            entry: path.join(__dirname, "lambda/process-export.ts"),
+            handler: "handler",
             runtime: lambda.Runtime.NODEJS_18_X,
             timeout: cdk.Duration.minutes(5),
             memorySize: 1024,
             environment: {
-                NODE_OPTIONS: '--enable-source-maps'
+                NODE_OPTIONS: "--enable-source-maps"
             },
             bundling: {
                 minify: true,
