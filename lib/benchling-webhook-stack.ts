@@ -49,11 +49,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
             bundling: {
                 minify: true,
                 sourceMap: true,
-                externalModules: [
-                    'aws-sdk'  // Available in Lambda runtime
-                ],
                 nodeModules: [
-                    'adm-zip'  // Bundle this dependency
+                    'adm-zip',  // Bundle this dependency
+                    'aws-sdk'   // Include aws-sdk in the bundle
                 ],
                 forceDockerBundling: false,
                 commandHooks: {
