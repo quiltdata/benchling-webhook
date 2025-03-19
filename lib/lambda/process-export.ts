@@ -21,30 +21,28 @@ export const handler = async (event: ProcessExportEvent): Promise<any> => {
         const zip = new AdmZip(zipBuffer);
         const entries = zip.getEntries();
 
-        // Find and process the notebook HTML
-        const notebookEntry = entries.find(entry => entry.entryName.endsWith('.html'));
-        if (!notebookEntry) {
-            throw new Error('No HTML file found in export');
-        }
+        // Upload all files in the ZIP
+        const uploadPromises = entries.map(async (entry: AdmZip.IZipEntry) => {
+            if (!entry.isDirectory) {
+                const key = `${event.packageName}/${entry.entryName}`;
+                const fileContent = entry.getData();
 
-        // Extract the HTML content
-        const htmlContent = notebookEntry.getData().toString('utf8');
+                await s3.putObject({
+                    Bucket: event.registry,
+                    Key: key,
+                    Body: fileContent,
+                    ContentType: getContentType(entry.entryName)
+                }).promise();
+            }
+        });
 
-        // Upload the HTML content
-        const key = `${event.packageName}/notebook.html`;
-        await s3.putObject({
-            Bucket: event.registry,
-            Key: key,
-            Body: htmlContent,
-            ContentType: 'text/html'
-        }).promise();
+        await Promise.all(uploadPromises);
 
         return {
             statusCode: 200,
             body: JSON.stringify({
                 message: 'Export processed successfully',
-                numFiles: entries.length,
-                outputKey: key
+                numFiles: entries.length
             })
         };
     } catch (error) {
@@ -73,4 +71,21 @@ function downloadFile(url: string): Promise<Buffer> {
             reject(error);
         });
     });
+}
+
+function getContentType(fileName: string): string {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    switch (extension) {
+        case 'html': return 'text/html';
+        case 'css': return 'text/css';
+        case 'js': return 'application/javascript';
+        case 'json': return 'application/json';
+        case 'png': return 'image/png';
+        case 'jpg':
+        case 'jpeg': return 'image/jpeg';
+        case 'gif': return 'image/gif';
+        case 'txt': return 'text/plain';
+        case 'pdf': return 'application/pdf';
+        default: return 'application/octet-stream';
+    }
 }
