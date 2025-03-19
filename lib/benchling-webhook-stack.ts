@@ -82,7 +82,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
             region: this.region,
             account: this.account,
             benchlingConnection,
-            benchlingTenant: props.benchlingTenant
+            benchlingTenant: props.benchlingTenant,
+            exportProcessor: this.exportProcessor
         });
 
         this.api = new WebhookApi(this, "WebhookApi", this.stateMachine.stateMachine);

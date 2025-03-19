@@ -15,6 +15,7 @@ export interface StateMachineProps {
     account: string;
     benchlingConnection: events.CfnConnection;
     benchlingTenant: string;
+    exportProcessor: lambda.IFunction;
 }
 
 export class WebhookStateMachine extends Construct {
@@ -139,9 +140,21 @@ This package contains the data and metadata for a Benchling Notebook entry.
         const extractDownloadURL = new stepfunctions.Pass(this, "ExtractDownloadURL", {
             parameters: {
                 "status.$": "$.exportStatus.status",
-                "downloadURL.$": "$.exportStatus.response.response.downloadURL"
+                "downloadURL.$": "$.exportStatus.response.response.downloadURL",
+                "packageName.$": "$.var.packageName",
+                "registry.$": "$.var.registry"
             },
             resultPath: "$.exportStatus"
+        });
+
+        const processExportTask = new tasks.LambdaInvoke(this, "ProcessExport", {
+            lambdaFunction: props.exportProcessor,
+            payload: stepfunctions.TaskInput.fromObject({
+                downloadURL: stepfunctions.JsonPath.stringAt("$.exportStatus.downloadURL"),
+                packageName: stepfunctions.JsonPath.stringAt("$.exportStatus.packageName"),
+                registry: stepfunctions.JsonPath.stringAt("$.exportStatus.registry")
+            }),
+            resultPath: "$.processResult"
         });
 
         const exportChoice = new stepfunctions.Choice(this, "CheckExportStatus")
@@ -149,6 +162,7 @@ This package contains the data and metadata for a Benchling Notebook entry.
                 waitState.next(pollExportTask))
             .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", "SUCCEEDED"),
                 extractDownloadURL
+                    .next(processExportTask)
                     .next(writeEntryToS3Task)
                     .next(writeReadmeToS3Task)
                     .next(writeMetadataTask)
