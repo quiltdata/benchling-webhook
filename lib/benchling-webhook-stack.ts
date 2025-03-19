@@ -50,12 +50,12 @@ export class BenchlingWebhookStack extends cdk.Stack {
             bundling: {
                 minify: true,
                 sourceMap: false,
-                externalModules: ['aws-sdk'],
+                externalModules: ["aws-sdk"],
                 forceDockerBundling: false,
-                target: 'node18',
+                target: "node18",
                 define: {
-                    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production')
-                }
+                    "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "production"),
+                },
             },
         });
 
