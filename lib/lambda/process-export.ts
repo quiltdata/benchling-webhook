@@ -2,15 +2,16 @@ import AWS from "aws-sdk";
 import AdmZip from "adm-zip";
 import * as https from "https";
 
-interface ProcessExportEvent {
-    downloadURL: string;
-    packageName: string;
-    registry: string;
-}
+import { ProcessExportEvent } from "../types";
 
 const s3 = new AWS.S3();
 
-export const handler = async (event: ProcessExportEvent): Promise<any> => {
+interface ProcessExportResult {
+    statusCode: number;
+    body: string;
+}
+
+export const handler = async (event: ProcessExportEvent): Promise<ProcessExportResult> => {
     console.log("Processing export with event:", JSON.stringify(event));
 
     try {
