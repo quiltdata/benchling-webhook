@@ -77,18 +77,7 @@ function downloadFile(url: string): Promise<Buffer> {
 import { MIME_TYPES } from "../constants";
 
 function getContentType(fileName: string): string {
-    const extension = fileName.split(".").pop()?.toLowerCase();
-    switch (extension) {
-    case "html": return MIME_TYPES.HTML;
-    case "css": return MIME_TYPES.CSS;
-    case "js": return MIME_TYPES.JS;
-    case "json": return MIME_TYPES.JSON;
-    case "png": return MIME_TYPES.PNG;
-    case "jpg":
-    case "jpeg": return MIME_TYPES.JPEG;
-    case "gif": return MIME_TYPES.GIF;
-    case "txt": return MIME_TYPES.TXT;
-    case "pdf": return MIME_TYPES.PDF;
-    default: return MIME_TYPES.DEFAULT;
-    }
+    const extension = fileName.split(".").pop()?.toLowerCase() || "";
+    const mimeTypeKey = extension.toUpperCase() as keyof typeof MIME_TYPES;
+    return MIME_TYPES[mimeTypeKey] || MIME_TYPES.DEFAULT;
 }
