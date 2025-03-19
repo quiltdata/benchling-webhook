@@ -54,12 +54,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 forceDockerBundling: false,
                 target: 'es2020',
                 externalModules: ['aws-sdk'],
-                esbuildArgs: {
-                    '--tree-shaking': 'true',
-                    '--bundle': 'true',
-                    '--minify': 'true',
-                    '--platform': 'node'
-                },
+                esbuild: true,
                 define: process.env.NODE_ENV === 'test' ? {
                     'process.env.NODE_ENV': JSON.stringify('test')
                 } : undefined
