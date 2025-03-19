@@ -52,26 +52,17 @@ export const handler = async (event: ProcessExportEvent): Promise<ProcessExportR
     }
 };
 
-function downloadFile(url: string): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-        https.get(url, (response) => {
-            const chunks: Buffer[] = [];
-
-            response.on("data", (chunk: Buffer) => {
-                chunks.push(chunk);
-            });
-
-            response.on("end", () => {
-                resolve(Buffer.concat(chunks));
-            });
-
-            response.on("error", (error) => {
-                reject(error);
-            });
-        }).on("error", (error) => {
-            reject(error);
-        });
+async function downloadFile(url: string): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    const response = await new Promise<any>((resolve, reject) => {
+        https.get(url, resolve).on("error", reject);
     });
+    
+    for await (const chunk of response) {
+        chunks.push(chunk);
+    }
+    
+    return Buffer.concat(chunks);
 }
 
 import { MIME_TYPES } from "../constants";

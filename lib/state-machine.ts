@@ -9,9 +9,10 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 
 import { StateMachineProps } from "./types";
+import { FILES, EXPORT_STATUS } from "./constants";
+import { README_TEMPLATE } from "./templates/readme";
 
 export class WebhookStateMachine extends Construct {
-import { FILES, README_TEMPLATE, EXPORT_STATUS } from "./constants";
     public readonly stateMachine: stepfunctions.StateMachine;
 
     constructor(scope: Construct, id: string, props: StateMachineProps) {
