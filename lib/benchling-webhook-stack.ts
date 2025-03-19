@@ -51,7 +51,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 minify: true,
                 sourceMap: false,
                 externalModules: [
-                    '@aws-sdk/client-s3'
+                    "@aws-sdk/client-s3",
                 ],
                 forceDockerBundling: false,
                 target: "node18",

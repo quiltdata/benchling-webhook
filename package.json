@@ -26,6 +26,7 @@
     "typescript": "~5.8.0"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.758.0",
     "adm-zip": "^0.5.10",
     "aws-cdk-lib": "2.184.1",
     "aws-sdk": "^2.1574.0",
