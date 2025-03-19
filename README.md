@@ -2,6 +2,15 @@
 
 API Gateway for processing Benchling Events
 
+## Project Structure
+
+The codebase is organized as follows:
+
+- `lib/constants.ts` - Shared constants and configuration
+- `lib/types.ts` - TypeScript interfaces and types
+- `lib/state-machine.ts` - AWS Step Functions workflow definition
+- `lib/lambda/process-export.ts` - Lambda function for processing exports
+
 ## Architecture
 
 This project implements a serverless webhook processor for Benchling events using AWS services:

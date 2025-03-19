@@ -1,0 +1,114 @@
+openapi: 3.0.0
+info:
+  title: Task Management API
+  version: 1.0.0
+  description: API for managing long-running tasks related to exports, sequences, and other operations.
+
+paths:
+  /tasks/{task_id}:
+    get:
+      summary: Get a task by ID
+      description: Retrieve details of a specific task using its unique identifier.
+      operationId: getTask
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: UUID of the task
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AsyncTask'
+                  - $ref: '#/components/schemas/CreateTemplateAlignmentAsyncTask'
+                  - $ref: '#/components/schemas/BulkCreateDnaSequencesAsyncTask'
+              examples:
+                Task Running:
+                  $ref: '#/components/examples/TaskRunning'
+                Task Failed:
+                  $ref: '#/components/examples/TaskFailed'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+
+  /exports:
+    post:
+      summary: Export Item
+      description: Initiates a long-running export task and returns the Task ID.
+      operationId: exportItem
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportItemRequest'
+      responses:
+        '202':
+          description: Task Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncTaskLink'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+
+components:
+  schemas:
+    AsyncTask:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the task
+        status:
+          type: string
+          enum: [RUNNING, FAILED, SUCCESS]
+    
+    ExportItemRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID of the item to export
+      required:
+        - id
+
+    AsyncTaskLink:
+      type: object
+      properties:
+        taskId:
+          type: string
+          description: ID of the initiated task
+
+    NotFoundError:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message when resource is not found
+
+    BadRequestError:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message for bad requests
+
+  examples:
+    TaskRunning:
+      value:
+        status: RUNNING
+    TaskFailed:
+      value:
+        status: FAILED

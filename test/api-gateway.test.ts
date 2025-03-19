@@ -1,5 +1,5 @@
 import * as cdk from "aws-cdk-lib";
-import { Template, Match } from "aws-cdk-lib/assertions";
+import { Template } from "aws-cdk-lib/assertions";
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
 import { WebhookApi } from "../lib/api-gateway";
 
@@ -11,7 +11,7 @@ describe("WebhookApi", () => {
         stack = new cdk.Stack();
         const stateMachine = new stepfunctions.StateMachine(stack, "TestStateMachine", {
             definitionBody: stepfunctions.DefinitionBody.fromChainable(
-                new stepfunctions.Pass(stack, "TestPass")
+                new stepfunctions.Pass(stack, "TestPass"),
             ),
         });
         new WebhookApi(stack, "TestApi", stateMachine);

@@ -2,6 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
+import * as lambda from "aws-cdk-lib/aws-lambda";
 import { WebhookStateMachine } from "../lib/state-machine";
 
 describe("WebhookStateMachine", () => {
@@ -33,6 +34,11 @@ describe("WebhookStateMachine", () => {
             account: "123456789012",
             benchlingConnection,
             benchlingTenant: "test-tenant",
+            exportProcessor: new lambda.Function(stack, "TestExportProcessor", {
+                runtime: lambda.Runtime.NODEJS_18_X,
+                handler: "index.handler",
+                code: lambda.Code.fromInline("exports.handler = async () => {};"),
+            }),
         });
 
         template = Template.fromStack(stack);
@@ -58,9 +64,9 @@ describe("WebhookStateMachine", () => {
                         Match.stringLikeRegexp(".*WriteToMessageS3.*"),
                         Match.stringLikeRegexp(".*FetchEntry.*"),
                         Match.stringLikeRegexp(".*WriteToEntryDataS3.*"),
-                        Match.stringLikeRegexp(".*SendToSQS.*")
-                    ])
-                ]
+                        Match.stringLikeRegexp(".*SendToSQS.*"),
+                    ]),
+                ],
             },
         });
     });
@@ -71,9 +77,9 @@ describe("WebhookStateMachine", () => {
                 "Fn::Join": [
                     "",
                     Match.arrayWith([
-                        Match.stringLikeRegexp(".*arn:aws:states:::http:invoke.*")
-                    ])
-                ]
+                        Match.stringLikeRegexp(".*arn:aws:states:::http:invoke.*"),
+                    ]),
+                ],
             },
         });
     });
