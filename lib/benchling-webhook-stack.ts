@@ -35,7 +35,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         }
 
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", props.bucketName);
-        
+
         // Create the export processor Lambda
         this.exportProcessor = new nodejs.NodejsFunction(this, "ExportProcessor", {
             entry: path.join(__dirname, "lambda/process-export.ts"),
@@ -44,14 +44,14 @@ export class BenchlingWebhookStack extends cdk.Stack {
             timeout: cdk.Duration.minutes(5),
             memorySize: 1024,
             environment: {
-                NODE_OPTIONS: "--enable-source-maps"
+                NODE_OPTIONS: "--enable-source-maps",
             },
             bundling: {
                 minify: true,
                 sourceMap: true,
                 nodeModules: [
-                    'adm-zip',  // Bundle this dependency
-                    'aws-sdk'   // Include aws-sdk in the bundle
+                    "adm-zip",  // Bundle this dependency
+                    "aws-sdk",   // Include aws-sdk in the bundle
                 ],
                 forceDockerBundling: false,
                 commandHooks: {
@@ -64,15 +64,15 @@ export class BenchlingWebhookStack extends cdk.Stack {
                     afterBundling(inputDir: string, outputDir: string): string[] {
                         return [];
                     },
-                }
-            }
+                },
+            },
         });
-        
+
         // Grant the Lambda function access to the S3 bucket
         this.bucket.grantReadWrite(this.exportProcessor);
-        
+
         const benchlingConnection = this.createBenchlingConnection(props);
-        
+
         this.stateMachine = new WebhookStateMachine(this, "StateMachine", {
             bucket: this.bucket,
             prefix: props.prefix,
@@ -81,11 +81,11 @@ export class BenchlingWebhookStack extends cdk.Stack {
             account: this.account,
             benchlingConnection,
             benchlingTenant: props.benchlingTenant,
-            exportProcessor: this.exportProcessor
+            exportProcessor: this.exportProcessor,
         });
 
         this.api = new WebhookApi(this, "WebhookApi", this.stateMachine.stateMachine);
-        
+
         this.createOutputs();
     }
 

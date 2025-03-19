@@ -1,7 +1,7 @@
 export const FILES = {
     ENTRY_JSON: "entry.json",
     RO_CRATE_METADATA_JSON: "ro-crate-metadata.json",
-    README_MD: "README.md"
+    README_MD: "README.md",
 };
 
 export const README_TEMPLATE = `
@@ -17,14 +17,14 @@ This package contains the data and metadata for a Benchling Notebook entry.
 `;
 
 export const MIME_TYPES = {
-    'html': 'text/html',
-    'css': 'text/css',
-    'js': 'application/javascript',
-    'json': 'application/json',
-    'png': 'image/png',
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'gif': 'image/gif',
-    'txt': 'text/plain',
-    'pdf': 'application/pdf'
+    "html": "text/html",
+    "css": "text/css",
+    "js": "application/javascript",
+    "json": "application/json",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "txt": "text/plain",
+    "pdf": "application/pdf",
 } as const;

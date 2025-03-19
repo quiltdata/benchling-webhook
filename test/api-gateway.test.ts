@@ -11,7 +11,7 @@ describe("WebhookApi", () => {
         stack = new cdk.Stack();
         const stateMachine = new stepfunctions.StateMachine(stack, "TestStateMachine", {
             definitionBody: stepfunctions.DefinitionBody.fromChainable(
-                new stepfunctions.Pass(stack, "TestPass")
+                new stepfunctions.Pass(stack, "TestPass"),
             ),
         });
         new WebhookApi(stack, "TestApi", stateMachine);

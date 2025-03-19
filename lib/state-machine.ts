@@ -133,7 +133,7 @@ This package contains the data and metadata for a Benchling Notebook entry.
         const exportTask = this.createExportTask(props.benchlingConnection);
         const pollExportTask = this.createPollExportTask(props.benchlingConnection);
         const waitState = this.createWaitState();
-        
+
         exportTask.addCatch(errorHandler);
         pollExportTask.addCatch(errorHandler);
 
@@ -143,9 +143,9 @@ This package contains the data and metadata for a Benchling Notebook entry.
                 "status.$": "$.exportStatus.status",
                 "downloadURL.$": "$.exportStatus.response.response.downloadURL",
                 "packageName.$": "$.var.packageName",
-                "registry.$": "$.var.registry"
+                "registry.$": "$.var.registry",
             },
-            resultPath: "$.exportStatus"
+            resultPath: "$.exportStatus",
         });
 
         const processExportTask = new tasks.LambdaInvoke(this, "ProcessExport", {
@@ -153,13 +153,13 @@ This package contains the data and metadata for a Benchling Notebook entry.
             payload: stepfunctions.TaskInput.fromObject({
                 downloadURL: stepfunctions.JsonPath.stringAt("$.exportStatus.downloadURL"),
                 packageName: stepfunctions.JsonPath.stringAt("$.exportStatus.packageName"),
-                registry: stepfunctions.JsonPath.stringAt("$.exportStatus.registry")
+                registry: stepfunctions.JsonPath.stringAt("$.exportStatus.registry"),
             }),
-            resultPath: "$.processResult"
+            resultPath: "$.processResult",
         });
 
         const exportChoice = new stepfunctions.Choice(this, "CheckExportStatus")
-            .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", "RUNNING"), 
+            .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", "RUNNING"),
                 waitState.next(pollExportTask))
             .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", "SUCCEEDED"),
                 extractDownloadURL
@@ -171,8 +171,8 @@ This package contains the data and metadata for a Benchling Notebook entry.
             .otherwise(
                 new stepfunctions.Fail(this, "ExportFailed", {
                     cause: "Export task did not succeed",
-                    error: "ExportFailure"
-                })
+                    error: "ExportFailure",
+                }),
             );
 
         // Main workflow
@@ -197,11 +197,11 @@ This package contains the data and metadata for a Benchling Notebook entry.
                         ConnectionArn: benchlingConnection.attrArn,
                     },
                     "RequestBody": {
-                        "id.$": "$.var.entity"
-                    }
+                        "id.$": "$.var.entity",
+                    },
                 },
                 ResultSelector: {
-                    "taskId.$": "$.ResponseBody.taskId"
+                    "taskId.$": "$.ResponseBody.taskId",
                 },
                 ResultPath: "$.exportTask",
             },
@@ -224,7 +224,7 @@ This package contains the data and metadata for a Benchling Notebook entry.
                 },
                 ResultSelector: {
                     "status.$": "$.ResponseBody.status",
-                    "response.$": "$.ResponseBody"
+                    "response.$": "$.ResponseBody",
                 },
                 ResultPath: "$.exportStatus",
             },

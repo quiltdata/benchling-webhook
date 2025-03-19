@@ -20,6 +20,6 @@ export interface ProcessExportEvent {
 }
 
 export interface ExportStatus {
-    status: 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+    status: "RUNNING" | "SUCCEEDED" | "FAILED";
     downloadURL?: string;
 }

@@ -10,7 +10,7 @@ export class WebhookApi {
     constructor(
         scope: Construct,
         id: string,
-        stateMachine: stepfunctions.StateMachine
+        stateMachine: stepfunctions.StateMachine,
     ) {
         const logGroup = new logs.LogGroup(scope, "ApiGatewayAccessLogs");
         const apiRole = this.createApiRole(scope, stateMachine);
@@ -38,7 +38,7 @@ export class WebhookApi {
             assumedBy: new iam.ServicePrincipal("apigateway.amazonaws.com"),
             managedPolicies: [
                 iam.ManagedPolicy.fromAwsManagedPolicyName(
-                    "service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+                    "service-role/AmazonAPIGatewayPushToCloudWatchLogs",
                 ),
             ],
         });
@@ -52,7 +52,7 @@ export class WebhookApi {
 
     private createApiRole(
         scope: Construct,
-        stateMachine: stepfunctions.StateMachine
+        stateMachine: stepfunctions.StateMachine,
     ): iam.Role {
         const role = new iam.Role(scope, "ApiGatewayStepFunctionsRole", {
             assumedBy: new iam.ServicePrincipal("apigateway.amazonaws.com"),
@@ -62,7 +62,7 @@ export class WebhookApi {
             new iam.PolicyStatement({
                 actions: ["states:StartExecution"],
                 resources: [stateMachine.stateMachineArn],
-            })
+            }),
         );
 
         return role;
@@ -70,7 +70,7 @@ export class WebhookApi {
 
     private addWebhookEndpoints(
         stateMachine: stepfunctions.StateMachine,
-        apiRole: iam.Role
+        apiRole: iam.Role,
     ): void {
         const sfnIntegration = new apigateway.AwsIntegration({
             service: "states",
@@ -97,7 +97,7 @@ export class WebhookApi {
                                 #set($context.responseOverride.status = 500)
                                 {"error": "State machine execution failed", "cause": "Check CloudWatch logs for details"}
                             #end
-                            `
+                            `,
                         },
                     },
                     {
