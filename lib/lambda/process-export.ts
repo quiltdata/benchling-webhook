@@ -54,7 +54,7 @@ export const handler = async (event: ProcessExportEvent): Promise<ProcessExportR
 
 async function downloadFile(url: string): Promise<Buffer> {
     const chunks: Buffer[] = [];
-    const response = await new Promise<any>((resolve, reject) => {
+    const response = await new Promise<import("http").IncomingMessage>((resolve, reject) => {
         https.get(url, resolve).on("error", reject);
     });
 

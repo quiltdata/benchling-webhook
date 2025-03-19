@@ -14,7 +14,7 @@ export class WebhookApi {
     ) {
         const logGroup = new logs.LogGroup(scope, "ApiGatewayAccessLogs");
         const apiRole = this.createApiRole(scope, stateMachine);
-        const cloudWatchRole = this.createCloudWatchRole(scope);
+        this.createCloudWatchRole(scope);
 
         this.api = new apigateway.RestApi(scope, "BenchlingWebhookAPI", {
             restApiName: "BenchlingWebhookAPI",

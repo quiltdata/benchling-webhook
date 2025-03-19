@@ -5,12 +5,10 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
 import * as iam from "aws-cdk-lib/aws-iam";
-import * as lambda from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 
-import { StateMachineProps } from "./types";
-import { FILES, EXPORT_STATUS } from "./constants";
-import { README_TEMPLATE } from "./templates/readme";
+import { StateMachineProps, ExportStatus } from "./types";
+import { EXPORT_STATUS } from "./constants";
 
 export class WebhookStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;

@@ -54,17 +54,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
                     "aws-sdk",   // Include aws-sdk in the bundle
                 ],
                 forceDockerBundling: false,
-                commandHooks: {
-                    beforeBundling(inputDir: string, outputDir: string): string[] {
-                        return [];
-                    },
-                    beforeInstall(inputDir: string, outputDir: string): string[] {
-                        return [];
-                    },
-                    afterBundling(inputDir: string, outputDir: string): string[] {
-                        return [];
-                    },
-                },
             },
         });
 
