@@ -8,16 +8,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 
-export interface StateMachineProps {
-    bucket: s3.IBucket;
-    prefix: string;
-    queueName: string;
-    region: string;
-    account: string;
-    benchlingConnection: events.CfnConnection;
-    benchlingTenant: string;
-    exportProcessor: lambda.IFunction;
-}
+import { StateMachineProps } from "./types";
 
 export class WebhookStateMachine extends Construct {
     private static readonly ENTRY_JSON = "entry.json";
@@ -140,7 +131,7 @@ This package contains the data and metadata for a Benchling Notebook entry.
         // Create export polling loop with proper state transitions
         const extractDownloadURL = new stepfunctions.Pass(this, "ExtractDownloadURL", {
             parameters: {
-                "status.$": "$.exportStatus.status",
+                "status.$": "$.exportStatus.status" as ExportStatus["status"],
                 "downloadURL.$": "$.exportStatus.response.response.downloadURL",
                 "packageName.$": "$.var.packageName",
                 "registry.$": "$.var.registry",
