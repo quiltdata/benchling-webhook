@@ -57,11 +57,11 @@ async function downloadFile(url: string): Promise<Buffer> {
     const response = await new Promise<any>((resolve, reject) => {
         https.get(url, resolve).on("error", reject);
     });
-    
+
     for await (const chunk of response) {
         chunks.push(chunk);
     }
-    
+
     return Buffer.concat(chunks);
 }
 
