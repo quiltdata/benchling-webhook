@@ -2,6 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
+import * as lambda from "aws-cdk-lib/aws-lambda";
 import { WebhookStateMachine } from "../lib/state-machine";
 
 describe("WebhookStateMachine", () => {
@@ -33,6 +34,11 @@ describe("WebhookStateMachine", () => {
             account: "123456789012",
             benchlingConnection,
             benchlingTenant: "test-tenant",
+            exportProcessor: new lambda.Function(stack, 'TestExportProcessor', {
+                runtime: lambda.Runtime.NODEJS_18_X,
+                handler: 'index.handler',
+                code: lambda.Code.fromInline('exports.handler = async () => {};')
+            })
         });
 
         template = Template.fromStack(stack);
