@@ -6,7 +6,7 @@
   },
   "scripts": {
     "clean": "rm -rf cdk.out */{*.js,*.d.ts}",
-    "test": "jest",
+    "test": "NODE_ENV=test jest",
     "cdk": "cdk",
     "lint": "eslint . --ext .ts --fix"
   },
