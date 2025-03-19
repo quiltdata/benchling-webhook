@@ -25,7 +25,6 @@
   "version": "0",
   "var": {
     "baseURL": "https://quilt-dtt.benchling.com",
-    "readme": "\n# Quilt Package Engine for Benchling Notebooks.\n\nThis package contains the data and metadata for a Benchling Notebook entry.\n\n## Files\n\n- entry.json: Entry data\n- ro-crate-metadata.json: Webhook event message\n- README.md: This README file\n",
     "registry": "quilt-bake",
     "typeFields": [
       "v2",

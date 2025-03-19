@@ -1,10 +1,8 @@
-import AWS from "aws-sdk";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import AdmZip from "adm-zip";
-import * as https from "https";
-
 import { ProcessExportEvent } from "../types";
 
-const s3 = new AWS.S3();
+const s3Client = new S3Client({});
 
 interface ProcessExportResult {
     statusCode: number;
@@ -28,12 +26,12 @@ export const handler = async (event: ProcessExportEvent): Promise<ProcessExportR
                 const key = `${event.packageName}/${entry.entryName}`;
                 const fileContent = entry.getData();
 
-                await s3.putObject({
+                await s3Client.send(new PutObjectCommand({
                     Bucket: event.registry,
                     Key: key,
                     Body: fileContent,
                     ContentType: getContentType(entry.entryName),
-                }).promise();
+                }));
             }
         });
 
@@ -53,16 +51,11 @@ export const handler = async (event: ProcessExportEvent): Promise<ProcessExportR
 };
 
 async function downloadFile(url: string): Promise<Buffer> {
-    const chunks: Buffer[] = [];
-    const response = await new Promise<import("http").IncomingMessage>((resolve, reject) => {
-        https.get(url, resolve).on("error", reject);
-    });
-
-    for await (const chunk of response) {
-        chunks.push(chunk);
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`Failed to download file: ${response.statusText}`);
     }
-
-    return Buffer.concat(chunks);
+    return Buffer.from(await response.arrayBuffer());
 }
 
 import { MIME_TYPES } from "../constants";
