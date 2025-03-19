@@ -46,25 +46,17 @@ export class BenchlingWebhookStack extends cdk.Stack {
             environment: {
                 NODE_OPTIONS: "--enable-source-maps",
             },
-            bundling: process.env.NODE_ENV === 'test' ? {
-                // In test environment, use a mock bundle
-                minify: false,
-                sourceMap: false,
-                nodeModules: [],
-                forceDockerBundling: false,
-                define: {
-                    'process.env.NODE_ENV': JSON.stringify('test')
-                },
-                // Provide an empty entry point for tests
-                entry: path.join(__dirname, 'lambda/__mocks__/process-export.ts'),
-            } : {
-                minify: true,
-                sourceMap: true,
-                nodeModules: [
+            bundling: {
+                minify: process.env.NODE_ENV === 'test',
+                sourceMap: process.env.NODE_ENV !== 'test',
+                nodeModules: process.env.NODE_ENV === 'test' ? [] : [
                     "adm-zip",
                     "aws-sdk",
                 ],
                 forceDockerBundling: false,
+                define: process.env.NODE_ENV === 'test' ? {
+                    'process.env.NODE_ENV': JSON.stringify('test')
+                } : undefined
             },
         });
 
