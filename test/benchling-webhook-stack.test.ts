@@ -14,7 +14,6 @@ describe("BenchlingWebhookStack", () => {
             queueName: "test-queue",
             benchlingClientId: "test-client-id",
             benchlingClientSecret: "test-client-secret",
-            benchlingTenant: "test-tenant",
         });
         template = Template.fromStack(stack);
     });
@@ -24,7 +23,7 @@ describe("BenchlingWebhookStack", () => {
             AuthorizationType: "OAUTH_CLIENT_CREDENTIALS",
             AuthParameters: {
                 OAuthParameters: {
-                    AuthorizationEndpoint: "https://test-tenant.benchling.com/api/v2/token",
+                    AuthorizationEndpoint: "https://test.benchling.com/api/v2/token",
                     HttpMethod: "POST",
                 },
             },
@@ -109,7 +108,6 @@ describe("BenchlingWebhookStack", () => {
                 queueName: "test-queue",
                 benchlingClientId: "test-client-id",
                 benchlingClientSecret: "test-client-secret",
-                benchlingTenant: "test-tenant",
             });
         }).toThrow("Prefix should not contain a '/' character.");
     });
