@@ -89,7 +89,7 @@ export class WebhookStateMachine extends Construct {
         );
         const writeMetadataTask = this.createS3WriteTask(
             props.bucket,
-            FILES.RO_CRATE_METADATA_JSON,
+            FILES.INPUT_JSON,
             "$.message",
         );
         const sendToSQSTask = this.createSQSTask(props);
