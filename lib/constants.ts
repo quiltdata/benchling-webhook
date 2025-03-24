@@ -6,7 +6,7 @@ export const EXPORT_STATUS = {
 
 export const FILES = {
     ENTRY_JSON: "entry.json",
-    RO_CRATE_METADATA_JSON: "ro-crate-metadata.json",
+    INPUT_JSON: "input.json",
     README_MD: "README.md",
 } as const;
 

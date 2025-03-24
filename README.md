@@ -76,7 +76,7 @@ export ENDPOINT_ID=4abcdef123
 export ENDPOINT_URL=https://$ENDPOINT_ID.execute-api.$CDK_DEFAULT_REGION.amazonaws.com/$STAGE/event
 export ENTRY_ID=etr_XXXXXX
 
-curl -X POST $ENDPOINT_URL -H "Content-Type: application/json" -d @test/entry-created.json
+curl -X POST $ENDPOINT_URL -H "Content-Type: application/json" -d @test/entry-updated.json
 
 aws s3 cp s3://$BUCKET_NAME/$PREFIX/$ENTRY_ID/api_payload.json -
 open https://$QUILT_CATALOG/b/$BUCKET_NAME/tree/$PREFIX/$ENTRY_ID

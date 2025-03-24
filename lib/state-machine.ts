@@ -89,7 +89,7 @@ export class WebhookStateMachine extends Construct {
         );
         const writeMetadataTask = this.createS3WriteTask(
             props.bucket,
-            FILES.RO_CRATE_METADATA_JSON,
+            FILES.INPUT_JSON,
             "$.message",
         );
         const sendToSQSTask = this.createSQSTask(props);
@@ -279,7 +279,7 @@ export class WebhookStateMachine extends Construct {
                 QueueUrl: queueUrl,
                 MessageBody: {
                     "source_prefix.$":
-                        "States.Format('s3://${}/{}/',$.var.registry,$.var.packageName)",
+                        "States.Format('s3://{}/{}/',$.var.registry,$.var.packageName)",
                     "registry.$": "$.var.registry",
                     "package_name.$": "$.var.packageName",
                     "metadata_uri": FILES.ENTRY_JSON,
