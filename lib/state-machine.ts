@@ -164,13 +164,27 @@ export class WebhookStateMachine extends Construct {
                 }),
             );
 
+        // Create channel choice state
+        const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
+            .when(
+                stepfunctions.Condition.stringEquals("$.var.channel", "events"),
+                setupResourceMetadataTask
+                    .next(fetchEntryTask)
+                    .next(exportTask)
+                    .next(pollExportTask)
+                    .next(exportChoice)
+            )
+            .otherwise(
+                new stepfunctions.Pass(this, "EchoInput", {
+                    parameters: {
+                        "input.$": "$",
+                    },
+                })
+            );
+
         // Main workflow
         return setupWebhookMetadataTask
-            .next(setupResourceMetadataTask)
-            .next(fetchEntryTask)
-            .next(exportTask)
-            .next(pollExportTask)
-            .next(exportChoice);
+            .next(channelChoice);
     }
 
     private createExportTask(
