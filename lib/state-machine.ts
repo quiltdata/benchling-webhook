@@ -57,17 +57,12 @@ export class WebhookStateMachine extends Construct {
     private createDefinition(
         props: StateMachineProps,
     ): stepfunctions.IChainable {
-        const setupVariablesTask = new stepfunctions.Pass(
+        const initialSetupTask = new stepfunctions.Pass(
             this,
-            "SetupVariables",
+            "InitialSetup",
             {
                 parameters: {
                     "baseURL.$": "$.message.baseURL",
-                    "entity.$": "$.message.resourceId",
-                    "packageName.$":
-                        `States.Format('${props.prefix}/{}', $.message.resourceId)`,
-                    "readme": README_TEMPLATE,
-                    "registry": props.bucket.bucketName,
                     "typeFields.$": "States.StringSplit($.message.type, '.')",
                     "channel.$": "$.channel",
                 },
@@ -90,10 +85,28 @@ export class WebhookStateMachine extends Construct {
             .otherwise(echoTask);
 
         // Main workflow
-        return setupVariablesTask.next(channelChoice);
+        return initialSetupTask.next(channelChoice);
     }
 
     private createEventProcessingChain(props: StateMachineProps): stepfunctions.IChainable {
+        const setupEventVariablesTask = new stepfunctions.Pass(
+            this,
+            "SetupEventVariables",
+            {
+                parameters: {
+                    "baseURL.$": "$.var.baseURL",
+                    "entity.$": "$.message.resourceId",
+                    "packageName.$":
+                        `States.Format('${props.prefix}/{}', $.message.resourceId)`,
+                    "readme": README_TEMPLATE,
+                    "registry": props.bucket.bucketName,
+                    "typeFields.$": "$.var.typeFields",
+                    "channel.$": "$.var.channel",
+                },
+                resultPath: "$.var",
+            },
+        );
+
         const fetchEntryTask = this.createFetchEntryTask(
             props.benchlingConnection,
         );
@@ -173,7 +186,8 @@ export class WebhookStateMachine extends Construct {
                 }),
             );
 
-        return fetchEntryTask
+        return setupEventVariablesTask
+            .next(fetchEntryTask)
             .next(exportTask)
             .next(pollExportTask)
             .next(exportChoice);
