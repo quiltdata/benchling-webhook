@@ -8,9 +8,8 @@ export interface StateMachineProps {
     queueName: string;
     region: string;
     account: string;
+    benchlingConnection: events.CfnConnection;
     exportProcessor: lambda.IFunction;
-    benchlingClientId: string;
-    benchlingClientSecret: string;
 }
 
 export interface ProcessExportEvent {

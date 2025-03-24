@@ -32,8 +32,7 @@ describe("WebhookStateMachine", () => {
             queueName: "test-queue",
             region: "us-west-2",
             account: "123456789012",
-            benchlingClientId: "test-id",
-            benchlingClientSecret: "test-secret",
+            benchlingConnection,
             exportProcessor: new lambda.Function(stack, "TestExportProcessor", {
                 runtime: lambda.Runtime.NODEJS_16_X,
                 handler: "index.handler",

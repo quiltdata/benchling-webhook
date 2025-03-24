@@ -18,15 +18,14 @@ describe("BenchlingWebhookStack", () => {
         template = Template.fromStack(stack);
     });
 
-    test("creates state machine with connection creation", () => {
-        template.hasResourceProperties("AWS::StepFunctions::StateMachine", {
-            DefinitionString: {
-                "Fn::Join": [
-                    "",
-                    Match.arrayWith([
-                        Match.stringLikeRegexp('.*"CreateConnection".*'),
-                    ]),
-                ],
+    test("creates Benchling connection", () => {
+        template.hasResourceProperties("AWS::Events::Connection", {
+            AuthorizationType: "OAUTH_CLIENT_CREDENTIALS",
+            AuthParameters: {
+                OAuthParameters: {
+                    AuthorizationEndpoint: "https://benchling.com/api/v2/token",
+                    HttpMethod: "POST",
+                },
             },
         });
     });
