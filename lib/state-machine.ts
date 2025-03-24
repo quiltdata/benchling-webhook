@@ -75,6 +75,9 @@ export class WebhookStateMachine extends Construct {
             "SetupResourceMetadata",
             {
                 parameters: {
+                    "baseURL.$": "$.var.baseURL",
+                    "typeFields.$": "$.var.typeFields",
+                    "channel.$": "$.var.channel",
                     "entity.$": "$.message.resourceId",
                     "packageName.$":
                         `States.Format('${props.prefix}/{}', $.message.resourceId)`,
