@@ -279,7 +279,7 @@ export class WebhookStateMachine extends Construct {
                 QueueUrl: queueUrl,
                 MessageBody: {
                     "source_prefix.$":
-                        "States.Format('s3://${}/{}/',$.var.registry,$.var.packageName)",
+                        "States.Format('s3://{}/{}/',$.var.registry,$.var.packageName)",
                     "registry.$": "$.var.registry",
                     "package_name.$": "$.var.packageName",
                     "metadata_uri": FILES.ENTRY_JSON,
