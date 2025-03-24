@@ -69,11 +69,31 @@ export class WebhookStateMachine extends Construct {
                     "readme": README_TEMPLATE,
                     "registry": props.bucket.bucketName,
                     "typeFields.$": "States.StringSplit($.message.type, '.')",
+                    "channel.$": "$.channel",
                 },
                 resultPath: "$.var",
             },
         );
 
+        const echoTask = new stepfunctions.Pass(this, "Echo", {
+            parameters: {
+                "input.$": "$",
+                "message": "Channel is not 'events', echoing input",
+            },
+        });
+
+        const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
+            .when(
+                stepfunctions.Condition.stringEquals("$.var.channel", "events"),
+                this.createEventProcessingChain(props)
+            )
+            .otherwise(echoTask);
+
+        // Main workflow
+        return setupVariablesTask.next(channelChoice);
+    }
+
+    private createEventProcessingChain(props: StateMachineProps): stepfunctions.IChainable {
         const fetchEntryTask = this.createFetchEntryTask(
             props.benchlingConnection,
         );
@@ -153,9 +173,7 @@ export class WebhookStateMachine extends Construct {
                 }),
             );
 
-        // Main workflow
-        return setupVariablesTask
-            .next(fetchEntryTask)
+        return fetchEntryTask
             .next(exportTask)
             .next(pollExportTask)
             .next(exportChoice);
