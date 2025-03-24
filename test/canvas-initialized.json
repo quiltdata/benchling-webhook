@@ -1,0 +1,19 @@
+{
+    "version": "0",
+    "baseURL": "https://subdomain.bnchdev.org",
+    "tenantId": "ten_XXXXXXXXXX",
+    "app": {
+        "id": "app_XXXXXXXXXXXXXXXX"
+    },
+    "appDefinition": {
+        "id": "appdef_XXXXXXXXXX",
+        "versionNumber": "0.0."
+    },
+    "channel": "app_signals",
+    "message": {
+        "deprecated": false,
+        "featureId": "test_interactive_run_feature",
+        "resourceId": "51a09c87-72f1-4f44-a34c-8b29ca39cf30",
+        "type": "v2.canvas.initialized"
+    }
+}
