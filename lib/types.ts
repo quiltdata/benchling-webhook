@@ -9,7 +9,6 @@ export interface StateMachineProps {
     region: string;
     account: string;
     benchlingConnection: events.CfnConnection;
-    benchlingTenant: string;
     exportProcessor: lambda.IFunction;
 }
 
