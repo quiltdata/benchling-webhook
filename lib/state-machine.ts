@@ -170,7 +170,10 @@ export class WebhookStateMachine extends Construct {
         // Create channel choice state
         const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
             .when(
-                stepfunctions.Condition.stringEquals("$.var.channel", "events"),
+                stepfunctions.Condition.or(
+                    stepfunctions.Condition.stringEquals("$.var.channel", "events"),
+                    stepfunctions.Condition.stringEquals("$.var.channel", "app_signals")
+                ),
                 setupResourceMetadataTask
                     .next(fetchEntryTask)
                     .next(exportTask)
