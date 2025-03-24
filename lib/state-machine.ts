@@ -168,17 +168,23 @@ export class WebhookStateMachine extends Construct {
             );
 
         // Create channel choice state
+        const createCanvasTask = this.createCanvasTask(props.benchlingConnection);
+
         const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
             .when(
-                stepfunctions.Condition.or(
-                    stepfunctions.Condition.stringEquals("$.var.channel", "events"),
-                    stepfunctions.Condition.stringEquals("$.var.channel", "app_signals")
-                ),
+                stepfunctions.Condition.stringEquals("$.var.channel", "events"),
                 setupResourceMetadataTask
                     .next(fetchEntryTask)
                     .next(exportTask)
                     .next(pollExportTask)
                     .next(exportChoice)
+            )
+            .when(
+                stepfunctions.Condition.and(
+                    stepfunctions.Condition.stringEquals("$.var.channel", "app_signals"),
+                    stepfunctions.Condition.stringEquals("$.message.type", "v2.canvas.initialized")
+                ),
+                createCanvasTask
             )
             .otherwise(
                 new stepfunctions.Pass(this, "EchoInput", {
@@ -245,6 +251,39 @@ export class WebhookStateMachine extends Construct {
         return new stepfunctions.Wait(this, "WaitForExport", {
             time: stepfunctions.WaitTime.duration(Duration.seconds(30)),
             comment: "Wait for the export to complete",
+        });
+    }
+
+    private createCanvasTask(
+        benchlingConnection: events.CfnConnection,
+    ): stepfunctions.CustomState {
+        return new stepfunctions.CustomState(this, "CreateCanvas", {
+            stateJson: {
+                Type: "Task",
+                Resource: "arn:aws:states:::http:invoke",
+                Parameters: {
+                    "ApiEndpoint.$": 
+                        "States.Format('{}/api/v2/app-canvases', $.var.baseURL)",
+                    Method: "POST",
+                    Authentication: {
+                        ConnectionArn: benchlingConnection.attrArn,
+                    },
+                    RequestBody: {
+                        "blocks": [
+                            {
+                                "type": "MARKDOWN",
+                                "text": "Initializing canvas...",
+                                "id": "init"
+                            }
+                        ],
+                        "enabled": true
+                    }
+                },
+                ResultSelector: {
+                    "canvasId.$": "$.ResponseBody.canvas.id"
+                },
+                ResultPath: "$.canvas"
+            },
         });
     }
 
