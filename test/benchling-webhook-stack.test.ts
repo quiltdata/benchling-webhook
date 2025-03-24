@@ -23,7 +23,7 @@ describe("BenchlingWebhookStack", () => {
             AuthorizationType: "OAUTH_CLIENT_CREDENTIALS",
             AuthParameters: {
                 OAuthParameters: {
-                    AuthorizationEndpoint: "https://test.benchling.com/api/v2/token",
+                    AuthorizationEndpoint: "https://benchling.com/api/v2/token",
                     HttpMethod: "POST",
                 },
             },
