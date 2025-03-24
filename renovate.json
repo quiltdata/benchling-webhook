@@ -1,13 +1,22 @@
 {
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended"
+  ],
   "packageRules": [
     {
       "groupName": "TypeScript and ESLint",
-      "matchPackagePatterns": ["typescript", "eslint", "node"]
+      "matchPackageNames": [
+        "/typescript/",
+        "/eslint/",
+        "/node/"
+      ]
     },
     {
       "groupName": "AWS",
-      "matchPackagePatterns": ["aws", "cdk"]
+      "matchPackageNames": [
+        "/aws/",
+        "/cdk/"
+      ]
     }
   ]
 }
