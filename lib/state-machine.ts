@@ -62,7 +62,7 @@ export class WebhookStateMachine extends Construct {
             "SetupVariables",
             {
                 parameters: {
-                    "baseURL": `https://${props.benchlingTenant}.benchling.com`,
+                    "baseURL.$": "$.message.baseURL",
                     "entity.$": "$.message.resourceId",
                     "packageName.$":
                         `States.Format('${props.prefix}/{}', $.message.resourceId)`,

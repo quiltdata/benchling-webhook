@@ -15,7 +15,6 @@ interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly queueName: string;
     readonly benchlingClientId: string;
     readonly benchlingClientSecret: string;
-    readonly benchlingTenant: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
@@ -73,7 +72,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             region: this.region,
             account: this.account,
             benchlingConnection,
-            benchlingTenant: props.benchlingTenant,
             exportProcessor: this.exportProcessor,
         });
 
