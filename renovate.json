@@ -3,7 +3,7 @@
   "packageRules": [
     {
       "groupName": "TypeScript and ESLint",
-      "matchPackagePatterns": ["^typescript", "^eslint"]
+      "matchPackagePatterns": ["typescript", "eslint", "node"]
     },
     {
       "groupName": "AWS",
