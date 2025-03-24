@@ -1,0 +1,17 @@
+{
+  "app": {
+    "id": "app_qdSsffBWrLoTVId4"
+  },
+  "appDefinition": {
+    "id": "appdef_mI4jtZESUi",
+    "versionNumber": "0.2.0"
+  },
+  "baseURL": "https://quilt-dtt.benchling.com",
+  "channel": "app_signals",
+  "message": {
+    "deprecated": false,
+    "type": "v2.app.installed"
+  },
+  "tenantId": "ten_dsrealahhb",
+  "version": "0"
+}
