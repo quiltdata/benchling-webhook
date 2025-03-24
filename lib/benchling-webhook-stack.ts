@@ -63,15 +63,14 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // Grant the Lambda function access to the S3 bucket
         this.bucket.grantReadWrite(this.exportProcessor);
 
-        const benchlingConnection = this.createBenchlingConnection(props);
-
         this.stateMachine = new WebhookStateMachine(this, "StateMachine", {
             bucket: this.bucket,
             prefix: props.prefix,
             queueName: props.queueName,
             region: this.region,
             account: this.account,
-            benchlingConnection,
+            benchlingClientId: props.benchlingClientId,
+            benchlingClientSecret: props.benchlingClientSecret,
             exportProcessor: this.exportProcessor,
         });
 
@@ -81,42 +80,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
     }
 
 
-    private createBenchlingConnection(
-        props: BenchlingWebhookStackProps,
-    ): events.CfnConnection {
-        const benchlingConnection = new events.CfnConnection(
-            this,
-            "BenchlingOAuthConnection",
-            {
-                authorizationType: "OAUTH_CLIENT_CREDENTIALS",
-                authParameters: {
-                    oAuthParameters: {
-                        authorizationEndpoint: "https://benchling.com/api/v2/token",
-                        clientParameters: {
-                            clientId: props.benchlingClientId,
-                            clientSecret: props.benchlingClientSecret,
-                        },
-                        httpMethod: "POST",
-                        oAuthHttpParameters: {
-                            headerParameters: [
-                                {
-                                    key: "Content-Type",
-                                    value: "application/x-www-form-urlencoded",
-                                },
-                            ],
-                            bodyParameters: [
-                                {
-                                    key: "grant_type",
-                                    value: "client_credentials",
-                                },
-                            ],
-                        },
-                    },
-                },
-            },
-        );
-        return benchlingConnection;
-    }
 
     private createOutputs(): void {
         new cdk.CfnOutput(this, "ApiUrl", {

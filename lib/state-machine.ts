@@ -74,9 +74,38 @@ export class WebhookStateMachine extends Construct {
             },
         );
 
-        const fetchEntryTask = this.createFetchEntryTask(
-            props.benchlingConnection,
-        );
+        const createConnectionTask = new tasks.CallAwsService(this, "CreateConnection", {
+            service: "events",
+            action: "createConnection",
+            parameters: {
+                Name: stepfunctions.JsonPath.format("BenchlingConnection-{}", stepfunctions.JsonPath.uuid()),
+                AuthorizationType: "OAUTH_CLIENT_CREDENTIALS",
+                AuthParameters: {
+                    OAuthParameters: {
+                        AuthorizationEndpoint: stepfunctions.JsonPath.format("{}/api/v2/token", "$.var.baseURL"),
+                        ClientParameters: {
+                            ClientID: props.benchlingClientId,
+                            ClientSecret: props.benchlingClientSecret
+                        },
+                        HttpMethod: "POST",
+                        OAuthHttpParameters: {
+                            HeaderParameters: [{
+                                Key: "Content-Type",
+                                Value: "application/x-www-form-urlencoded"
+                            }],
+                            BodyParameters: [{
+                                Key: "grant_type",
+                                Value: "client_credentials"
+                            }]
+                        }
+                    }
+                }
+            },
+            resultPath: "$.connection",
+            iamResources: ["*"]
+        });
+
+        const fetchEntryTask = this.createFetchEntryTask();
         const writeEntryToS3Task = this.createS3WriteTask(
             props.bucket,
             FILES.ENTRY_JSON,
@@ -108,8 +137,8 @@ export class WebhookStateMachine extends Construct {
         sendToSQSTask.addCatch(errorHandler);
 
         // Create export polling loop
-        const exportTask = this.createExportTask(props.benchlingConnection);
-        const pollExportTask = this.createPollExportTask(props.benchlingConnection);
+        const exportTask = this.createExportTask();
+        const pollExportTask = this.createPollExportTask();
         const waitState = this.createWaitState();
 
         exportTask.addCatch(errorHandler);
@@ -155,15 +184,14 @@ export class WebhookStateMachine extends Construct {
 
         // Main workflow
         return setupVariablesTask
+            .next(createConnectionTask)
             .next(fetchEntryTask)
             .next(exportTask)
             .next(pollExportTask)
             .next(exportChoice);
     }
 
-    private createExportTask(
-        benchlingConnection: events.CfnConnection,
-    ): stepfunctions.CustomState {
+    private createExportTask(): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "ExportEntry", {
             stateJson: {
                 Type: "Task",
@@ -172,7 +200,7 @@ export class WebhookStateMachine extends Construct {
                     "ApiEndpoint.$": "States.Format('{}/api/v2/exports', $.var.baseURL)",
                     Method: "POST",
                     Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
+                        ConnectionArn: "$.connection.ConnectionArn",
                     },
                     "RequestBody": {
                         "id.$": "$.var.entity",
@@ -186,9 +214,7 @@ export class WebhookStateMachine extends Construct {
         });
     }
 
-    private createPollExportTask(
-        benchlingConnection: events.CfnConnection,
-    ): stepfunctions.CustomState {
+    private createPollExportTask(): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "PollExportStatus", {
             stateJson: {
                 Type: "Task",
@@ -197,7 +223,7 @@ export class WebhookStateMachine extends Construct {
                     "ApiEndpoint.$": "States.Format('{}/api/v2/tasks/{}', $.var.baseURL, $.exportTask.taskId)",
                     Method: "GET",
                     Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
+                        ConnectionArn: "$.connection.ConnectionArn",
                     },
                 },
                 ResultSelector: {
@@ -216,9 +242,7 @@ export class WebhookStateMachine extends Construct {
         });
     }
 
-    private createFetchEntryTask(
-        benchlingConnection: events.CfnConnection,
-    ): stepfunctions.CustomState {
+    private createFetchEntryTask(): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "FetchEntry", {
             stateJson: {
                 Type: "Task",
@@ -228,7 +252,7 @@ export class WebhookStateMachine extends Construct {
                         "States.Format('{}/api/v2/entries/{}', $.var.baseURL, $.var.entity)",
                     Method: "GET",
                     Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
+                        ConnectionArn: "$.connection.ConnectionArn",
                     },
                 },
                 ResultSelector: {
