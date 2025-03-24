@@ -91,8 +91,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 authorizationType: "OAUTH_CLIENT_CREDENTIALS",
                 authParameters: {
                     oAuthParameters: {
-                        authorizationEndpoint:
-                            `https://${props.benchlingTenant}.benchling.com/api/v2/token`,
+                        authorizationEndpoint: "https://benchling.com/api/v2/token",
                         clientParameters: {
                             clientId: props.benchlingClientId,
                             clientSecret: props.benchlingClientSecret,
