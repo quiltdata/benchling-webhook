@@ -57,18 +57,29 @@ export class WebhookStateMachine extends Construct {
     private createDefinition(
         props: StateMachineProps,
     ): stepfunctions.IChainable {
-        const setupVariablesTask = new stepfunctions.Pass(
+        const setupWebhookMetadataTask = new stepfunctions.Pass(
             this,
-            "SetupVariables",
+            "SetupWebhookMetadata",
             {
                 parameters: {
                     "baseURL": `https://${props.benchlingTenant}.benchling.com`,
+                    "typeFields.$": "States.StringSplit($.message.type, '.')",
+                    "channel.$": "$.channel",
+                },
+                resultPath: "$.var",
+            },
+        );
+
+        const setupResourceMetadataTask = new stepfunctions.Pass(
+            this,
+            "SetupResourceMetadata",
+            {
+                parameters: {
                     "entity.$": "$.message.resourceId",
                     "packageName.$":
                         `States.Format('${props.prefix}/{}', $.message.resourceId)`,
                     "readme": README_TEMPLATE,
                     "registry": props.bucket.bucketName,
-                    "typeFields.$": "States.StringSplit($.message.type, '.')",
                 },
                 resultPath: "$.var",
             },
@@ -154,7 +165,8 @@ export class WebhookStateMachine extends Construct {
             );
 
         // Main workflow
-        return setupVariablesTask
+        return setupWebhookMetadataTask
+            .next(setupResourceMetadataTask)
             .next(fetchEntryTask)
             .next(exportTask)
             .next(pollExportTask)
