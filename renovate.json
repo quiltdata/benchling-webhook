@@ -1,6 +1,13 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "groupName": "TypeScript and ESLint",
+      "matchPackagePatterns": ["^typescript", "^eslint"]
+    },
+    {
+      "groupName": "AWS",
+      "matchPackagePatterns": ["aws", "cdk"]
+    }
   ]
 }
