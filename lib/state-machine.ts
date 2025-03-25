@@ -270,7 +270,7 @@ export class WebhookStateMachine extends Construct {
     ): stepfunctions.Map {
         return new stepfunctions.Map(this, "FetchExternalFiles", {
             itemsPath: "$.fileIds.fileIds",
-            parameters: {
+            itemSelector: {
                 "fileId.$": "$$.Map.Item.Value",
                 "entryId.$": "$.var.entity",
                 "baseURL.$": "$.var.baseURL",
@@ -280,7 +280,7 @@ export class WebhookStateMachine extends Construct {
         }).iterator(
             new stepfunctions.CustomState(this, "FetchExternalFile", {
                 stateJson: {
-                    Type: "Task",
+                    Type: "Task", 
                     Resource: "arn:aws:states:::http:invoke",
                     Parameters: {
                         "ApiEndpoint.$": "States.Format('{}/api/v2/entries/{}/external-files/{}', $.baseURL, $.entryId, $.fileId)",
