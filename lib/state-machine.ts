@@ -161,7 +161,7 @@ export class WebhookStateMachine extends Construct {
         const processExternalFilesTask = new tasks.LambdaInvoke(this, "ProcessExternalFiles", {
             lambdaFunction: props.exportProcessor,
             payload: stepfunctions.TaskInput.fromObject({
-                "downloadURLs.$": "$.externalFiles[*].downloadURL",
+                "downloadURLs.$": "$.externalFiles[0].downloadURL",
                 "packageName.$": "$.var.packageName",
                 "registry.$": "$.var.registry",
             }),
