@@ -1,19 +1,20 @@
 {
-    "version": "0",
-    "baseURL": "https://subdomain.bnchdev.org",
-    "tenantId": "ten_XXXXXXXXXX",
     "app": {
-        "id": "app_XXXXXXXXXXXXXXXX"
+        "id": "app_qdSsffBWrLoTVId4"
     },
     "appDefinition": {
-        "id": "appdef_XXXXXXXXXX",
-        "versionNumber": "0.0."
+        "id": "appdef_mI4jtZESUi",
+        "versionNumber": "0.2.0"
     },
+    "baseURL": "https://quilt-dtt.benchling.com",
     "channel": "app_signals",
     "message": {
+        "canvasId": "cnvs_rv7MuD30",
         "deprecated": false,
-        "featureId": "test_interactive_run_feature",
-        "resourceId": "51a09c87-72f1-4f44-a34c-8b29ca39cf30",
+        "featureId": "quilt_integration",
+        "resourceId": "cnvs_rv7MuD30",
         "type": "v2.canvas.initialized"
-    }
+    },
+    "tenantId": "ten_dsrealahhb",
+    "version": "0"
 }
