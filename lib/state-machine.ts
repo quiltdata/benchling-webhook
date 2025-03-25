@@ -78,6 +78,9 @@ export class WebhookStateMachine extends Construct {
             props.benchlingConnection,
         );
         const extractFileIdsTask = this.createExtractFileIdsTask();
+        const fetchExternalFilesTask = this.createFetchExternalFilesTask(
+            props.benchlingConnection,
+        );
         const writeEntryToS3Task = this.createS3WriteTask(
             props.bucket,
             FILES.ENTRY_JSON,
@@ -158,6 +161,7 @@ export class WebhookStateMachine extends Construct {
         return setupVariablesTask
             .next(fetchEntryTask)
             .next(extractFileIdsTask)
+            .next(fetchExternalFilesTask)
             .next(exportTask)
             .next(pollExportTask)
             .next(exportChoice);
@@ -248,6 +252,39 @@ export class WebhookStateMachine extends Construct {
             },
             resultPath: "$.fileIds",
         });
+    }
+
+    private createFetchExternalFilesTask(
+        benchlingConnection: events.CfnConnection,
+    ): stepfunctions.Map {
+        return new stepfunctions.Map(this, "FetchExternalFiles", {
+            itemsPath: "$.fileIds.fileIds",
+            parameters: {
+                "fileId.$": "$$.Map.Item.Value",
+                "entryId.$": "$.var.entity",
+                "baseURL.$": "$.var.baseURL",
+            },
+            resultPath: "$.externalFiles",
+            maxConcurrency: 1,
+        }).iterator(
+            new stepfunctions.CustomState(this, "FetchExternalFile", {
+                stateJson: {
+                    Type: "Task",
+                    Resource: "arn:aws:states:::http:invoke",
+                    Parameters: {
+                        "ApiEndpoint.$": "States.Format('{}/api/v2/entries/{}/external-files/{}', $.baseURL, $.entryId, $.fileId)",
+                        Method: "GET",
+                        Authentication: {
+                            ConnectionArn: benchlingConnection.attrArn,
+                        },
+                    },
+                    ResultSelector: {
+                        "fileId.$": "$.fileId",
+                        "downloadURL.$": "$.ResponseBody.downloadUrl",
+                    },
+                },
+            }),
+        );
     }
 
     private createS3WriteTask(
