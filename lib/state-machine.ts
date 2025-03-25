@@ -280,7 +280,9 @@ export class WebhookStateMachine extends Construct {
                     },
                     ResultSelector: {
                         "fileId.$": "$.fileId",
-                        "downloadURL.$": "$.ResponseBody.downloadUrl",
+                        "downloadURL.$": "$.ResponseBody.externalFile.downloadURL",
+                        "size.$": "$.ResponseBody.externalFile.size",
+                        "expiresAt.$": "$.ResponseBody.externalFile.expiresAt"
                     },
                 },
             }),
