@@ -7,7 +7,7 @@ import * as events from "aws-cdk-lib/aws-events";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
-import { StateMachineProps, ExportStatus } from "./types";
+import { ExportStatus, StateMachineProps } from "./types";
 import { EXPORT_STATUS, FILES } from "./constants";
 import { README_TEMPLATE } from "./templates/readme";
 
@@ -113,43 +113,71 @@ export class WebhookStateMachine extends Construct {
 
         // Create export polling loop
         const exportTask = this.createExportTask(props.benchlingConnection);
-        const pollExportTask = this.createPollExportTask(props.benchlingConnection);
+        const pollExportTask = this.createPollExportTask(
+            props.benchlingConnection,
+        );
         const waitState = this.createWaitState();
 
         exportTask.addCatch(errorHandler);
         pollExportTask.addCatch(errorHandler);
 
         // Create export polling loop with proper state transitions
-        const extractDownloadURL = new stepfunctions.Pass(this, "ExtractDownloadURL", {
-            parameters: {
-                "status.$": "$.exportStatus.status" as ExportStatus["status"],
-                "downloadURL.$": "$.exportStatus.response.response.downloadURL",
-                "packageName.$": "$.var.packageName",
-                "registry.$": "$.var.registry",
+        const extractDownloadURL = new stepfunctions.Pass(
+            this,
+            "ExtractDownloadURL",
+            {
+                parameters: {
+                    "status.$":
+                        "$.exportStatus.status" as ExportStatus["status"],
+                    "downloadURL.$":
+                        "$.exportStatus.response.response.downloadURL",
+                    "packageName.$": "$.var.packageName",
+                    "registry.$": "$.var.registry",
+                },
+                resultPath: "$.exportStatus",
             },
-            resultPath: "$.exportStatus",
-        });
+        );
 
-        const processExportTask = new tasks.LambdaInvoke(this, "ProcessExport", {
-            lambdaFunction: props.exportProcessor,
-            payload: stepfunctions.TaskInput.fromObject({
-                downloadURL: stepfunctions.JsonPath.stringAt("$.exportStatus.downloadURL"),
-                packageName: stepfunctions.JsonPath.stringAt("$.exportStatus.packageName"),
-                registry: stepfunctions.JsonPath.stringAt("$.exportStatus.registry"),
-            }),
-            resultPath: "$.processResult",
-        });
+        const processExportTask = new tasks.LambdaInvoke(
+            this,
+            "ProcessExport",
+            {
+                lambdaFunction: props.exportProcessor,
+                payload: stepfunctions.TaskInput.fromObject({
+                    downloadURL: stepfunctions.JsonPath.stringAt(
+                        "$.exportStatus.downloadURL",
+                    ),
+                    packageName: stepfunctions.JsonPath.stringAt(
+                        "$.exportStatus.packageName",
+                    ),
+                    registry: stepfunctions.JsonPath.stringAt(
+                        "$.exportStatus.registry",
+                    ),
+                }),
+                resultPath: "$.processResult",
+            },
+        );
 
         const exportChoice = new stepfunctions.Choice(this, "CheckExportStatus")
-            .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", EXPORT_STATUS.RUNNING),
-                waitState.next(pollExportTask))
-            .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", EXPORT_STATUS.SUCCEEDED),
+            .when(
+                stepfunctions.Condition.stringEquals(
+                    "$.exportStatus.status",
+                    EXPORT_STATUS.RUNNING,
+                ),
+                waitState.next(pollExportTask),
+            )
+            .when(
+                stepfunctions.Condition.stringEquals(
+                    "$.exportStatus.status",
+                    EXPORT_STATUS.SUCCEEDED,
+                ),
                 extractDownloadURL
                     .next(processExportTask)
                     .next(writeEntryToS3Task)
                     .next(writeReadmeToS3Task)
                     .next(writeMetadataTask)
-                    .next(sendToSQSTask))
+                    .next(sendToSQSTask),
+            )
             .otherwise(
                 new stepfunctions.Fail(this, "ExportFailed", {
                     cause: "Export task did not succeed",
@@ -158,15 +186,19 @@ export class WebhookStateMachine extends Construct {
             );
 
         // Main workflow
-        const processExternalFilesTask = new tasks.LambdaInvoke(this, "ProcessExternalFiles", {
-            lambdaFunction: props.exportProcessor,
-            payload: stepfunctions.TaskInput.fromObject({
-                "downloadURLs.$": "$.externalFiles[0].downloadURL",
-                "packageName.$": "$.var.packageName",
-                "registry.$": "$.var.registry",
-            }),
-            resultPath: "$.processExternalFilesResult",
-        });
+        const processExternalFilesTask = new tasks.LambdaInvoke(
+            this,
+            "ProcessExternalFiles",
+            {
+                lambdaFunction: props.exportProcessor,
+                payload: stepfunctions.TaskInput.fromObject({
+                    "downloadURLs.$": "$.externalFiles[*].downloadURL",
+                    "packageName.$": "$.var.packageName",
+                    "registry.$": "$.var.registry",
+                }),
+                resultPath: "$.processExternalFilesResult",
+            },
+        );
 
         return setupVariablesTask
             .next(fetchEntryTask)
@@ -186,7 +218,8 @@ export class WebhookStateMachine extends Construct {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": "States.Format('{}/api/v2/exports', $.var.baseURL)",
+                    "ApiEndpoint.$":
+                        "States.Format('{}/api/v2/exports', $.var.baseURL)",
                     Method: "POST",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
@@ -211,7 +244,8 @@ export class WebhookStateMachine extends Construct {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": "States.Format('{}/api/v2/tasks/{}', $.var.baseURL, $.exportTask.taskId)",
+                    "ApiEndpoint.$":
+                        "States.Format('{}/api/v2/tasks/{}', $.var.baseURL, $.exportTask.taskId)",
                     Method: "GET",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
@@ -259,7 +293,8 @@ export class WebhookStateMachine extends Construct {
     private createExtractFileIdsTask(): stepfunctions.Pass {
         return new stepfunctions.Pass(this, "ExtractFileIds", {
             parameters: {
-                "fileIds.$": "States.ArrayUnique(States.Array($.entry.entryData.days[*].notes[?(@.type=='external_file')].externalFileId))",
+                "fileIds.$":
+                    "States.ArrayUnique(States.Array($.entry.entryData.days[*].notes[?(@.type=='external_file')].externalFileId))",
             },
             resultPath: "$.fileIds",
         });
@@ -277,13 +312,14 @@ export class WebhookStateMachine extends Construct {
             },
             resultPath: "$.externalFiles",
             maxConcurrency: 1,
-        }).iterator(
+        }).itemProcessor(
             new stepfunctions.CustomState(this, "FetchExternalFile", {
                 stateJson: {
-                    Type: "Task", 
+                    Type: "Task",
                     Resource: "arn:aws:states:::http:invoke",
                     Parameters: {
-                        "ApiEndpoint.$": "States.Format('{}/api/v2/entries/{}/external-files/{}', $.baseURL, $.entryId, $.fileId)",
+                        "ApiEndpoint.$":
+                            "States.Format('{}/api/v2/entries/{}/external-files/{}', $.baseURL, $.entryId, $.fileId)",
                         Method: "GET",
                         Authentication: {
                             ConnectionArn: benchlingConnection.attrArn,
@@ -291,9 +327,10 @@ export class WebhookStateMachine extends Construct {
                     },
                     ResultSelector: {
                         "fileId.$": "$.fileId",
-                        "downloadURL.$": "$.ResponseBody.externalFile.downloadURL",
+                        "downloadURL.$":
+                            "$.ResponseBody.externalFile.downloadURL",
                         "size.$": "$.ResponseBody.externalFile.size",
-                        "expiresAt.$": "$.ResponseBody.externalFile.expiresAt"
+                        "expiresAt.$": "$.ResponseBody.externalFile.expiresAt",
                     },
                 },
             }),
