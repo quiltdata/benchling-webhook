@@ -77,6 +77,7 @@ export class WebhookStateMachine extends Construct {
         const fetchEntryTask = this.createFetchEntryTask(
             props.benchlingConnection,
         );
+        const extractFileIdsTask = this.createExtractFileIdsTask();
         const writeEntryToS3Task = this.createS3WriteTask(
             props.bucket,
             FILES.ENTRY_JSON,
@@ -156,6 +157,7 @@ export class WebhookStateMachine extends Construct {
         // Main workflow
         return setupVariablesTask
             .next(fetchEntryTask)
+            .next(extractFileIdsTask)
             .next(exportTask)
             .next(pollExportTask)
             .next(exportChoice);
@@ -236,6 +238,15 @@ export class WebhookStateMachine extends Construct {
                 },
                 ResultPath: "$.entry",
             },
+        });
+    }
+
+    private createExtractFileIdsTask(): stepfunctions.Pass {
+        return new stepfunctions.Pass(this, "ExtractFileIds", {
+            parameters: {
+                "fileIds.$": "States.ArrayUnique(States.Array($.entry.entryData.days[*].notes[?(@.type=='external_file')].externalFileId))",
+            },
+            resultPath: "$.fileIds",
         });
     }
 
