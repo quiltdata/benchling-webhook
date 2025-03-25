@@ -180,8 +180,9 @@ export class WebhookStateMachine extends Construct {
                     .next(exportChoice)
             )
             .when(
-                stepfunctions.Condition.and(
-                    stepfunctions.Condition.stringEquals("$.var.channel", "app_signals"),
+                stepfunctions.Condition.or(
+                    stepfunctions.Condition.stringEquals("$.message.type", "v2.app.activateRequested"),
+                    stepfunctions.Condition.stringEquals("$.message.type", "v2.canvas.created"),
                     stepfunctions.Condition.stringEquals("$.message.type", "v2.canvas.initialized")
                 ),
                 createCanvasTask
@@ -276,7 +277,10 @@ export class WebhookStateMachine extends Construct {
                                 "id": "init"
                             }
                         ],
-                        "enabled": true
+                        "enabled": true,
+                        "featureId.$": "$.message.featureId",
+                        "resourceId.$": "$.message.canvasId",
+                        "appId.$": "$.app.id",
                     }
                 },
                 ResultSelector: {

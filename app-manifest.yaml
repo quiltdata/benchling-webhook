@@ -2,11 +2,14 @@ manifestVersion: 1
 info:
   name: package-with-quilt
   description: Uses Quilt Package Engine
-  version: 0.2.0
+  version: 0.2.1
 features:
   - name: Quilt Integration
     id: quilt_integration
     type: CANVAS
+  - name: Quilt Homepage
+    id: quilt_homepage
+    type: APP_HOMEPAGE
 subscriptions:
   deliveryMethod: WEBHOOK
   messages:
