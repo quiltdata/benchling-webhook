@@ -1,6 +1,7 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import AdmZip from "adm-zip";
 import { ProcessExportEvent } from "../types";
+import { promises as fsPromises } from "fs";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -23,38 +24,45 @@ export const handler = async (event: ProcessExportEvent): Promise<ProcessExportR
         if (event.downloadURL.includes('external-files')) {
             // Handle external file download
             await handleExternalFile(event);
+            return {
+                statusCode: 200,
+                body: JSON.stringify({
+                    message: "External file processed successfully"
+                })
+            };
         } else {
             // Handle ZIP export
             const zipBuffer = await downloadFile(event.downloadURL);
+            
+            // Process the ZIP contents
+            const zip = new AdmZip(zipBuffer);
+            const entries = zip.getEntries();
 
-        // Process the ZIP contents
-        const zip = new AdmZip(zipBuffer);
-        const entries = zip.getEntries();
+            // Upload all files in the ZIP
+            const uploadPromises = entries.map(async (entry: AdmZip.IZipEntry) => {
+                if (!entry.isDirectory) {
+                    const key = `${event.packageName}/${entry.entryName}`;
+                    const fileContent = entry.getData();
 
-        // Upload all files in the ZIP
-        const uploadPromises = entries.map(async (entry: AdmZip.IZipEntry) => {
-            if (!entry.isDirectory) {
-                const key = `${event.packageName}/${entry.entryName}`;
-                const fileContent = entry.getData();
+                    await s3Client.send(new PutObjectCommand({
+                        Bucket: event.registry,
+                        Key: key,
+                        Body: fileContent,
+                        ContentType: getContentType(entry.entryName),
+                    }));
+                }
+            });
 
-                await s3Client.send(new PutObjectCommand({
-                    Bucket: event.registry,
-                    Key: key,
-                    Body: fileContent,
-                    ContentType: getContentType(entry.entryName),
-                }));
-            }
-        });
+            await Promise.all(uploadPromises);
 
-        await Promise.all(uploadPromises);
-
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                message: "Export processed successfully",
-                numFiles: entries.length,
-            }),
-        };
+            return {
+                statusCode: 200,
+                body: JSON.stringify({
+                    message: "Export processed successfully",
+                    numFiles: entries.length,
+                }),
+            };
+        }
     } catch (error) {
         console.error("Error processing export:", error);
         throw error;
