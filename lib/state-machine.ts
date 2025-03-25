@@ -158,10 +158,21 @@ export class WebhookStateMachine extends Construct {
             );
 
         // Main workflow
+        const processExternalFilesTask = new tasks.LambdaInvoke(this, "ProcessExternalFiles", {
+            lambdaFunction: props.exportProcessor,
+            payload: stepfunctions.TaskInput.fromObject({
+                "downloadURLs.$": "$.externalFiles[*].downloadURL",
+                "packageName.$": "$.var.packageName",
+                "registry.$": "$.var.registry",
+            }),
+            resultPath: "$.processExternalFilesResult",
+        });
+
         return setupVariablesTask
             .next(fetchEntryTask)
             .next(extractFileIdsTask)
             .next(fetchExternalFilesTask)
+            .next(processExternalFilesTask)
             .next(exportTask)
             .next(pollExportTask)
             .next(exportChoice);
