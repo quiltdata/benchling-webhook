@@ -343,6 +343,18 @@ export class WebhookStateMachine extends Construct {
                     },
                 }),
             ).next(
+                new stepfunctions.Pass(this, "DebugS3Key", {
+                    parameters: {
+                        "debug": {
+                            "proposedKey.$": "States.Format('{}/external_files/{}', $.packageName, $.filename)",
+                            "packageName.$": "$.packageName",
+                            "filename.$": "$.filename",
+                            "downloadURL.$": "$.downloadURL"
+                        }
+                    },
+                    resultPath: "$.debug"
+                })
+            ).next(
                 new tasks.CallAwsService(this, "WriteExternalFileToS3", {
                     service: "s3",
                     action: "putObject",
