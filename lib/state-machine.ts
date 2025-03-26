@@ -322,22 +322,23 @@ export class WebhookStateMachine extends Construct {
                     parameters: {
                         "fileId.$": "$.fileId",
                         "downloadURL.$": "$.downloadURL",
-                        "baseUrl.$": "States.ArrayGetItem(States.StringSplit($.downloadURL, '?'), 0)",
+                        "baseUrl.$":
+                            "States.ArrayGetItem(States.StringSplit($.downloadURL, '?'), 0)",
                         "size.$": "$.size",
-                        "expiresAt.$": "$.expiresAt"
-                    }
-                })
+                        "expiresAt.$": "$.expiresAt",
+                    },
+                }),
             ).next(
                 new stepfunctions.Pass(this, "SplitPath", {
                     parameters: {
                         "fileId.$": "$.fileId",
-                        "downloadURL.$": "$.downloadURL", 
+                        "downloadURL.$": "$.downloadURL",
                         "baseUrl.$": "$.baseUrl",
                         "pathParts.$": "States.StringSplit($.baseUrl, '/')",
                         "size.$": "$.size",
-                        "expiresAt.$": "$.expiresAt"
-                    }
-                })
+                        "expiresAt.$": "$.expiresAt",
+                    },
+                }),
             ).next(
                 new stepfunctions.Pass(this, "ExtractFilename", {
                     parameters: {
@@ -346,16 +347,24 @@ export class WebhookStateMachine extends Construct {
                         "baseUrl.$": "$.baseUrl",
                         "pathParts.$": "$.pathParts",
                         "pathLength.$": "States.ArrayLength($.pathParts)",
-                        "filename.$": "States.ArrayGetItem($.pathParts, States.MathAdd(States.ArrayLength($.pathParts), -1))",
+                        "filename.$":
+                            "States.ArrayGetItem($.pathParts, States.MathAdd(States.ArrayLength($.pathParts), -1))",
                         "size.$": "$.size",
-                        "expiresAt.$": "$.expiresAt"
-                    }
-                })
+                        "expiresAt.$": "$.expiresAt",
+                    },
+                }),
             ).next(
-                this.createS3WriteTask(
-                    "external_files/${filename}",
-                    "$.downloadURL"
-                )
+                new tasks.CallAwsService(this, "WriteExternalFileToS3", {
+                    service: "s3",
+                    action: "putObject",
+                    parameters: {
+                        Bucket: this.bucket.bucketName,
+                        "Key.$": "States.Format('{}/external_files/{}', $.var.packageName, $.filename)",
+                        "Body.$": "$.downloadURL",
+                    },
+                    iamResources: [this.bucket.arnForObjects("*")],
+                    resultPath: "$.putResult",
+                }),
             ),
         );
     }
