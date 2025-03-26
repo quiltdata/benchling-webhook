@@ -14,8 +14,7 @@
   ],
   "data": "{\"key\": \"value\"}",
   "enabled": true,
-  "featureId": "quilt_integration",
-  "resourceId": "app_qdSsffBWrLoTVId4",
-  "sessionId": "sesn_SwKtkgB5",
-  "appId": "app_qdSsffBWrLoTVId4"
+  "featureId": "quilt_homepage",
+  "resourceId": "appdef_mI4jtZESUi",
+  "appId": "appdef_mI4jtZESUi"
 }

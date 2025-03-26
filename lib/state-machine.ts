@@ -182,7 +182,7 @@ export class WebhookStateMachine extends Construct {
             .when(
                 stepfunctions.Condition.or(
                     stepfunctions.Condition.stringEquals("$.message.type", "v2.app.activateRequested"),
-                    stepfunctions.Condition.stringEquals("$.message.type", "v2.canvas.created"),
+                    stepfunctions.Condition.stringEquals("$.message.type", "v2-beta.canvas.created"),
                     stepfunctions.Condition.stringEquals("$.message.type", "v2.canvas.initialized")
                 ),
                 createCanvasTask
