@@ -318,12 +318,22 @@ export class WebhookStateMachine extends Construct {
                     },
                 },
             }).next(
+                new stepfunctions.Pass(this, "SplitURL", {
+                    parameters: {
+                        "fileId.$": "$.fileId",
+                        "downloadURL.$": "$.downloadURL",
+                        "baseUrl.$": "States.ArrayGetItem(States.StringSplit($.downloadURL, '?'), 0)",
+                        "size.$": "$.size",
+                        "expiresAt.$": "$.expiresAt"
+                    }
+                })
+            ).next(
                 new stepfunctions.Pass(this, "ExtractFilename", {
                     parameters: {
-                        "fileId.$": "$.fileId", 
+                        "fileId.$": "$.fileId",
                         "downloadURL.$": "$.downloadURL",
-                        "urlPath.$": "States.ArrayGetItem(States.StringSplit($.downloadURL, '?'), 0)",
-                        "filename.$": "States.ArrayGetItem(States.StringSplit(States.ArrayGetItem(States.StringSplit($.downloadURL, '?'), 0), '/'), -1)",
+                        "baseUrl.$": "$.baseUrl",
+                        "filename.$": "States.ArrayGetItem(States.StringSplit($.baseUrl, '/'), -1)",
                         "size.$": "$.size",
                         "expiresAt.$": "$.expiresAt"
                     }
