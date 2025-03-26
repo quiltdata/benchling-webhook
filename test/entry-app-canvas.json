@@ -12,10 +12,7 @@
       "value": "# This is a markdown block\n1. with **bold text**."
     }
   ],
-  "data": "{\"key\": \"value\"}",
+  "data": "{\"canvasId\": \"cnvs_ELM2Ecb4\", \"appId\": \"appdef_mI4jtZESUi\"}",
   "enabled": true,
-  "featureId": "quilt_integration",
-  "resourceId": "etr_rv7MuD30",
-  "sessionId": "sesn_SwKtkgB5",
-  "appId": "appdef_mI4jtZESUi"
+  "featureId": "quilt_integration"
 }

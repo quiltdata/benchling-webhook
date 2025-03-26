@@ -264,8 +264,8 @@ export class WebhookStateMachine extends Construct {
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
                     "ApiEndpoint.$": 
-                        "States.Format('{}/api/v2/app-canvases', $.var.baseURL)",
-                    Method: "POST",
+                        "States.Format('{}/api/v2/app-canvases/{}', $.var.baseURL, $.message.canvasId)",
+                    Method: "PATCH",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
                     },
@@ -278,9 +278,7 @@ export class WebhookStateMachine extends Construct {
                             }
                         ],
                         "enabled": true,
-                        "featureId.$": "$.message.featureId",
-                        "resourceId.$": "$.message.canvasId",
-                        "appId.$": "$.app.id",
+                        "featureId.$": "$.message.featureId"
                     }
                 },
                 ResultSelector: {
