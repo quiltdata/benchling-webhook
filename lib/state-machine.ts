@@ -13,9 +13,11 @@ import { README_TEMPLATE } from "./templates/readme";
 
 export class WebhookStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
+    private readonly bucket: s3.IBucket;
 
     constructor(scope: Construct, id: string, props: StateMachineProps) {
         super(scope, id);
+        this.bucket = props.bucket;
         const definition = this.createDefinition(props);
 
         const role = new iam.Role(scope, "StateMachineRole", {
@@ -82,17 +84,14 @@ export class WebhookStateMachine extends Construct {
             props.benchlingConnection,
         );
         const writeEntryToS3Task = this.createS3WriteTask(
-            props.bucket,
             FILES.ENTRY_JSON,
             "$.entry.entryData",
         );
         const writeReadmeToS3Task = this.createS3WriteTask(
-            props.bucket,
             FILES.README_MD,
             "$.var.readme",
         );
         const writeMetadataTask = this.createS3WriteTask(
-            props.bucket,
             FILES.INPUT_JSON,
             "$.message",
         );
@@ -185,26 +184,10 @@ export class WebhookStateMachine extends Construct {
                 }),
             );
 
-        // Main workflow
-        const processExternalFilesTask = new tasks.LambdaInvoke(
-            this,
-            "ProcessExternalFiles",
-            {
-                lambdaFunction: props.exportProcessor,
-                payload: stepfunctions.TaskInput.fromObject({
-                    "downloadURLs.$": "$.externalFiles[*].downloadURL",
-                    "packageName.$": "$.var.packageName",
-                    "registry.$": "$.var.registry",
-                }),
-                resultPath: "$.processExternalFilesResult",
-            },
-        );
-
         return setupVariablesTask
             .next(fetchEntryTask)
             .next(extractFileIdsTask)
             .next(fetchExternalFilesTask)
-            .next(processExternalFilesTask)
             .next(exportTask)
             .next(pollExportTask)
             .next(exportChoice);
@@ -334,12 +317,27 @@ export class WebhookStateMachine extends Construct {
                         "expiresAt.$": "$.ResponseBody.externalFile.expiresAt",
                     },
                 },
-            }),
+            }).next(
+                new stepfunctions.Pass(this, "ExtractFilename", {
+                    parameters: {
+                        "fileId.$": "$.fileId", 
+                        "downloadURL.$": "$.downloadURL",
+                        "urlPath.$": "States.ArrayGetItem(States.StringSplit($.downloadURL, '?'), 0)",
+                        "filename.$": "States.ArrayGetItem(States.StringSplit(States.ArrayGetItem(States.StringSplit($.downloadURL, '?'), 0), '/'), -1)",
+                        "size.$": "$.size",
+                        "expiresAt.$": "$.expiresAt"
+                    }
+                })
+            ).next(
+                this.createS3WriteTask(
+                    "external_files/${filename}",
+                    "$.downloadURL"
+                )
+            ),
         );
     }
 
     private createS3WriteTask(
-        bucket: s3.IBucket,
         filename: string,
         bodyPath: string,
     ): tasks.CallAwsService {
@@ -354,12 +352,12 @@ export class WebhookStateMachine extends Construct {
             service: "s3",
             action: "putObject",
             parameters: {
-                Bucket: bucket.bucketName,
+                Bucket: this.bucket.bucketName,
                 "Key.$":
                     `States.Format('{}/{}', $.var.packageName, '${filename}')`,
                 "Body.$": bodyPath,
             },
-            iamResources: [bucket.arnForObjects("*")],
+            iamResources: [this.bucket.arnForObjects("*")],
             resultPath: resultPath,
         });
     }
