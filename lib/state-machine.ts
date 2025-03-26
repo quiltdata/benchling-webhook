@@ -320,7 +320,7 @@ export class WebhookStateMachine extends Construct {
                 new stepfunctions.Pass(this, "SplitURL", {
                     parameters: {
                         "downloadURL.$": "$.downloadURL",
-                        "sansQuery":
+                        "sansQuery.$":
                             "States.ArrayGetItem(States.StringSplit($.downloadURL, '?'), 0)",
                         "packageName.$": "$.packageName",
                     },
