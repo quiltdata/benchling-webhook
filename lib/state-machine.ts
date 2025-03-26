@@ -294,7 +294,7 @@ export class WebhookStateMachine extends Construct {
         return new stepfunctions.Pass(this, "ExtractFileIds", {
             parameters: {
                 "fileIds.$":
-                    "States.ArrayUnique(States.Array($.entry.entryData.days[*].notes[?(@.type=='external_file')].externalFileId))",
+                    "States.ArrayUnique($.entry.entryData.days[*].notes[?(@.type=='external_file')].externalFileId)",
             },
             resultPath: "$.fileIds",
         });
@@ -305,6 +305,7 @@ export class WebhookStateMachine extends Construct {
     ): stepfunctions.Map {
         return new stepfunctions.Map(this, "FetchExternalFiles", {
             itemsPath: "$.fileIds.fileIds",
+            inputPath: "$",
             itemSelector: {
                 "fileId.$": "$$.Map.Item.Value",
                 "entryId.$": "$.var.entity",
@@ -326,7 +327,7 @@ export class WebhookStateMachine extends Construct {
                         },
                     },
                     ResultSelector: {
-                        "fileId.$": "$.fileId",
+                        "fileId.$": "$.ResponseBody.externalFile.id",
                         "downloadURL.$":
                             "$.ResponseBody.externalFile.downloadURL",
                         "size.$": "$.ResponseBody.externalFile.size",
