@@ -38,7 +38,7 @@ api_request() {
     local endpoint=$2
     local data=$3
 
-    curl -s -X "$method" "$API_ROOT/$endpoint" \
+    curl -v -X "$method" "$API_ROOT/$endpoint" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         ${data:+--data "$data"}
@@ -67,6 +67,6 @@ if [[ -n "$1" ]]; then
     echo "Updating canvas with ID: $CANVAS_ID"
     api_request "PATCH" "app-canvases/${CANVAS_ID}" $BLOCKS
 else
-    echo "No canvas ID provided. Fetching entries instead."
+    echo "No canvas ID provided. Fetching apps instead."
     api_request "GET" "apps"
 fi
