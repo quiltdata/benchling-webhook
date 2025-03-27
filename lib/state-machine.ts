@@ -313,7 +313,7 @@ export class WebhookStateMachine extends Construct {
                         "fileId.$": "$.ResponseBody.externalFile.id",
                         "downloadURL.$":
                             "$.ResponseBody.externalFile.downloadURL",
-                        "packageName.$": "$$.Execution.Input.var.packageName",
+                        "packageName.$": "$$.var.packageName",
                     },
                 },
             }).next(
@@ -346,21 +346,23 @@ export class WebhookStateMachine extends Construct {
                 new stepfunctions.Pass(this, "DebugS3Key", {
                     parameters: {
                         "debug": {
-                            "proposedKey.$": "States.Format('{}/external_files/{}', $.packageName, $.filename)",
+                            "proposedKey.$":
+                                "States.Format('{}/external_files/{}', $.packageName, $.filename)",
                             "packageName.$": "$.packageName",
                             "filename.$": "$.filename",
-                            "downloadURL.$": "$.downloadURL"
-                        }
+                            "downloadURL.$": "$.downloadURL",
+                        },
                     },
-                    resultPath: "$.debug"
-                })
+                    resultPath: "$.debug",
+                }),
             ).next(
                 new tasks.CallAwsService(this, "WriteExternalFileToS3", {
                     service: "s3",
                     action: "putObject",
                     parameters: {
                         Bucket: this.bucket.bucketName,
-                        "Key.$": "States.Format('{}/external_files/{}', $.packageName, $.filename)",
+                        "Key.$":
+                            "States.Format('{}/external_files/{}', $.packageName, $.filename)",
                         "Body.$": "$.downloadURL",
                     },
                     iamResources: [this.bucket.arnForObjects("*")],
