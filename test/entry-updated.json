@@ -22,17 +22,5 @@
     ]
   },
   "tenantId": "ten_dsrealahhb",
-  "version": "0",
-  "var": {
-    "baseURL": "https://quilt-dtt.benchling.com",
-    "registry": "quilt-bake",
-    "typeFields": [
-      "v2",
-      "entry",
-      "updated",
-      "fields"
-    ],
-    "packageName": "benchling/etr_rv7MuD30",
-    "entity": "etr_rv7MuD30"
-  }
+  "version": "0"
 }
