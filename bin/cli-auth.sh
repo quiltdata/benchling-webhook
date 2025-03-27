@@ -29,6 +29,15 @@ get_list() {
         -H "Content-Type: application/json"
 }
 
+# Function to get canvas details
+get_canvas() {
+    local canvas_id=$1
+    curl -s --request GET \
+        --url "$API_ROOT/app-canvases/${canvas_id}" \
+        --header "Authorization: Bearer $2" \
+        --header "Content-Type: application/json"
+}
+
 # Function to update app canvas
 update_canvas() {
     local canvas_id=$1
@@ -62,6 +71,10 @@ echo "TOKEN: $TOKEN"
 # Check if CANVAS_ID is provided as an argument
 if [[ -n "$1" ]]; then
     CANVAS_ID="$1"
+    echo "Fetching canvas with ID: $CANVAS_ID"
+    CANVAS_DETAILS=$(get_canvas "$CANVAS_ID" "$TOKEN")
+    echo "Canvas details: $CANVAS_DETAILS"
+
     echo "Updating canvas with ID: $CANVAS_ID"
     update_canvas "$CANVAS_ID" "$TOKEN"
 else
