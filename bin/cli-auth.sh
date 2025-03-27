@@ -11,17 +11,6 @@ echo "BENCHLING_CLIENT_ID: $BENCHLING_CLIENT_ID"
 echo "BENCHLING_TENANT: $BENCHLING_TENANT"
 
 API_ROOT="https://${BENCHLING_TENANT}.benchling.com/api/v2"
-BLOCKS='{
-    "blocks": [
-        {
-            "type": "MARKDOWN",
-            "text": "Initializing canvas...",
-            "id": "init"
-        }
-    ],
-    "enabled": true,
-    "featureId": "quilt_integration"
-}'
 
 # Function to get OAuth Token
 get_token() {
@@ -61,11 +50,24 @@ echo "TOKEN: $TOKEN"
 if [[ -n "$1" ]]; then
     CANVAS_ID="$1"
     echo "Fetching canvas with ID: $CANVAS_ID"
-    CANVAS_DETAILS=$(api_request "GET" "app-canvases/${CANVAS_ID}")
-    echo "Canvas details: $CANVAS_DETAILS"
+    echo "=== $CANVAS_ID ==="
+    api_request "GET" "app-canvases/${CANVAS_ID}"
+    echo "=== $CANVAS_ID ==="
 
     echo "Updating canvas with ID: $CANVAS_ID"
-    api_request "PATCH" "app-canvases/${CANVAS_ID}" $BLOCKS
+    api_request "PATCH" "app-canvases/${CANVAS_ID}" '{
+        "blocks": [
+            {
+                "enabled": true,
+                "id": "user_defined_id",
+                "text": "Click me to submit",
+                "type": "BUTTON"
+            }
+        ]
+        "enabled": true,
+        "featureId": "quilt_integration"
+    }'
+
 else
     echo "No canvas ID provided. Fetching apps instead."
     api_request "GET" "apps"
