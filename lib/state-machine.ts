@@ -93,10 +93,6 @@ export class WebhookStateMachine extends Construct {
         const fetchEntryTask = this.createFetchEntryTask(
             props.benchlingConnection,
         );
-        const extractFileIdsTask = this.createExtractFileIdsTask();
-        const fetchExternalFilesTask = this.createFetchExternalFilesTask(
-            props,
-        );
         const writeEntryToS3Task = this.createS3WriteTask(
             FILES.ENTRY_JSON,
             "$.entry.entryData",
@@ -208,8 +204,6 @@ export class WebhookStateMachine extends Construct {
                 stepfunctions.Condition.stringEquals("$.var.channel", "events"),
                 setupResourceMetadataTask
                     .next(fetchEntryTask)
-                    .next(extractFileIdsTask)
-                    .next(fetchExternalFilesTask)
                     .next(exportTask)
                     .next(pollExportTask)
                     .next(exportChoice),
@@ -357,97 +351,6 @@ export class WebhookStateMachine extends Construct {
                 ResultPath: "$.entry",
             },
         });
-    }
-
-    private createExtractFileIdsTask(): stepfunctions.Pass {
-        return new stepfunctions.Pass(this, "ExtractFileIds", {
-            parameters: {
-                "fileIds.$":
-                    "States.ArrayUnique($.entry.entryData.days[*].notes[?(@.type=='external_file')].externalFileId)",
-            },
-            resultPath: "$.fileIds",
-        });
-    }
-
-    private createFetchExternalFilesTask(
-        props: StateMachineProps,
-    ): stepfunctions.Map {
-        return new stepfunctions.Map(this, "FetchExternalFiles", {
-            itemsPath: "$.fileIds.fileIds",
-            inputPath: "$",
-            itemSelector: {
-                "fileId.$": "$$.Map.Item.Value",
-                "entryId.$": "$.var.entity",
-                "baseURL.$": "$.var.baseURL",
-            },
-            resultPath: "$.externalFiles",
-            maxConcurrency: 1,
-        }).itemProcessor(
-            new stepfunctions.CustomState(this, "FetchExternalFile", {
-                stateJson: {
-                    Type: "Task",
-                    Resource: "arn:aws:states:::http:invoke",
-                    Parameters: {
-                        "ApiEndpoint.$":
-                            "States.Format('{}/api/v2/entries/{}/external-files/{}', $.baseURL, $.entryId, $.fileId)",
-                        Method: "GET",
-                        Authentication: {
-                            ConnectionArn: props.benchlingConnection.attrArn,
-                        },
-                    },
-                    ResultSelector: {
-                        "fileId.$": "$.ResponseBody.externalFile.id",
-                        "fetchURL.$":
-                            "$.ResponseBody.externalFile.downloadURL",
-                    },
-                },
-            }).next(
-                new stepfunctions.Pass(this, "SplitURL", {
-                    parameters: {
-                        "fetchURL.$": "$.fetchURL",
-                        "sansQuery.$":
-                            "States.ArrayGetItem(States.StringSplit($.fetchURL, '?'), 0)",
-                    },
-                }),
-            ).next(
-                new stepfunctions.Pass(this, "SplitPath", {
-                    parameters: {
-                        "fetchURL.$": "$.fetchURL",
-                        "pathParts.$": "States.StringSplit($.sansQuery, '/')",
-                    },
-                }),
-            ).next(
-                new stepfunctions.Pass(this, "ExtractFilename", {
-                    parameters: {
-                        "fetchURL.$": "$.fetchURL",
-                        "filename.$":
-                            "States.ArrayGetItem($.pathParts, States.MathAdd(States.ArrayLength($.pathParts), -1))",
-                        "packageName.$":
-                            `States.Format('${props.prefix}/{}', $$.Execution.Input.message.resourceId)`,
-                    },
-                }),
-            ).next(
-                new stepfunctions.Pass(this, "ConstructKey", {
-                    parameters: {
-                        "fetchURL.$": "$.fetchURL",
-                        "fileKey.$":
-                            "States.Format('{}/external_files/{}', $.packageName, $.filename)",
-                    },
-                }),
-            ).next(
-                new tasks.CallAwsService(this, "WriteExternalFileToS3", {
-                    service: "s3",
-                    action: "putObject",
-                    parameters: {
-                        Bucket: this.bucket.bucketName,
-                        "Key.$": "$.fileKey",
-                        "Body.$": "$.fetchURL",
-                    },
-                    iamResources: [this.bucket.arnForObjects("*")],
-                    resultPath: "$.putResult",
-                }),
-            ),
-        );
     }
 
     private createS3WriteTask(
