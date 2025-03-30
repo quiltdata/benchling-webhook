@@ -283,7 +283,7 @@ export class WebhookStateMachine extends Construct {
                     }
                 },
                 ResultSelector: {
-                    "canvasId.$": "$.ResponseBody.canvas.id"
+                    "canvasId.$": "$.ResponseBody.id"
                 },
                 ResultPath: "$.canvas"
             },
