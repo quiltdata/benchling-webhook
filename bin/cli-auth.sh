@@ -63,7 +63,7 @@ if [[ -n "$1" ]]; then
                 "text": "Click me to submit",
                 "type": "BUTTON"
             }
-        ]
+        ],
         "enabled": true,
         "featureId": "quilt_integration"
     }'

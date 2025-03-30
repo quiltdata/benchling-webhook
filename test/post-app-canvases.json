@@ -1,0 +1,184 @@
+{
+  "blocks": [
+    {
+      "enabled": true,
+      "id": "user_defined_id",
+      "text": "Click me to submit",
+      "type": "BUTTON"
+    },
+    {
+      "id": "user_generated_id",
+      "type": "CHIP",
+      "value": "string"
+    },
+    {
+      "enabled": true,
+      "id": "user_defined_id",
+      "label": "My Input",
+      "value": "string",
+      "dropdownId": "string",
+      "type": "DROPDOWN"
+    },
+    {
+      "enabled": true,
+      "id": "user_defined_id",
+      "label": "My Input",
+      "value": [
+        "string"
+      ],
+      "dropdownId": "string",
+      "type": "DROPDOWN_MULTIVALUE"
+    },
+    {
+      "id": "user_generated_id",
+      "type": "MARKDOWN",
+      "value": "# This is a markdown block\n1. with **bold text**."
+    },
+    {
+      "enabled": true,
+      "id": "user_defined_id",
+      "label": "My Input",
+      "value": "string",
+      "itemType": "dna_sequence",
+      "schemaId": "string",
+      "type": "SEARCH_INPUT"
+    },
+    {
+      "enabled": true,
+      "id": "user_defined_id",
+      "label": "My Input",
+      "value": [
+        "string"
+      ],
+      "itemType": "dna_sequence",
+      "schemaId": "string",
+      "type": "SEARCH_INPUT_MULTIVALUE"
+    },
+    {
+      "children": [
+        {
+          "enabled": true,
+          "id": "user_defined_id",
+          "text": "Click me to submit",
+          "type": "BUTTON"
+        },
+        {
+          "id": "user_generated_id",
+          "type": "CHIP",
+          "value": "string"
+        },
+        {
+          "enabled": true,
+          "id": "user_defined_id",
+          "label": "My Input",
+          "value": "string",
+          "dropdownId": "string",
+          "type": "DROPDOWN"
+        },
+        {
+          "enabled": true,
+          "id": "user_defined_id",
+          "label": "My Input",
+          "value": [
+            "string"
+          ],
+          "dropdownId": "string",
+          "type": "DROPDOWN_MULTIVALUE"
+        },
+        {
+          "id": "user_generated_id",
+          "type": "MARKDOWN",
+          "value": "# This is a markdown block\n1. with **bold text**."
+        },
+        {
+          "enabled": true,
+          "id": "user_defined_id",
+          "label": "My Input",
+          "value": "string",
+          "itemType": "dna_sequence",
+          "schemaId": "string",
+          "type": "SEARCH_INPUT"
+        },
+        {
+          "enabled": true,
+          "id": "user_defined_id",
+          "label": "My Input",
+          "value": [
+            "string"
+          ],
+          "itemType": "dna_sequence",
+          "schemaId": "string",
+          "type": "SEARCH_INPUT_MULTIVALUE"
+        },
+        {
+          "enabled": true,
+          "id": "user_defined_id",
+          "label": "My Input",
+          "value": "string",
+          "options": [
+            "string"
+          ],
+          "type": "SELECTOR_INPUT"
+        },
+        {
+          "enabled": true,
+          "id": "user_defined_id",
+          "label": "My Input",
+          "value": [
+            "string"
+          ],
+          "options": [
+            "string"
+          ],
+          "type": "SELECTOR_INPUT_MULTIVALUE"
+        },
+        {
+          "enabled": true,
+          "id": "user_defined_id",
+          "label": "My Input",
+          "value": "string",
+          "placeholder": "string",
+          "type": "TEXT_INPUT"
+        }
+      ],
+      "id": "user_generated_id",
+      "type": "SECTION"
+    },
+    {
+      "enabled": true,
+      "id": "user_defined_id",
+      "label": "My Input",
+      "value": "string",
+      "options": [
+        "string"
+      ],
+      "type": "SELECTOR_INPUT"
+    },
+    {
+      "enabled": true,
+      "id": "user_defined_id",
+      "label": "My Input",
+      "value": [
+        "string"
+      ],
+      "options": [
+        "string"
+      ],
+      "type": "SELECTOR_INPUT_MULTIVALUE"
+    },
+    {
+      "enabled": true,
+      "id": "user_defined_id",
+      "label": "My Input",
+      "value": "string",
+      "placeholder": "string",
+      "type": "TEXT_INPUT"
+    }
+  ],
+  "data": "{\"key\": \"value\"}",
+  "enabled": true,
+  "featureId": "quilt_integration",
+  "resourceId": "etr_rv7MuD30",
+  "sessionId": "sesn_SwKtkgB5",
+  "appId": "appdef_mI4jtZESUi"
+}
