@@ -272,13 +272,14 @@ export class WebhookStateMachine extends Construct {
                     RequestBody: {
                         "blocks": [
                             {
-                                "type": "MARKDOWN",
-                                "text": "Initializing canvas...",
-                                "id": "init"
+                                "enabled": true,
+                                "id": "user_defined_id",
+                                "text": "Click me to submit",
+                                "type": "BUTTON"
                             }
                         ],
                         "enabled": true,
-                        "featureId.$": "$.message.featureId"
+                        "featureId": "quilt_integration"
                     }
                 },
                 ResultSelector: {
