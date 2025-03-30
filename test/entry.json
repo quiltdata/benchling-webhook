@@ -1,0 +1,187 @@
+{
+  "entry": {
+    "apiURL": "https://quilt-dtt.benchling.com/api/v2/entries/etr_0uKCQZ8f",
+    "archiveRecord": null,
+    "assignedReviewers": [],
+    "authors": [
+      {
+        "handle": "eprabhakar",
+        "id": "ent_9CIv9U8P",
+        "name": "Ernest Prabhakar"
+      }
+    ],
+    "createdAt": "2025-03-24T21:34:16.262367+00:00",
+    "creator": {
+      "handle": "eprabhakar",
+      "id": "ent_9CIv9U8P",
+      "name": "Ernest Prabhakar"
+    },
+    "customFields": {},
+    "days": [
+      {
+        "date": "2025-03-24",
+        "notes": [
+          {
+            "indentation": 0,
+            "links": [],
+            "text": "This is a test notebook.",
+            "type": "text"
+          },
+          {
+            "indentation": 0,
+            "links": [],
+            "text": "The goal is to sync this Benchling Entry with a Quilt Package.",
+            "type": "text"
+          },
+          {
+            "indentation": 0,
+            "links": [],
+            "text": "See \"Metadata\" for the relevant fields.",
+            "type": "text"
+          },
+          {
+            "indentation": 0,
+            "links": [],
+            "text": "",
+            "type": "text"
+          },
+          {
+            "indentation": 0,
+            "links": [],
+            "text": "",
+            "type": "text"
+          },
+          {
+            "externalFileId": "efl_fmVaBrIX",
+            "indentation": 0,
+            "links": [],
+            "text": "",
+            "type": "external_file"
+          },
+          {
+            "indentation": 0,
+            "links": [],
+            "text": "",
+            "type": "text"
+          }
+        ],
+        "title": null
+      }
+    ],
+    "displayId": "EXP25000007",
+    "entryTemplateId": "tmpl_1ZdkRpdd",
+    "fields": {
+      "Project": {
+        "displayValue": "CanvasTest",
+        "isMulti": false,
+        "textValue": "CanvasTest",
+        "type": "text",
+        "value": "CanvasTest"
+      },
+      "Quilt Catalog URL": {
+        "displayValue": "https://demo.quiltdata.com/b/quilt-benchling/packages/benchling/EXP25000007",
+        "isMulti": false,
+        "textValue": "https://demo.quiltdata.com/b/quilt-benchling/packages/benchling/EXP25000007",
+        "type": "text",
+        "value": "https://demo.quiltdata.com/b/quilt-benchling/packages/benchling/EXP25000007"
+      },
+      "Quilt DropZone URL": {
+        "displayValue": null,
+        "isMulti": false,
+        "textValue": null,
+        "type": "text",
+        "value": null
+      },
+      "Quilt Revise URL": {
+        "displayValue": "https://demo.quiltdata.com/b/quilt-benchling/packages/benchling/EXP25000007?action=revisePackage",
+        "isMulti": false,
+        "textValue": "https://demo.quiltdata.com/b/quilt-benchling/packages/benchling/EXP25000007?action=revisePackage",
+        "type": "text",
+        "value": "https://demo.quiltdata.com/b/quilt-benchling/packages/benchling/EXP25000007?action=revisePackage"
+      },
+      "Quilt+ URI": {
+        "displayValue": "quilt+s3://quilt-benchling#package=benchling/EXP25000007",
+        "isMulti": false,
+        "textValue": "quilt+s3://quilt-benchling#package=benchling/EXP25000007",
+        "type": "text",
+        "value": "quilt+s3://quilt-benchling#package=benchling/EXP25000007"
+      },
+      "Sentinel": {
+        "displayValue": "1",
+        "isMulti": false,
+        "textValue": "1",
+        "type": "integer",
+        "unit": null,
+        "value": 1
+      },
+      "Study": {
+        "displayValue": "Webhook",
+        "isMulti": false,
+        "textValue": "Webhook",
+        "type": "text",
+        "value": "Webhook"
+      },
+      "compute_engine": {
+        "displayValue": null,
+        "isMulti": false,
+        "textValue": null,
+        "type": "text",
+        "value": null
+      },
+      "enable_fastq": {
+        "displayValue": "",
+        "isMulti": false,
+        "textValue": "",
+        "type": "integer",
+        "unit": null,
+        "value": null
+      },
+      "enable_vep": {
+        "displayValue": "",
+        "isMulti": false,
+        "textValue": "",
+        "type": "integer",
+        "unit": null,
+        "value": null
+      },
+      "platform": {
+        "displayValue": null,
+        "isMulti": false,
+        "textValue": null,
+        "type": "text",
+        "value": null
+      },
+      "read_group": {
+        "displayValue": null,
+        "isMulti": false,
+        "textValue": null,
+        "type": "text",
+        "value": null
+      },
+      "s3_path": {
+        "displayValue": null,
+        "isMulti": false,
+        "textValue": null,
+        "type": "text",
+        "value": null
+      },
+      "sample_name": {
+        "displayValue": null,
+        "isMulti": false,
+        "textValue": null,
+        "type": "text",
+        "value": null
+      }
+    },
+    "folderId": "lib_uz14ul16",
+    "id": "etr_0uKCQZ8f",
+    "modifiedAt": "2025-03-25T02:59:06.046127+00:00",
+    "name": "quiltable",
+    "reviewRecord": null,
+    "schema": {
+      "id": "ts_sWLj9kNl",
+      "name": "Quiltable"
+    },
+    "webURL": "https://quilt-dtt.benchling.com/quilt-dev/f/lib_uz14ul16-quilt-integration/etr_0uKCQZ8f-quiltable/edit"
+  }
+}

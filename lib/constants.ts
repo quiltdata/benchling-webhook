@@ -20,6 +20,10 @@ export const MIME_TYPES = {
     GIF: "image/gif",
     TXT: "text/plain",
     PDF: "application/pdf",
+    MD: "text/markdown",
+    ZIP: "application/zip",
+    YAML: "application/yaml",
+    YML: "application/yaml",
     DEFAULT: "application/octet-stream",
 } as const;
 

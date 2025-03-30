@@ -7,15 +7,17 @@ import * as events from "aws-cdk-lib/aws-events";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
-import { StateMachineProps, ExportStatus } from "./types";
+import { ExportStatus, StateMachineProps } from "./types";
 import { EXPORT_STATUS, FILES } from "./constants";
 import { README_TEMPLATE } from "./templates/readme";
 
 export class WebhookStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
+    private readonly bucket: s3.IBucket;
 
     constructor(scope: Construct, id: string, props: StateMachineProps) {
         super(scope, id);
+        this.bucket = props.bucket;
         const definition = this.createDefinition(props);
 
         const role = new iam.Role(scope, "StateMachineRole", {
@@ -92,17 +94,14 @@ export class WebhookStateMachine extends Construct {
             props.benchlingConnection,
         );
         const writeEntryToS3Task = this.createS3WriteTask(
-            props.bucket,
             FILES.ENTRY_JSON,
             "$.entry.entryData",
         );
         const writeReadmeToS3Task = this.createS3WriteTask(
-            props.bucket,
             FILES.README_MD,
             "$.var.readme",
         );
         const writeMetadataTask = this.createS3WriteTask(
-            props.bucket,
             FILES.INPUT_JSON,
             "$.message",
         );
@@ -123,43 +122,71 @@ export class WebhookStateMachine extends Construct {
 
         // Create export polling loop
         const exportTask = this.createExportTask(props.benchlingConnection);
-        const pollExportTask = this.createPollExportTask(props.benchlingConnection);
+        const pollExportTask = this.createPollExportTask(
+            props.benchlingConnection,
+        );
         const waitState = this.createWaitState();
 
         exportTask.addCatch(errorHandler);
         pollExportTask.addCatch(errorHandler);
 
         // Create export polling loop with proper state transitions
-        const extractDownloadURL = new stepfunctions.Pass(this, "ExtractDownloadURL", {
-            parameters: {
-                "status.$": "$.exportStatus.status" as ExportStatus["status"],
-                "downloadURL.$": "$.exportStatus.response.response.downloadURL",
-                "packageName.$": "$.var.packageName",
-                "registry.$": "$.var.registry",
+        const extractDownloadURL = new stepfunctions.Pass(
+            this,
+            "ExtractDownloadURL",
+            {
+                parameters: {
+                    "status.$":
+                        "$.exportStatus.status" as ExportStatus["status"],
+                    "downloadURL.$":
+                        "$.exportStatus.response.response.downloadURL",
+                    "packageName.$": "$.var.packageName",
+                    "registry.$": "$.var.registry",
+                },
+                resultPath: "$.exportStatus",
             },
-            resultPath: "$.exportStatus",
-        });
+        );
 
-        const processExportTask = new tasks.LambdaInvoke(this, "ProcessExport", {
-            lambdaFunction: props.exportProcessor,
-            payload: stepfunctions.TaskInput.fromObject({
-                downloadURL: stepfunctions.JsonPath.stringAt("$.exportStatus.downloadURL"),
-                packageName: stepfunctions.JsonPath.stringAt("$.exportStatus.packageName"),
-                registry: stepfunctions.JsonPath.stringAt("$.exportStatus.registry"),
-            }),
-            resultPath: "$.processResult",
-        });
+        const processExportTask = new tasks.LambdaInvoke(
+            this,
+            "ProcessExport",
+            {
+                lambdaFunction: props.exportProcessor,
+                payload: stepfunctions.TaskInput.fromObject({
+                    downloadURL: stepfunctions.JsonPath.stringAt(
+                        "$.exportStatus.downloadURL",
+                    ),
+                    packageName: stepfunctions.JsonPath.stringAt(
+                        "$.exportStatus.packageName",
+                    ),
+                    registry: stepfunctions.JsonPath.stringAt(
+                        "$.exportStatus.registry",
+                    ),
+                }),
+                resultPath: "$.processResult",
+            },
+        );
 
         const exportChoice = new stepfunctions.Choice(this, "CheckExportStatus")
-            .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", EXPORT_STATUS.RUNNING),
-                waitState.next(pollExportTask))
-            .when(stepfunctions.Condition.stringEquals("$.exportStatus.status", EXPORT_STATUS.SUCCEEDED),
+            .when(
+                stepfunctions.Condition.stringEquals(
+                    "$.exportStatus.status",
+                    EXPORT_STATUS.RUNNING,
+                ),
+                waitState.next(pollExportTask),
+            )
+            .when(
+                stepfunctions.Condition.stringEquals(
+                    "$.exportStatus.status",
+                    EXPORT_STATUS.SUCCEEDED,
+                ),
                 extractDownloadURL
                     .next(processExportTask)
                     .next(writeEntryToS3Task)
                     .next(writeReadmeToS3Task)
                     .next(writeMetadataTask)
-                    .next(sendToSQSTask))
+                    .next(sendToSQSTask),
+            )
             .otherwise(
                 new stepfunctions.Fail(this, "ExportFailed", {
                     cause: "Export task did not succeed",
@@ -168,7 +195,9 @@ export class WebhookStateMachine extends Construct {
             );
 
         // Create channel choice state
-        const createCanvasTask = this.createCanvasTask(props.benchlingConnection);
+        const createCanvasTask = this.createCanvasTask(
+            props.benchlingConnection,
+        );
 
         const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
             .when(
@@ -177,22 +206,31 @@ export class WebhookStateMachine extends Construct {
                     .next(fetchEntryTask)
                     .next(exportTask)
                     .next(pollExportTask)
-                    .next(exportChoice)
+                    .next(exportChoice),
             )
             .when(
                 stepfunctions.Condition.or(
-                    stepfunctions.Condition.stringEquals("$.message.type", "v2.app.activateRequested"),
-                    stepfunctions.Condition.stringEquals("$.message.type", "v2-beta.canvas.created"),
-                    stepfunctions.Condition.stringEquals("$.message.type", "v2.canvas.initialized")
+                    stepfunctions.Condition.stringEquals(
+                        "$.message.type",
+                        "v2.app.activateRequested",
+                    ),
+                    stepfunctions.Condition.stringEquals(
+                        "$.message.type",
+                        "v2-beta.canvas.created",
+                    ),
+                    stepfunctions.Condition.stringEquals(
+                        "$.message.type",
+                        "v2.canvas.initialized",
+                    ),
                 ),
-                createCanvasTask
+                createCanvasTask,
             )
             .otherwise(
                 new stepfunctions.Pass(this, "EchoInput", {
                     parameters: {
                         "input.$": "$",
                     },
-                })
+                }),
             );
 
         // Main workflow
@@ -208,7 +246,8 @@ export class WebhookStateMachine extends Construct {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": "States.Format('{}/api/v2/exports', $.var.baseURL)",
+                    "ApiEndpoint.$":
+                        "States.Format('{}/api/v2/exports', $.var.baseURL)",
                     Method: "POST",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
@@ -233,7 +272,8 @@ export class WebhookStateMachine extends Construct {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": "States.Format('{}/api/v2/tasks/{}', $.var.baseURL, $.exportTask.taskId)",
+                    "ApiEndpoint.$":
+                        "States.Format('{}/api/v2/tasks/{}', $.var.baseURL, $.exportTask.taskId)",
                     Method: "GET",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
@@ -263,7 +303,7 @@ export class WebhookStateMachine extends Construct {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": 
+                    "ApiEndpoint.$":
                         "States.Format('{}/api/v2/app-canvases/{}', $.var.baseURL, $.message.canvasId)",
                     Method: "PATCH",
                     Authentication: {
@@ -275,17 +315,17 @@ export class WebhookStateMachine extends Construct {
                                 "enabled": true,
                                 "id": "user_defined_id",
                                 "text": "Click me to submit",
-                                "type": "BUTTON"
-                            }
+                                "type": "BUTTON",
+                            },
                         ],
                         "enabled": true,
-                        "featureId": "quilt_integration"
-                    }
+                        "featureId": "quilt_integration",
+                    },
                 },
                 ResultSelector: {
-                    "canvasId.$": "$.ResponseBody.id"
+                    "canvasId.$": "$.ResponseBody.id",
                 },
-                ResultPath: "$.canvas"
+                ResultPath: "$.canvas",
             },
         });
     }
@@ -314,7 +354,6 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createS3WriteTask(
-        bucket: s3.IBucket,
         filename: string,
         bodyPath: string,
     ): tasks.CallAwsService {
@@ -329,12 +368,12 @@ export class WebhookStateMachine extends Construct {
             service: "s3",
             action: "putObject",
             parameters: {
-                Bucket: bucket.bucketName,
+                Bucket: this.bucket.bucketName,
                 "Key.$":
                     `States.Format('{}/{}', $.var.packageName, '${filename}')`,
                 "Body.$": bodyPath,
             },
-            iamResources: [bucket.arnForObjects("*")],
+            iamResources: [this.bucket.arnForObjects("*")],
             resultPath: resultPath,
         });
     }
