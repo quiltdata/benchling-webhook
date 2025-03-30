@@ -59,18 +59,32 @@ export class WebhookStateMachine extends Construct {
     private createDefinition(
         props: StateMachineProps,
     ): stepfunctions.IChainable {
-        const setupVariablesTask = new stepfunctions.Pass(
+        const setupWebhookMetadataTask = new stepfunctions.Pass(
             this,
-            "SetupVariables",
+            "SetupWebhookMetadata",
             {
                 parameters: {
                     "baseURL": `https://${props.benchlingTenant}.benchling.com`,
+                    "typeFields.$": "States.StringSplit($.message.type, '.')",
+                    "channel.$": "$.channel",
+                },
+                resultPath: "$.var",
+            },
+        );
+
+        const setupResourceMetadataTask = new stepfunctions.Pass(
+            this,
+            "SetupResourceMetadata",
+            {
+                parameters: {
+                    "baseURL.$": "$.var.baseURL",
+                    "typeFields.$": "$.var.typeFields",
+                    "channel.$": "$.var.channel",
                     "entity.$": "$.message.resourceId",
                     "packageName.$":
                         `States.Format('${props.prefix}/{}', $.message.resourceId)`,
                     "readme": README_TEMPLATE,
                     "registry": props.bucket.bucketName,
-                    "typeFields.$": "States.StringSplit($.message.type, '.')",
                 },
                 resultPath: "$.var",
             },
@@ -184,13 +198,39 @@ export class WebhookStateMachine extends Construct {
                 }),
             );
 
-        return setupVariablesTask
-            .next(fetchEntryTask)
-            .next(extractFileIdsTask)
-            .next(fetchExternalFilesTask)
-            .next(exportTask)
-            .next(pollExportTask)
-            .next(exportChoice);
+        // Create channel choice state
+        const createCanvasTask = this.createCanvasTask(props.benchlingConnection);
+
+        const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
+            .when(
+                stepfunctions.Condition.stringEquals("$.var.channel", "events"),
+                setupResourceMetadataTask
+                    .next(fetchEntryTask)
+                    .next(extractFileIdsTask)
+                    .next(fetchExternalFilesTask)
+                    .next(exportTask)
+                    .next(pollExportTask)
+                    .next(exportChoice)
+            )
+            .when(
+                stepfunctions.Condition.or(
+                    stepfunctions.Condition.stringEquals("$.message.type", "v2.app.activateRequested"),
+                    stepfunctions.Condition.stringEquals("$.message.type", "v2-beta.canvas.created"),
+                    stepfunctions.Condition.stringEquals("$.message.type", "v2.canvas.initialized")
+                ),
+                createCanvasTask
+            )
+            .otherwise(
+                new stepfunctions.Pass(this, "EchoInput", {
+                    parameters: {
+                        "input.$": "$",
+                    },
+                })
+            );
+
+        // Main workflow
+        return setupWebhookMetadataTask
+            .next(channelChoice);
     }
 
     private createExportTask(
@@ -247,6 +287,41 @@ export class WebhookStateMachine extends Construct {
         return new stepfunctions.Wait(this, "WaitForExport", {
             time: stepfunctions.WaitTime.duration(Duration.seconds(30)),
             comment: "Wait for the export to complete",
+        });
+    }
+
+    private createCanvasTask(
+        benchlingConnection: events.CfnConnection,
+    ): stepfunctions.CustomState {
+        return new stepfunctions.CustomState(this, "CreateCanvas", {
+            stateJson: {
+                Type: "Task",
+                Resource: "arn:aws:states:::http:invoke",
+                Parameters: {
+                    "ApiEndpoint.$": 
+                        "States.Format('{}/api/v2/app-canvases/{}', $.var.baseURL, $.message.canvasId)",
+                    Method: "PATCH",
+                    Authentication: {
+                        ConnectionArn: benchlingConnection.attrArn,
+                    },
+                    RequestBody: {
+                        "blocks": [
+                            {
+                                "enabled": true,
+                                "id": "user_defined_id",
+                                "text": "Click me to submit",
+                                "type": "BUTTON"
+                            }
+                        ],
+                        "enabled": true,
+                        "featureId": "quilt_integration"
+                    }
+                },
+                ResultSelector: {
+                    "canvasId.$": "$.ResponseBody.id"
+                },
+                ResultPath: "$.canvas"
+            },
         });
     }
 

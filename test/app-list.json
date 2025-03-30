@@ -1,0 +1,78 @@
+{
+  "apps": [
+    {
+      "apiURL": "https://quilt-dtt.benchling.com/api/v2/apps/app_99QCTUKNrNn5l1iE",
+      "appDefinition": {
+        "id": "appdef_mLUA1ChcZc",
+        "versionNumber": "0.1.1"
+      },
+      "archiveRecord": null,
+      "createdAt": "2025-03-08T00:04:34.694161+00:00",
+      "creator": {
+        "handle": "eprabhakar",
+        "id": "ent_9CIv9U8P",
+        "name": "Ernest Prabhakar"
+      },
+      "description": "",
+      "id": "app_99QCTUKNrNn5l1iE",
+      "modifiedAt": "2025-03-14T22:59:15.219784+00:00",
+      "name": "Sample Sync App",
+      "webURL": "https://quilt-dtt.benchling.com/developer/apps/app_99QCTUKNrNn5l1iE"
+    },
+    {
+      "apiURL": "https://quilt-dtt.benchling.com/api/v2/apps/app_qdSsffBWrLoTVId4",
+      "appDefinition": {
+        "id": "appdef_mI4jtZESUi",
+        "versionNumber": "0.2.0"
+      },
+      "archiveRecord": null,
+      "createdAt": "2025-03-06T23:23:24.146570+00:00",
+      "creator": {
+        "handle": "eprabhakar",
+        "id": "ent_9CIv9U8P",
+        "name": "Ernest Prabhakar"
+      },
+      "description": "Uses Quilt Package Engine",
+      "id": "app_qdSsffBWrLoTVId4",
+      "modifiedAt": "2025-03-06T23:25:38.693042+00:00",
+      "name": "package-with-quilt",
+      "webURL": "https://quilt-dtt.benchling.com/developer/apps/app_qdSsffBWrLoTVId4"
+    },
+    {
+      "apiURL": "https://quilt-dtt.benchling.com/api/v2/apps/app_GmU1DpjfIWNLO3Nt",
+      "appDefinition": {
+        "id": "appdef_dUmcErYNyS",
+        "versionNumber": "0.0.1"
+      },
+      "archiveRecord": null,
+      "createdAt": "2024-09-23T20:45:18.204468+00:00",
+      "creator": {
+        "handle": "eprabhakar",
+        "id": "ent_9CIv9U8P",
+        "name": "Ernest Prabhakar"
+      },
+      "description": "Ganymede Integration",
+      "id": "app_GmU1DpjfIWNLO3Nt",
+      "modifiedAt": "2025-02-28T23:11:01.230537+00:00",
+      "name": "nurix-demo-app",
+      "webURL": "https://quilt-dtt.benchling.com/developer/apps/app_GmU1DpjfIWNLO3Nt"
+    },
+    {
+      "apiURL": "https://quilt-dtt.benchling.com/api/v2/apps/app_CcGMbNWtziXlWz5V",
+      "appDefinition": null,
+      "archiveRecord": null,
+      "createdAt": "2023-11-28T05:25:04.004371+00:00",
+      "creator": {
+        "handle": "eprabhakar",
+        "id": "ent_9CIv9U8P",
+        "name": "Ernest Prabhakar"
+      },
+      "description": "For https://github.com/data-yaml/vivos",
+      "id": "app_CcGMbNWtziXlWz5V",
+      "modifiedAt": "2023-11-28T05:25:04.004371+00:00",
+      "name": "vivos-tower-app",
+      "webURL": "https://quilt-dtt.benchling.com/developer/apps/app_CcGMbNWtziXlWz5V"
+    }
+  ],
+  "nextToken": ""
+}

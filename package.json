@@ -7,14 +7,14 @@
   "scripts": {
     "clean": "rm -rf cdk.out */{*.js,*.d.ts}",
     "test": "NODE_ENV=test node --max-old-space-size=4096 ./node_modules/.bin/jest",
-    "cdk": "cdk",
+    "cdk": "npm run test && npx cdk deploy --require-approval never",
     "lint": "eslint . --ext .ts --fix"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
     "@types/adm-zip": "^0.5.7",
     "@types/jest": "^29.5.14",
-    "@types/node": "22.13.13",
+    "@types/node": "22.13.14",
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
     "aws-cdk": "2.1006.0",
@@ -28,7 +28,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.758.0",
     "adm-zip": "^0.5.10",
-    "aws-cdk-lib": "2.185.0",
+    "aws-cdk-lib": "2.186.0",
     "aws-sdk": "^2.1574.0",
     "constructs": "^10.0.0"
   }

@@ -9,10 +9,11 @@
     "baseURL": "https://quilt-dtt.benchling.com",
     "channel": "app_signals",
     "message": {
-        "canvasId": "cnvs_RkaAQhyb",
+        "canvasId": "cnvs_ELM2Ecb4",
         "deprecated": false,
         "featureId": "quilt_integration",
-        "type": "v2-beta.canvas.created"
+        "resourceId": "cnvs_ELM2Ecb4",
+        "type": "v2.canvas.initialized"
     },
     "tenantId": "ten_dsrealahhb",
     "version": "0"
