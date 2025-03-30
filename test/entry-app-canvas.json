@@ -1,0 +1,18 @@
+{
+  "blocks": [
+    {
+      "enabled": true,
+      "id": "user_defined_id",
+      "text": "Click me to submit",
+      "type": "BUTTON"
+    },
+    {
+      "id": "user_generated_id",
+      "type": "MARKDOWN",
+      "value": "# This is a markdown block\n1. with **bold text**."
+    }
+  ],
+  "data": "{\"canvasId\": \"cnvs_ELM2Ecb4\", \"appId\": \"appdef_mI4jtZESUi\"}",
+  "enabled": true,
+  "featureId": "quilt_integration"
+}

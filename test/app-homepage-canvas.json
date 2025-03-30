@@ -1,0 +1,20 @@
+{
+  "blocks": [
+    {
+      "enabled": true,
+      "id": "user_defined_id",
+      "text": "Click me to submit",
+      "type": "BUTTON"
+    },
+    {
+      "id": "user_generated_id",
+      "type": "MARKDOWN",
+      "value": "# This is a markdown block\n1. with **bold text**."
+    }
+  ],
+  "data": "{\"key\": \"value\"}",
+  "enabled": true,
+  "featureId": "quilt_homepage",
+  "resourceId": "appdef_mI4jtZESUi",
+  "appId": "appdef_mI4jtZESUi"
+}
