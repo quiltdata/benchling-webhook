@@ -397,29 +397,29 @@ export class WebhookStateMachine extends Construct {
                     },
                     ResultSelector: {
                         "fileId.$": "$.ResponseBody.externalFile.id",
-                        "downloadURL.$":
+                        "fetchURL.$":
                             "$.ResponseBody.externalFile.downloadURL",
                     },
                 },
             }).next(
                 new stepfunctions.Pass(this, "SplitURL", {
                     parameters: {
-                        "downloadURL.$": "$.downloadURL",
+                        "fetchURL.$": "$.fetchURL",
                         "sansQuery.$":
-                            "States.ArrayGetItem(States.StringSplit($.downloadURL, '?'), 0)",
+                            "States.ArrayGetItem(States.StringSplit($.fetchURL, '?'), 0)",
                     },
                 }),
             ).next(
                 new stepfunctions.Pass(this, "SplitPath", {
                     parameters: {
-                        "downloadURL.$": "$.downloadURL",
+                        "fetchURL.$": "$.fetchURL",
                         "pathParts.$": "States.StringSplit($.sansQuery, '/')",
                     },
                 }),
             ).next(
                 new stepfunctions.Pass(this, "ExtractFilename", {
                     parameters: {
-                        "downloadURL.$": "$.downloadURL",
+                        "fetchURL.$": "$.fetchURL",
                         "filename.$":
                             "States.ArrayGetItem($.pathParts, States.MathAdd(States.ArrayLength($.pathParts), -1))",
                         "packageName.$":
@@ -427,17 +427,12 @@ export class WebhookStateMachine extends Construct {
                     },
                 }),
             ).next(
-                new stepfunctions.Pass(this, "DebugS3Key", {
+                new stepfunctions.Pass(this, "ConstructKey", {
                     parameters: {
-                        "debug": {
-                            "proposedKey.$":
-                                "States.Format('{}/external_files/{}', $.packageName, $.filename)",
-                            "packageName.$": "$.packageName",
-                            "filename.$": "$.filename",
-                            "downloadURL.$": "$.downloadURL",
-                        },
+                        "fetchURL.$": "$.fetchURL",
+                        "fileKey.$":
+                            "States.Format('{}/external_files/{}', $.packageName, $.filename)",
                     },
-                    resultPath: "$.debug",
                 }),
             ).next(
                 new tasks.CallAwsService(this, "WriteExternalFileToS3", {
@@ -445,9 +440,8 @@ export class WebhookStateMachine extends Construct {
                     action: "putObject",
                     parameters: {
                         Bucket: this.bucket.bucketName,
-                        "Key.$":
-                            "States.Format('{}/external_files/{}', $.packageName, $.filename)",
-                        "Body.$": "$.downloadURL",
+                        "Key.$": "$.fileKey",
+                        "Body.$": "$.fetchURL",
                     },
                     iamResources: [this.bucket.arnForObjects("*")],
                     resultPath: "$.putResult",
