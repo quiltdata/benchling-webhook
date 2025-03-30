@@ -12,7 +12,7 @@
     "createdAt": "2025-03-14T14:15:25.035271+00:00",
     "deprecated": false,
     "id": "evt_wXhBvbr8wqdx",
-    "resourceId": "etr_rv7MuD30",
+    "resourceId": "etr_0uKCQZ8f",
     "schema": {
       "id": "ts_sWLj9kNl"
     },
@@ -22,17 +22,5 @@
     ]
   },
   "tenantId": "ten_dsrealahhb",
-  "version": "0",
-  "var": {
-    "baseURL": "https://quilt-dtt.benchling.com",
-    "registry": "quilt-bake",
-    "typeFields": [
-      "v2",
-      "entry",
-      "updated",
-      "fields"
-    ],
-    "packageName": "benchling/etr_rv7MuD30",
-    "entity": "etr_rv7MuD30"
-  }
+  "version": "0"
 }
