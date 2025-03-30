@@ -95,7 +95,7 @@ export class WebhookStateMachine extends Construct {
         );
         const extractFileIdsTask = this.createExtractFileIdsTask();
         const fetchExternalFilesTask = this.createFetchExternalFilesTask(
-            props.benchlingConnection,
+            props,
         );
         const writeEntryToS3Task = this.createS3WriteTask(
             FILES.ENTRY_JSON,
@@ -199,7 +199,9 @@ export class WebhookStateMachine extends Construct {
             );
 
         // Create channel choice state
-        const createCanvasTask = this.createCanvasTask(props.benchlingConnection);
+        const createCanvasTask = this.createCanvasTask(
+            props.benchlingConnection,
+        );
 
         const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
             .when(
@@ -210,22 +212,31 @@ export class WebhookStateMachine extends Construct {
                     .next(fetchExternalFilesTask)
                     .next(exportTask)
                     .next(pollExportTask)
-                    .next(exportChoice)
+                    .next(exportChoice),
             )
             .when(
                 stepfunctions.Condition.or(
-                    stepfunctions.Condition.stringEquals("$.message.type", "v2.app.activateRequested"),
-                    stepfunctions.Condition.stringEquals("$.message.type", "v2-beta.canvas.created"),
-                    stepfunctions.Condition.stringEquals("$.message.type", "v2.canvas.initialized")
+                    stepfunctions.Condition.stringEquals(
+                        "$.message.type",
+                        "v2.app.activateRequested",
+                    ),
+                    stepfunctions.Condition.stringEquals(
+                        "$.message.type",
+                        "v2-beta.canvas.created",
+                    ),
+                    stepfunctions.Condition.stringEquals(
+                        "$.message.type",
+                        "v2.canvas.initialized",
+                    ),
                 ),
-                createCanvasTask
+                createCanvasTask,
             )
             .otherwise(
                 new stepfunctions.Pass(this, "EchoInput", {
                     parameters: {
                         "input.$": "$",
                     },
-                })
+                }),
             );
 
         // Main workflow
@@ -298,7 +309,7 @@ export class WebhookStateMachine extends Construct {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": 
+                    "ApiEndpoint.$":
                         "States.Format('{}/api/v2/app-canvases/{}', $.var.baseURL, $.message.canvasId)",
                     Method: "PATCH",
                     Authentication: {
@@ -310,17 +321,17 @@ export class WebhookStateMachine extends Construct {
                                 "enabled": true,
                                 "id": "user_defined_id",
                                 "text": "Click me to submit",
-                                "type": "BUTTON"
-                            }
+                                "type": "BUTTON",
+                            },
                         ],
                         "enabled": true,
-                        "featureId": "quilt_integration"
-                    }
+                        "featureId": "quilt_integration",
+                    },
                 },
                 ResultSelector: {
-                    "canvasId.$": "$.ResponseBody.id"
+                    "canvasId.$": "$.ResponseBody.id",
                 },
-                ResultPath: "$.canvas"
+                ResultPath: "$.canvas",
             },
         });
     }
@@ -359,7 +370,7 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createFetchExternalFilesTask(
-        benchlingConnection: events.CfnConnection,
+        props: StateMachineProps,
     ): stepfunctions.Map {
         return new stepfunctions.Map(this, "FetchExternalFiles", {
             itemsPath: "$.fileIds.fileIds",
@@ -381,14 +392,13 @@ export class WebhookStateMachine extends Construct {
                             "States.Format('{}/api/v2/entries/{}/external-files/{}', $.baseURL, $.entryId, $.fileId)",
                         Method: "GET",
                         Authentication: {
-                            ConnectionArn: benchlingConnection.attrArn,
+                            ConnectionArn: props.benchlingConnection.attrArn,
                         },
                     },
                     ResultSelector: {
                         "fileId.$": "$.ResponseBody.externalFile.id",
                         "downloadURL.$":
                             "$.ResponseBody.externalFile.downloadURL",
-                        "packageName.$": "$$.var.packageName",
                     },
                 },
             }).next(
@@ -397,7 +407,6 @@ export class WebhookStateMachine extends Construct {
                         "downloadURL.$": "$.downloadURL",
                         "sansQuery.$":
                             "States.ArrayGetItem(States.StringSplit($.downloadURL, '?'), 0)",
-                        "packageName.$": "$.packageName",
                     },
                 }),
             ).next(
@@ -405,7 +414,6 @@ export class WebhookStateMachine extends Construct {
                     parameters: {
                         "downloadURL.$": "$.downloadURL",
                         "pathParts.$": "States.StringSplit($.sansQuery, '/')",
-                        "packageName.$": "$.packageName",
                     },
                 }),
             ).next(
@@ -414,7 +422,8 @@ export class WebhookStateMachine extends Construct {
                         "downloadURL.$": "$.downloadURL",
                         "filename.$":
                             "States.ArrayGetItem($.pathParts, States.MathAdd(States.ArrayLength($.pathParts), -1))",
-                        "packageName.$": "$.packageName",
+                        "packageName.$":
+                            `States.Format('${props.prefix}/{}', $$.Execution.Input.message.resourceId)`,
                     },
                 }),
             ).next(
