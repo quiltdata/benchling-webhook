@@ -65,8 +65,8 @@ export class WebhookStateMachine extends Construct {
             {
                 parameters: {
                     "baseURL": `https://${props.benchlingTenant}.benchling.com`,
-                    "typeFields.$": "States.StringSplit($.message.type, '.')",
-                    "channel.$": "$.channel",
+                    "typeFields": "{% $split($states.input.message.type, '.') %}",
+                    "channel": "{% $states.input.channel %}"
                 },
                 resultPath: "$.var",
             },
@@ -76,17 +76,16 @@ export class WebhookStateMachine extends Construct {
             this,
             "SetupResourceMetadata",
             {
-                parameters: {
-                    "baseURL.$": "$.var.baseURL",
-                    "typeFields.$": "$.var.typeFields",
-                    "channel.$": "$.var.channel",
-                    "entity.$": "$.message.resourceId",
-                    "packageName.$":
-                        `States.Format('${props.prefix}/{}', $.message.resourceId)`,
-                    "readme": README_TEMPLATE,
-                    "registry": props.bucket.bucketName,
-                },
-                resultPath: "$.var",
+            parameters: {
+                "baseURL": `https://${props.benchlingTenant}.benchling.com`,
+                "typeFields.$": "$.var.typeFields",
+                "channel.$": "$.var.channel",
+                "entity.$": "$.message.resourceId",
+                "packageName.$": `States.Format('{}/{}', '${props.prefix}', $.message.resourceId)`,
+                "readme": README_TEMPLATE,
+                "registry": props.bucket.bucketName,
+            },
+            resultPath: "$.var",
             },
         );
 
@@ -224,7 +223,26 @@ export class WebhookStateMachine extends Construct {
                     ),
                 ),
                 this.createFindAppEntryTask(props.benchlingConnection)
-                    .next(createCanvasTask),
+                .next(new stepfunctions.Pass(this, "ValidateCanvas", {
+                    parameters: {
+                        "hasMatchingCanvas": "{% $exists($states.input.appEntries.entry.days[].notes[type='app_canvas' and canvasId=$states.input.appEntries.canvasId]) %}",
+                        "entry": "{% $states.input.appEntries.entry %}",
+                        "canvasId": "{% $states.input.appEntries.canvasId %}"
+                    },
+                    resultPath: "$.validation"
+                }))
+                .next(new stepfunctions.Choice(this, "CheckCanvasExists")
+                    .when(
+                        stepfunctions.Condition.booleanEquals("$.validation.hasMatchingCanvas", true),
+                        createCanvasTask
+                    )
+                    .otherwise(
+                        new stepfunctions.Fail(this, "NoMatchingCanvas", {
+                            cause: "No matching canvas found in entry",
+                            error: "CanvasNotFound"
+                        })
+                    )
+                ),
             )
             .otherwise(
                 new stepfunctions.Pass(this, "EchoInput", {
@@ -247,18 +265,17 @@ export class WebhookStateMachine extends Construct {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$":
-                        "States.Format('{}/api/v2/exports', $.var.baseURL)",
+                    "ApiEndpoint": "{% $states.input.var.baseURL & '/api/v2/exports' %}",
                     Method: "POST",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
                     },
                     "RequestBody": {
-                        "id.$": "$.var.entity",
+                        "id": "{% $states.input.var.entity %}"
                     },
                 },
                 ResultSelector: {
-                    "taskId.$": "$.ResponseBody.taskId",
+                    "taskId": "{% $states.result.ResponseBody.taskId %}"
                 },
                 ResultPath: "$.exportTask",
             },
@@ -273,16 +290,15 @@ export class WebhookStateMachine extends Construct {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$":
-                        "States.Format('{}/api/v2/tasks/{}', $.var.baseURL, $.exportTask.taskId)",
+                    "ApiEndpoint": "{% $states.input.var.baseURL & '/api/v2/tasks/' & $states.input.exportTask.taskId %}",
                     Method: "GET",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
                     },
                 },
                 ResultSelector: {
-                    "status.$": "$.ResponseBody.status",
-                    "response.$": "$.ResponseBody",
+                    "status": "{% $states.result.ResponseBody.status %}",
+                    "response": "{% $states.result.ResponseBody %}"
                 },
                 ResultPath: "$.exportStatus",
             },
@@ -311,11 +327,13 @@ export class WebhookStateMachine extends Construct {
                     },
                     QueryParameters: {
                         "schemaId.$": "$.message.schema.id",
-                        "modifiedAt.$": "$.message.createdAt"
+                        "modifiedAt.$": "$.message.createdAt",
+                        "pageSize": "1"
                     }
                 },
                 ResultSelector: {
-                    "entries.$": "States.Format('$.ResponseBody.entries[?(@.days[*].notes[?(@.type==''app_canvas'' && @.canvasId==''{}'')]))]', $.message.canvasId)"
+                    "entry": "{% $states.result.ResponseBody.entries[0] %}",
+                    "canvasId": "{% $states.input.message.canvasId %}"
                 },
                 ResultPath: "$.appEntries"
             },
@@ -340,7 +358,7 @@ export class WebhookStateMachine extends Construct {
                         "blocks": [
                             {
                                 "enabled": true,
-                                "id.$": "$.appEntries.entries[0].id",
+                                "id.$": "$.appEntries.entry.id",
                                 "text": "Click me to submit",
                                 "type": "BUTTON",
                             },
