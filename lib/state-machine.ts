@@ -262,22 +262,22 @@ export class WebhookStateMachine extends Construct {
     ): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "ExportEntry", {
             stateJson: {
-                Type: "Task",
-                Resource: "arn:aws:states:::http:invoke",
-                Parameters: {
-                    "ApiEndpoint": "{% $states.input.var.baseURL & '/api/v2/exports' %}",
-                    Method: "POST",
-                    Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
-                    },
-                    "RequestBody": {
-                        "id": "{% $states.input.var.entity %}"
-                    },
+            Type: "Task",
+            Resource: "arn:aws:states:::http:invoke",
+            Parameters: {
+                "ApiEndpoint.$": "States.Format('{}/api/v2/exports', $.var.baseURL)",
+                Method: "POST",
+                Authentication: {
+                ConnectionArn: benchlingConnection.attrArn,
                 },
-                ResultSelector: {
-                    "taskId": "{% $states.result.ResponseBody.taskId %}"
+                RequestBody: {
+                "id.$": "$.var.entity",
                 },
-                ResultPath: "$.exportTask",
+            },
+            ResultSelector: {
+                "taskId.$": "$.ResponseBody.taskId",
+            },
+            ResultPath: "$.exportTask",
             },
         });
     }
@@ -287,20 +287,20 @@ export class WebhookStateMachine extends Construct {
     ): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "PollExportStatus", {
             stateJson: {
-                Type: "Task",
-                Resource: "arn:aws:states:::http:invoke",
-                Parameters: {
-                    "ApiEndpoint": "{% $states.input.var.baseURL & '/api/v2/tasks/' & $states.input.exportTask.taskId %}",
-                    Method: "GET",
-                    Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
-                    },
+            Type: "Task",
+            Resource: "arn:aws:states:::http:invoke",
+            Parameters: {
+                "ApiEndpoint.$": "States.Format('{}/api/v2/tasks/{}', $.var.baseURL, $.exportTask.taskId)",
+                Method: "GET",
+                Authentication: {
+                ConnectionArn: benchlingConnection.attrArn,
                 },
-                ResultSelector: {
-                    "status": "{% $states.result.ResponseBody.status %}",
-                    "response": "{% $states.result.ResponseBody %}"
-                },
-                ResultPath: "$.exportStatus",
+            },
+            ResultSelector: {
+                "status.$": "$.ResponseBody.status",
+                "response.$": "$.ResponseBody",
+            },
+            ResultPath: "$.exportStatus",
             },
         });
     }
