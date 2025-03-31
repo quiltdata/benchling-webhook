@@ -223,7 +223,8 @@ export class WebhookStateMachine extends Construct {
                         "v2.canvas.initialized",
                     ),
                 ),
-                createCanvasTask,
+                this.createFindAppEntryTask(props.benchlingConnection)
+                    .next(createCanvasTask),
             )
             .otherwise(
                 new stepfunctions.Pass(this, "EchoInput", {
@@ -292,6 +293,32 @@ export class WebhookStateMachine extends Construct {
         return new stepfunctions.Wait(this, "WaitForExport", {
             time: stepfunctions.WaitTime.duration(Duration.seconds(30)),
             comment: "Wait for the export to complete",
+        });
+    }
+
+    private createFindAppEntryTask(
+        benchlingConnection: events.CfnConnection,
+    ): stepfunctions.CustomState {
+        return new stepfunctions.CustomState(this, "FindAppEntry", {
+            stateJson: {
+                Type: "Task",
+                Resource: "arn:aws:states:::http:invoke",
+                Parameters: {
+                    "ApiEndpoint.$": "States.Format('{}/api/v2/entries', $.var.baseURL)",
+                    Method: "GET",
+                    Authentication: {
+                        ConnectionArn: benchlingConnection.attrArn,
+                    },
+                    QueryParameters: {
+                        "schemaId.$": "$.message.schema.id",
+                        "modifiedAt.$": "$.message.createdAt"
+                    }
+                },
+                ResultSelector: {
+                    "entries.$": "States.Format('$.ResponseBody.entries[?(@.days[*].notes[?(@.type==''app_canvas'' && @.canvasId==''{}'')]))]', $.message.canvasId)"
+                },
+                ResultPath: "$.appEntries"
+            },
         });
     }
 
