@@ -59,27 +59,11 @@ export class WebhookStateMachine extends Construct {
     private createDefinition(
         props: StateMachineProps,
     ): stepfunctions.IChainable {
-        const setupWebhookMetadataTask = new stepfunctions.Pass(
-            this,
-            "SetupWebhookMetadata",
-            {
-                parameters: {
-                    "baseURL": `https://${props.benchlingTenant}.benchling.com`,
-                    "typeFields": "{% $split($states.input.message.type, '.') %}",
-                    "channel": "{% $states.input.channel %}"
-                },
-                resultPath: "$.var",
-            },
-        );
-
         const setupResourceMetadataTask = new stepfunctions.Pass(
             this,
             "SetupResourceMetadata",
             {
             parameters: {
-                "baseURL": `https://${props.benchlingTenant}.benchling.com`,
-                "typeFields.$": "$.var.typeFields",
-                "channel.$": "$.var.channel",
                 "entity.$": "$.message.resourceId",
                 "packageName.$": `States.Format('{}/{}', '${props.prefix}', $.message.resourceId)`,
                 "readme": README_TEMPLATE,
@@ -200,7 +184,7 @@ export class WebhookStateMachine extends Construct {
 
         const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
             .when(
-                stepfunctions.Condition.stringEquals("$.var.channel", "events"),
+                stepfunctions.Condition.stringEquals("$.channel", "events"),
                 setupResourceMetadataTask
                     .next(fetchEntryTask)
                     .next(exportTask)
@@ -252,9 +236,8 @@ export class WebhookStateMachine extends Construct {
                 }),
             );
 
-        // Main workflow
-        return setupWebhookMetadataTask
-            .next(channelChoice);
+        // Main workflow entry point
+        return channelChoice;
     }
 
     private createExportTask(
@@ -265,7 +248,7 @@ export class WebhookStateMachine extends Construct {
             Type: "Task",
             Resource: "arn:aws:states:::http:invoke",
             Parameters: {
-                "ApiEndpoint.$": "States.Format('{}/api/v2/exports', $.var.baseURL)",
+                "ApiEndpoint.$": "States.Format('{}/api/v2/exports', $.baseURL)",
                 Method: "POST",
                 Authentication: {
                 ConnectionArn: benchlingConnection.attrArn,
@@ -290,7 +273,7 @@ export class WebhookStateMachine extends Construct {
             Type: "Task",
             Resource: "arn:aws:states:::http:invoke",
             Parameters: {
-                "ApiEndpoint.$": "States.Format('{}/api/v2/tasks/{}', $.var.baseURL, $.exportTask.taskId)",
+                "ApiEndpoint.$": "States.Format('{}/api/v2/tasks/{}', $.baseURL, $.exportTask.taskId)",
                 Method: "GET",
                 Authentication: {
                 ConnectionArn: benchlingConnection.attrArn,
@@ -320,7 +303,7 @@ export class WebhookStateMachine extends Construct {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": "States.Format('{}/api/v2/entries', $.var.baseURL)",
+                    "ApiEndpoint.$": "States.Format('{}/api/v2/entries', $.baseURL)",
                     Method: "GET",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
@@ -349,7 +332,7 @@ export class WebhookStateMachine extends Construct {
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
                     "ApiEndpoint.$":
-                        "States.Format('{}/api/v2/app-canvases/{}', $.var.baseURL, $.message.canvasId)",
+                        "States.Format('{}/api/v2/app-canvases/{}', $.baseURL, $.message.canvasId)",
                     Method: "PATCH",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
@@ -384,7 +367,7 @@ export class WebhookStateMachine extends Construct {
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
                     "ApiEndpoint.$":
-                        "States.Format('{}/api/v2/entries/{}', $.var.baseURL, $.var.entity)",
+                        "States.Format('{}/api/v2/entries/{}', $.baseURL, $.var.entity)",
                     Method: "GET",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
