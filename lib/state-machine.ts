@@ -340,7 +340,7 @@ export class WebhookStateMachine extends Construct {
                         "blocks": [
                             {
                                 "enabled": true,
-                                "id": "user_defined_id",
+                                "id.$": "$.appEntries.entries[0].id",
                                 "text": "Click me to submit",
                                 "type": "BUTTON",
                             },
