@@ -16,6 +16,7 @@ interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly benchlingClientId: string;
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
+    readonly quiltCatalog: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
@@ -45,6 +46,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             memorySize: 1024,
             environment: {
                 NODE_OPTIONS: "--enable-source-maps",
+                QUILT_CATALOG: props.quiltCatalog,
             },
             architecture: lambda.Architecture.ARM_64,
             bundling: {
