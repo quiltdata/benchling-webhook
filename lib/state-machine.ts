@@ -300,25 +300,23 @@ export class WebhookStateMachine extends Construct {
     ): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "FindAppEntry", {
             stateJson: {
-                Type: "Task",
-                Resource: "arn:aws:states:::http:invoke",
-                Parameters: {
-                    "ApiEndpoint.$": "States.Format('{}/api/v2/entries', $.baseURL)",
-                    Method: "GET",
-                    Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
-                    },
-                    QueryParameters: {
-                        "schemaId.$": "$.message.schema.id",
-                        "modifiedAt.$": "$.message.createdAt",
-                        "pageSize": "1"
-                    }
+            Type: "Task",
+            Resource: "arn:aws:states:::http:invoke",
+            Parameters: {
+                "ApiEndpoint.$": "States.Format('{}/api/v2/entries', $.baseURL)",
+                Method: "GET",
+                Authentication: {
+                ConnectionArn: benchlingConnection.attrArn,
                 },
-                ResultSelector: {
-                    "entry": "{% $states.result.ResponseBody.entries[0] %}",
-                    "canvasId": "{% $states.input.message.canvasId %}"
-                },
-                ResultPath: "$.appEntries"
+                QueryParameters: {
+                "pageSize": "100"
+                }
+            },
+            ResultSelector: {
+                "entry.$": "$.ResponseBody.entries[0]",
+                "canvasId.$": "$.message.canvasId"
+            },
+            ResultPath: "$.appEntries"
             },
         });
     }
