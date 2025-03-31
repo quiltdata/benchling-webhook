@@ -209,7 +209,28 @@ export class WebhookStateMachine extends Construct {
                 ),
                 this.createFindAppEntryTask(props.benchlingConnection)
                     .next(createCanvasTask),
-            ).otherwise(
+            )
+            .when(
+                stepfunctions.Condition.stringEquals(
+                    "$.message.type",
+                    "v2.canvas.userInteracted",
+                ),
+                new stepfunctions.Pass(this, "SetupButtonMetadata", {
+                    parameters: {
+                        "entity.$": "$.message.buttonId",
+                        "packageName.$": 
+                            `States.Format('{}/{}', '${props.prefix}', $.message.buttonId)`,
+                        "readme": README_TEMPLATE,
+                        "registry": props.bucket.bucketName,
+                    },
+                    resultPath: "$.var",
+                })
+                .next(fetchEntryTask)
+                .next(exportTask)
+                .next(pollExportTask)
+                .next(exportChoice),
+            )
+            .otherwise(
                 new stepfunctions.Pass(this, "EchoInput", {
                     parameters: {
                         "input.$": "$",
