@@ -63,13 +63,14 @@ export class WebhookStateMachine extends Construct {
             this,
             "SetupResourceMetadata",
             {
-            parameters: {
-                "entity.$": "$.message.resourceId",
-                "packageName.$": `States.Format('{}/{}', '${props.prefix}', $.message.resourceId)`,
-                "readme": README_TEMPLATE,
-                "registry": props.bucket.bucketName,
-            },
-            resultPath: "$.var",
+                parameters: {
+                    "entity.$": "$.message.resourceId",
+                    "packageName.$":
+                        `States.Format('{}/{}', '${props.prefix}', $.message.resourceId)`,
+                    "readme": README_TEMPLATE,
+                    "registry": props.bucket.bucketName,
+                },
+                resultPath: "$.var",
             },
         );
 
@@ -207,26 +208,39 @@ export class WebhookStateMachine extends Construct {
                     ),
                 ),
                 this.createFindAppEntryTask(props.benchlingConnection)
-                .next(new stepfunctions.Pass(this, "ValidateCanvas", {
-                    parameters: {
-                        "hasMatchingCanvas": "{% $exists($states.input.appEntries.entry.days[].notes[type='app_canvas' and canvasId=$states.input.appEntries.canvasId]) %}",
-                        "entry": "{% $states.input.appEntries.entry %}",
-                        "canvasId": "{% $states.input.appEntries.canvasId %}"
-                    },
-                    resultPath: "$.validation"
-                }))
-                .next(new stepfunctions.Choice(this, "CheckCanvasExists")
-                    .when(
-                        stepfunctions.Condition.booleanEquals("$.validation.hasMatchingCanvas", true),
-                        createCanvasTask
+                    .next(
+                        new stepfunctions.Pass(this, "ValidateCanvas", {
+                            parameters: {
+                                "hasMatchingCanvas":
+                                    "{% $exists($states.input.appEntries.entry.days[].notes[type='app_canvas' and canvasId=$states.input.appEntries.canvasId]) %}",
+                                "entry": "{% $states.input.appEntries.entry %}",
+                                "canvasId":
+                                    "{% $states.input.appEntries.canvasId %}",
+                            },
+                            resultPath: "$.validation",
+                        }),
                     )
-                    .otherwise(
-                        new stepfunctions.Fail(this, "NoMatchingCanvas", {
-                            cause: "No matching canvas found in entry",
-                            error: "CanvasNotFound"
-                        })
-                    )
-                ),
+                    .next(
+                        new stepfunctions.Choice(this, "CheckCanvasExists")
+                            .when(
+                                stepfunctions.Condition.booleanEquals(
+                                    "$.validation.hasMatchingCanvas",
+                                    true,
+                                ),
+                                createCanvasTask,
+                            )
+                            .otherwise(
+                                new stepfunctions.Fail(
+                                    this,
+                                    "NoMatchingCanvas",
+                                    {
+                                        cause:
+                                            "No matching canvas found in entry",
+                                        error: "CanvasNotFound",
+                                    },
+                                ),
+                            ),
+                    ),
             )
             .otherwise(
                 new stepfunctions.Pass(this, "EchoInput", {
@@ -245,22 +259,23 @@ export class WebhookStateMachine extends Construct {
     ): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "ExportEntry", {
             stateJson: {
-            Type: "Task",
-            Resource: "arn:aws:states:::http:invoke",
-            Parameters: {
-                "ApiEndpoint.$": "States.Format('{}/api/v2/exports', $.baseURL)",
-                Method: "POST",
-                Authentication: {
-                ConnectionArn: benchlingConnection.attrArn,
+                Type: "Task",
+                Resource: "arn:aws:states:::http:invoke",
+                Parameters: {
+                    "ApiEndpoint.$":
+                        "States.Format('{}/api/v2/exports', $.baseURL)",
+                    Method: "POST",
+                    Authentication: {
+                        ConnectionArn: benchlingConnection.attrArn,
+                    },
+                    RequestBody: {
+                        "id.$": "$.var.entity",
+                    },
                 },
-                RequestBody: {
-                "id.$": "$.var.entity",
+                ResultSelector: {
+                    "taskId.$": "$.ResponseBody.taskId",
                 },
-            },
-            ResultSelector: {
-                "taskId.$": "$.ResponseBody.taskId",
-            },
-            ResultPath: "$.exportTask",
+                ResultPath: "$.exportTask",
             },
         });
     }
@@ -270,20 +285,21 @@ export class WebhookStateMachine extends Construct {
     ): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "PollExportStatus", {
             stateJson: {
-            Type: "Task",
-            Resource: "arn:aws:states:::http:invoke",
-            Parameters: {
-                "ApiEndpoint.$": "States.Format('{}/api/v2/tasks/{}', $.baseURL, $.exportTask.taskId)",
-                Method: "GET",
-                Authentication: {
-                ConnectionArn: benchlingConnection.attrArn,
+                Type: "Task",
+                Resource: "arn:aws:states:::http:invoke",
+                Parameters: {
+                    "ApiEndpoint.$":
+                        "States.Format('{}/api/v2/tasks/{}', $.baseURL, $.exportTask.taskId)",
+                    Method: "GET",
+                    Authentication: {
+                        ConnectionArn: benchlingConnection.attrArn,
+                    },
                 },
-            },
-            ResultSelector: {
-                "status.$": "$.ResponseBody.status",
-                "response.$": "$.ResponseBody",
-            },
-            ResultPath: "$.exportStatus",
+                ResultSelector: {
+                    "status.$": "$.ResponseBody.status",
+                    "response.$": "$.ResponseBody",
+                },
+                ResultPath: "$.exportStatus",
             },
         });
     }
@@ -300,23 +316,24 @@ export class WebhookStateMachine extends Construct {
     ): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "FindAppEntry", {
             stateJson: {
-            Type: "Task",
-            Resource: "arn:aws:states:::http:invoke",
-            Parameters: {
-                "ApiEndpoint.$": "States.Format('{}/api/v2/entries', $.baseURL)",
-                Method: "GET",
-                Authentication: {
-                ConnectionArn: benchlingConnection.attrArn,
+                Type: "Task",
+                Resource: "arn:aws:states:::http:invoke",
+                Parameters: {
+                    "ApiEndpoint.$":
+                        "States.Format('{}/api/v2/entries', $.baseURL)",
+                    Method: "GET",
+                    Authentication: {
+                        ConnectionArn: benchlingConnection.attrArn,
+                    },
+                    QueryParameters: {
+                        "pageSize": "1",
+                    },
                 },
-                QueryParameters: {
-                "pageSize": "100"
-                }
-            },
-            ResultSelector: {
-                "entry.$": "$.ResponseBody.entries[0]",
-                "canvasId.$": "$.message.canvasId"
-            },
-            ResultPath: "$.appEntries"
+                ResultSelector: {
+                    "entry.$": "$.ResponseBody.entries[0]",
+                    "canvasId.$": "$.message.canvasId",
+                },
+                ResultPath: "$.appEntries",
             },
         });
     }
