@@ -183,17 +183,20 @@ export class WebhookStateMachine extends Construct {
             props.benchlingConnection,
         );
 
-        // Create the export workflow chain that will be reused
+        // Create the export workflow chain
         const exportWorkflow = exportTask
             .next(pollExportTask)
             .next(exportChoice);
 
-        // Create the metadata and export workflow chain
-        const metadataAndExportWorkflow = setupResourceMetadataTask
-            .next(fetchEntryTask)
+        // Create the metadata workflow chain
+        const metadataWorkflow = fetchEntryTask
             .next(exportWorkflow);
 
-        // Create the button metadata and export workflow chain
+        // Create the metadata setup and workflow chain
+        const metadataAndExportWorkflow = setupResourceMetadataTask
+            .next(metadataWorkflow);
+
+        // Create the button metadata workflow chain
         const buttonMetadataTask = new stepfunctions.Pass(this, "SetupButtonMetadata", {
             parameters: {
                 "entity.$": "$.message.buttonId",
@@ -206,8 +209,7 @@ export class WebhookStateMachine extends Construct {
         });
 
         const buttonWorkflow = buttonMetadataTask
-            .next(fetchEntryTask)
-            .next(exportWorkflow);
+            .next(metadataWorkflow);
 
         // Create the canvas workflow
         const canvasWorkflow = this.createFindAppEntryTask(props.benchlingConnection)
