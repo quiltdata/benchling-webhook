@@ -208,8 +208,15 @@ export class WebhookStateMachine extends Construct {
                     ),
                 ),
                 this.createFindAppEntryTask(props.benchlingConnection)
-                .next(createCanvasTask)
+                    .next(createCanvasTask),
+            ).otherwise(
+                new stepfunctions.Pass(this, "EchoInput", {
+                    parameters: {
+                        "input.$": "$",
+                    },
+                }),
             );
+
         // Main workflow entry point
         return channelChoice;
     }
