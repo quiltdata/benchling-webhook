@@ -1,0 +1,21 @@
+{
+  "app": {
+    "id": "app_qdSsffBWrLoTVId4"
+  },
+  "appDefinition": {
+    "id": "appdef_mI4jtZESUi",
+    "versionNumber": "0.2.1"
+  },
+  "baseURL": "https://quilt-dtt.benchling.com",
+  "channel": "app_signals",
+  "message": {
+    "buttonId": "etr_OtsAuzfT",
+    "canvasId": "cnvs_dYQTvmId",
+    "deprecated": false,
+    "featureId": "quilt_integration",
+    "type": "v2.canvas.userInteracted",
+    "userId": "ent_9CIv9U8P"
+  },
+  "tenantId": "ten_dsrealahhb",
+  "version": "0"
+}
