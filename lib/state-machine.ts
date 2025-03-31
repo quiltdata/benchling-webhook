@@ -361,6 +361,11 @@ export class WebhookStateMachine extends Construct {
                                 "text": "Sync",
                                 "type": "BUTTON",
                             },
+                            {
+                                "enabled": true,
+                                "text.$": "States.Format('### Quilt Links\n\n- Quilt+ URI: quilt+s3://{0}#package={1}\n- Quilt URL: {2}/b/{0}/package/{1}', $.var.registry, $.var.packageName, $.baseURL)",
+                                "type": "MARKDOWN"
+                            }
                         ],
                         "enabled": true,
                         "featureId": "quilt_integration",
