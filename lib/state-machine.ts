@@ -183,14 +183,40 @@ export class WebhookStateMachine extends Construct {
             props.benchlingConnection,
         );
 
+        // Create the export workflow chain that will be reused
+        const exportWorkflow = exportTask
+            .next(pollExportTask)
+            .next(exportChoice);
+
+        // Create the metadata and export workflow chain
+        const metadataAndExportWorkflow = setupResourceMetadataTask
+            .next(fetchEntryTask)
+            .next(exportWorkflow);
+
+        // Create the button metadata and export workflow chain
+        const buttonMetadataTask = new stepfunctions.Pass(this, "SetupButtonMetadata", {
+            parameters: {
+                "entity.$": "$.message.buttonId",
+                "packageName.$": 
+                    `States.Format('{}/{}', '${props.prefix}', $.message.buttonId)`,
+                "readme": README_TEMPLATE,
+                "registry": props.bucket.bucketName,
+            },
+            resultPath: "$.var",
+        });
+
+        const buttonWorkflow = buttonMetadataTask
+            .next(fetchEntryTask)
+            .next(exportWorkflow);
+
+        // Create the canvas workflow
+        const canvasWorkflow = this.createFindAppEntryTask(props.benchlingConnection)
+            .next(createCanvasTask);
+
         const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
             .when(
                 stepfunctions.Condition.stringEquals("$.channel", "events"),
-                setupResourceMetadataTask
-                    .next(fetchEntryTask)
-                    .next(exportTask)
-                    .next(pollExportTask)
-                    .next(exportChoice),
+                metadataAndExportWorkflow
             )
             .when(
                 stepfunctions.Condition.or(
@@ -207,28 +233,14 @@ export class WebhookStateMachine extends Construct {
                         "v2.canvas.initialized",
                     ),
                 ),
-                this.createFindAppEntryTask(props.benchlingConnection)
-                    .next(createCanvasTask),
+                canvasWorkflow
             )
             .when(
                 stepfunctions.Condition.stringEquals(
                     "$.message.type",
                     "v2.canvas.userInteracted",
                 ),
-                new stepfunctions.Pass(this, "SetupButtonMetadata", {
-                    parameters: {
-                        "entity.$": "$.message.buttonId",
-                        "packageName.$": 
-                            `States.Format('{}/{}', '${props.prefix}', $.message.buttonId)`,
-                        "readme": README_TEMPLATE,
-                        "registry": props.bucket.bucketName,
-                    },
-                    resultPath: "$.var",
-                })
-                .next(fetchEntryTask)
-                .next(exportTask)
-                .next(pollExportTask)
-                .next(exportChoice),
+                buttonWorkflow
             )
             .otherwise(
                 new stepfunctions.Pass(this, "EchoInput", {
