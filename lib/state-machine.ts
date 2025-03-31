@@ -208,48 +208,8 @@ export class WebhookStateMachine extends Construct {
                     ),
                 ),
                 this.createFindAppEntryTask(props.benchlingConnection)
-                    .next(
-                        new stepfunctions.Pass(this, "ValidateCanvas", {
-                            parameters: {
-                                "hasMatchingCanvas":
-                                    "{% $exists($states.input.appEntries.entry.days[].notes[type='app_canvas' and canvasId=$states.input.appEntries.canvasId]) %}",
-                                "entry": "{% $states.input.appEntries.entry %}",
-                                "canvasId":
-                                    "{% $states.input.appEntries.canvasId %}",
-                            },
-                            resultPath: "$.validation",
-                        }),
-                    )
-                    .next(
-                        new stepfunctions.Choice(this, "CheckCanvasExists")
-                            .when(
-                                stepfunctions.Condition.booleanEquals(
-                                    "$.validation.hasMatchingCanvas",
-                                    true,
-                                ),
-                                createCanvasTask,
-                            )
-                            .otherwise(
-                                new stepfunctions.Fail(
-                                    this,
-                                    "NoMatchingCanvas",
-                                    {
-                                        cause:
-                                            "No matching canvas found in entry",
-                                        error: "CanvasNotFound",
-                                    },
-                                ),
-                            ),
-                    ),
-            )
-            .otherwise(
-                new stepfunctions.Pass(this, "EchoInput", {
-                    parameters: {
-                        "input.$": "$",
-                    },
-                }),
+                .next(createCanvasTask)
             );
-
         // Main workflow entry point
         return channelChoice;
     }
@@ -331,7 +291,6 @@ export class WebhookStateMachine extends Construct {
                 },
                 ResultSelector: {
                     "entry.$": "$.ResponseBody.entries[0]",
-                    "canvasId.$": "$.message.canvasId",
                 },
                 ResultPath: "$.appEntries",
             },
@@ -357,7 +316,7 @@ export class WebhookStateMachine extends Construct {
                             {
                                 "enabled": true,
                                 "id.$": "$.appEntries.entry.id",
-                                "text": "Click me to submit",
+                                "text": "Sync",
                                 "type": "BUTTON",
                             },
                         ],
