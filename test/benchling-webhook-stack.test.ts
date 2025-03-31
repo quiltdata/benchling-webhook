@@ -15,6 +15,7 @@ describe("BenchlingWebhookStack", () => {
             benchlingClientId: "test-client-id",
             benchlingClientSecret: "test-client-secret",
             benchlingTenant: "test-tenant",
+            quiltCatalog: "https://quilt-example.com",
         });
         template = Template.fromStack(stack);
     });
@@ -110,6 +111,7 @@ describe("BenchlingWebhookStack", () => {
                 benchlingClientId: "test-client-id",
                 benchlingClientSecret: "test-client-secret",
                 benchlingTenant: "test-tenant",
+                quiltCatalog: "https://quilt-example.com",
             });
         }).toThrow("Prefix should not contain a '/' character.");
     });
