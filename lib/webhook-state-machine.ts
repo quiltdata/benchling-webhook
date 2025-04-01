@@ -175,7 +175,18 @@ export class WebhookStateMachine extends Construct {
         return new stepfunctions.Choice(this, "CheckChannel")
             .when(
                 stepfunctions.Condition.stringEquals("$.channel", "events"),
-                startPackageEntryExecution,
+                new stepfunctions.Pass(this, "SetupEventMetadata", {
+                    parameters: {
+                        "entity.$": "$.message.resourceId",
+                        "packageName.$": `States.Format('{}/{}', '${this.props.prefix}', $.message.resourceId)`,
+                        "readme": README_TEMPLATE,
+                        "registry": this.props.bucket.bucketName,
+                        "baseURL.$": "$.baseURL",
+                        "message.$": "$.message",
+                    },
+                    resultPath: "$.var",
+                })
+                .next(startPackageEntryExecution),
             )
             .when(
                 stepfunctions.Condition.or(
