@@ -44,8 +44,8 @@ describe("WebhookStateMachine", () => {
         template = Template.fromStack(stack);
     });
 
-    test("creates state machine", () => {
-        template.resourceCountIs("AWS::StepFunctions::StateMachine", 1);
+    test("creates state machines", () => {
+        template.resourceCountIs("AWS::StepFunctions::StateMachine", 2);
     });
 
     test("creates log group", () => {
