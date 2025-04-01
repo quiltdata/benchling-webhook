@@ -144,18 +144,22 @@ export class WebhookStateMachine extends Construct {
             },
         );
 
-        const makeQuiltLinksTask = new stepfunctions.CustomState(this, "MakeQuiltLinks", {
-            stateJson: {
-                Type: "Pass",
-                Parameters: {
-                    "sync_uri.$": 
-                        `States.Format("quilt+s3://{}#package={}:latest&catalog={}", $.var.registry, $.var.packageName, $.var.catalog)`,
-                    "catalog_url.$":
-                        `States.Format("https://{}/b/{}/packages/{}", $.var.catalog, $.var.registry, $.var.packageName)`,
+        const makeQuiltLinksTask = new stepfunctions.CustomState(
+            this,
+            "MakeQuiltLinks",
+            {
+                stateJson: {
+                    Type: "Pass",
+                    Parameters: {
+                        "sync_uri.$":
+                            "States.Format('quilt+s3://{}#package={}:latest&catalog={}', $.var.registry, $.var.packageName, $.var.catalog)",
+                        "catalog_url.$":
+                            "States.Format('https://{}/b/{}/packages/{}', $.var.catalog, $.var.registry, $.var.packageName)",
+                    },
+                    ResultPath: "$.links",
                 },
-                ResultPath: "$.links",
             },
-        });
+        );
 
         const canvasWorkflow = findAppEntryTask
             .next(setupCanvasMetadataTask)
@@ -255,7 +259,7 @@ export class WebhookStateMachine extends Construct {
                                 "id": "md1",
                                 "type": "MARKDOWN",
                                 "value":
-                                "# Quilt Links\n---\n- [QuiltSync](quilt+s3://quilt-bake#package=benchhook/etr_OtsAuzfT:latest&catalog=stable.quilttest.com)\n- [Quilt Catalog](https://stable.quilttest.com/b/quilt-bake/packages/benchhook/etr_OtsAuzfT)",
+                                    "# Quilt Links\n---\n- [QuiltSync](quilt+s3://quilt-bake#package=benchhook/etr_OtsAuzfT:latest&catalog=stable.quilttest.com)\n- [Quilt Catalog](https://stable.quilttest.com/b/quilt-bake/packages/benchhook/etr_OtsAuzfT)",
                             },
                         ],
                         "enabled": true,
