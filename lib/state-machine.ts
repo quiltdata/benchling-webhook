@@ -197,33 +197,43 @@ export class WebhookStateMachine extends Construct {
             .next(metadataWorkflow);
 
         // Create the button metadata workflow chain
-        const buttonMetadataTask = new stepfunctions.Pass(this, "SetupButtonMetadata", {
-            parameters: {
-                "entity.$": "$.message.buttonId",
-                "packageName.$": 
-                    `States.Format('{}/{}', '${props.prefix}', $.message.buttonId)`,
-                "readme": README_TEMPLATE,
-                "registry": props.bucket.bucketName,
+        const buttonMetadataTask = new stepfunctions.Pass(
+            this,
+            "SetupButtonMetadata",
+            {
+                parameters: {
+                    "entity.$": "$.message.buttonId",
+                    "packageName.$":
+                        `States.Format('{}/{}', '${props.prefix}', $.message.buttonId)`,
+                    "readme": README_TEMPLATE,
+                    "registry": props.bucket.bucketName,
+                },
+                resultPath: "$.var",
             },
-            resultPath: "$.var",
-        });
+        );
 
         const buttonWorkflow = buttonMetadataTask
             .next(metadataWorkflow);
 
         // Create the canvas workflow
-        const findAppEntryTask = this.createFindAppEntryTask(props.benchlingConnection);
-        
-        const setupCanvasMetadataTask = new stepfunctions.Pass(this, "SetupCanvasMetadata", {
-            parameters: {
-                "entity.$": "$.appEntries.entry.id",
-                "packageName.$": 
-                    `States.Format('{}/{}', '${props.prefix}', $.appEntries.entry.id)`,
-                "readme": README_TEMPLATE,
-                "registry": props.bucket.bucketName,
+        const findAppEntryTask = this.createFindAppEntryTask(
+            props.benchlingConnection,
+        );
+
+        const setupCanvasMetadataTask = new stepfunctions.Pass(
+            this,
+            "SetupCanvasMetadata",
+            {
+                parameters: {
+                    "entity.$": "$.appEntries.entry.id",
+                    "packageName.$":
+                        `States.Format('{}/{}', '${props.prefix}', $.appEntries.entry.id)`,
+                    "readme": README_TEMPLATE,
+                    "registry": props.bucket.bucketName,
+                },
+                resultPath: "$.var",
             },
-            resultPath: "$.var",
-        });
+        );
 
         const canvasWorkflow = findAppEntryTask
             .next(setupCanvasMetadataTask)
@@ -232,7 +242,7 @@ export class WebhookStateMachine extends Construct {
         const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
             .when(
                 stepfunctions.Condition.stringEquals("$.channel", "events"),
-                metadataAndExportWorkflow
+                metadataAndExportWorkflow,
             )
             .when(
                 stepfunctions.Condition.or(
@@ -249,14 +259,14 @@ export class WebhookStateMachine extends Construct {
                         "v2.canvas.initialized",
                     ),
                 ),
-                canvasWorkflow
+                canvasWorkflow,
             )
             .when(
                 stepfunctions.Condition.stringEquals(
                     "$.message.type",
                     "v2.canvas.userInteracted",
                 ),
-                buttonWorkflow
+                buttonWorkflow,
             )
             .otherwise(
                 new stepfunctions.Pass(this, "EchoInput", {
@@ -370,16 +380,17 @@ export class WebhookStateMachine extends Construct {
                     RequestBody: {
                         "blocks": [
                             {
-                                "enabled": true,
                                 "id.$": "$.appEntries.entry.id",
-                                "text": "Sync",
                                 "type": "BUTTON",
+                                "text": "Sync",
+                                "enabled": true,
                             },
                             {
-                                "enabled": true,
-                                "text": "# Quilt URIs\n - Quilt+ URI\n Quilt Catalog URL\n",
-                                "type": "MARKDOWN"
-                            }
+                                "id": "md1",
+                                "type": "MARKDOWN",
+                                "value":
+                                    "### This is a markdown text section\n---\nBasic markdown options like **bold**, _italics_, and [links]() are supported",
+                            },
                         ],
                         "enabled": true,
                         "featureId": "quilt_integration",
