@@ -143,7 +143,19 @@ export class WebhookStateMachine extends Construct {
             },
         );
 
-        return buttonMetadataTask.next(startPackageEntryExecution);
+        const successResponse = new stepfunctions.Pass(this, "ButtonSuccess", {
+            parameters: {
+                statusCode: 200,
+                body: JSON.stringify({
+                    message: "Package creation started",
+                    status: "success"
+                })
+            }
+        });
+
+        return buttonMetadataTask
+            .next(startPackageEntryExecution)
+            .next(successResponse);
     }
 
     private createCanvasWorkflow(
