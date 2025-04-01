@@ -70,7 +70,23 @@ export class PackagingStateMachine extends Construct {
                     "packageName.$": "$.packageName",
                     "registry.$": "$.registry",
                     "FILES": FILES,
-                    "readme.$": "States.Format('" + README_TEMPLATE + "', $.FILES.ENTRY_JSON, $.FILES.INPUT_JSON, $.FILES.README_MD)",
+                },
+                resultPath: "$.exportStatus",
+            },
+        );
+
+        const createReadme = new stepfunctions.Pass(
+            this,
+            "CreateReadme",
+            {
+                parameters: {
+                    "status.$":
+                        "$.exportStatus.status" as ExportStatus["status"],
+                    "downloadURL.$":
+                        "$.exportStatus.response.response.downloadURL",
+                    "packageName.$": "$.packageName",
+                    "registry.$": "$.registry",
+                    "FILES": FILES,
                 },
                 resultPath: "$.exportStatus",
             },
@@ -113,6 +129,17 @@ export class PackagingStateMachine extends Construct {
         );
         const sendToSQSTask = this.createSQSTask(props);
 
+        const createReadme = new stepfunctions.Pass(
+            this,
+            "CreateReadme",
+            {
+                parameters: {
+                    "readme.$": "States.Format('" + README_TEMPLATE + "', $.exportStatus.FILES.ENTRY_JSON, $.exportStatus.FILES.INPUT_JSON, $.exportStatus.FILES.README_MD)",
+                },
+                resultPath: "$.readme",
+            },
+        );
+
         const exportChoice = new stepfunctions.Choice(this, "CheckExportStatus")
             .when(
                 stepfunctions.Condition.stringEquals(
@@ -127,6 +154,7 @@ export class PackagingStateMachine extends Construct {
                     EXPORT_STATUS.SUCCEEDED,
                 ),
                 extractDownloadURL
+                    .next(createReadme)
                     .next(processExportTask)
                     .next(writeEntryToS3Task)
                     .next(writeReadmeToS3Task)
