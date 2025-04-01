@@ -8,7 +8,7 @@ import { Construct } from "constructs";
 import { ExportStatus, PackageEntryStateMachineProps } from "./types";
 import { EXPORT_STATUS, FILES } from "./constants";
 
-export class PackageEntryStateMachine extends Construct {
+export class PackagingStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
 
     constructor(scope: Construct, id: string, props: PackageEntryStateMachineProps) {
@@ -29,7 +29,7 @@ export class PackageEntryStateMachine extends Construct {
 
         this.stateMachine = new stepfunctions.StateMachine(
             scope,
-            "PackageEntryStateMachine",
+            "PackagingStateMachine",
             {
                 definitionBody: stepfunctions.DefinitionBody.fromChainable(
                     definition,

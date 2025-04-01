@@ -8,7 +8,7 @@ import { Construct } from "constructs";
 
 import { WebhookStateMachineProps } from "./types";
 import { README_TEMPLATE } from "./templates/readme";
-import { PackageEntryStateMachine } from "./package-entry-state-machine";
+import { PackagingStateMachine } from "./packaging-state-machine";
 
 export class WebhookStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
@@ -19,7 +19,7 @@ export class WebhookStateMachine extends Construct {
         this.props = props;
 
         // Create the package entry state machine
-        const packageEntryStateMachine = new PackageEntryStateMachine(
+        const packageEntryStateMachine = new PackagingStateMachine(
             this,
             "PackageEntry",
             {
@@ -57,7 +57,7 @@ export class WebhookStateMachine extends Construct {
 
         this.stateMachine = new stepfunctions.StateMachine(
             scope,
-            "BenchlingWebhookStateMachine",
+            "WebhookStateMachine",
             {
                 definitionBody: stepfunctions.DefinitionBody.fromChainable(
                     definition,

@@ -90,7 +90,7 @@ describe("BenchlingWebhookStack", () => {
                             "",
                             [
                                 Match.stringLikeRegexp(".*\"stateMachineArn\".*"),
-                                { "Ref": "BenchlingWebhookStateMachine177934B3" },
+                                { "Ref": "WebhookStateMachine1016675F" },
                                 Match.stringLikeRegexp(".*\"input\".*\\$input\\.json\\('\\$'\\).*"),
                             ],
                         ],
