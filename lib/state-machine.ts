@@ -212,7 +212,21 @@ export class WebhookStateMachine extends Construct {
             .next(metadataWorkflow);
 
         // Create the canvas workflow
-        const canvasWorkflow = this.createFindAppEntryTask(props.benchlingConnection)
+        const findAppEntryTask = this.createFindAppEntryTask(props.benchlingConnection);
+        
+        const setupCanvasMetadataTask = new stepfunctions.Pass(this, "SetupCanvasMetadata", {
+            parameters: {
+                "entity.$": "$.appEntries.entry.id",
+                "packageName.$": 
+                    `States.Format('{}/{}', '${props.prefix}', $.appEntries.entry.id)`,
+                "readme": README_TEMPLATE,
+                "registry": props.bucket.bucketName,
+            },
+            resultPath: "$.var",
+        });
+
+        const canvasWorkflow = findAppEntryTask
+            .next(setupCanvasMetadataTask)
             .next(createCanvasTask);
 
         const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
@@ -363,7 +377,7 @@ export class WebhookStateMachine extends Construct {
                             },
                             {
                                 "enabled": true,
-                                "text.$": "States.Format('### Quilt Links\n\n- Quilt+ URI: quilt+s3://{0}#package={1}\n- Quilt URL: {2}/b/{0}/package/{1}', $.var.registry, $.var.packageName, $.baseURL)",
+                                "text": "# Quilt URIs\n - Quilt+ URI\n Quilt Catalog URL\n",
                                 "type": "MARKDOWN"
                             }
                         ],
