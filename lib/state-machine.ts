@@ -194,11 +194,7 @@ export class WebhookStateMachine extends Construct {
                 stateJson: {
                     Type: "Pass",
                     Parameters: {
-                        "markdown": {
-                            "Fn::States.Format": "# Quilt Links\n---\n- [QuiltSync]({0})\n- [Quilt Catalog]({1})",
-                            "0.$": "$.links.sync_uri",
-                            "1.$": "$.links.catalog_url"
-                        }
+                        "markdown.$": "States.Format('# Quilt Links\n---\n- [QuiltSync]({0})\n- [Quilt Catalog]({1})', $.links.sync_uri, $.links.catalog_url)"
                     },
                     ResultPath: "$.markdown",
                 },
