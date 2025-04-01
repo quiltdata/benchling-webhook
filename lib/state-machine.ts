@@ -12,10 +12,12 @@ import { PackageEntryStateMachine } from "./package-entry-state-machine";
 
 export class WebhookStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
+    private readonly props: StateMachineProps;
     private readonly bucket: s3.IBucket;
 
     constructor(scope: Construct, id: string, props: StateMachineProps) {
         super(scope, id);
+        this.props = props;
         this.bucket = props.bucket;
 
         // Create the package entry state machine
@@ -136,13 +138,28 @@ export class WebhookStateMachine extends Construct {
                         `States.Format('{}/{}', '${props.prefix}', $.appEntries.entry.id)`,
                     "readme": README_TEMPLATE,
                     "registry": props.bucket.bucketName,
+                    "catalog": "stable.quilttest.com",
                 },
                 resultPath: "$.var",
             },
         );
 
+        const makeQuiltLinksTask = new stepfunctions.CustomState(this, "MakeQuiltLinks", {
+            stateJson: {
+                Type: "Pass",
+                Parameters: {
+                    "sync_uri.$": 
+                        `States.Format("quilt+s3://{}#package={}:latest&catalog={}", $.var.registry, $.var.packageName, $.var.catalog)`,
+                    "catalog_url.$":
+                        `States.Format("https://{}/b/{}/packages/{}", $.var.catalog, $.var.registry, $.var.packageName)`,
+                },
+                ResultPath: "$.links",
+            },
+        });
+
         const canvasWorkflow = findAppEntryTask
             .next(setupCanvasMetadataTask)
+            .next(makeQuiltLinksTask)
             .next(createCanvasTask);
 
         const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
@@ -238,7 +255,7 @@ export class WebhookStateMachine extends Construct {
                                 "id": "md1",
                                 "type": "MARKDOWN",
                                 "value":
-                                    "### This is a markdown text section\n---\nBasic markdown options like **bold**, _italics_, and [links]() are supported",
+                                "# Quilt Links\n---\n- [QuiltSync](quilt+s3://quilt-bake#package=benchhook/etr_OtsAuzfT:latest&catalog=stable.quilttest.com)\n- [Quilt Catalog](https://stable.quilttest.com/b/quilt-bake/packages/benchhook/etr_OtsAuzfT)",
                             },
                         ],
                         "enabled": true,
