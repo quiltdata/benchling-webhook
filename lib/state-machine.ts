@@ -80,7 +80,9 @@ export class WebhookStateMachine extends Construct {
         const startPackageEntryExecution = this.createStartPackageEntryTask(
             packageEntryStateMachine,
         );
-        const canvasWorkflow = this.createCanvasWorkflow();
+        const canvasWorkflow = this.createCanvasWorkflow(
+            startPackageEntryExecution,
+        );
         const buttonWorkflow = this.createButtonWorkflow(
             startPackageEntryExecution,
         );
@@ -144,10 +146,13 @@ export class WebhookStateMachine extends Construct {
         return buttonMetadataTask.next(startPackageEntryExecution);
     }
 
-    private createCanvasWorkflow(): stepfunctions.IChainable {
+    private createCanvasWorkflow(
+        startPackageEntryExecution: stepfunctions.IChainable,
+    ): stepfunctions.IChainable {
         return this.createFindAppEntryTask()
             .next(this.createQuiltMetadata())
-            .next(this.createCanvasTask());
+            .next(this.createCanvasTask())
+            .next(startPackageEntryExecution);
     }
 
     private createChannelChoice(
