@@ -278,7 +278,7 @@ export class WebhookStateMachine extends Construct {
                     Type: "Pass",
                     Parameters: {
                         "links.$": stepfunctions.JsonPath.stringAt(
-                            "States.Format(" +
+                            "States.Format('" +
                                 "> NOTE: It may take a minute for the package to be created asynchronously.\n"+
                                 "# Quilt Links\n" +
                                 "---\n" +
