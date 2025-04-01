@@ -21,12 +21,7 @@ export class PackageEntryStateMachine extends Construct {
 
         role.addToPolicy(
             new iam.PolicyStatement({
-                actions: [
-                    "states:InvokeHTTPEndpoint",
-                    "events:RetrieveConnectionCredentials",
-                    "secretsmanager:DescribeSecret",
-                    "secretsmanager:GetSecretValue",
-                ],
+                actions: ["states:InvokeHTTPEndpoint"],
                 resources: ["*"],
                 effect: iam.Effect.ALLOW,
             }),
@@ -45,44 +40,84 @@ export class PackageEntryStateMachine extends Construct {
         );
     }
 
-    private createDefinition(props: StateMachineProps): stepfunctions.IChainable {
-        const fetchEntryTask = this.createFetchEntryTask(props.benchlingConnection);
+    private createDefinition(
+        props: StateMachineProps,
+    ): stepfunctions.IChainable {
+        const fetchEntryTask = this.createFetchEntryTask(
+            props.benchlingConnection,
+        );
         const exportTask = this.createExportTask(props.benchlingConnection);
-        const pollExportTask = this.createPollExportTask(props.benchlingConnection);
+        const pollExportTask = this.createPollExportTask(
+            props.benchlingConnection,
+        );
         const waitState = this.createWaitState();
 
-        const extractDownloadURL = new stepfunctions.Pass(this, "ExtractDownloadURL", {
-            parameters: {
-                "status.$": "$.exportStatus.status" as ExportStatus["status"],
-                "downloadURL.$": "$.exportStatus.response.response.downloadURL",
-                "packageName.$": "$.packageName",
-                "registry.$": "$.registry",
+        const extractDownloadURL = new stepfunctions.Pass(
+            this,
+            "ExtractDownloadURL",
+            {
+                parameters: {
+                    "status.$":
+                        "$.exportStatus.status" as ExportStatus["status"],
+                    "downloadURL.$":
+                        "$.exportStatus.response.response.downloadURL",
+                    "packageName.$": "$.packageName",
+                    "registry.$": "$.registry",
+                },
+                resultPath: "$.exportStatus",
             },
-            resultPath: "$.exportStatus",
-        });
+        );
 
-        const processExportTask = new tasks.LambdaInvoke(this, "ProcessExport", {
-            lambdaFunction: props.exportProcessor,
-            payload: stepfunctions.TaskInput.fromObject({
-                downloadURL: stepfunctions.JsonPath.stringAt("$.exportStatus.downloadURL"),
-                packageName: stepfunctions.JsonPath.stringAt("$.exportStatus.packageName"),
-                registry: stepfunctions.JsonPath.stringAt("$.exportStatus.registry"),
-            }),
-            resultPath: "$.processResult",
-        });
+        const processExportTask = new tasks.LambdaInvoke(
+            this,
+            "ProcessExport",
+            {
+                lambdaFunction: props.exportProcessor,
+                payload: stepfunctions.TaskInput.fromObject({
+                    downloadURL: stepfunctions.JsonPath.stringAt(
+                        "$.exportStatus.downloadURL",
+                    ),
+                    packageName: stepfunctions.JsonPath.stringAt(
+                        "$.exportStatus.packageName",
+                    ),
+                    registry: stepfunctions.JsonPath.stringAt(
+                        "$.exportStatus.registry",
+                    ),
+                }),
+                resultPath: "$.processResult",
+            },
+        );
 
-        const writeEntryToS3Task = this.createS3WriteTask(props.bucket, FILES.ENTRY_JSON, "$.entry.entryData");
-        const writeReadmeToS3Task = this.createS3WriteTask(props.bucket, FILES.README_MD, "$.readme");
-        const writeMetadataTask = this.createS3WriteTask(props.bucket, FILES.INPUT_JSON, "$.message");
+        const writeEntryToS3Task = this.createS3WriteTask(
+            props.bucket,
+            FILES.ENTRY_JSON,
+            "$.entry.entryData",
+        );
+        const writeReadmeToS3Task = this.createS3WriteTask(
+            props.bucket,
+            FILES.README_MD,
+            "$.readme",
+        );
+        const writeMetadataTask = this.createS3WriteTask(
+            props.bucket,
+            FILES.INPUT_JSON,
+            "$.message",
+        );
         const sendToSQSTask = this.createSQSTask(props);
 
         const exportChoice = new stepfunctions.Choice(this, "CheckExportStatus")
             .when(
-                stepfunctions.Condition.stringEquals("$.exportStatus.status", EXPORT_STATUS.RUNNING),
+                stepfunctions.Condition.stringEquals(
+                    "$.exportStatus.status",
+                    EXPORT_STATUS.RUNNING,
+                ),
                 waitState.next(pollExportTask),
             )
             .when(
-                stepfunctions.Condition.stringEquals("$.exportStatus.status", EXPORT_STATUS.SUCCEEDED),
+                stepfunctions.Condition.stringEquals(
+                    "$.exportStatus.status",
+                    EXPORT_STATUS.SUCCEEDED,
+                ),
                 extractDownloadURL
                     .next(processExportTask)
                     .next(writeEntryToS3Task)
@@ -104,13 +139,16 @@ export class PackageEntryStateMachine extends Construct {
         return fetchEntryTask.next(exportWorkflow);
     }
 
-    private createFetchEntryTask(benchlingConnection: events.CfnConnection): stepfunctions.CustomState {
+    private createFetchEntryTask(
+        benchlingConnection: events.CfnConnection,
+    ): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "FetchEntry", {
             stateJson: {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": "States.Format('{}/api/v2/entries/{}', $.baseURL, $.entity)",
+                    "ApiEndpoint.$":
+                        "States.Format('{}/api/v2/entries/{}', $.baseURL, $.entity)",
                     Method: "GET",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
@@ -124,13 +162,16 @@ export class PackageEntryStateMachine extends Construct {
         });
     }
 
-    private createExportTask(benchlingConnection: events.CfnConnection): stepfunctions.CustomState {
+    private createExportTask(
+        benchlingConnection: events.CfnConnection,
+    ): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "ExportEntry", {
             stateJson: {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": "States.Format('{}/api/v2/exports', $.baseURL)",
+                    "ApiEndpoint.$":
+                        "States.Format('{}/api/v2/exports', $.baseURL)",
                     Method: "POST",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
@@ -147,13 +188,16 @@ export class PackageEntryStateMachine extends Construct {
         });
     }
 
-    private createPollExportTask(benchlingConnection: events.CfnConnection): stepfunctions.CustomState {
+    private createPollExportTask(
+        benchlingConnection: events.CfnConnection,
+    ): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "PollExportStatus", {
             stateJson: {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
-                    "ApiEndpoint.$": "States.Format('{}/api/v2/tasks/{}', $.baseURL, $.exportTask.taskId)",
+                    "ApiEndpoint.$":
+                        "States.Format('{}/api/v2/tasks/{}', $.baseURL, $.exportTask.taskId)",
                     Method: "GET",
                     Authentication: {
                         ConnectionArn: benchlingConnection.attrArn,
@@ -175,8 +219,14 @@ export class PackageEntryStateMachine extends Construct {
         });
     }
 
-    private createS3WriteTask(bucket: s3.IBucket, filename: string, bodyPath: string): tasks.CallAwsService {
-        const taskId = `WriteTo${bodyPath.split(".")[1][0].toUpperCase()}${bodyPath.split(".")[1].slice(1)}S3`;
+    private createS3WriteTask(
+        bucket: s3.IBucket,
+        filename: string,
+        bodyPath: string,
+    ): tasks.CallAwsService {
+        const taskId = `WriteTo${bodyPath.split(".")[1][0].toUpperCase()}${
+            bodyPath.split(".")[1].slice(1)
+        }S3`;
         const resultPath = bodyPath.replace("Body", "put") + "Result";
 
         return new tasks.CallAwsService(this, taskId, {
@@ -193,8 +243,10 @@ export class PackageEntryStateMachine extends Construct {
     }
 
     private createSQSTask(props: StateMachineProps): tasks.CallAwsService {
-        const queueArn = `arn:aws:sqs:${props.region}:${props.account}:${props.queueName}`;
-        const queueUrl = `https://sqs.${props.region}.amazonaws.com/${props.account}/${props.queueName}`;
+        const queueArn =
+            `arn:aws:sqs:${props.region}:${props.account}:${props.queueName}`;
+        const queueUrl =
+            `https://sqs.${props.region}.amazonaws.com/${props.account}/${props.queueName}`;
         const timestamp = new Date().toISOString();
 
         return new tasks.CallAwsService(this, "SendToSQS", {
@@ -203,11 +255,13 @@ export class PackageEntryStateMachine extends Construct {
             parameters: {
                 QueueUrl: queueUrl,
                 MessageBody: {
-                    "source_prefix.$": "States.Format('s3://{}/{}/',$.registry,$.packageName)",
+                    "source_prefix.$":
+                        "States.Format('s3://{}/{}/',$.registry,$.packageName)",
                     "registry.$": "$.registry",
                     "package_name.$": "$.packageName",
                     "metadata_uri": FILES.ENTRY_JSON,
-                    "commit_message": `Benchling webhook payload - ${timestamp}`,
+                    "commit_message":
+                        `Benchling webhook payload - ${timestamp}`,
                 },
             },
             iamResources: [queueArn],

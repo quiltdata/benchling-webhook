@@ -19,9 +19,16 @@ export class WebhookStateMachine extends Construct {
         this.bucket = props.bucket;
 
         // Create the package entry state machine
-        const packageEntryStateMachine = new PackageEntryStateMachine(this, "PackageEntry", props);
-        
-        const definition = this.createDefinition(props, packageEntryStateMachine.stateMachine);
+        const packageEntryStateMachine = new PackageEntryStateMachine(
+            this,
+            "PackageEntry",
+            props,
+        );
+
+        const definition = this.createDefinition(
+            props,
+            packageEntryStateMachine.stateMachine,
+        );
 
         const role = new iam.Role(scope, "StateMachineRole", {
             assumedBy: new iam.ServicePrincipal("states.amazonaws.com"),
@@ -64,17 +71,21 @@ export class WebhookStateMachine extends Construct {
         props: StateMachineProps,
         packageEntryStateMachine: stepfunctions.StateMachine,
     ): stepfunctions.IChainable {
-        const startPackageEntryExecution = new tasks.StepFunctionsStartExecution(this, "StartPackageEntryExecution", {
+        const startPackageEntryExecution = new tasks
+            .StepFunctionsStartExecution(this, "StartPackageEntryExecution", {
             stateMachine: packageEntryStateMachine,
             input: stepfunctions.TaskInput.fromObject({
                 entity: stepfunctions.JsonPath.stringAt("$.var.entity"),
-                packageName: stepfunctions.JsonPath.stringAt(`States.Format('{}/{}', '${props.prefix}', $.var.entity)`),
+                packageName: stepfunctions.JsonPath.stringAt(
+                    `States.Format('{}/{}', '${props.prefix}', $.var.entity)`,
+                ),
                 readme: README_TEMPLATE,
                 registry: props.bucket.bucketName,
                 baseURL: stepfunctions.JsonPath.stringAt("$.baseURL"),
                 message: stepfunctions.JsonPath.stringAt("$.message"),
             }),
-            integrationPattern: stepfunctions.IntegrationPattern.REQUEST_RESPONSE,
+            integrationPattern:
+                stepfunctions.IntegrationPattern.REQUEST_RESPONSE,
         });
 
         const errorHandler = new stepfunctions.Pass(this, "HandleError", {
@@ -87,7 +98,9 @@ export class WebhookStateMachine extends Construct {
         startPackageEntryExecution.addCatch(errorHandler);
 
         // Create channel choice state
-        const createCanvasTask = this.createCanvasTask(props.benchlingConnection);
+        const createCanvasTask = this.createCanvasTask(
+            props.benchlingConnection,
+        );
 
         // Create the button metadata workflow chain
         const buttonMetadataTask = new stepfunctions.Pass(
@@ -239,5 +252,4 @@ export class WebhookStateMachine extends Construct {
             },
         });
     }
-
 }
