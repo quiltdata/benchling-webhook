@@ -68,7 +68,7 @@ export class WebhookStateMachine extends Construct {
             stateMachine: packageEntryStateMachine,
             input: stepfunctions.TaskInput.fromObject({
                 entity: stepfunctions.JsonPath.stringAt("$.var.entity"),
-                packageName: stepfunctions.JsonPath.stringAt(`States.Format('{}/{}', '${props.prefix}', $.message.resourceId)`),
+                packageName: stepfunctions.JsonPath.stringAt(`States.Format('{}/{}', '${props.prefix}', $.var.entity)`),
                 readme: README_TEMPLATE,
                 registry: props.bucket.bucketName,
                 baseURL: stepfunctions.JsonPath.stringAt("$.baseURL"),
