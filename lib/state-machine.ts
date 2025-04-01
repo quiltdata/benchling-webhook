@@ -177,10 +177,12 @@ export class WebhookStateMachine extends Construct {
                 stateJson: {
                     Type: "Pass",
                     Parameters: {
-                        "sync_uri.$":
-                            "States.Format('quilt+s3://{}#package={}:latest&catalog={}', $.var.registry, $.var.packageName, $.var.catalog)",
                         "catalog_url.$":
-                            "States.Format('https://{}/b/{}/packages/{}', $.var.catalog, $.var.registry, $.var.packageName)",
+                            "States.Format('https://{}/b/{}/packages/{}:latest', $.var.catalog, $.var.registry, $.var.packageName)",
+                        "revise_url.$":
+                            "States.Format('https://{}/b/{}/packages/{}?action=revisePackage', $.var.catalog, $.var.registry, $.var.packageName)",
+                        "sync_uri.$":
+                            "States.Format('quilt+s3://{}#package={}&catalog={}', $.var.registry, $.var.packageName, $.var.catalog)",
                     },
                     ResultPath: "$.links",
                 },
@@ -194,7 +196,8 @@ export class WebhookStateMachine extends Construct {
                 stateJson: {
                     Type: "Pass",
                     Parameters: {
-                        "markdown.$": "States.Format('# Quilt Links\n---\n- [QuiltSync]({0})\n- [Quilt Catalog]({1})', $.links.sync_uri, $.links.catalog_url)"
+                        "links.$":
+                            "States.Format('# Quilt Links\n---\n- [Quilt Catalog]({})\n- [Drop Zone]({})\n- Quilt+ URI: {}',$.links.catalog_url, $.links.revise_url, $.links.sync_uri)",
                     },
                     ResultPath: "$.markdown",
                 },
@@ -302,7 +305,7 @@ export class WebhookStateMachine extends Construct {
                             {
                                 "id": "md1",
                                 "type": "MARKDOWN",
-                                "value.$": "$.markdown.markdown",
+                                "value.$": "$.markdown.links",
                             },
                         ],
                         "enabled": true,
