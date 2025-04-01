@@ -279,12 +279,14 @@ export class WebhookStateMachine extends Construct {
                     Parameters: {
                         "links.$": stepfunctions.JsonPath.stringAt(
                             "States.Format('" +
-                                "> NOTE: It may take a minute for the package to be created asynchronously.\n"+
                                 "# Quilt Links\n" +
                                 "---\n" +
                                 "- [Quilt Catalog]({})\n" +
                                 "- [Drop Zone]({})\n" +
-                                "- Quilt+ URI: {}\n'," +
+                                "- Quilt+ URI: {}\n" +
+                                "---\n" +
+                                "> NOTE: It may take a minute for the package to be created asynchronously.\n"+
+                                "', " +
                                 "$.links.catalog_url, " +
                                 "$.links.revise_url, " +
                                 "$.links.sync_uri" +
@@ -316,15 +318,15 @@ export class WebhookStateMachine extends Construct {
                     RequestBody: {
                         "blocks": [
                             {
+                                "id": "md1",
+                                "type": "MARKDOWN",
+                                "value.$": "$.markdown.links",
+                            },
+                            {
                                 "id.$": "$.appEntries.entry.id",
                                 "type": "BUTTON",
                                 "text": "Sync",
                                 "enabled": true,
-                            },
-                            {
-                                "id": "md1",
-                                "type": "MARKDOWN",
-                                "value.$": "$.markdown.links",
                             },
                         ],
                         "enabled": true,
