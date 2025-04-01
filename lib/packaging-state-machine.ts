@@ -7,6 +7,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { ExportStatus, PackageEntryStateMachineProps } from "./types";
 import { EXPORT_STATUS, FILES } from "./constants";
+import { README_TEMPLATE } from "./templates/readme";
 
 export class PackagingStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
@@ -68,6 +69,7 @@ export class PackagingStateMachine extends Construct {
                         "$.exportStatus.response.response.downloadURL",
                     "packageName.$": "$.packageName",
                     "registry.$": "$.registry",
+                    "readme": README_TEMPLATE,
                 },
                 resultPath: "$.exportStatus",
             },

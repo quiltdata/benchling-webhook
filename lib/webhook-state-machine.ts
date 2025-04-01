@@ -7,7 +7,6 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
 import { WebhookStateMachineProps } from "./types";
-import { README_TEMPLATE } from "./templates/readme";
 import { PackagingStateMachine } from "./packaging-state-machine";
 
 export class WebhookStateMachine extends Construct {
@@ -105,7 +104,6 @@ export class WebhookStateMachine extends Construct {
                 packageName: stepfunctions.JsonPath.stringAt(
                     `States.Format('{}/{}', '${this.props.prefix}', $.var.entity)`,
                 ),
-                readme: README_TEMPLATE,
                 registry: this.props.bucket.bucketName,
                 baseURL: stepfunctions.JsonPath.stringAt("$.baseURL"),
                 message: stepfunctions.JsonPath.stringAt("$.message"),
@@ -136,7 +134,6 @@ export class WebhookStateMachine extends Construct {
                     "entity.$": "$.message.buttonId",
                     "packageName.$":
                         `States.Format('{}/{}', '${this.props.prefix}', $.message.buttonId)`,
-                    "readme": README_TEMPLATE,
                     "registry": this.props.bucket.bucketName,
                 },
                 resultPath: "$.var",
@@ -179,7 +176,6 @@ export class WebhookStateMachine extends Construct {
                     parameters: {
                         "entity.$": "$.message.resourceId",
                         "packageName.$": `States.Format('{}/{}', '${this.props.prefix}', $.message.resourceId)`,
-                        "readme": README_TEMPLATE,
                         "registry": this.props.bucket.bucketName,
                         "baseURL.$": "$.baseURL",
                         "message.$": "$.message",
@@ -254,7 +250,6 @@ export class WebhookStateMachine extends Construct {
                     "entity.$": "$.appEntries.entry.id",
                     "packageName.$":
                         `States.Format('{}/{}', '${this.props.prefix}', $.appEntries.entry.id)`,
-                    "readme": README_TEMPLATE,
                     "registry": this.props.bucket.bucketName,
                     "catalog": this.props.quiltCatalog,
                 },
