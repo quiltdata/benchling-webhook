@@ -187,9 +187,28 @@ export class WebhookStateMachine extends Construct {
             },
         );
 
+        const makeMarkdownTask = new stepfunctions.CustomState(
+            this,
+            "MakeMarkdown",
+            {
+                stateJson: {
+                    Type: "Pass",
+                    Parameters: {
+                        "markdown": {
+                            "Fn::States.Format": "# Quilt Links\n---\n- [QuiltSync]({0})\n- [Quilt Catalog]({1})",
+                            "0.$": "$.links.sync_uri",
+                            "1.$": "$.links.catalog_url"
+                        }
+                    },
+                    ResultPath: "$.markdown",
+                },
+            },
+        );
+
         return findAppEntryTask
             .next(setupCanvasMetadataTask)
             .next(makeQuiltLinksTask)
+            .next(makeMarkdownTask)
             .next(createCanvasTask);
     }
 
@@ -287,7 +306,7 @@ export class WebhookStateMachine extends Construct {
                             {
                                 "id": "md1",
                                 "type": "MARKDOWN",
-                                "value.$": "States.Format('# Quilt Links\\n---\\n- [QuiltSync]({})\\n- [Quilt Catalog]({})', $.links.sync_uri, $.links.catalog_url)",
+                                "value.$": "$.markdown.markdown",
                             },
                         ],
                         "enabled": true,
