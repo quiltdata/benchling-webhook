@@ -265,8 +265,19 @@ export class WebhookStateMachine extends Construct {
                 stateJson: {
                     Type: "Pass",
                     Parameters: {
-                        "links.$":
-                            "States.Format('# Quilt Links\n---\n- [Quilt Catalog]({})\n- [Drop Zone]({})\n- Quilt+ URI: {}',$.links.catalog_url, $.links.revise_url, $.links.sync_uri)",
+                        "links.$": stepfunctions.JsonPath.stringAt(
+                            "States.Format(" +
+                                "> NOTE: It may take a minute for the package to be created asynchronously.\n"+
+                                "# Quilt Links\n" +
+                                "---\n" +
+                                "- [Quilt Catalog]({})\n" +
+                                "- [Drop Zone]({})\n" +
+                                "- Quilt+ URI: {}\n'," +
+                                "$.links.catalog_url, " +
+                                "$.links.revise_url, " +
+                                "$.links.sync_uri" +
+                                ")",
+                        ),
                     },
                     ResultPath: "$.markdown",
                 },
