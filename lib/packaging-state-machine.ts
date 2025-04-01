@@ -234,14 +234,23 @@ export class PackagingStateMachine extends Construct {
         }S3`;
         const resultPath = bodyPath.replace("Body", "put") + "Result";
 
+        const parameters: Record<string, any> = {
+            Bucket: bucket.bucketName,
+            "Key.$": `States.Format('{}/{}', $.packageName, '${filename}')`,
+            "Body.$": bodyPath,
+        };
+
+        // Set appropriate content type based on file extension
+        if (filename.endsWith('.md')) {
+            parameters.ContentType = 'text/markdown';
+        } else if (filename.endsWith('.json')) {
+            parameters.ContentType = 'application/json';
+        }
+
         return new tasks.CallAwsService(this, taskId, {
             service: "s3",
             action: "putObject",
-            parameters: {
-                Bucket: bucket.bucketName,
-                "Key.$": `States.Format('{}/{}', $.packageName, '${filename}')`,
-                "Body.$": bodyPath,
-            },
+            parameters,
             iamResources: [bucket.arnForObjects("*")],
             resultPath: resultPath,
         });
