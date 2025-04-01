@@ -14,7 +14,7 @@ export class PackagingStateMachine extends Construct {
 
     constructor(scope: Construct, id: string, props: PackageEntryStateMachineProps) {
         super(scope, id);
-        const definition = this.createDefinition(props);
+        const definition = this.createDefinition();
 
         const role = new iam.Role(scope, "PackageEntryStateMachineRole", {
             assumedBy: new iam.ServicePrincipal("states.amazonaws.com"),
@@ -46,16 +46,10 @@ export class PackagingStateMachine extends Construct {
         );
     }
 
-    private createDefinition(
-        props: PackageEntryStateMachineProps,
-    ): stepfunctions.IChainable {
-        const fetchEntryTask = this.createFetchEntryTask(
-            props.benchlingConnection,
-        );
-        const exportTask = this.createExportTask(props.benchlingConnection);
-        const pollExportTask = this.createPollExportTask(
-            props.benchlingConnection,
-        );
+    private createDefinition(): stepfunctions.IChainable {
+        const fetchEntryTask = this.createFetchEntryTask();
+        const exportTask = this.createExportTask();
+        const pollExportTask = this.createPollExportTask();
         const waitState = this.createWaitState();
 
         const extractDownloadURL = new stepfunctions.Pass(
@@ -170,9 +164,7 @@ export class PackagingStateMachine extends Construct {
         return fetchEntryTask.next(setupREADME).next(exportWorkflow);
     }
 
-    private createFetchEntryTask(
-        benchlingConnection: events.CfnConnection,
-    ): stepfunctions.CustomState {
+    private createFetchEntryTask(): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "FetchEntry", {
             stateJson: {
                 Type: "Task",
@@ -182,7 +174,7 @@ export class PackagingStateMachine extends Construct {
                         "States.Format('{}/api/v2/entries/{}', $.baseURL, $.entity)",
                     Method: "GET",
                     Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
+                        ConnectionArn: this.props.benchlingConnection.attrArn,
                     },
                 },
                 ResultSelector: {
@@ -193,9 +185,7 @@ export class PackagingStateMachine extends Construct {
         });
     }
 
-    private createExportTask(
-        benchlingConnection: events.CfnConnection,
-    ): stepfunctions.CustomState {
+    private createExportTask(): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "ExportEntry", {
             stateJson: {
                 Type: "Task",
@@ -205,7 +195,7 @@ export class PackagingStateMachine extends Construct {
                         "States.Format('{}/api/v2/exports', $.baseURL)",
                     Method: "POST",
                     Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
+                        ConnectionArn: this.props.benchlingConnection.attrArn,
                     },
                     RequestBody: {
                         "id.$": "$.entity",
@@ -219,9 +209,7 @@ export class PackagingStateMachine extends Construct {
         });
     }
 
-    private createPollExportTask(
-        benchlingConnection: events.CfnConnection,
-    ): stepfunctions.CustomState {
+    private createPollExportTask(): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "PollExportStatus", {
             stateJson: {
                 Type: "Task",
@@ -231,7 +219,7 @@ export class PackagingStateMachine extends Construct {
                         "States.Format('{}/api/v2/tasks/{}', $.baseURL, $.exportTask.taskId)",
                     Method: "GET",
                     Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
+                        ConnectionArn: this.props.benchlingConnection.attrArn,
                     },
                 },
                 ResultSelector: {
