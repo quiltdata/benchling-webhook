@@ -13,12 +13,10 @@ import { PackageEntryStateMachine } from "./package-entry-state-machine";
 export class WebhookStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
     private readonly props: WebhookStateMachineProps;
-    private readonly bucket: s3.IBucket;
 
     constructor(scope: Construct, id: string, props: WebhookStateMachineProps) {
         super(scope, id);
         this.props = props;
-        this.bucket = props.bucket;
 
         // Create the package entry state machine
         const packageEntryStateMachine = new PackageEntryStateMachine(
@@ -28,7 +26,6 @@ export class WebhookStateMachine extends Construct {
         );
 
         const definition = this.createDefinition(
-            props,
             packageEntryStateMachine.stateMachine,
         );
 
@@ -70,16 +67,13 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createDefinition(
-        props: WebhookStateMachineProps,
         packageEntryStateMachine: stepfunctions.StateMachine,
     ): stepfunctions.IChainable {
         const startPackageEntryExecution = this.createStartPackageEntryTask(
-            props,
             packageEntryStateMachine,
         );
-        const canvasWorkflow = this.createCanvasWorkflow(props);
+        const canvasWorkflow = this.createCanvasWorkflow();
         const buttonWorkflow = this.createButtonWorkflow(
-            props,
             startPackageEntryExecution,
         );
 
@@ -91,7 +85,6 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createStartPackageEntryTask(
-        props: WebhookStateMachineProps,
         packageEntryStateMachine: stepfunctions.StateMachine,
     ): stepfunctions.IChainable {
         const startPackageEntryExecution = new tasks
@@ -100,10 +93,10 @@ export class WebhookStateMachine extends Construct {
             input: stepfunctions.TaskInput.fromObject({
                 entity: stepfunctions.JsonPath.stringAt("$.var.entity"),
                 packageName: stepfunctions.JsonPath.stringAt(
-                    `States.Format('{}/{}', '${props.prefix}', $.var.entity)`,
+                    `States.Format('{}/{}', '${this.props.prefix}', $.var.entity)`,
                 ),
                 readme: README_TEMPLATE,
-                registry: props.bucket.bucketName,
+                registry: this.props.bucket.bucketName,
                 baseURL: stepfunctions.JsonPath.stringAt("$.baseURL"),
                 message: stepfunctions.JsonPath.stringAt("$.message"),
             }),
@@ -123,7 +116,6 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createButtonWorkflow(
-        props: WebhookStateMachineProps,
         startPackageEntryExecution: stepfunctions.IChainable,
     ): stepfunctions.IChainable {
         const buttonMetadataTask = new stepfunctions.Pass(
@@ -133,9 +125,9 @@ export class WebhookStateMachine extends Construct {
                 parameters: {
                     "entity.$": "$.message.buttonId",
                     "packageName.$":
-                        `States.Format('{}/{}', '${props.prefix}', $.message.buttonId)`,
+                        `States.Format('{}/{}', '${this.props.prefix}', $.message.buttonId)`,
                     "readme": README_TEMPLATE,
-                    "registry": props.bucket.bucketName,
+                    "registry": this.props.bucket.bucketName,
                 },
                 resultPath: "$.var",
             },
@@ -144,14 +136,12 @@ export class WebhookStateMachine extends Construct {
         return buttonMetadataTask.next(startPackageEntryExecution);
     }
 
-    private createCanvasWorkflow(
-        props: WebhookStateMachineProps,
-    ): stepfunctions.IChainable {
+    private createCanvasWorkflow(): stepfunctions.IChainable {
         const findAppEntryTask = this.createFindAppEntryTask(
-            props.benchlingConnection,
+            this.props.benchlingConnection,
         );
         const createCanvasTask = this.createCanvasTask(
-            props.benchlingConnection,
+            this.props.benchlingConnection,
         );
 
         const setupCanvasMetadataTask = new stepfunctions.Pass(
@@ -161,9 +151,9 @@ export class WebhookStateMachine extends Construct {
                 parameters: {
                     "entity.$": "$.appEntries.entry.id",
                     "packageName.$":
-                        `States.Format('{}/{}', '${props.prefix}', $.appEntries.entry.id)`,
+                        `States.Format('{}/{}', '${this.props.prefix}', $.appEntries.entry.id)`,
                     "readme": README_TEMPLATE,
-                    "registry": props.bucket.bucketName,
+                    "registry": this.props.bucket.bucketName,
                     "catalog": "stable.quilttest.com",
                 },
                 resultPath: "$.var",
