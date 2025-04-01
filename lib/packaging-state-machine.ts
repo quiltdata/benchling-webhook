@@ -50,11 +50,66 @@ export class PackagingStateMachine extends Construct {
 
     private createDefinition(): stepfunctions.IChainable {
         const fetchEntryTask = this.createFetchEntryTask();
+        const setupREADME = this.createSetupReadmeTask();
+        const exportWorkflow = this.createExportWorkflow();
+        
+        return fetchEntryTask.next(setupREADME).next(exportWorkflow);
+    }
+
+    private createSetupReadmeTask(): stepfunctions.Pass {
+        return new stepfunctions.Pass(
+            this,
+            "SetupREADME",
+            {
+                parameters: {
+                    "FILES": FILES,
+                },
+                resultPath: "$.files",
+            },
+        );
+    }
+
+    private createExportWorkflow(): stepfunctions.IChainable {
         const exportTask = this.createExportTask();
         const pollExportTask = this.createPollExportTask();
         const waitState = this.createWaitState();
+        const exportChoice = this.createExportChoice(waitState, pollExportTask);
+        
+        return exportTask.next(pollExportTask).next(exportChoice);
+    }
 
-        const extractDownloadURL = new stepfunctions.Pass(
+    private createExportChoice(
+        waitState: stepfunctions.Wait,
+        pollExportTask: stepfunctions.CustomState,
+    ): stepfunctions.Choice {
+        const extractDownloadURL = this.createExtractDownloadURLTask();
+        const successChain = this.createSuccessChain(extractDownloadURL);
+
+        return new stepfunctions.Choice(this, "CheckExportStatus")
+            .when(
+                stepfunctions.Condition.stringEquals(
+                    "$.exportStatus.status",
+                    EXPORT_STATUS.RUNNING,
+                ),
+                waitState.next(pollExportTask),
+            )
+            .when(
+                stepfunctions.Condition.stringEquals(
+                    "$.exportStatus.status",
+                    EXPORT_STATUS.SUCCEEDED,
+                ),
+                successChain,
+            )
+            .otherwise(
+                new stepfunctions.Fail(this, "ExportFailed", {
+                    cause: "Export task did not succeed",
+                    error: "ExportFailure",
+                }),
+            );
+    }
+
+    private createExtractDownloadURLTask(): stepfunctions.Pass {
+        return new stepfunctions.Pass(
             this,
             "ExtractDownloadURL",
             {
@@ -70,7 +125,19 @@ export class PackagingStateMachine extends Construct {
                 resultPath: "$.exportStatus",
             },
         );
+    }
 
+    private createSuccessChain(extractDownloadURL: stepfunctions.Pass): stepfunctions.IChainable {
+        const createReadme = new stepfunctions.Pass(
+            this,
+            "CreateReadme",
+            {
+                parameters: {
+                    "readme.$": "States.Format('" + README_TEMPLATE + "', $.exportStatus.FILES.ENTRY_JSON, $.exportStatus.FILES.INPUT_JSON, $.exportStatus.FILES.README_MD)",
+                },
+                resultPath: "$.readme",
+            },
+        );
 
         const processExportTask = new tasks.LambdaInvoke(
             this,
@@ -109,61 +176,13 @@ export class PackagingStateMachine extends Construct {
         );
         const sendToSQSTask = this.createSQSTask(this.props);
 
-        const createReadme = new stepfunctions.Pass(
-            this,
-            "CreateReadme",
-            {
-                parameters: {
-                    "readme.$": "States.Format('" + README_TEMPLATE + "', $.exportStatus.FILES.ENTRY_JSON, $.exportStatus.FILES.INPUT_JSON, $.exportStatus.FILES.README_MD)",
-                },
-                resultPath: "$.readme",
-            },
-        );
-
-        const exportChoice = new stepfunctions.Choice(this, "CheckExportStatus")
-            .when(
-                stepfunctions.Condition.stringEquals(
-                    "$.exportStatus.status",
-                    EXPORT_STATUS.RUNNING,
-                ),
-                waitState.next(pollExportTask),
-            )
-            .when(
-                stepfunctions.Condition.stringEquals(
-                    "$.exportStatus.status",
-                    EXPORT_STATUS.SUCCEEDED,
-                ),
-                extractDownloadURL
-                    .next(createReadme)
-                    .next(processExportTask)
-                    .next(writeEntryToS3Task)
-                    .next(writeReadmeToS3Task)
-                    .next(writeMetadataTask)
-                    .next(sendToSQSTask),
-            )
-            .otherwise(
-                new stepfunctions.Fail(this, "ExportFailed", {
-                    cause: "Export task did not succeed",
-                    error: "ExportFailure",
-                }),
-            );
-
-        const exportWorkflow = exportTask
-            .next(pollExportTask)
-            .next(exportChoice);
-
-        const setupREADME = new stepfunctions.Pass(
-            this,
-            "SetupREADME",
-            {
-                parameters: {
-                    "FILES": FILES,
-                },
-                resultPath: "$.files",
-            },
-        );
-
-        return fetchEntryTask.next(setupREADME).next(exportWorkflow);
+        return extractDownloadURL
+            .next(createReadme)
+            .next(processExportTask)
+            .next(writeEntryToS3Task)
+            .next(writeReadmeToS3Task)
+            .next(writeMetadataTask)
+            .next(sendToSQSTask);
     }
 
     private createFetchEntryTask(): stepfunctions.CustomState {
