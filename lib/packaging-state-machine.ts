@@ -75,22 +75,6 @@ export class PackagingStateMachine extends Construct {
             },
         );
 
-        const createReadme = new stepfunctions.Pass(
-            this,
-            "CreateReadme",
-            {
-                parameters: {
-                    "status.$":
-                        "$.exportStatus.status" as ExportStatus["status"],
-                    "downloadURL.$":
-                        "$.exportStatus.response.response.downloadURL",
-                    "packageName.$": "$.packageName",
-                    "registry.$": "$.registry",
-                    "FILES": FILES,
-                },
-                resultPath: "$.exportStatus",
-            },
-        );
 
         const processExportTask = new tasks.LambdaInvoke(
             this,
