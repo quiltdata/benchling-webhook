@@ -14,6 +14,7 @@ export interface WebhookStateMachineProps extends BaseStateMachineProps {
     account: string;
     benchlingTenant: string;
     exportProcessor: lambda.IFunction;
+    quiltCatalog?: string;
 }
 
 export interface PackageEntryStateMachineProps extends BaseStateMachineProps {

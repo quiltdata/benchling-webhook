@@ -154,7 +154,7 @@ export class WebhookStateMachine extends Construct {
                         `States.Format('{}/{}', '${this.props.prefix}', $.appEntries.entry.id)`,
                     "readme": README_TEMPLATE,
                     "registry": this.props.bucket.bucketName,
-                    "catalog": "stable.quilttest.com",
+                    "catalog": this.props.quiltCatalog,
                 },
                 resultPath: "$.var",
             },
@@ -168,7 +168,7 @@ export class WebhookStateMachine extends Construct {
                     Type: "Pass",
                     Parameters: {
                         "catalog_url.$":
-                            "States.Format('https://{}/b/{}/packages/{}:latest', $.var.catalog, $.var.registry, $.var.packageName)",
+                            "States.Format('https://{}/b/{}/packages/{}', $.var.catalog, $.var.registry, $.var.packageName)",
                         "revise_url.$":
                             "States.Format('https://{}/b/{}/packages/{}?action=revisePackage', $.var.catalog, $.var.registry, $.var.packageName)",
                         "sync_uri.$":
