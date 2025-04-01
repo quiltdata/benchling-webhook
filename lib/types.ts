@@ -2,14 +2,25 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 
-export interface StateMachineProps {
+export interface BaseStateMachineProps {
     bucket: s3.IBucket;
     prefix: string;
+    benchlingConnection: events.CfnConnection;
+}
+
+export interface WebhookStateMachineProps extends BaseStateMachineProps {
     queueName: string;
     region: string;
     account: string;
-    benchlingConnection: events.CfnConnection;
     benchlingTenant: string;
+    exportProcessor: lambda.IFunction;
+    quiltCatalog?: string;
+}
+
+export interface PackageEntryStateMachineProps extends BaseStateMachineProps {
+    queueName: string;
+    region: string;
+    account: string;
     exportProcessor: lambda.IFunction;
 }
 

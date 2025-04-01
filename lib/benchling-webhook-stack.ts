@@ -6,7 +6,7 @@ import * as nodejs from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "path";
 import { Construct } from "constructs";
 import { WebhookApi } from "./api-gateway";
-import { WebhookStateMachine } from "./state-machine";
+import { WebhookStateMachine } from "./webhook-state-machine";
 
 interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
@@ -16,6 +16,7 @@ interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly benchlingClientId: string;
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
+    readonly quiltCatalog?: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
@@ -45,6 +46,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             memorySize: 1024,
             environment: {
                 NODE_OPTIONS: "--enable-source-maps",
+                QUILT_CATALOG: props.quiltCatalog || "open.quiltdata.com",
             },
             architecture: lambda.Architecture.ARM_64,
             bundling: {
@@ -75,6 +77,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             benchlingConnection,
             benchlingTenant: props.benchlingTenant,
             exportProcessor: this.exportProcessor,
+            quiltCatalog: props.quiltCatalog,
         });
 
         this.api = new WebhookApi(this, "WebhookApi", this.stateMachine.stateMachine);

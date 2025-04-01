@@ -15,6 +15,7 @@ describe("BenchlingWebhookStack", () => {
             benchlingClientId: "test-client-id",
             benchlingClientSecret: "test-client-secret",
             benchlingTenant: "test-tenant",
+            quiltCatalog: "https://quilt-example.com",
         });
         template = Template.fromStack(stack);
     });
@@ -31,8 +32,8 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
-    test("creates state machine", () => {
-        template.resourceCountIs("AWS::StepFunctions::StateMachine", 1);
+    test("creates state machines", () => {
+        template.resourceCountIs("AWS::StepFunctions::StateMachine", 2);
     });
 
     test("creates CloudWatch log groups", () => {
@@ -89,7 +90,7 @@ describe("BenchlingWebhookStack", () => {
                             "",
                             [
                                 Match.stringLikeRegexp(".*\"stateMachineArn\".*"),
-                                { "Ref": "BenchlingWebhookStateMachine177934B3" },
+                                { "Ref": "WebhookStateMachine1016675F" },
                                 Match.stringLikeRegexp(".*\"input\".*\\$input\\.json\\('\\$'\\).*"),
                             ],
                         ],
@@ -110,6 +111,7 @@ describe("BenchlingWebhookStack", () => {
                 benchlingClientId: "test-client-id",
                 benchlingClientSecret: "test-client-secret",
                 benchlingTenant: "test-tenant",
+                quiltCatalog: "https://quilt-example.com",
             });
         }).toThrow("Prefix should not contain a '/' character.");
     });
