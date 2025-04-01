@@ -46,6 +46,21 @@
             "type": "text"
           },
           {
+            "appId": "app_qdSsffBWrLoTVId4",
+            "canvasId": "cnvs_pHGVgdN1",
+            "featureId": "quilt_integration",
+            "indentation": 0,
+            "links": [],
+            "text": "",
+            "type": "app_canvas"
+          },
+          {
+            "indentation": 0,
+            "links": [],
+            "text": "",
+            "type": "text"
+          },
+          {
             "indentation": 0,
             "links": [],
             "text": "",
@@ -59,10 +74,24 @@
             "type": "external_file"
           },
           {
+            "externalFileId": "efl_clzRTqMc",
+            "indentation": 0,
+            "links": [],
+            "text": "",
+            "type": "external_file"
+          },
+          {
             "indentation": 0,
             "links": [],
             "text": "",
             "type": "text"
+          },
+          {
+            "externalFileId": "efl_NpLGuDgJ",
+            "indentation": 0,
+            "links": [],
+            "text": "",
+            "type": "external_file"
           }
         ],
         "title": null
@@ -107,12 +136,12 @@
         "value": "quilt+s3://quilt-benchling#package=benchling/EXP25000007"
       },
       "Sentinel": {
-        "displayValue": "1",
+        "displayValue": "-1",
         "isMulti": false,
-        "textValue": "1",
+        "textValue": "-1",
         "type": "integer",
         "unit": null,
-        "value": 1
+        "value": -1
       },
       "Study": {
         "displayValue": "Webhook",
@@ -175,7 +204,7 @@
     },
     "folderId": "lib_uz14ul16",
     "id": "etr_0uKCQZ8f",
-    "modifiedAt": "2025-03-25T02:59:06.046127+00:00",
+    "modifiedAt": "2025-03-30T23:37:22.777296+00:00",
     "name": "quiltable",
     "reviewRecord": null,
     "schema": {

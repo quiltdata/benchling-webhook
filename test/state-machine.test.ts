@@ -3,7 +3,7 @@ import { Template, Match } from "aws-cdk-lib/assertions";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import { WebhookStateMachine } from "../lib/state-machine";
+import { WebhookStateMachine } from "../lib/webhook-state-machine";
 
 describe("WebhookStateMachine", () => {
     let stack: cdk.Stack;
@@ -44,8 +44,8 @@ describe("WebhookStateMachine", () => {
         template = Template.fromStack(stack);
     });
 
-    test("creates state machine", () => {
-        template.resourceCountIs("AWS::StepFunctions::StateMachine", 1);
+    test("creates state machines", () => {
+        template.resourceCountIs("AWS::StepFunctions::StateMachine", 2);
     });
 
     test("creates log group", () => {
