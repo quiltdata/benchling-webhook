@@ -287,8 +287,7 @@ export class WebhookStateMachine extends Construct {
                             {
                                 "id": "md1",
                                 "type": "MARKDOWN",
-                                "value":
-                                    "# Quilt Links\n---\n- [QuiltSync](quilt+s3://quilt-bake#package=benchhook/etr_OtsAuzfT:latest&catalog=stable.quilttest.com)\n- [Quilt Catalog](https://stable.quilttest.com/b/quilt-bake/packages/benchhook/etr_OtsAuzfT)",
+                                "value.$": "States.Format('# Quilt Links\\n---\\n- [QuiltSync]({})\\n- [Quilt Catalog]({})', $.links.sync_uri, $.links.catalog_url)",
                             },
                         ],
                         "enabled": true,
