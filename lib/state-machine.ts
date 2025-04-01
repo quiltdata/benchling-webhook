@@ -6,16 +6,16 @@ import * as events from "aws-cdk-lib/aws-events";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
-import { StateMachineProps } from "./types";
+import { WebhookStateMachineProps } from "./types";
 import { README_TEMPLATE } from "./templates/readme";
 import { PackageEntryStateMachine } from "./package-entry-state-machine";
 
 export class WebhookStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
-    private readonly props: StateMachineProps;
+    private readonly props: WebhookStateMachineProps;
     private readonly bucket: s3.IBucket;
 
-    constructor(scope: Construct, id: string, props: StateMachineProps) {
+    constructor(scope: Construct, id: string, props: WebhookStateMachineProps) {
         super(scope, id);
         this.props = props;
         this.bucket = props.bucket;
@@ -70,7 +70,7 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createDefinition(
-        props: StateMachineProps,
+        props: WebhookStateMachineProps,
         packageEntryStateMachine: stepfunctions.StateMachine,
     ): stepfunctions.IChainable {
         const startPackageEntryExecution = this.createStartPackageEntryTask(
@@ -91,7 +91,7 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createStartPackageEntryTask(
-        props: StateMachineProps,
+        props: WebhookStateMachineProps,
         packageEntryStateMachine: stepfunctions.StateMachine,
     ): stepfunctions.IChainable {
         const startPackageEntryExecution = new tasks
@@ -123,7 +123,7 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createButtonWorkflow(
-        props: StateMachineProps,
+        props: WebhookStateMachineProps,
         startPackageEntryExecution: stepfunctions.IChainable,
     ): stepfunctions.IChainable {
         const buttonMetadataTask = new stepfunctions.Pass(
@@ -145,7 +145,7 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createCanvasWorkflow(
-        props: StateMachineProps,
+        props: WebhookStateMachineProps,
     ): stepfunctions.IChainable {
         const findAppEntryTask = this.createFindAppEntryTask(
             props.benchlingConnection,

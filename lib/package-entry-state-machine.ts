@@ -5,13 +5,13 @@ import * as events from "aws-cdk-lib/aws-events";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
-import { ExportStatus, StateMachineProps } from "./types";
+import { ExportStatus, PackageEntryStateMachineProps } from "./types";
 import { EXPORT_STATUS, FILES } from "./constants";
 
 export class PackageEntryStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
 
-    constructor(scope: Construct, id: string, props: StateMachineProps) {
+    constructor(scope: Construct, id: string, props: PackageEntryStateMachineProps) {
         super(scope, id);
         const definition = this.createDefinition(props);
 
@@ -41,7 +41,7 @@ export class PackageEntryStateMachine extends Construct {
     }
 
     private createDefinition(
-        props: StateMachineProps,
+        props: PackageEntryStateMachineProps,
     ): stepfunctions.IChainable {
         const fetchEntryTask = this.createFetchEntryTask(
             props.benchlingConnection,
@@ -242,7 +242,7 @@ export class PackageEntryStateMachine extends Construct {
         });
     }
 
-    private createSQSTask(props: StateMachineProps): tasks.CallAwsService {
+    private createSQSTask(props: PackageEntryStateMachineProps): tasks.CallAwsService {
         const queueArn =
             `arn:aws:sqs:${props.region}:${props.account}:${props.queueName}`;
         const queueUrl =
