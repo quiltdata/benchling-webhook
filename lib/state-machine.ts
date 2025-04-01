@@ -73,6 +73,27 @@ export class WebhookStateMachine extends Construct {
         props: StateMachineProps,
         packageEntryStateMachine: stepfunctions.StateMachine,
     ): stepfunctions.IChainable {
+        const startPackageEntryExecution = this.createStartPackageEntryTask(
+            props,
+            packageEntryStateMachine,
+        );
+        const canvasWorkflow = this.createCanvasWorkflow(props);
+        const buttonWorkflow = this.createButtonWorkflow(
+            props,
+            startPackageEntryExecution,
+        );
+
+        return this.createChannelChoice(
+            startPackageEntryExecution,
+            canvasWorkflow,
+            buttonWorkflow,
+        );
+    }
+
+    private createStartPackageEntryTask(
+        props: StateMachineProps,
+        packageEntryStateMachine: stepfunctions.StateMachine,
+    ): stepfunctions.IChainable {
         const startPackageEntryExecution = new tasks
             .StepFunctionsStartExecution(this, "StartPackageEntryExecution", {
             stateMachine: packageEntryStateMachine,
@@ -98,13 +119,13 @@ export class WebhookStateMachine extends Construct {
         });
 
         startPackageEntryExecution.addCatch(errorHandler);
+        return startPackageEntryExecution;
+    }
 
-        // Create channel choice state
-        const createCanvasTask = this.createCanvasTask(
-            props.benchlingConnection,
-        );
-
-        // Create the button metadata workflow chain
+    private createButtonWorkflow(
+        props: StateMachineProps,
+        startPackageEntryExecution: stepfunctions.IChainable,
+    ): stepfunctions.IChainable {
         const buttonMetadataTask = new stepfunctions.Pass(
             this,
             "SetupButtonMetadata",
@@ -120,11 +141,16 @@ export class WebhookStateMachine extends Construct {
             },
         );
 
-        const buttonWorkflow = buttonMetadataTask
-            .next(startPackageEntryExecution);
+        return buttonMetadataTask.next(startPackageEntryExecution);
+    }
 
-        // Create the canvas workflow
+    private createCanvasWorkflow(
+        props: StateMachineProps,
+    ): stepfunctions.IChainable {
         const findAppEntryTask = this.createFindAppEntryTask(
+            props.benchlingConnection,
+        );
+        const createCanvasTask = this.createCanvasTask(
             props.benchlingConnection,
         );
 
@@ -161,12 +187,18 @@ export class WebhookStateMachine extends Construct {
             },
         );
 
-        const canvasWorkflow = findAppEntryTask
+        return findAppEntryTask
             .next(setupCanvasMetadataTask)
             .next(makeQuiltLinksTask)
             .next(createCanvasTask);
+    }
 
-        const channelChoice = new stepfunctions.Choice(this, "CheckChannel")
+    private createChannelChoice(
+        startPackageEntryExecution: stepfunctions.IChainable,
+        canvasWorkflow: stepfunctions.IChainable,
+        buttonWorkflow: stepfunctions.IChainable,
+    ): stepfunctions.Choice {
+        return new stepfunctions.Choice(this, "CheckChannel")
             .when(
                 stepfunctions.Condition.stringEquals("$.channel", "events"),
                 startPackageEntryExecution,
@@ -202,9 +234,6 @@ export class WebhookStateMachine extends Construct {
                     },
                 }),
             );
-
-        // Main workflow entry point
-        return channelChoice;
     }
 
     private createFindAppEntryTask(
