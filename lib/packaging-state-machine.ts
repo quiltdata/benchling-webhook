@@ -156,7 +156,18 @@ export class PackagingStateMachine extends Construct {
             .next(pollExportTask)
             .next(exportChoice);
 
-        return fetchEntryTask.next(exportWorkflow);
+        const setupREADME = new stepfunctions.Pass(
+            this,
+            "SetupREADME",
+            {
+                parameters: {
+                    "FILES": FILES,
+                },
+                resultPath: "$.files",
+            },
+        );
+
+        return fetchEntryTask.next(setupREADME).next(exportWorkflow);
     }
 
     private createFetchEntryTask(
