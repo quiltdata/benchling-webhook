@@ -22,7 +22,15 @@ export class WebhookStateMachine extends Construct {
         const packageEntryStateMachine = new PackageEntryStateMachine(
             this,
             "PackageEntry",
-            props,
+            {
+                bucket: props.bucket,
+                prefix: props.prefix,
+                benchlingConnection: props.benchlingConnection,
+                queueName: props.queueName,
+                region: props.region,
+                account: props.account,
+                exportProcessor: props.exportProcessor,
+            },
         );
 
         const definition = this.createDefinition(
@@ -137,13 +145,79 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createCanvasWorkflow(): stepfunctions.IChainable {
-        const findAppEntryTask = this.createFindAppEntryTask(
-            this.props.benchlingConnection,
-        );
-        const createCanvasTask = this.createCanvasTask(
-            this.props.benchlingConnection,
-        );
+        return this.createFindAppEntryTask()
+            .next(this.createQuiltMetadata())
+            .next(this.createCanvasTask());
+    }
 
+    private createChannelChoice(
+        startPackageEntryExecution: stepfunctions.IChainable,
+        canvasWorkflow: stepfunctions.IChainable,
+        buttonWorkflow: stepfunctions.IChainable,
+    ): stepfunctions.Choice {
+        return new stepfunctions.Choice(this, "CheckChannel")
+            .when(
+                stepfunctions.Condition.stringEquals("$.channel", "events"),
+                startPackageEntryExecution,
+            )
+            .when(
+                stepfunctions.Condition.or(
+                    stepfunctions.Condition.stringEquals(
+                        "$.message.type",
+                        "v2.app.activateRequested",
+                    ),
+                    stepfunctions.Condition.stringEquals(
+                        "$.message.type",
+                        "v2-beta.canvas.created",
+                    ),
+                    stepfunctions.Condition.stringEquals(
+                        "$.message.type",
+                        "v2.canvas.initialized",
+                    ),
+                ),
+                canvasWorkflow,
+            )
+            .when(
+                stepfunctions.Condition.stringEquals(
+                    "$.message.type",
+                    "v2.canvas.userInteracted",
+                ),
+                buttonWorkflow,
+            )
+            .otherwise(
+                new stepfunctions.Pass(this, "EchoInput", {
+                    parameters: {
+                        "input.$": "$",
+                    },
+                }),
+            );
+    }
+
+    private createFindAppEntryTask(): stepfunctions.CustomState {
+        return new stepfunctions.CustomState(this, "FindAppEntry", {
+            stateJson: {
+                Type: "Task",
+                Resource: "arn:aws:states:::http:invoke",
+                Parameters: {
+                    "ApiEndpoint.$":
+                        "States.Format('{}/api/v2/entries', $.baseURL)",
+                    Method: "GET",
+                    Authentication: {
+                        ConnectionArn: this.props.benchlingConnection.attrArn,
+                    },
+                    QueryParameters: {
+                        "pageSize": "1",
+                    },
+                },
+                ResultSelector: {
+                    "entry.$": "$.ResponseBody.entries[0]",
+                },
+                ResultPath: "$.appEntries",
+            },
+        });
+    }
+
+    private createQuiltMetadata(): stepfunctions.IChainable {
         const setupCanvasMetadataTask = new stepfunctions.Pass(
             this,
             "SetupCanvasMetadata",
@@ -194,85 +268,12 @@ export class WebhookStateMachine extends Construct {
             },
         );
 
-        return findAppEntryTask
-            .next(setupCanvasMetadataTask)
+        return setupCanvasMetadataTask
             .next(makeQuiltLinksTask)
-            .next(makeMarkdownTask)
-            .next(createCanvasTask);
+            .next(makeMarkdownTask);
     }
 
-    private createChannelChoice(
-        startPackageEntryExecution: stepfunctions.IChainable,
-        canvasWorkflow: stepfunctions.IChainable,
-        buttonWorkflow: stepfunctions.IChainable,
-    ): stepfunctions.Choice {
-        return new stepfunctions.Choice(this, "CheckChannel")
-            .when(
-                stepfunctions.Condition.stringEquals("$.channel", "events"),
-                startPackageEntryExecution,
-            )
-            .when(
-                stepfunctions.Condition.or(
-                    stepfunctions.Condition.stringEquals(
-                        "$.message.type",
-                        "v2.app.activateRequested",
-                    ),
-                    stepfunctions.Condition.stringEquals(
-                        "$.message.type",
-                        "v2-beta.canvas.created",
-                    ),
-                    stepfunctions.Condition.stringEquals(
-                        "$.message.type",
-                        "v2.canvas.initialized",
-                    ),
-                ),
-                canvasWorkflow,
-            )
-            .when(
-                stepfunctions.Condition.stringEquals(
-                    "$.message.type",
-                    "v2.canvas.userInteracted",
-                ),
-                buttonWorkflow,
-            )
-            .otherwise(
-                new stepfunctions.Pass(this, "EchoInput", {
-                    parameters: {
-                        "input.$": "$",
-                    },
-                }),
-            );
-    }
-
-    private createFindAppEntryTask(
-        benchlingConnection: events.CfnConnection,
-    ): stepfunctions.CustomState {
-        return new stepfunctions.CustomState(this, "FindAppEntry", {
-            stateJson: {
-                Type: "Task",
-                Resource: "arn:aws:states:::http:invoke",
-                Parameters: {
-                    "ApiEndpoint.$":
-                        "States.Format('{}/api/v2/entries', $.baseURL)",
-                    Method: "GET",
-                    Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
-                    },
-                    QueryParameters: {
-                        "pageSize": "1",
-                    },
-                },
-                ResultSelector: {
-                    "entry.$": "$.ResponseBody.entries[0]",
-                },
-                ResultPath: "$.appEntries",
-            },
-        });
-    }
-
-    private createCanvasTask(
-        benchlingConnection: events.CfnConnection,
-    ): stepfunctions.CustomState {
+    private createCanvasTask(): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "CreateCanvas", {
             stateJson: {
                 Type: "Task",
@@ -282,7 +283,7 @@ export class WebhookStateMachine extends Construct {
                         "States.Format('{}/api/v2/app-canvases/{}', $.baseURL, $.message.canvasId)",
                     Method: "PATCH",
                     Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
+                        ConnectionArn: this.props.benchlingConnection.attrArn,
                     },
                     RequestBody: {
                         "blocks": [
