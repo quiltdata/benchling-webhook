@@ -11,9 +11,11 @@ import { README_TEMPLATE } from "./templates/readme";
 
 export class PackagingStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
+    private readonly props: PackageEntryStateMachineProps;
 
     constructor(scope: Construct, id: string, props: PackageEntryStateMachineProps) {
         super(scope, id);
+        this.props = props;
         const definition = this.createDefinition();
 
         const role = new iam.Role(scope, "PackageEntryStateMachineRole", {
@@ -74,7 +76,7 @@ export class PackagingStateMachine extends Construct {
             this,
             "ProcessExport",
             {
-                lambdaFunction: props.exportProcessor,
+                lambdaFunction: this.props.exportProcessor,
                 payload: stepfunctions.TaskInput.fromObject({
                     downloadURL: stepfunctions.JsonPath.stringAt(
                         "$.exportStatus.downloadURL",
@@ -91,21 +93,21 @@ export class PackagingStateMachine extends Construct {
         );
 
         const writeEntryToS3Task = this.createS3WriteTask(
-            props.bucket,
+            this.props.bucket,
             FILES.ENTRY_JSON,
             "$.entry.entryData",
         );
         const writeReadmeToS3Task = this.createS3WriteTask(
-            props.bucket,
+            this.props.bucket,
             FILES.README_MD,
             "$.readme",
         );
         const writeMetadataTask = this.createS3WriteTask(
-            props.bucket,
+            this.props.bucket,
             FILES.INPUT_JSON,
             "$.message",
         );
-        const sendToSQSTask = this.createSQSTask(props);
+        const sendToSQSTask = this.createSQSTask(this.props);
 
         const createReadme = new stepfunctions.Pass(
             this,
