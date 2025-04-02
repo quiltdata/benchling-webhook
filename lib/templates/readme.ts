@@ -1,13 +1,55 @@
+import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
 import { FILES } from "../constants";
+import { BaseTemplate } from "./base-template";
 
-export const README_TEMPLATE = `
-# Quilt Package Engine for Benchling Notebooks.
+export class ReadmeTemplate extends BaseTemplate {
+    protected template(): string {
+        return "# {} ({})\n\n" +
+            "## Benchling Webhook Example\n\n" +
+            "This auto-generated package uses Amazon Step Functions and the " +
+            "[Quilt Packaging Engine]" +
+            "(https://docs.quilt.bio/quilt-platform-catalog-user/packaging) " +
+            "to collect data and metadata " +
+            "for a Benchling Notebook entry.\n\n" +
+            "## Files\n\n" +
+            "- [{}](./{}): Entry data\n" +
+            "- [{}](./{}): Webhook event message\n";
+    }
 
-This package contains the data and metadata for a Benchling Notebook entry.
+    protected createContent(): stepfunctions.Pass {
+        return new stepfunctions.Pass(
+            this.scope,
+            "CreateReadmeContent",
+            {
+                parameters: {
+                    "content.$": "States.Format('" + this.template() + "'" +
+                        ", $.entry.entryData.name" +
+                        ", $.entry.entryData.id" +
+                        ", $.files.FILES.ENTRY_JSON,  $.files.FILES.ENTRY_JSON" +
+                        ", $.files.FILES.INPUT_JSON,  $.files.FILES.INPUT_JSON" +
+                        ")",
+                },
+                resultPath: "$.content",
+            },
+        );
+    }
 
-## Files
+    private setupFiles(): stepfunctions.Pass {
+        return new stepfunctions.Pass(
+            this.scope,
+            "SetupREADME",
+            {
+                parameters: {
+                    "FILES": FILES,
+                },
+                resultPath: "$.files",
+            },
+        );
+    }
 
-- ${FILES.ENTRY_JSON}: Entry data
-- ${FILES.INPUT_JSON}: Webhook event message
-- ${FILES.README_MD}: This README file
-`;
+    public createMarkdown(): stepfunctions.Chain {
+        return stepfunctions.Chain
+            .start(this.setupFiles())
+            .next(super.createMarkdown());
+    }
+}

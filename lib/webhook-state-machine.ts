@@ -7,7 +7,6 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
 import { WebhookStateMachineProps } from "./types";
-import { README_TEMPLATE } from "./templates/readme";
 import { PackagingStateMachine } from "./packaging-state-machine";
 
 export class WebhookStateMachine extends Construct {
@@ -19,9 +18,9 @@ export class WebhookStateMachine extends Construct {
         this.props = props;
 
         // Create the package entry state machine
-        const packageEntryStateMachine = new PackagingStateMachine(
+        const packagingStateMachine = new PackagingStateMachine(
             this,
-            "PackageEntry",
+            "Packaging",
             {
                 bucket: props.bucket,
                 prefix: props.prefix,
@@ -29,12 +28,11 @@ export class WebhookStateMachine extends Construct {
                 queueName: props.queueName,
                 region: props.region,
                 account: props.account,
-                exportProcessor: props.exportProcessor,
             },
         );
 
         const definition = this.createDefinition(
-            packageEntryStateMachine.stateMachine,
+            packagingStateMachine.stateMachine,
         );
 
         const role = new iam.Role(scope, "StateMachineRole", {
@@ -75,37 +73,36 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createDefinition(
-        packageEntryStateMachine: stepfunctions.StateMachine,
+        packagingStateMachine: stepfunctions.StateMachine,
     ): stepfunctions.IChainable {
-        const startPackageEntryExecution = this.createStartPackageEntryTask(
-            packageEntryStateMachine,
+        const startPackagingExecution = this.createStartPackagingTask(
+            packagingStateMachine,
         );
         const canvasWorkflow = this.createCanvasWorkflow(
-            startPackageEntryExecution,
+            startPackagingExecution,
         );
         const buttonWorkflow = this.createButtonWorkflow(
-            startPackageEntryExecution,
+            startPackagingExecution,
         );
 
         return this.createChannelChoice(
-            startPackageEntryExecution,
+            startPackagingExecution,
             canvasWorkflow,
             buttonWorkflow,
         );
     }
 
-    private createStartPackageEntryTask(
-        packageEntryStateMachine: stepfunctions.StateMachine,
+    private createStartPackagingTask(
+        packagingStateMachine: stepfunctions.StateMachine,
     ): stepfunctions.IChainable {
-        const startPackageEntryExecution = new tasks
-            .StepFunctionsStartExecution(this, "StartPackageEntryExecution", {
-            stateMachine: packageEntryStateMachine,
+        const startPackagingExecution = new tasks
+            .StepFunctionsStartExecution(this, "StartPackagingExecution", {
+            stateMachine: packagingStateMachine,
             input: stepfunctions.TaskInput.fromObject({
                 entity: stepfunctions.JsonPath.stringAt("$.var.entity"),
                 packageName: stepfunctions.JsonPath.stringAt(
                     `States.Format('{}/{}', '${this.props.prefix}', $.var.entity)`,
                 ),
-                readme: README_TEMPLATE,
                 registry: this.props.bucket.bucketName,
                 baseURL: stepfunctions.JsonPath.stringAt("$.baseURL"),
                 message: stepfunctions.JsonPath.stringAt("$.message"),
@@ -121,12 +118,12 @@ export class WebhookStateMachine extends Construct {
             },
         });
 
-        startPackageEntryExecution.addCatch(errorHandler);
-        return startPackageEntryExecution;
+        startPackagingExecution.addCatch(errorHandler);
+        return startPackagingExecution;
     }
 
     private createButtonWorkflow(
-        startPackageEntryExecution: stepfunctions.IChainable,
+        startPackagingExecution: stepfunctions.IChainable,
     ): stepfunctions.IChainable {
         const buttonMetadataTask = new stepfunctions.Pass(
             this,
@@ -136,7 +133,6 @@ export class WebhookStateMachine extends Construct {
                     "entity.$": "$.message.buttonId",
                     "packageName.$":
                         `States.Format('{}/{}', '${this.props.prefix}', $.message.buttonId)`,
-                    "readme": README_TEMPLATE,
                     "registry": this.props.bucket.bucketName,
                 },
                 resultPath: "$.var",
@@ -154,28 +150,38 @@ export class WebhookStateMachine extends Construct {
         });
 
         return buttonMetadataTask
-            .next(startPackageEntryExecution)
+            .next(startPackagingExecution)
             .next(successResponse);
     }
 
     private createCanvasWorkflow(
-        startPackageEntryExecution: stepfunctions.IChainable,
+        startPackagingExecution: stepfunctions.IChainable,
     ): stepfunctions.IChainable {
         return this.createFindAppEntryTask()
             .next(this.createQuiltMetadata())
             .next(this.createCanvasTask())
-            .next(startPackageEntryExecution);
+            .next(startPackagingExecution);
     }
 
     private createChannelChoice(
-        startPackageEntryExecution: stepfunctions.IChainable,
+        startPackagingExecution: stepfunctions.IChainable,
         canvasWorkflow: stepfunctions.IChainable,
         buttonWorkflow: stepfunctions.IChainable,
     ): stepfunctions.Choice {
         return new stepfunctions.Choice(this, "CheckChannel")
             .when(
                 stepfunctions.Condition.stringEquals("$.channel", "events"),
-                startPackageEntryExecution,
+                new stepfunctions.Pass(this, "SetupEventMetadata", {
+                    parameters: {
+                        "entity.$": "$.message.resourceId",
+                        "packageName.$": `States.Format('{}/{}', '${this.props.prefix}', $.message.resourceId)`,
+                        "registry": this.props.bucket.bucketName,
+                        "baseURL.$": "$.baseURL",
+                        "message.$": "$.message",
+                    },
+                    resultPath: "$.var",
+                })
+                .next(startPackagingExecution),
             )
             .when(
                 stepfunctions.Condition.or(
@@ -243,7 +249,6 @@ export class WebhookStateMachine extends Construct {
                     "entity.$": "$.appEntries.entry.id",
                     "packageName.$":
                         `States.Format('{}/{}', '${this.props.prefix}', $.appEntries.entry.id)`,
-                    "readme": README_TEMPLATE,
                     "registry": this.props.bucket.bucketName,
                     "catalog": this.props.quiltCatalog,
                 },
@@ -325,7 +330,7 @@ export class WebhookStateMachine extends Construct {
                             {
                                 "id.$": "$.appEntries.entry.id",
                                 "type": "BUTTON",
-                                "text": "Sync",
+                                "text": "Update Package",
                                 "enabled": true,
                             },
                         ],
