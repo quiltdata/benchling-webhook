@@ -18,9 +18,9 @@ export class WebhookStateMachine extends Construct {
         this.props = props;
 
         // Create the package entry state machine
-        const packageEntryStateMachine = new PackagingStateMachine(
+        const packagingStateMachine = new PackagingStateMachine(
             this,
-            "PackageEntry",
+            "Packaging",
             {
                 bucket: props.bucket,
                 prefix: props.prefix,
@@ -32,7 +32,7 @@ export class WebhookStateMachine extends Construct {
         );
 
         const definition = this.createDefinition(
-            packageEntryStateMachine.stateMachine,
+            packagingStateMachine.stateMachine,
         );
 
         const role = new iam.Role(scope, "StateMachineRole", {
@@ -73,31 +73,31 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createDefinition(
-        packageEntryStateMachine: stepfunctions.StateMachine,
+        packagingStateMachine: stepfunctions.StateMachine,
     ): stepfunctions.IChainable {
-        const startPackageEntryExecution = this.createStartPackageEntryTask(
-            packageEntryStateMachine,
+        const startPackagingExecution = this.createStartPackagingTask(
+            packagingStateMachine,
         );
         const canvasWorkflow = this.createCanvasWorkflow(
-            startPackageEntryExecution,
+            startPackagingExecution,
         );
         const buttonWorkflow = this.createButtonWorkflow(
-            startPackageEntryExecution,
+            startPackagingExecution,
         );
 
         return this.createChannelChoice(
-            startPackageEntryExecution,
+            startPackagingExecution,
             canvasWorkflow,
             buttonWorkflow,
         );
     }
 
-    private createStartPackageEntryTask(
-        packageEntryStateMachine: stepfunctions.StateMachine,
+    private createStartPackagingTask(
+        packagingStateMachine: stepfunctions.StateMachine,
     ): stepfunctions.IChainable {
-        const startPackageEntryExecution = new tasks
-            .StepFunctionsStartExecution(this, "StartPackageEntryExecution", {
-            stateMachine: packageEntryStateMachine,
+        const startPackagingExecution = new tasks
+            .StepFunctionsStartExecution(this, "StartPackagingExecution", {
+            stateMachine: packagingStateMachine,
             input: stepfunctions.TaskInput.fromObject({
                 entity: stepfunctions.JsonPath.stringAt("$.var.entity"),
                 packageName: stepfunctions.JsonPath.stringAt(
@@ -118,12 +118,12 @@ export class WebhookStateMachine extends Construct {
             },
         });
 
-        startPackageEntryExecution.addCatch(errorHandler);
-        return startPackageEntryExecution;
+        startPackagingExecution.addCatch(errorHandler);
+        return startPackagingExecution;
     }
 
     private createButtonWorkflow(
-        startPackageEntryExecution: stepfunctions.IChainable,
+        startPackagingExecution: stepfunctions.IChainable,
     ): stepfunctions.IChainable {
         const buttonMetadataTask = new stepfunctions.Pass(
             this,
@@ -150,21 +150,21 @@ export class WebhookStateMachine extends Construct {
         });
 
         return buttonMetadataTask
-            .next(startPackageEntryExecution)
+            .next(startPackagingExecution)
             .next(successResponse);
     }
 
     private createCanvasWorkflow(
-        startPackageEntryExecution: stepfunctions.IChainable,
+        startPackagingExecution: stepfunctions.IChainable,
     ): stepfunctions.IChainable {
         return this.createFindAppEntryTask()
             .next(this.createQuiltMetadata())
             .next(this.createCanvasTask())
-            .next(startPackageEntryExecution);
+            .next(startPackagingExecution);
     }
 
     private createChannelChoice(
-        startPackageEntryExecution: stepfunctions.IChainable,
+        startPackagingExecution: stepfunctions.IChainable,
         canvasWorkflow: stepfunctions.IChainable,
         buttonWorkflow: stepfunctions.IChainable,
     ): stepfunctions.Choice {
@@ -181,7 +181,7 @@ export class WebhookStateMachine extends Construct {
                     },
                     resultPath: "$.var",
                 })
-                .next(startPackageEntryExecution),
+                .next(startPackagingExecution),
             )
             .when(
                 stepfunctions.Condition.or(

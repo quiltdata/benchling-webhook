@@ -7,7 +7,6 @@ import * as path from "path";
 import { Construct } from "constructs";
 import { WebhookApi } from "./api-gateway";
 import { WebhookStateMachine } from "./webhook-state-machine";
-import { PackagingStateMachine } from "./packaging-state-machine";
 
 interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
@@ -38,16 +37,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", props.bucketName);
 
         const benchlingConnection = this.createBenchlingConnection(props);
-
-        // Create the packaging state machine with Lambda functions
-        const packagingStateMachine = new PackagingStateMachine(this, "PackagingStateMachine", {
-            bucket: this.bucket,
-            prefix: props.prefix,
-            queueName: props.queueName,
-            region: this.region,
-            account: this.account,
-            benchlingConnection,
-        });
 
         // Create the webhook state machine
         this.stateMachine = new WebhookStateMachine(this, "StateMachine", {
