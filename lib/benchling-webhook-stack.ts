@@ -58,8 +58,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             benchlingConnection,
             benchlingTenant: props.benchlingTenant,
             quiltCatalog: props.quiltCatalog,
-            exportProcessor: packagingStateMachine.exportProcessor,
-            stringProcessor: packagingStateMachine.stringProcessor,
         });
 
         this.api = new WebhookApi(this, "WebhookApi", this.stateMachine.stateMachine);

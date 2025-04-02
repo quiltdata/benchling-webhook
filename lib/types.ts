@@ -13,8 +13,6 @@ export interface WebhookStateMachineProps extends BaseStateMachineProps {
     region: string;
     account: string;
     benchlingTenant: string;
-    exportProcessor: lambda.IFunction;
-    stringProcessor: lambda.IFunction;
     quiltCatalog?: string;
 }
 
@@ -22,8 +20,6 @@ export interface PackageEntryStateMachineProps extends BaseStateMachineProps {
     queueName: string;
     region: string;
     account: string;
-    exportProcessor: lambda.IFunction;
-    stringProcessor: lambda.IFunction;
 }
 
 export interface ProcessExportEvent {
