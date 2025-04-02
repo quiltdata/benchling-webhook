@@ -1,21 +1,103 @@
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
 import { Duration } from "aws-cdk-lib";
+import * as cdk from "aws-cdk-lib";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as nodejs from "aws-cdk-lib/aws-lambda-nodejs";
+import * as path from "path";
 import * as tasks from "aws-cdk-lib/aws-stepfunctions-tasks";
 import * as events from "aws-cdk-lib/aws-events";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
-import { ExportStatus, PackageEntryStateMachineProps } from "./types";
+import { ExportStatus, PackagingStateMachineProps } from "./types";
 import { EXPORT_STATUS, FILES } from "./constants";
+import { ReadmeTemplate } from "./templates/readme";
+import { EntryTemplate } from "./templates/entry";
 
 export class PackagingStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
+    private readonly props: PackagingStateMachineProps;
 
-    constructor(scope: Construct, id: string, props: PackageEntryStateMachineProps) {
+    private readonly exportProcessor: lambda.IFunction;
+    private readonly stringProcessor: lambda.IFunction;
+
+    constructor(
+        scope: Construct,
+        id: string,
+        props: PackagingStateMachineProps,
+    ) {
         super(scope, id);
-        const definition = this.createDefinition(props);
+        this.props = props;
 
-        const role = new iam.Role(scope, "PackageEntryStateMachineRole", {
+        // Create the export processor Lambda
+        this.exportProcessor = new nodejs.NodejsFunction(
+            this,
+            "ExportProcessor",
+            {
+                entry: path.join(__dirname, "lambda/process-export.ts"),
+                handler: "handler",
+                runtime: lambda.Runtime.NODEJS_18_X,
+                timeout: cdk.Duration.minutes(5),
+                memorySize: 1024,
+                environment: {
+                    NODE_OPTIONS: "--enable-source-maps",
+                },
+                architecture: lambda.Architecture.ARM_64,
+                bundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "@aws-sdk/client-s3",
+                    ],
+                    forceDockerBundling: false,
+                    target: "node18",
+                    define: {
+                        "process.env.NODE_ENV": JSON.stringify(
+                            process.env.NODE_ENV || "production",
+                        ),
+                    },
+                },
+            },
+        );
+
+        // Create the string processor Lambda
+        this.stringProcessor = new nodejs.NodejsFunction(
+            this,
+            "StringProcessor",
+            {
+                entry: path.join(__dirname, "lambda/process-string.ts"),
+                handler: "handler",
+                runtime: lambda.Runtime.NODEJS_18_X,
+                timeout: cdk.Duration.minutes(1),
+                memorySize: 128,
+                environment: {
+                    NODE_OPTIONS: "--enable-source-maps",
+                },
+                architecture: lambda.Architecture.ARM_64,
+                bundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "@aws-sdk/client-s3",
+                    ],
+                    forceDockerBundling: false,
+                    target: "node18",
+                    define: {
+                        "process.env.NODE_ENV": JSON.stringify(
+                            process.env.NODE_ENV || "production",
+                        ),
+                    },
+                },
+            },
+        );
+
+        // Grant both Lambda functions access to the S3 bucket
+        props.bucket.grantReadWrite(this.exportProcessor);
+        props.bucket.grantReadWrite(this.stringProcessor);
+
+        const definition = this.createDefinition();
+
+        const role = new iam.Role(scope, "PackagingStateMachineRole", {
             assumedBy: new iam.ServicePrincipal("states.amazonaws.com"),
         });
 
@@ -25,7 +107,7 @@ export class PackagingStateMachine extends Construct {
                     "states:InvokeHTTPEndpoint",
                     "events:RetrieveConnectionCredentials",
                     "secretsmanager:DescribeSecret",
-                    "secretsmanager:GetSecretValue"
+                    "secretsmanager:GetSecretValue",
                 ],
                 resources: ["*"],
                 effect: iam.Effect.ALLOW,
@@ -45,19 +127,64 @@ export class PackagingStateMachine extends Construct {
         );
     }
 
-    private createDefinition(
-        props: PackageEntryStateMachineProps,
-    ): stepfunctions.IChainable {
-        const fetchEntryTask = this.createFetchEntryTask(
-            props.benchlingConnection,
-        );
-        const exportTask = this.createExportTask(props.benchlingConnection);
-        const pollExportTask = this.createPollExportTask(
-            props.benchlingConnection,
-        );
-        const waitState = this.createWaitState();
+    private writeTemplates(): stepfunctions.Chain {
+        const readmeTemplate = new ReadmeTemplate(this);
+        // const entryTemplate = new EntryTemplate(this);
 
-        const extractDownloadURL = new stepfunctions.Pass(
+        return readmeTemplate.write(this.stringProcessor, this.props.bucket, FILES.README_MD);
+            //.next(entryTemplate.write(this.stringProcessor, this.props.bucket, FILES.ENTRY_MD));
+    }
+
+    private createDefinition(): stepfunctions.IChainable {
+        const fetchEntryTask = this.createFetchEntryTask();
+        const templates = this.writeTemplates();
+        const exportWorkflow = this.createExportWorkflow();
+
+        return fetchEntryTask.next(templates).next(exportWorkflow);
+    }
+
+
+    private createExportWorkflow(): stepfunctions.IChainable {
+        const exportTask = this.createExportTask();
+        const pollExportTask = this.createPollExportTask();
+        const waitState = this.createWaitState();
+        const exportChoice = this.createExportChoice(waitState, pollExportTask);
+
+        return exportTask.next(pollExportTask).next(exportChoice);
+    }
+
+    private createExportChoice(
+        waitState: stepfunctions.Wait,
+        pollExportTask: stepfunctions.CustomState,
+    ): stepfunctions.Choice {
+        const extractDownloadURL = this.createExtractDownloadURLTask();
+        const successChain = this.createSuccessChain(extractDownloadURL);
+
+        return new stepfunctions.Choice(this, "CheckExportStatus")
+            .when(
+                stepfunctions.Condition.stringEquals(
+                    "$.exportStatus.status",
+                    EXPORT_STATUS.RUNNING,
+                ),
+                waitState.next(pollExportTask),
+            )
+            .when(
+                stepfunctions.Condition.stringEquals(
+                    "$.exportStatus.status",
+                    EXPORT_STATUS.SUCCEEDED,
+                ),
+                successChain,
+            )
+            .otherwise(
+                new stepfunctions.Fail(this, "ExportFailed", {
+                    cause: "Export task did not succeed",
+                    error: "ExportFailure",
+                }),
+            );
+    }
+
+    private createExtractDownloadURLTask(): stepfunctions.Pass {
+        return new stepfunctions.Pass(
             this,
             "ExtractDownloadURL",
             {
@@ -68,16 +195,21 @@ export class PackagingStateMachine extends Construct {
                         "$.exportStatus.response.response.downloadURL",
                     "packageName.$": "$.packageName",
                     "registry.$": "$.registry",
+                    "FILES": FILES,
                 },
                 resultPath: "$.exportStatus",
             },
         );
+    }
 
+    private createSuccessChain(
+        extractDownloadURL: stepfunctions.Pass,
+    ): stepfunctions.IChainable {
         const processExportTask = new tasks.LambdaInvoke(
             this,
             "ProcessExport",
             {
-                lambdaFunction: props.exportProcessor,
+                lambdaFunction: this.exportProcessor,
                 payload: stepfunctions.TaskInput.fromObject({
                     downloadURL: stepfunctions.JsonPath.stringAt(
                         "$.exportStatus.downloadURL",
@@ -94,59 +226,25 @@ export class PackagingStateMachine extends Construct {
         );
 
         const writeEntryToS3Task = this.createS3WriteTask(
-            props.bucket,
+            this.props.bucket,
             FILES.ENTRY_JSON,
             "$.entry.entryData",
         );
-        const writeReadmeToS3Task = this.createS3WriteTask(
-            props.bucket,
-            FILES.README_MD,
-            "$.readme",
-        );
         const writeMetadataTask = this.createS3WriteTask(
-            props.bucket,
+            this.props.bucket,
             FILES.INPUT_JSON,
             "$.message",
         );
-        const sendToSQSTask = this.createSQSTask(props);
+        const sendToSQSTask = this.createSQSTask(this.props);
 
-        const exportChoice = new stepfunctions.Choice(this, "CheckExportStatus")
-            .when(
-                stepfunctions.Condition.stringEquals(
-                    "$.exportStatus.status",
-                    EXPORT_STATUS.RUNNING,
-                ),
-                waitState.next(pollExportTask),
-            )
-            .when(
-                stepfunctions.Condition.stringEquals(
-                    "$.exportStatus.status",
-                    EXPORT_STATUS.SUCCEEDED,
-                ),
-                extractDownloadURL
-                    .next(processExportTask)
-                    .next(writeEntryToS3Task)
-                    .next(writeReadmeToS3Task)
-                    .next(writeMetadataTask)
-                    .next(sendToSQSTask),
-            )
-            .otherwise(
-                new stepfunctions.Fail(this, "ExportFailed", {
-                    cause: "Export task did not succeed",
-                    error: "ExportFailure",
-                }),
-            );
-
-        const exportWorkflow = exportTask
-            .next(pollExportTask)
-            .next(exportChoice);
-
-        return fetchEntryTask.next(exportWorkflow);
+        return extractDownloadURL
+            .next(processExportTask)
+            .next(writeEntryToS3Task)
+            .next(writeMetadataTask)
+            .next(sendToSQSTask);
     }
 
-    private createFetchEntryTask(
-        benchlingConnection: events.CfnConnection,
-    ): stepfunctions.CustomState {
+    private createFetchEntryTask(): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "FetchEntry", {
             stateJson: {
                 Type: "Task",
@@ -156,7 +254,7 @@ export class PackagingStateMachine extends Construct {
                         "States.Format('{}/api/v2/entries/{}', $.baseURL, $.entity)",
                     Method: "GET",
                     Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
+                        ConnectionArn: this.props.benchlingConnection.attrArn,
                     },
                 },
                 ResultSelector: {
@@ -167,9 +265,7 @@ export class PackagingStateMachine extends Construct {
         });
     }
 
-    private createExportTask(
-        benchlingConnection: events.CfnConnection,
-    ): stepfunctions.CustomState {
+    private createExportTask(): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "ExportEntry", {
             stateJson: {
                 Type: "Task",
@@ -179,7 +275,7 @@ export class PackagingStateMachine extends Construct {
                         "States.Format('{}/api/v2/exports', $.baseURL)",
                     Method: "POST",
                     Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
+                        ConnectionArn: this.props.benchlingConnection.attrArn,
                     },
                     RequestBody: {
                         "id.$": "$.entity",
@@ -193,9 +289,7 @@ export class PackagingStateMachine extends Construct {
         });
     }
 
-    private createPollExportTask(
-        benchlingConnection: events.CfnConnection,
-    ): stepfunctions.CustomState {
+    private createPollExportTask(): stepfunctions.CustomState {
         return new stepfunctions.CustomState(this, "PollExportStatus", {
             stateJson: {
                 Type: "Task",
@@ -205,7 +299,7 @@ export class PackagingStateMachine extends Construct {
                         "States.Format('{}/api/v2/tasks/{}', $.baseURL, $.exportTask.taskId)",
                     Method: "GET",
                     Authentication: {
-                        ConnectionArn: benchlingConnection.attrArn,
+                        ConnectionArn: this.props.benchlingConnection.attrArn,
                     },
                 },
                 ResultSelector: {
@@ -234,20 +328,24 @@ export class PackagingStateMachine extends Construct {
         }S3`;
         const resultPath = bodyPath.replace("Body", "put") + "Result";
 
+        const parameters: Record<string, any> = {
+            Bucket: bucket.bucketName,
+            "Key.$": `States.Format('{}/{}', $.packageName, '${filename}')`,
+            "Body.$": bodyPath,
+        };
+
         return new tasks.CallAwsService(this, taskId, {
             service: "s3",
             action: "putObject",
-            parameters: {
-                Bucket: bucket.bucketName,
-                "Key.$": `States.Format('{}/{}', $.packageName, '${filename}')`,
-                "Body.$": bodyPath,
-            },
+            parameters,
             iamResources: [bucket.arnForObjects("*")],
             resultPath: resultPath,
         });
     }
 
-    private createSQSTask(props: PackageEntryStateMachineProps): tasks.CallAwsService {
+    private createSQSTask(
+        props: PackagingStateMachineProps,
+    ): tasks.CallAwsService {
         const queueArn =
             `arn:aws:sqs:${props.region}:${props.account}:${props.queueName}`;
         const queueUrl =

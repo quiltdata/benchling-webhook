@@ -30,7 +30,6 @@ export const handler = async (event: ProcessExportEvent): Promise<ProcessExportR
                     Bucket: event.registry,
                     Key: key,
                     Body: fileContent,
-                    ContentType: getContentType(entry.entryName),
                 }));
             }
         });
@@ -56,12 +55,4 @@ async function downloadFile(url: string): Promise<Buffer> {
         throw new Error(`Failed to download file: ${response.statusText}`);
     }
     return Buffer.from(await response.arrayBuffer());
-}
-
-import { MIME_TYPES } from "../constants";
-
-function getContentType(fileName: string): string {
-    const extension = fileName.split(".").pop()?.toLowerCase() || "";
-    const mimeTypeKey = extension.toUpperCase() as keyof typeof MIME_TYPES;
-    return MIME_TYPES[mimeTypeKey] || MIME_TYPES.DEFAULT;
 }
