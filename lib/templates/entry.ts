@@ -27,26 +27,41 @@ export class EntryTemplate extends BaseTemplate {
             "CreateEntryContent",
             {
                 parameters: {
-                    "content.$": "States.Format('" + this.template() + "', " +
-                        "$.entry.entryData.name, " +
-                        "$.entry.entryData.webURL, " +
-                        "$.entry.entryData.id, " +
-                        "$.entry.entryData.displayId, " +
-                        "$.entry.entryData.folderId, " +
-                        "$.entry.entryData.createdAt, " +
-                        "$.entry.entryData.modifiedAt, " +
-                        "States.Array($.entry.entryData.authors[*], " +
-                            "'* ' + $.name + '\\n  * id: ' + $.id + '\\n  * handle: ' + $.handle), " +
-                        "$.entry.entryData.schema.id, " +
-                        "$.entry.entryData.schema.name, " +
-                        "States.Array(States.StringToJson(States.JsonToString($.entry.entryData.fields))[*], " +
-                            "'* ' + States.JsonToString(@.key) + ': ' + @.value.displayValue), " +
-                        "States.Array(States.StringToJson(States.JsonToString($.entry.entryData.customFields))[*], " +
-                            "'* ' + States.JsonToString(@.key) + ': ' + @.value.value)" +
-                        ")",
+                    "content": {
+                        "title.$": "$.entry.entryData.name",
+                        "url.$": "$.entry.entryData.webURL",
+                        "id.$": "$.entry.entryData.id",
+                        "displayId.$": "$.entry.entryData.displayId",
+                        "folderId.$": "$.entry.entryData.folderId",
+                        "createdAt.$": "$.entry.entryData.createdAt",
+                        "modifiedAt.$": "$.entry.entryData.modifiedAt",
+                        "authors.$": "States.Array($.entry.entryData.authors[*], '* ' + $.name + '\\n  * id: ' + $.id + '\\n  * handle: ' + $.handle)",
+                        "schemaId.$": "$.entry.entryData.schema.id",
+                        "schemaName.$": "$.entry.entryData.schema.name",
+                        "fields.$": "States.Array(States.StringToJson(States.JsonToString($.entry.entryData.fields))[*], '* ' + States.JsonToString(@.key) + ': ' + @.value.displayValue)",
+                        "customFields.$": "States.Array(States.StringToJson(States.JsonToString($.entry.entryData.customFields))[*], '* ' + States.JsonToString(@.key) + ': ' + @.value.value)"
+                    }
                 },
                 resultPath: "$.content",
             }
         );
+    }
+
+    protected template(): string {
+        return "# [{title}]({url})\n\n" +
+               "* id: {id}\n" +
+               "* displayId: {displayId}\n" +
+               "* folderId: {folderId}\n" +
+               "* createdAt: {createdAt}\n" +
+               "* modifiedAt: {modifiedAt}\n\n" +
+               "## Authors\n" +
+               "{authors}\n\n" +
+               "## Schema\n\n" +
+               "* id: {schemaId}\n" +
+               "* name: {schemaName}\n\n" +
+               "## Fields\n" +
+               "{fields}\n\n" +
+               "## Custom fields\n" +
+               "{customFields}";
     }
 }
