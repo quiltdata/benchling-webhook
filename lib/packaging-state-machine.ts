@@ -12,6 +12,7 @@ import { Construct } from "constructs";
 import { ExportStatus, PackagingStateMachineProps } from "./types";
 import { EXPORT_STATUS, FILES } from "./constants";
 import { README_TEMPLATE } from "./templates/readme";
+import { ENTRY_TEMPLATE } from "./templates/entry";
 
 export class PackagingStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
@@ -149,6 +150,17 @@ export class PackagingStateMachine extends Construct {
                 },
                 resultPath: "$.readme",
             },
+        );
+
+        const createEntryMarkdown = new stepfunctions.Pass(
+            this,
+            "CreateEntryMarkdown",
+            {
+                parameters: {
+                    "markdown.$": "States.Format('" + ENTRY_TEMPLATE + "')",
+                },
+                resultPath: "$.entryMarkdown",
+            }
         );
 
         const WriteReadmeTask = new tasks.LambdaInvoke(
