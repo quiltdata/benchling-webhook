@@ -8,6 +8,7 @@ export const FILES = {
     ENTRY_JSON: "entry.json",
     INPUT_JSON: "input.json",
     README_MD: "README.md",
+    ENTRY_MD: "entry.md",
 } as const;
 
 export const MIME_TYPES = {
