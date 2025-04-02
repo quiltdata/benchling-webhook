@@ -1,4 +1,9 @@
-export const ENTRY_TEMPLATE = 
+import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
+import { Construct } from "constructs";
+
+export class EntryTemplate {
+    private readonly scope: Construct;
+    private static readonly TEMPLATE = 
 `# [\${$.entry.entryData.name}](\${$.entry.entryData.webURL})
 
 * id: \${$.entry.entryData.id}
@@ -23,3 +28,21 @@ export const ENTRY_TEMPLATE =
 ## Custom fields
 \${States.Array(States.StringToJson(States.JsonToString($.entry.entryData.customFields))[*],
 '* ' + States.JsonToString(@.key) + ': ' + @.value.value)}`;
+
+    constructor(scope: Construct) {
+        this.scope = scope;
+    }
+
+    public createEntryMarkdown(): stepfunctions.Pass {
+        return new stepfunctions.Pass(
+            this.scope,
+            "CreateEntryMarkdown",
+            {
+                parameters: {
+                    "markdown.$": EntryTemplate.TEMPLATE,
+                },
+                resultPath: "$.entryMarkdown",
+            }
+        );
+    }
+}
