@@ -29,6 +29,7 @@ export class WebhookStateMachine extends Construct {
                 region: props.region,
                 account: props.account,
                 exportProcessor: props.exportProcessor,
+                stringProcessor: props.stringProcessor,
             },
         );
 

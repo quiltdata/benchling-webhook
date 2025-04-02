@@ -38,6 +38,17 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         const benchlingConnection = this.createBenchlingConnection(props);
 
+        // Create the packaging state machine with Lambda functions
+        const packagingStateMachine = new PackagingStateMachine(this, "PackagingStateMachine", {
+            bucket: this.bucket,
+            prefix: props.prefix,
+            queueName: props.queueName,
+            region: this.region,
+            account: this.account,
+            benchlingConnection,
+        });
+
+        // Create the webhook state machine
         this.stateMachine = new WebhookStateMachine(this, "StateMachine", {
             bucket: this.bucket,
             prefix: props.prefix,
@@ -47,6 +58,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
             benchlingConnection,
             benchlingTenant: props.benchlingTenant,
             quiltCatalog: props.quiltCatalog,
+            exportProcessor: packagingStateMachine.exportProcessor,
+            stringProcessor: packagingStateMachine.stringProcessor,
         });
 
         this.api = new WebhookApi(this, "WebhookApi", this.stateMachine.stateMachine);
