@@ -29,54 +29,66 @@ export class PackagingStateMachine extends Construct {
         this.props = props;
 
         // Create the export processor Lambda
-        this.exportProcessor = new nodejs.NodejsFunction(this, "ExportProcessor", {
-            entry: path.join(__dirname, "lambda/process-export.ts"),
-            handler: "handler",
-            runtime: lambda.Runtime.NODEJS_18_X,
-            timeout: cdk.Duration.minutes(5),
-            memorySize: 1024,
-            environment: {
-                NODE_OPTIONS: "--enable-source-maps",
-            },
-            architecture: lambda.Architecture.ARM_64,
-            bundling: {
-                minify: true,
-                sourceMap: false,
-                externalModules: [
-                    "@aws-sdk/client-s3",
-                ],
-                forceDockerBundling: false,
-                target: "node18",
-                define: {
-                    "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "production"),
+        this.exportProcessor = new nodejs.NodejsFunction(
+            this,
+            "ExportProcessor",
+            {
+                entry: path.join(__dirname, "lambda/process-export.ts"),
+                handler: "handler",
+                runtime: lambda.Runtime.NODEJS_18_X,
+                timeout: cdk.Duration.minutes(5),
+                memorySize: 1024,
+                environment: {
+                    NODE_OPTIONS: "--enable-source-maps",
+                },
+                architecture: lambda.Architecture.ARM_64,
+                bundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "@aws-sdk/client-s3",
+                    ],
+                    forceDockerBundling: false,
+                    target: "node18",
+                    define: {
+                        "process.env.NODE_ENV": JSON.stringify(
+                            process.env.NODE_ENV || "production",
+                        ),
+                    },
                 },
             },
-        });
+        );
 
         // Create the string processor Lambda
-        this.stringProcessor = new nodejs.NodejsFunction(this, "StringProcessor", {
-            entry: path.join(__dirname, "lambda/process-string.ts"),
-            handler: "handler",
-            runtime: lambda.Runtime.NODEJS_18_X,
-            timeout: cdk.Duration.minutes(1),
-            memorySize: 128,
-            environment: {
-                NODE_OPTIONS: "--enable-source-maps",
-            },
-            architecture: lambda.Architecture.ARM_64,
-            bundling: {
-                minify: true,
-                sourceMap: false,
-                externalModules: [
-                    "@aws-sdk/client-s3",
-                ],
-                forceDockerBundling: false,
-                target: "node18",
-                define: {
-                    "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "production"),
+        this.stringProcessor = new nodejs.NodejsFunction(
+            this,
+            "StringProcessor",
+            {
+                entry: path.join(__dirname, "lambda/process-string.ts"),
+                handler: "handler",
+                runtime: lambda.Runtime.NODEJS_18_X,
+                timeout: cdk.Duration.minutes(1),
+                memorySize: 128,
+                environment: {
+                    NODE_OPTIONS: "--enable-source-maps",
+                },
+                architecture: lambda.Architecture.ARM_64,
+                bundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "@aws-sdk/client-s3",
+                    ],
+                    forceDockerBundling: false,
+                    target: "node18",
+                    define: {
+                        "process.env.NODE_ENV": JSON.stringify(
+                            process.env.NODE_ENV || "production",
+                        ),
+                    },
                 },
             },
-        });
+        );
 
         // Grant both Lambda functions access to the S3 bucket
         props.bucket.grantReadWrite(this.exportProcessor);
@@ -128,22 +140,26 @@ export class PackagingStateMachine extends Construct {
             "CreateReadme",
             {
                 parameters: {
-                    "readme.$": "States.Format('" + README_TEMPLATE +
-                        "', $.files.FILES.ENTRY_JSON, $.files.FILES.INPUT_JSON, $.files.FILES.README_MD)",
+                    "readme.$": "States.Format('" + README_TEMPLATE + "'" +
+                        ", $.entry.entryData.name" +
+                        ", $.entry.entryData.id" +
+                        ", $.files.FILES.ENTRY_JSON,  $.files.FILES.ENTRY_JSON" +
+                        ", $.files.FILES.INPUT_JSON,  $.files.FILES.INPUT_JSON" +
+                        ")",
                 },
                 resultPath: "$.readme",
             },
         );
 
-        const writeReadmeToS3Task = new tasks.LambdaInvoke(
+        const WriteReadmeTask = new tasks.LambdaInvoke(
             this,
-            "WriteReadmeToS3",
+            "WriteReadme",
             {
                 lambdaFunction: this.stringProcessor,
                 payload: stepfunctions.TaskInput.fromObject({
                     bucket: this.props.bucket.bucketName,
                     key: stepfunctions.JsonPath.stringAt(
-                        `States.Format('{}/{}', $.packageName, '${FILES.README_MD}')`
+                        `States.Format('{}/{}', $.packageName, '${FILES.README_MD}')`,
                     ),
                     body: stepfunctions.JsonPath.stringAt("$.readme.readme"),
                 }),
@@ -162,7 +178,7 @@ export class PackagingStateMachine extends Construct {
                     resultPath: "$.files",
                 },
             ),
-        ).next(createReadme).next(writeReadmeToS3Task);
+        ).next(createReadme).next(WriteReadmeTask);
     }
 
     private createExportWorkflow(): stepfunctions.IChainable {
