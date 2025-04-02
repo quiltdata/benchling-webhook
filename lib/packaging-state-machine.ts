@@ -167,7 +167,7 @@ export class PackagingStateMachine extends Construct {
         const writeReadmeToS3Task = this.createS3WriteTask(
             this.props.bucket,
             FILES.README_MD,
-            "$.readme",
+            "$.readme.readme",
         );
         const writeMetadataTask = this.createS3WriteTask(
             this.props.bucket,
