@@ -129,7 +129,7 @@ export class PackagingStateMachine extends Construct {
             {
                 parameters: {
                     "readme.$": "States.Format('" + README_TEMPLATE +
-                        "', $.exportStatus.FILES.ENTRY_JSON, $.exportStatus.FILES.INPUT_JSON, $.exportStatus.FILES.README_MD)",
+                        "', $.files.FILES.ENTRY_JSON, $.files.FILES.INPUT_JSON, $.files.FILES.README_MD)",
                 },
                 resultPath: "$.readme",
             },
