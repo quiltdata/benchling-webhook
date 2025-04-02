@@ -17,17 +17,8 @@ export class EntryTemplate extends BaseTemplate {
                         "folderId.$": "$.entry.entryData.folderId",
                         "createdAt.$": "$.entry.entryData.createdAt",
                         "modifiedAt.$": "$.entry.entryData.modifiedAt",
-                        "authors": {
-                            "$": "States.Array($.entry.entryData.authors[*], States.Format('* {}\\n  * id: {}\\n  * handle: {}', $.name, $.id, $.handle))"
-                        },
                         "schemaId.$": "$.entry.entryData.schema.id",
-                        "schemaName.$": "$.entry.entryData.schema.name",
-                        "fields": {
-                            "$": "States.Array(States.StringToJson(States.JsonToString($.entry.entryData.fields))[*], States.Format('* {}: {}', States.JsonToString(@.key), @.value.displayValue))"
-                        },
-                        "customFields": {
-                            "$": "States.Array(States.StringToJson(States.JsonToString($.entry.entryData.customFields))[*], States.Format('* {}: {}', States.JsonToString(@.key), @.value.value))"
-                        }
+                        "schemaName.$": "$.entry.entryData.schema.name"
                     }
                 },
                 resultPath: "$.content",
@@ -42,14 +33,8 @@ export class EntryTemplate extends BaseTemplate {
                "* folderId: {folderId}\n" +
                "* createdAt: {createdAt}\n" +
                "* modifiedAt: {modifiedAt}\n\n" +
-               "## Authors\n" +
-               "{authors}\n\n" +
                "## Schema\n\n" +
                "* id: {schemaId}\n" +
-               "* name: {schemaName}\n\n" +
-               "## Fields\n" +
-               "{fields}\n\n" +
-               "## Custom fields\n" +
-               "{customFields}";
+               "* name: {schemaName}\n";
     }
 }
