@@ -11,7 +11,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { ExportStatus, PackagingStateMachineProps } from "./types";
 import { EXPORT_STATUS, FILES } from "./constants";
-import { README_TEMPLATE } from "./templates/readme";
+import { ReadmeTemplate } from "./templates/readme";
 import { ENTRY_TEMPLATE } from "./templates/entry";
 
 export class PackagingStateMachine extends Construct {
@@ -136,21 +136,8 @@ export class PackagingStateMachine extends Construct {
     }
 
     private createReadmeTask(): stepfunctions.Chain {
-        const createReadme = new stepfunctions.Pass(
-            this,
-            "CreateReadme",
-            {
-                parameters: {
-                    "readme.$": "States.Format('" + README_TEMPLATE + "'" +
-                        ", $.entry.entryData.name" +
-                        ", $.entry.entryData.id" +
-                        ", $.files.FILES.ENTRY_JSON,  $.files.FILES.ENTRY_JSON" +
-                        ", $.files.FILES.INPUT_JSON,  $.files.FILES.INPUT_JSON" +
-                        ")",
-                },
-                resultPath: "$.readme",
-            },
-        );
+        const readmeTemplate = new ReadmeTemplate(this);
+        const readmeChain = readmeTemplate.createReadmeChain();
 
         const createEntryMarkdown = new stepfunctions.Pass(
             this,
@@ -179,18 +166,7 @@ export class PackagingStateMachine extends Construct {
             },
         );
 
-        return stepfunctions.Chain.start(
-            new stepfunctions.Pass(
-                this,
-                "SetupREADME",
-                {
-                    parameters: {
-                        "FILES": FILES,
-                    },
-                    resultPath: "$.files",
-                },
-            ),
-        ).next(createReadme).next(WriteReadmeTask);
+        return readmeChain.next(createEntryMarkdown).next(WriteReadmeTask);
     }
 
     private createExportWorkflow(): stepfunctions.IChainable {
