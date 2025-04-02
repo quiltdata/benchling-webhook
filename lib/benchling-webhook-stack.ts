@@ -7,6 +7,7 @@ import * as path from "path";
 import { Construct } from "constructs";
 import { WebhookApi } from "./api-gateway";
 import { WebhookStateMachine } from "./webhook-state-machine";
+import { PackagingStateMachine } from "./packaging-state-machine";
 
 interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
