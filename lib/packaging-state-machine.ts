@@ -235,10 +235,20 @@ export class PackagingStateMachine extends Construct {
             FILES.ENTRY_JSON,
             "$.entry.entryData",
         );
-        const writeReadmeToS3Task = this.createS3WriteTask(
-            this.props.bucket,
-            FILES.README_MD,
-            "$.readme.readme",
+        const writeReadmeToS3Task = new tasks.LambdaInvoke(
+            this,
+            "WriteReadmeToS3",
+            {
+                lambdaFunction: this.stringProcessor,
+                payload: stepfunctions.TaskInput.fromObject({
+                    bucket: this.props.bucket.bucketName,
+                    key: stepfunctions.JsonPath.stringAt(
+                        `States.Format('{}/{}', $.packageName, '${FILES.README_MD}')`
+                    ),
+                    body: stepfunctions.JsonPath.stringAt("$.readme.readme"),
+                }),
+                resultPath: "$.readmeResult",
+            },
         );
         const writeMetadataTask = this.createS3WriteTask(
             this.props.bucket,
