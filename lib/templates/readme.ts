@@ -1,5 +1,4 @@
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
-import { Construct } from "constructs";
 import { FILES } from "../constants";
 import { BaseTemplate } from "./base-template";
 

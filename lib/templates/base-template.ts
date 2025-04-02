@@ -6,9 +6,11 @@ import { Construct } from "constructs";
 
 export abstract class BaseTemplate {
     protected readonly scope: Construct;
+    protected readonly name: string;
 
     constructor(scope: Construct) {
         this.scope = scope;
+        this.name = this.constructor.name;
     }
 
     protected abstract template(): string;
@@ -19,7 +21,7 @@ export abstract class BaseTemplate {
             .start(this.createContent())
             .next(new stepfunctions.Pass(
                 this.scope,
-                `Create${this.constructor.name}Markdown`,
+                `Create${this.name}Markdown`,
                 {
                     parameters: {
                         "markdown.$": "$.content.content"
@@ -33,7 +35,7 @@ export abstract class BaseTemplate {
         return this.createMarkdown()
             .next(new tasks.LambdaInvoke(
                 this.scope,
-                `Write${this.constructor.name}`,
+                `Write${this.name}`,
                 {
                     lambdaFunction: stringProcessor,
                     payload: stepfunctions.TaskInput.fromObject({

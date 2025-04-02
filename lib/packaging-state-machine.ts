@@ -129,10 +129,10 @@ export class PackagingStateMachine extends Construct {
 
     private writeTemplates(): stepfunctions.Chain {
         const readmeTemplate = new ReadmeTemplate(this);
-        const entryTemplate = new EntryTemplate(this);
+        // const entryTemplate = new EntryTemplate(this);
 
-        return readmeTemplate.write(this.stringProcessor, this.props.bucket, FILES.README_MD)
-            .next(entryTemplate.write(this.stringProcessor, this.props.bucket, FILES.ENTRY_MD));
+        return readmeTemplate.write(this.stringProcessor, this.props.bucket, FILES.README_MD);
+            //.next(entryTemplate.write(this.stringProcessor, this.props.bucket, FILES.ENTRY_MD));
     }
 
     private createDefinition(): stepfunctions.IChainable {
