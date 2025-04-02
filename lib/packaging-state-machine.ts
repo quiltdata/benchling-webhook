@@ -140,7 +140,7 @@ export class PackagingStateMachine extends Construct {
         const readmeChain = readmeTemplate.createReadmeChain();
 
         const entryTemplate = new EntryTemplate(this);
-        const createEntryMarkdown = entryTemplate.createEntryMarkdown();
+        const entryMarkdownChain = entryTemplate.createEntryMarkdown();
 
         const WriteReadmeTask = new tasks.LambdaInvoke(
             this,
@@ -158,7 +158,7 @@ export class PackagingStateMachine extends Construct {
             },
         );
 
-        return readmeChain.next(createEntryMarkdown).next(WriteReadmeTask);
+        return readmeChain.next(entryMarkdownChain).next(WriteReadmeTask);
     }
 
     private createExportWorkflow(): stepfunctions.IChainable {
