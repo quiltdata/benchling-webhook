@@ -68,19 +68,24 @@ npx cdk deploy
     2. Click "Add app"
     3. Select the app
     4. Change the 'Role' to 'Admin'
-12. Create a new entry in the Benchling app
+
+## Usage
+
+1. Create a new entry in the Benchling app
     1. Go to the "Benchling" tab
     2. Click "Create > Entry -> Blank entry"
     3. Set a name
     4. Click "Create"
-13. Add the Canvas app to the entry
+2. Add the Canvas app to the entry
     1. Select "Insert -> Canvas" from the Toolbar
     2. Select "Quilt Integration"
     3. Click "Insert"
-14. In the Canvas section
+3. In the Canvas section
     1. Click "Create" (wait a few seconds for it to create)
     2. Wait a bit for the package to be asynchronously created
     3. Command-Click "Quilt Catalog" to open the package in a new window
+4. Drag in an attachment to the Benchling entry
+    1. Click "Update package" to create a new version
 
 ## Testing
 
