@@ -4,14 +4,16 @@ import { BaseTemplate } from "./base-template";
 
 export class ReadmeTemplate extends BaseTemplate {
     protected template(): string {
-        return "# Package With Quilt\n\n" +
-               "## Benchling Webhook Example\n\n" +
-               "This auto-generated package uses Amazon Step Functions " + 
-               "to collect data and metadata" +
-               "for the Benchling Notebook entry: {} ({}).\n\n" +
-               "## Files\n\n" +
-               "- [{}](./{}): Entry data\n" +
-               "- [{}](./{}): Webhook event message\n";
+        return "# {} ({})\n\n" +
+            "## Benchling Webhook Example\n\n" +
+            "This auto-generated package uses Amazon Step Functions and the " +
+            "[Quilt Packaging Engine]" +
+            "(https://docs.quilt.bio/quilt-platform-catalog-user/packaging) " +
+            "to collect data and metadata " +
+            "for a Benchling Notebook entry.\n\n" +
+            "## Files\n\n" +
+            "- [{}](./{}): Entry data\n" +
+            "- [{}](./{}): Webhook event message\n";
     }
 
     protected createContent(): stepfunctions.Pass {
