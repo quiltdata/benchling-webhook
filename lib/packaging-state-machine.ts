@@ -157,7 +157,7 @@ export class PackagingStateMachine extends Construct {
             "CreateEntryMarkdown",
             {
                 parameters: {
-                    "markdown.$": "States.Format('" + ENTRY_TEMPLATE + "')",
+                    "markdown.$": ENTRY_TEMPLATE,
                 },
                 resultPath: "$.entryMarkdown",
             }

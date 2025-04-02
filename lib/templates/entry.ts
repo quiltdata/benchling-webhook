@@ -1,31 +1,25 @@
-export const ENTRY_TEMPLATE = `
-# [{{ entry.name }}]({{ entry.webURL }})
+export const ENTRY_TEMPLATE = 
+`# [\${$.entry.entryData.name}](\${$.entry.entryData.webURL})
 
-* id: {{ entry.id }}
-* displayId: {{ entry.displayId }}
-* folderId: {{ entry.folderId }}
-* createdAt: {{ entry.createdAt }}
-* modifiedAt: {{ entry.modifiedAt }}
+* id: \${$.entry.entryData.id}
+* displayId: \${$.entry.entryData.displayId}
+* folderId: \${$.entry.entryData.folderId}
+* createdAt: \${$.entry.entryData.createdAt}
+* modifiedAt: \${$.entry.entryData.modifiedAt}
 
 ## Authors
-{% for author in entry.authors %}
-* {{ author.name }}
-  * id: {{ author.id }}
-  * handle: {{ author.handle }}
-{%- endfor %}
+\${States.Array($.entry.entryData.authors[*], 
+'* ' + $.name + '\\n  * id: ' + $.id + '\\n  * handle: ' + $.handle)}
 
 ## Schema
 
-* id: {{ entry.schema.id }}
-* name: {{ entry.schema.name }}
+* id: \${$.entry.entryData.schema.id}
+* name: \${$.entry.entryData.schema.name}
 
 ## Fields
-{% for name, value in entry.fields.items() %}
-* {{ name }}: {{ value.displayValue }}
-{%- endfor %}
+\${States.Array(States.StringToJson(States.JsonToString($.entry.entryData.fields))[*], 
+'* ' + States.JsonToString(@.key) + ': ' + @.value.displayValue)}
 
 ## Custom fields
-{% for name, value in entry.customFields.items() %}
-* {{ name }}: {{ value.value }}
-{%- endfor %}
-`;
+\${States.Array(States.StringToJson(States.JsonToString($.entry.entryData.customFields))[*],
+'* ' + States.JsonToString(@.key) + ': ' + @.value.value)}`;
