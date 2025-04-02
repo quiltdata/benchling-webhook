@@ -330,7 +330,7 @@ export class WebhookStateMachine extends Construct {
                             {
                                 "id.$": "$.appEntries.entry.id",
                                 "type": "BUTTON",
-                                "text": "Sync",
+                                "text": "Update Package",
                                 "enabled": true,
                             },
                         ],
