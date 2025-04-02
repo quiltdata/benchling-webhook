@@ -145,10 +145,10 @@ export class PackagingStateMachine extends Construct {
 
     private createReadmeTask(): stepfunctions.Chain {
         const readmeTemplate = new ReadmeTemplate(this);
-        const readmeChain = readmeTemplate.createReadmeChain();
+        const readmeChain = readmeTemplate.createMarkdown();
 
         const entryTemplate = new EntryTemplate(this);
-        const entryMarkdownChain = entryTemplate.createEntryMarkdown();
+        const entryMarkdownChain = entryTemplate.createMarkdown();
 
         const WriteReadmeTask = new tasks.LambdaInvoke(
             this,
@@ -160,7 +160,7 @@ export class PackagingStateMachine extends Construct {
                     key: stepfunctions.JsonPath.stringAt(
                         `States.Format('{}/{}', $.packageName, '${FILES.README_MD}')`,
                     ),
-                    body: stepfunctions.JsonPath.stringAt("$.readme.readme"),
+                    body: stepfunctions.JsonPath.stringAt("$.markdown.markdown"),
                 }),
                 resultPath: "$.readmeResult",
             },
