@@ -127,12 +127,20 @@ export class PackagingStateMachine extends Construct {
         );
     }
 
+    private writeTemplates(): stepfunctions.Chain {
+        const readmeTemplate = new ReadmeTemplate(this);
+        const entryTemplate = new EntryTemplate(this);
+
+        return readmeTemplate.write(this.stringProcessor, this.props.bucket, FILES.README_MD)
+            .next(entryTemplate.write(this.stringProcessor, this.props.bucket, "entry.md"));
+    }
+
     private createDefinition(): stepfunctions.IChainable {
         const fetchEntryTask = this.createFetchEntryTask();
-        const setupREADME = this.createReadmeTask();
+        const templates = this.writeTemplates();
         const exportWorkflow = this.createExportWorkflow();
 
-        return fetchEntryTask.next(setupREADME).next(exportWorkflow);
+        return fetchEntryTask.next(templates).next(exportWorkflow);
     }
 
     private createReadmeTask(): stepfunctions.Chain {

@@ -1,36 +1,33 @@
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
 import { Construct } from "constructs";
+import { BaseTemplate } from "./base-template";
 
-export class EntryTemplate {
-    private readonly scope: Construct;
-    private static readonly TEMPLATE = 
-        "# [{}]({})\n\n" +
-        "* id: {}\n" +
-        "* displayId: {}\n" +
-        "* folderId: {}\n" +
-        "* createdAt: {}\n" +
-        "* modifiedAt: {}\n\n" +
-        "## Authors\n" +
-        "{}\n\n" +
-        "## Schema\n\n" +
-        "* id: {}\n" +
-        "* name: {}\n\n" +
-        "## Fields\n" +
-        "{}\n\n" +
-        "## Custom fields\n" +
-        "{}";
-
-    constructor(scope: Construct) {
-        this.scope = scope;
+export class EntryTemplate extends BaseTemplate {
+    protected template(): string {
+        return "# [{}]({})\n\n" +
+               "* id: {}\n" +
+               "* displayId: {}\n" +
+               "* folderId: {}\n" +
+               "* createdAt: {}\n" +
+               "* modifiedAt: {}\n\n" +
+               "## Authors\n" +
+               "{}\n\n" +
+               "## Schema\n\n" +
+               "* id: {}\n" +
+               "* name: {}\n\n" +
+               "## Fields\n" +
+               "{}\n\n" +
+               "## Custom fields\n" +
+               "{}";
     }
 
-    private createEntryContent(): stepfunctions.Pass {
+    protected createContent(): stepfunctions.Pass {
         return new stepfunctions.Pass(
             this.scope,
             "CreateEntryContent",
             {
                 parameters: {
-                    "content.$": "States.Format('" + EntryTemplate.TEMPLATE + "', " +
+                    "content.$": "States.Format('" + this.template() + "', " +
                         "$.entry.entryData.name, " +
                         "$.entry.entryData.webURL, " +
                         "$.entry.entryData.id, " +
@@ -48,23 +45,8 @@ export class EntryTemplate {
                             "'* ' + States.JsonToString(@.key) + ': ' + @.value.value)" +
                         ")",
                 },
-                resultPath: "$.entryContent",
+                resultPath: "$.content",
             }
         );
-    }
-
-    public createEntryMarkdown(): stepfunctions.Chain {
-        return stepfunctions.Chain
-            .start(this.createEntryContent())
-            .next(new stepfunctions.Pass(
-                this.scope,
-                "CreateEntryMarkdown",
-                {
-                    parameters: {
-                        "markdown.$": "$.entryContent.content"
-                    },
-                    resultPath: "$.entryMarkdown",
-                }
-            ));
     }
 }
