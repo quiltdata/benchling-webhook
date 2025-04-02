@@ -3,24 +3,6 @@ import { Construct } from "constructs";
 import { BaseTemplate } from "./base-template";
 
 export class EntryTemplate extends BaseTemplate {
-    protected template(): string {
-        return "# [{}]({})\n\n" +
-               "* id: {}\n" +
-               "* displayId: {}\n" +
-               "* folderId: {}\n" +
-               "* createdAt: {}\n" +
-               "* modifiedAt: {}\n\n" +
-               "## Authors\n" +
-               "{}\n\n" +
-               "## Schema\n\n" +
-               "* id: {}\n" +
-               "* name: {}\n\n" +
-               "## Fields\n" +
-               "{}\n\n" +
-               "## Custom fields\n" +
-               "{}";
-    }
-
     protected createContent(): stepfunctions.Pass {
         return new stepfunctions.Pass(
             this.scope,

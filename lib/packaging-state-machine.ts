@@ -143,31 +143,6 @@ export class PackagingStateMachine extends Construct {
         return fetchEntryTask.next(templates).next(exportWorkflow);
     }
 
-    private createReadmeTask(): stepfunctions.Chain {
-        const readmeTemplate = new ReadmeTemplate(this);
-        const readmeChain = readmeTemplate.createMarkdown();
-
-        const entryTemplate = new EntryTemplate(this);
-        const entryMarkdownChain = entryTemplate.createMarkdown();
-
-        const WriteReadmeTask = new tasks.LambdaInvoke(
-            this,
-            "WriteReadme",
-            {
-                lambdaFunction: this.stringProcessor,
-                payload: stepfunctions.TaskInput.fromObject({
-                    bucket: this.props.bucket.bucketName,
-                    key: stepfunctions.JsonPath.stringAt(
-                        `States.Format('{}/{}', $.packageName, '${FILES.README_MD}')`,
-                    ),
-                    body: stepfunctions.JsonPath.stringAt("$.markdown.markdown"),
-                }),
-                resultPath: "$.readmeResult",
-            },
-        );
-
-        return readmeChain.next(entryMarkdownChain).next(WriteReadmeTask);
-    }
 
     private createExportWorkflow(): stepfunctions.IChainable {
         const exportTask = this.createExportTask();
