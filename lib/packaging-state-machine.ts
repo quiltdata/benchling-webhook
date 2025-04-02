@@ -9,13 +9,13 @@ import * as events from "aws-cdk-lib/aws-events";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
-import { ExportStatus, PackageEntryStateMachineProps } from "./types";
+import { ExportStatus, PackagingStateMachineProps } from "./types";
 import { EXPORT_STATUS, FILES } from "./constants";
 import { README_TEMPLATE } from "./templates/readme";
 
 export class PackagingStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
-    private readonly props: PackageEntryStateMachineProps;
+    private readonly props: PackagingStateMachineProps;
 
     private readonly exportProcessor: lambda.IFunction;
     private readonly stringProcessor: lambda.IFunction;
@@ -23,7 +23,7 @@ export class PackagingStateMachine extends Construct {
     constructor(
         scope: Construct,
         id: string,
-        props: PackageEntryStateMachineProps,
+        props: PackagingStateMachineProps,
     ) {
         super(scope, id);
         this.props = props;
@@ -84,7 +84,7 @@ export class PackagingStateMachine extends Construct {
 
         const definition = this.createDefinition();
 
-        const role = new iam.Role(scope, "PackageEntryStateMachineRole", {
+        const role = new iam.Role(scope, "PackagingStateMachineRole", {
             assumedBy: new iam.ServicePrincipal("states.amazonaws.com"),
         });
 
@@ -365,7 +365,7 @@ export class PackagingStateMachine extends Construct {
     }
 
     private createSQSTask(
-        props: PackageEntryStateMachineProps,
+        props: PackagingStateMachineProps,
     ): tasks.CallAwsService {
         const queueArn =
             `arn:aws:sqs:${props.region}:${props.account}:${props.queueName}`;

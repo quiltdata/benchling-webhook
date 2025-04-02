@@ -16,7 +16,7 @@ export interface WebhookStateMachineProps extends BaseStateMachineProps {
     quiltCatalog?: string;
 }
 
-export interface PackageEntryStateMachineProps extends BaseStateMachineProps {
+export interface PackagingStateMachineProps extends BaseStateMachineProps {
     queueName: string;
     region: string;
     account: string;
