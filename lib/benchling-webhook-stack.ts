@@ -23,7 +23,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
     private readonly bucket: s3.IBucket;
     private readonly stateMachine: WebhookStateMachine;
     private readonly api: WebhookApi;
-    private readonly exportProcessor: lambda.IFunction;
 
     constructor(
         scope: Construct,
@@ -37,35 +36,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", props.bucketName);
 
-        // Create the export processor Lambda
-        this.exportProcessor = new nodejs.NodejsFunction(this, "ExportProcessor", {
-            entry: path.join(__dirname, "lambda/process-export.ts"),
-            handler: "handler",
-            runtime: lambda.Runtime.NODEJS_18_X,
-            timeout: cdk.Duration.minutes(5),
-            memorySize: 1024,
-            environment: {
-                NODE_OPTIONS: "--enable-source-maps",
-                QUILT_CATALOG: props.quiltCatalog || "open.quiltdata.com",
-            },
-            architecture: lambda.Architecture.ARM_64,
-            bundling: {
-                minify: true,
-                sourceMap: false,
-                externalModules: [
-                    "@aws-sdk/client-s3",
-                ],
-                forceDockerBundling: false,
-                target: "node18",
-                define: {
-                    "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "production"),
-                },
-            },
-        });
-
-        // Grant the Lambda function access to the S3 bucket
-        this.bucket.grantReadWrite(this.exportProcessor);
-
         const benchlingConnection = this.createBenchlingConnection(props);
 
         this.stateMachine = new WebhookStateMachine(this, "StateMachine", {
@@ -76,7 +46,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             account: this.account,
             benchlingConnection,
             benchlingTenant: props.benchlingTenant,
-            exportProcessor: this.exportProcessor,
             quiltCatalog: props.quiltCatalog,
         });
 

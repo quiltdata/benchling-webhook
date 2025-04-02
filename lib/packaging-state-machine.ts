@@ -1,5 +1,9 @@
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
 import { Duration } from "aws-cdk-lib";
+import * as cdk from "aws-cdk-lib";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as nodejs from "aws-cdk-lib/aws-lambda-nodejs";
+import * as path from "path";
 import * as tasks from "aws-cdk-lib/aws-stepfunctions-tasks";
 import * as events from "aws-cdk-lib/aws-events";
 import * as iam from "aws-cdk-lib/aws-iam";
@@ -13,6 +17,9 @@ export class PackagingStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
     private readonly props: PackageEntryStateMachineProps;
 
+    private readonly exportProcessor: lambda.IFunction;
+    private readonly stringProcessor: lambda.IFunction;
+
     constructor(
         scope: Construct,
         id: string,
@@ -20,6 +27,61 @@ export class PackagingStateMachine extends Construct {
     ) {
         super(scope, id);
         this.props = props;
+
+        // Create the export processor Lambda
+        this.exportProcessor = new nodejs.NodejsFunction(this, "ExportProcessor", {
+            entry: path.join(__dirname, "lambda/process-export.ts"),
+            handler: "handler",
+            runtime: lambda.Runtime.NODEJS_18_X,
+            timeout: cdk.Duration.minutes(5),
+            memorySize: 1024,
+            environment: {
+                NODE_OPTIONS: "--enable-source-maps",
+            },
+            architecture: lambda.Architecture.ARM_64,
+            bundling: {
+                minify: true,
+                sourceMap: false,
+                externalModules: [
+                    "@aws-sdk/client-s3",
+                ],
+                forceDockerBundling: false,
+                target: "node18",
+                define: {
+                    "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "production"),
+                },
+            },
+        });
+
+        // Create the string processor Lambda
+        this.stringProcessor = new nodejs.NodejsFunction(this, "StringProcessor", {
+            entry: path.join(__dirname, "lambda/process-string.ts"),
+            handler: "handler",
+            runtime: lambda.Runtime.NODEJS_18_X,
+            timeout: cdk.Duration.minutes(1),
+            memorySize: 128,
+            environment: {
+                NODE_OPTIONS: "--enable-source-maps",
+            },
+            architecture: lambda.Architecture.ARM_64,
+            bundling: {
+                minify: true,
+                sourceMap: false,
+                externalModules: [
+                    "@aws-sdk/client-s3",
+                ],
+                forceDockerBundling: false,
+                target: "node18",
+                define: {
+                    "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "production"),
+                },
+            },
+        });
+
+        // Grant both Lambda functions access to the S3 bucket
+        props.bucket.grantReadWrite(this.exportProcessor);
+        props.bucket.grantReadWrite(this.stringProcessor);
+
         const definition = this.createDefinition();
 
         const role = new iam.Role(scope, "PackageEntryStateMachineRole", {
