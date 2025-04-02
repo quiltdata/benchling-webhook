@@ -135,6 +135,22 @@ export class PackagingStateMachine extends Construct {
             },
         );
 
+        const writeReadmeToS3Task = new tasks.LambdaInvoke(
+            this,
+            "WriteReadmeToS3",
+            {
+                lambdaFunction: this.stringProcessor,
+                payload: stepfunctions.TaskInput.fromObject({
+                    bucket: this.props.bucket.bucketName,
+                    key: stepfunctions.JsonPath.stringAt(
+                        `States.Format('{}/{}', $.packageName, '${FILES.README_MD}')`
+                    ),
+                    body: stepfunctions.JsonPath.stringAt("$.readme.readme"),
+                }),
+                resultPath: "$.readmeResult",
+            },
+        );
+
         return stepfunctions.Chain.start(
             new stepfunctions.Pass(
                 this,
@@ -146,7 +162,7 @@ export class PackagingStateMachine extends Construct {
                     resultPath: "$.files",
                 },
             ),
-        ).next(createReadme);
+        ).next(createReadme).next(writeReadmeToS3Task);
     }
 
     private createExportWorkflow(): stepfunctions.IChainable {
@@ -235,21 +251,6 @@ export class PackagingStateMachine extends Construct {
             FILES.ENTRY_JSON,
             "$.entry.entryData",
         );
-        const writeReadmeToS3Task = new tasks.LambdaInvoke(
-            this,
-            "WriteReadmeToS3",
-            {
-                lambdaFunction: this.stringProcessor,
-                payload: stepfunctions.TaskInput.fromObject({
-                    bucket: this.props.bucket.bucketName,
-                    key: stepfunctions.JsonPath.stringAt(
-                        `States.Format('{}/{}', $.packageName, '${FILES.README_MD}')`
-                    ),
-                    body: stepfunctions.JsonPath.stringAt("$.readme.readme"),
-                }),
-                resultPath: "$.readmeResult",
-            },
-        );
         const writeMetadataTask = this.createS3WriteTask(
             this.props.bucket,
             FILES.INPUT_JSON,
@@ -260,7 +261,6 @@ export class PackagingStateMachine extends Construct {
         return extractDownloadURL
             .next(processExportTask)
             .next(writeEntryToS3Task)
-            .next(writeReadmeToS3Task)
             .next(writeMetadataTask)
             .next(sendToSQSTask);
     }
