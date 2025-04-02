@@ -17,11 +17,17 @@ export class EntryTemplate extends BaseTemplate {
                         "folderId.$": "$.entry.entryData.folderId",
                         "createdAt.$": "$.entry.entryData.createdAt",
                         "modifiedAt.$": "$.entry.entryData.modifiedAt",
-                        "authors.$": "States.Array($.entry.entryData.authors[*], '* ' + $.name + '\\n  * id: ' + $.id + '\\n  * handle: ' + $.handle)",
+                        "authors": {
+                            "$": "States.Array($.entry.entryData.authors[*], States.Format('* {}\\n  * id: {}\\n  * handle: {}', $.name, $.id, $.handle))"
+                        },
                         "schemaId.$": "$.entry.entryData.schema.id",
                         "schemaName.$": "$.entry.entryData.schema.name",
-                        "fields.$": "States.Array(States.StringToJson(States.JsonToString($.entry.entryData.fields))[*], '* ' + States.JsonToString(@.key) + ': ' + @.value.displayValue)",
-                        "customFields.$": "States.Array(States.StringToJson(States.JsonToString($.entry.entryData.customFields))[*], '* ' + States.JsonToString(@.key) + ': ' + @.value.value)"
+                        "fields": {
+                            "$": "States.Array(States.StringToJson(States.JsonToString($.entry.entryData.fields))[*], States.Format('* {}: {}', States.JsonToString(@.key), @.value.displayValue))"
+                        },
+                        "customFields": {
+                            "$": "States.Array(States.StringToJson(States.JsonToString($.entry.entryData.customFields))[*], States.Format('* {}: {}', States.JsonToString(@.key), @.value.value))"
+                        }
                     }
                 },
                 resultPath: "$.content",
