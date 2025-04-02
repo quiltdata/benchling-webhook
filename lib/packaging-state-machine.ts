@@ -13,7 +13,11 @@ export class PackagingStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
     private readonly props: PackageEntryStateMachineProps;
 
-    constructor(scope: Construct, id: string, props: PackageEntryStateMachineProps) {
+    constructor(
+        scope: Construct,
+        id: string,
+        props: PackageEntryStateMachineProps,
+    ) {
         super(scope, id);
         this.props = props;
         const definition = this.createDefinition();
@@ -28,7 +32,7 @@ export class PackagingStateMachine extends Construct {
                     "states:InvokeHTTPEndpoint",
                     "events:RetrieveConnectionCredentials",
                     "secretsmanager:DescribeSecret",
-                    "secretsmanager:GetSecretValue"
+                    "secretsmanager:GetSecretValue",
                 ],
                 resources: ["*"],
                 effect: iam.Effect.ALLOW,
@@ -52,21 +56,35 @@ export class PackagingStateMachine extends Construct {
         const fetchEntryTask = this.createFetchEntryTask();
         const setupREADME = this.createSetupReadmeTask();
         const exportWorkflow = this.createExportWorkflow();
-        
+
         return fetchEntryTask.next(setupREADME).next(exportWorkflow);
     }
 
-    private createSetupReadmeTask(): stepfunctions.Pass {
-        return new stepfunctions.Pass(
+    private createSetupReadmeTask(): stepfunctions.Chain {
+        const createReadme = new stepfunctions.Pass(
             this,
-            "SetupREADME",
+            "CreateReadme",
             {
                 parameters: {
-                    "FILES": FILES,
+                    "readme.$": "States.Format('" + README_TEMPLATE +
+                        "', $.exportStatus.FILES.ENTRY_JSON, $.exportStatus.FILES.INPUT_JSON, $.exportStatus.FILES.README_MD)",
                 },
-                resultPath: "$.files",
+                resultPath: "$.readme",
             },
         );
+
+        return stepfunctions.Chain.start(
+            new stepfunctions.Pass(
+                this,
+                "SetupREADME",
+                {
+                    parameters: {
+                        "FILES": FILES,
+                    },
+                    resultPath: "$.files",
+                },
+            ),
+        ).next(createReadme);
     }
 
     private createExportWorkflow(): stepfunctions.IChainable {
@@ -74,7 +92,7 @@ export class PackagingStateMachine extends Construct {
         const pollExportTask = this.createPollExportTask();
         const waitState = this.createWaitState();
         const exportChoice = this.createExportChoice(waitState, pollExportTask);
-        
+
         return exportTask.next(pollExportTask).next(exportChoice);
     }
 
@@ -127,18 +145,9 @@ export class PackagingStateMachine extends Construct {
         );
     }
 
-    private createSuccessChain(extractDownloadURL: stepfunctions.Pass): stepfunctions.IChainable {
-        const createReadme = new stepfunctions.Pass(
-            this,
-            "CreateReadme",
-            {
-                parameters: {
-                    "readme.$": "States.Format('" + README_TEMPLATE + "', $.exportStatus.FILES.ENTRY_JSON, $.exportStatus.FILES.INPUT_JSON, $.exportStatus.FILES.README_MD)",
-                },
-                resultPath: "$.readme",
-            },
-        );
-
+    private createSuccessChain(
+        extractDownloadURL: stepfunctions.Pass,
+    ): stepfunctions.IChainable {
         const processExportTask = new tasks.LambdaInvoke(
             this,
             "ProcessExport",
@@ -177,7 +186,6 @@ export class PackagingStateMachine extends Construct {
         const sendToSQSTask = this.createSQSTask(this.props);
 
         return extractDownloadURL
-            .next(createReadme)
             .next(processExportTask)
             .next(writeEntryToS3Task)
             .next(writeReadmeToS3Task)
@@ -275,13 +283,6 @@ export class PackagingStateMachine extends Construct {
             "Body.$": bodyPath,
         };
 
-        // Set appropriate content type based on file extension
-        if (filename.endsWith('.md')) {
-            parameters.ContentType = 'text/markdown';
-        } else if (filename.endsWith('.json')) {
-            parameters.ContentType = 'application/json';
-        }
-
         return new tasks.CallAwsService(this, taskId, {
             service: "s3",
             action: "putObject",
@@ -291,7 +292,9 @@ export class PackagingStateMachine extends Construct {
         });
     }
 
-    private createSQSTask(props: PackageEntryStateMachineProps): tasks.CallAwsService {
+    private createSQSTask(
+        props: PackageEntryStateMachineProps,
+    ): tasks.CallAwsService {
         const queueArn =
             `arn:aws:sqs:${props.region}:${props.account}:${props.queueName}`;
         const queueUrl =

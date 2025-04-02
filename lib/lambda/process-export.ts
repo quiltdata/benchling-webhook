@@ -30,7 +30,6 @@ export const handler = async (event: ProcessExportEvent): Promise<ProcessExportR
                     Bucket: event.registry,
                     Key: key,
                     Body: fileContent,
-                    ContentType: getContentType(entry.entryName),
                 }));
             }
         });
