@@ -128,13 +128,13 @@ export class PackagingStateMachine extends Construct {
 
     private createDefinition(): stepfunctions.IChainable {
         const fetchEntryTask = this.createFetchEntryTask();
-        const setupREADME = this.createSetupReadmeTask();
+        const setupREADME = this.createReadmeTask();
         const exportWorkflow = this.createExportWorkflow();
 
         return fetchEntryTask.next(setupREADME).next(exportWorkflow);
     }
 
-    private createSetupReadmeTask(): stepfunctions.Chain {
+    private createReadmeTask(): stepfunctions.Chain {
         const createReadme = new stepfunctions.Pass(
             this,
             "CreateReadme",
