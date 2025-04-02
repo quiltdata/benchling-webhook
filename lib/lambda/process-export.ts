@@ -56,11 +56,3 @@ async function downloadFile(url: string): Promise<Buffer> {
     }
     return Buffer.from(await response.arrayBuffer());
 }
-
-import { MIME_TYPES } from "../constants";
-
-function getContentType(fileName: string): string {
-    const extension = fileName.split(".").pop()?.toLowerCase() || "";
-    const mimeTypeKey = extension.toUpperCase() as keyof typeof MIME_TYPES;
-    return MIME_TYPES[mimeTypeKey] || MIME_TYPES.DEFAULT;
-}
