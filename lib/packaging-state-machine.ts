@@ -214,7 +214,7 @@ export class PackagingStateMachine extends Construct {
             this,
             "ProcessExport",
             {
-                lambdaFunction: this.props.exportProcessor,
+                lambdaFunction: this.exportProcessor,
                 payload: stepfunctions.TaskInput.fromObject({
                     downloadURL: stepfunctions.JsonPath.stringAt(
                         "$.exportStatus.downloadURL",
