@@ -5,7 +5,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as nodejs from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "path";
 import { Construct } from "constructs";
-import { WebhookApi } from "./api-gateway";
+import { WebhookApi } from "./webhook-api";
 import { WebhookStateMachine } from "./webhook-state-machine";
 
 interface BenchlingWebhookStackProps extends cdk.StackProps {
