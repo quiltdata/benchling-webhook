@@ -8,14 +8,34 @@ export interface ProcessStringEvent {
     body: string;
 }
 
-export async function handler(event: ProcessStringEvent): Promise<void> {
-    const { bucket, key, body } = event;
+export interface ProcessStringResult {
+    statusCode: number;
+    body: string;
+}
 
-    await s3Client.send(
-        new PutObjectCommand({
-            Bucket: bucket,
-            Key: key,
-            Body: body,
-        })
-    );
+export async function handler(event: ProcessStringEvent): Promise<ProcessStringResult> {
+    console.log("Processing string with event:", JSON.stringify(event));
+
+    try {
+        const { bucket, key, body } = event;
+
+        await s3Client.send(
+            new PutObjectCommand({
+                Bucket: bucket,
+                Key: key,
+                Body: body,
+            })
+        );
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify({
+                message: "String processed successfully",
+                key: key
+            })
+        };
+    } catch (error) {
+        console.error("Error processing string:", error);
+        throw error;
+    }
 }
