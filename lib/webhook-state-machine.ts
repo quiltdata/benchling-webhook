@@ -8,7 +8,7 @@ import { Construct } from "constructs";
 
 import { WebhookStateMachineProps } from "./types";
 import { PackagingStateMachine } from "./packaging-state-machine";
-import { CanvasStateMachine } from "./canvas-state-machine";
+import { createWorkflow, createButtonWorkflow } from "./canvas-workflow";
 
 export class WebhookStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
@@ -64,18 +64,9 @@ export class WebhookStateMachine extends Construct {
         return startPackagingExecution;
     }
 
-    private readonly canvasStateMachine: CanvasStateMachine;
-
     constructor(scope: Construct, id: string, props: WebhookStateMachineProps) {
         super(scope, id);
         this.props = props;
-
-        this.canvasStateMachine = new CanvasStateMachine(this, "CanvasStateMachine", {
-            benchlingConnection: props.benchlingConnection,
-            prefix: props.prefix,
-            bucketName: props.bucket.bucketName,
-            quiltCatalog: props.quiltCatalog,
-        });
 
         // Create the package entry state machine
         const packagingStateMachine = new PackagingStateMachine(
@@ -135,13 +126,23 @@ export class WebhookStateMachine extends Construct {
     private createButtonWorkflow(
         startPackagingExecution: stepfunctions.IChainable,
     ): stepfunctions.IChainable {
-        return this.canvasStateMachine.createButtonWorkflow(startPackagingExecution);
+        return createButtonWorkflow(this, {
+            benchlingConnection: this.props.benchlingConnection,
+            prefix: this.props.prefix,
+            bucketName: this.props.bucket.bucketName,
+            quiltCatalog: this.props.quiltCatalog,
+        }, startPackagingExecution);
     }
 
     private createCanvasWorkflow(
         startPackagingExecution: stepfunctions.IChainable,
     ): stepfunctions.IChainable {
-        return this.canvasStateMachine.createWorkflow(startPackagingExecution);
+        return createWorkflow(this, {
+            benchlingConnection: this.props.benchlingConnection,
+            prefix: this.props.prefix,
+            bucketName: this.props.bucket.bucketName,
+            quiltCatalog: this.props.quiltCatalog,
+        }, startPackagingExecution);
     }
 
 
