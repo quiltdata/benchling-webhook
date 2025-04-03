@@ -1,7 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
-import { WebhookApi } from "../lib/api-gateway";
+import { WebhookApi } from "../lib/webhook-api";
 
 describe("WebhookApi", () => {
     let stack: cdk.Stack;
