@@ -11,8 +11,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { ExportStatus, PackagingStateMachineProps } from "./types";
 import { EXPORT_STATUS, FILES } from "./constants";
-import { ReadmeTemplate } from "./templates/readme";
-import { EntryTemplate } from "./templates/entry";
+import { ReadmeTemplate, EntryTemplate } from "./templates";
 
 export class PackagingStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
