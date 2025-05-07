@@ -4,16 +4,20 @@ import { BaseTemplate } from "./base-template";
 
 export class ReadmeTemplate extends BaseTemplate {
     protected template(): string {
-        return "# {} ({})\n\n" +
-            "## Benchling Webhook Example\n\n" +
-            "This auto-generated package uses Amazon Step Functions and the " +
-            "[Quilt Packaging Engine]" +
-            "(https://docs.quilt.bio/quilt-platform-catalog-user/packaging) " +
-            "to collect data and metadata " +
-            "for a Benchling Notebook entry.\n\n" +
-            "## Files\n\n" +
-            "- [{}](./{}): Entry data\n" +
-            "- [{}](./{}): Webhook event message\n";
+        return "# {}({})\\n\\n" +
+            "* id: {}\\n" +
+            "* displayId: {}\\n" +
+            "* folderId: {}\\n" +
+            "* createdAt: {}\\n" +
+            "* modifiedAt: {}\\n\\n" +
+            "## Authors: {}\\n" +
+            "## Schema\\n\\n" +
+            "* id: {}\\n" +
+            "* name: {}\\n\\n" +
+            "## Fields\\n" +
+            "{}\\n\\n" +
+            "## Custom fields\\n" +
+            "{}";
     }
 
     protected createContent(): stepfunctions.Pass {
@@ -23,10 +27,18 @@ export class ReadmeTemplate extends BaseTemplate {
             {
                 parameters: {
                     "content.$": "States.Format('" + this.template() + "'" +
-                        ", $.entry.entryData.name" +
-                        ", $.entry.entryData.id" +
-                        ", $.files.FILES.ENTRY_JSON,  $.files.FILES.ENTRY_JSON" +
-                        ", $.files.FILES.INPUT_JSON,  $.files.FILES.INPUT_JSON" +
+                        ", $.entry.name" +
+                        ", $.entry.webURL" +
+                        ", $.entry.id" +
+                        ", $.entry.displayId" +
+                        ", $.entry.folderId" +
+                        ", $.entry.createdAt" +
+                        ", $.entry.modifiedAt" +
+                        ", $.entry.authors" +
+                        ", $.entry.schema.id" +
+                        ", $.entry.schema.name" +
+                        ", $.entry.fieldsFormatted" +
+                        ", $.entry.customFieldsFormatted" +
                         ")",
                 },
                 resultPath: "$.content",
