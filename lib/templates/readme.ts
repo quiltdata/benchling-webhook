@@ -34,11 +34,11 @@ export class ReadmeTemplate extends BaseTemplate {
                         ", $.entry.entryData.folderId" +
                         ", $.entry.entryData.createdAt" +
                         ", $.entry.entryData.modifiedAt" +
-                        ", States.Join('\\n', $.authorsFormatted.authorsFormatted)" + // Join authors with newlines
+                        ", $.authorsFormatted.authorsFormatted" + // Authors
                         ", $.entry.entryData.schema.id" +
                         ", $.entry.entryData.schema.name" +
-                        ", States.Join('\\n', $.fieldsFormatted.fieldsFormatted)" + // Join fields with newlines
-                        ", States.Join('\\n', $.customFieldsFormatted.customFieldsFormatted)" + // Join custom fields with newlines
+                        ", $.fieldsFormatted.fieldsFormatted" + // Fields
+                        ", $.customFieldsFormatted.customFieldsFormatted" + // Custom fields
                         ")",
                 },
                 resultPath: "$.content",
