@@ -4,19 +4,19 @@ import { BaseTemplate } from "./base-template";
 
 export class ReadmeTemplate extends BaseTemplate {
     protected template(): string {
-        return "# {}({})\\n\\n" +
-            "* id: {}\\n" +
-            "* displayId: {}\\n" +
-            "* folderId: {}\\n" +
-            "* createdAt: {}\\n" +
-            "* modifiedAt: {}\\n\\n" +
-            "## Authors: {}\\n" +
-            "## Schema\\n\\n" +
-            "* id: {}\\n" +
-            "* name: {}\\n\\n" +
-            "## Fields\\n" +
-            "{}\\n\\n" +
-            "## Custom fields\\n" +
+        return "# {} ({})\n\n" +
+            "* id: {}\n" +
+            "* displayId: {}\n" +
+            "* folderId: {}\n" +
+            "* createdAt: {}\n" +
+            "* modifiedAt: {}\n\n" +
+            "## Authors: {}\n" +
+            "## Schema\n\n" +
+            "* id: {}\n" +
+            "* name: {}\n\n" +
+            "## Fields\n" +
+            "{}\n\n" +
+            "## Custom fields\n" +
             "{}";
     }
 
@@ -27,18 +27,18 @@ export class ReadmeTemplate extends BaseTemplate {
             {
                 parameters: {
                     "content.$": "States.Format('" + this.template() + "'" +
-                        ", $.entry.name" +
-                        ", $.entry.webURL" +
-                        ", $.entry.id" +
-                        ", $.entry.displayId" +
-                        ", $.entry.folderId" +
-                        ", $.entry.createdAt" +
-                        ", $.entry.modifiedAt" +
-                        ", $.entry.authors" +
-                        ", $.entry.schema.id" +
-                        ", $.entry.schema.name" +
-                        ", $.entry.fieldsFormatted" +
-                        ", $.entry.customFieldsFormatted" +
+                        ", $.entry.entryData.name" +  // {title}
+                        ", $.entry.entryData.webURL" + // {url}
+                        ", $.entry.entryData.id" +
+                        ", $.entry.entryData.displayId" +
+                        ", $.entry.entryData.folderId" +
+                        ", $.entry.entryData.createdAt" +
+                        ", $.entry.entryData.modifiedAt" +
+                        ", States.Join('\\n', $.authorsFormatted.authorsFormatted)" + // Join authors with newlines
+                        ", $.entry.entryData.schema.id" +
+                        ", $.entry.entryData.schema.name" +
+                        ", States.Join('\\n', $.fieldsFormatted.fieldsFormatted)" + // Join fields with newlines
+                        ", States.Join('\\n', $.customFieldsFormatted.customFieldsFormatted)" + // Join custom fields with newlines
                         ")",
                 },
                 resultPath: "$.content",
@@ -59,32 +59,31 @@ export class ReadmeTemplate extends BaseTemplate {
         );
     }
 
-    private formatFields(): stepfunctions.Map {
-        const appendFormattedField = new stepfunctions.Pass(this.scope, 'AppendFormattedField', {
+    private formatFields(): stepfunctions.Pass {
+        return new stepfunctions.Pass(this.scope, 'FormatFields', {
             parameters: {
-                "formattedField.$": "States.Format('* {}: {}', $.name, $.displayValue)"
+                "fieldsFormatted.$": "States.Array(States.Format('* Project: {}', $.entry.entryData.fields.Project.displayValue), States.Format('* Study: {}', $.entry.entryData.fields.Study.displayValue))"
             },
-            resultPath: "$.formattedField"
+            resultPath: "$.fieldsFormatted"
         });
-
-        return new stepfunctions.Map(this.scope, 'FormatFields', {
-            itemsPath: '$.entry.fields',
-            resultPath: '$.fieldsFormatted',
-        }).itemProcessor(appendFormattedField);
     }
 
-    private formatCustomFields(): stepfunctions.Map {
-        const appendFormattedCustomField = new stepfunctions.Pass(this.scope, 'AppendFormattedCustomField', {
+    private formatCustomFields(): stepfunctions.Pass {
+        return new stepfunctions.Pass(this.scope, 'FormatCustomFields', {
             parameters: {
-                "formattedCustomField.$": "States.Format('* {}: {}', $.name, $.value)"
+                "customFieldsFormatted.$": "States.Array('* No custom fields defined')"
             },
-            resultPath: "$.formattedCustomField"
+            resultPath: "$.customFieldsFormatted"
         });
+    }
 
-        return new stepfunctions.Map(this.scope, 'FormatCustomFields', {
-            itemsPath: '$.entry.customFields',
-            resultPath: '$.customFieldsFormatted',
-        }).itemProcessor(appendFormattedCustomField);
+    private formatAuthors(): stepfunctions.Pass {
+        return new stepfunctions.Pass(this.scope, 'FormatAuthors', {
+            parameters: {
+                "authorsFormatted.$": "States.Array(States.Format('* {}', States.StringToJson(States.JsonToString($.entry.entryData.authors))))"
+            },
+            resultPath: "$.authorsFormatted"
+        });
     }
 
     public createMarkdown(): stepfunctions.Chain {
@@ -92,6 +91,7 @@ export class ReadmeTemplate extends BaseTemplate {
             .start(this.setupFiles())
             .next(this.formatFields())
             .next(this.formatCustomFields())
+            .next(this.formatAuthors())
             .next(super.createMarkdown());
     }
 }
