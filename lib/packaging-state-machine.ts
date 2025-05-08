@@ -189,12 +189,10 @@ export class PackagingStateMachine extends Construct {
             "ExtractDownloadURL",
             {
                 parameters: {
-                    "exportStatus": {
-                        "status.$": "$.exportStatus.status",
-                        "downloadURL.$": "$.exportStatus.response.response.downloadURL",
-                        "packageName.$": "$.packageName",
-                        "registry.$": "$.registry"
-                    }
+                    "status.$": "$.exportStatus.status",
+                    "downloadURL.$": "$.exportStatus.response.response.downloadURL",
+                    "packageName.$": "$.packageName",
+                    "registry.$": "$.registry"
                 },
                 resultPath: "$.exportStatus",
             },
