@@ -4,16 +4,17 @@ import { BaseTemplate } from "./base-template";
 
 export class ReadmeTemplate extends BaseTemplate {
     protected template(): string {
-        return "# {} ({})\n\n" +
-            "* id: {}\n" +
-            "* displayId: {}\n" +
-            "* folderId: {}\n" +
-            "* createdAt: {}\n" +
-            "* modifiedAt: {}\n\n" +
-            "## Authors: {}\n" +
+        return "# [{}]({})\n\n" +
+            "* **id**: {}\n" +
+            "* **displayId**: {}\n" +
+            "* **folderId**: {}\n" +
+            "* **createdAt**: {}\n" +
+            "* **modifiedAt**: {}\n\n" +
+            "## Authors:\n" +
+            "{}\n" +
             "## Schema\n\n" +
-            "* id: {}\n" +
-            "* name: {}\n\n" +
+            "* **id**: {}\n" +
+            "* **name**: {}\n\n" +
             "## Fields\n" +
             "{}\n\n" +
             "## Custom fields\n" +
@@ -77,12 +78,29 @@ export class ReadmeTemplate extends BaseTemplate {
         });
     }
 
-    private formatAuthors(): stepfunctions.Pass {
-        return new stepfunctions.Pass(this.scope, 'FormatAuthors', {
+    private formatAuthors(): stepfunctions.Map {
+        const appendFormattedAuthor = new stepfunctions.Pass(this.scope, 'AppendFormattedAuthor', {
             parameters: {
-                "authorsFormatted.$": "States.Array(States.Format('* {}', States.StringToJson(States.JsonToString($.entry.entryData.authors))))"
+                "formattedAuthor.$": "States.Format('* {} <{}@{}>', $.name, $.handle, $.id)"
             },
-            resultPath: "$.authorsFormatted"
+            resultPath: "$.formattedAuthor"
+        });
+
+        return new stepfunctions.Map(this.scope, 'FormatAuthors', {
+            itemsPath: '$.entry.entryData.authors',
+            resultPath: '$.authorsFormatted',
+        }).itemProcessor(appendFormattedAuthor);
+    }
+
+    private joinListVariables(): stepfunctions.Pass {
+        // Use States.JsonToString to serialize arrays to strings, which can be post-processed in Lambda if needed.
+        return new stepfunctions.Pass(this.scope, 'JoinFormattedLists', {
+            parameters: {
+                "fieldsFormatted.$": "States.JsonToString($.fieldsFormatted.fieldsFormatted)",
+                "customFieldsFormatted.$": "States.JsonToString($.customFieldsFormatted.customFieldsFormatted)",
+                "authorsFormatted.$": "States.JsonToString($.authorsFormatted.authorsFormatted)"
+            },
+            resultPath: "$"
         });
     }
 
@@ -92,6 +110,7 @@ export class ReadmeTemplate extends BaseTemplate {
             .next(this.formatFields())
             .next(this.formatCustomFields())
             .next(this.formatAuthors())
+            .next(this.joinListVariables())
             .next(super.createMarkdown());
     }
 }
