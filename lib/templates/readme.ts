@@ -35,11 +35,11 @@ export class ReadmeTemplate extends BaseTemplate {
                         ", $.entry.entryData.folderId" +
                         ", $.entry.entryData.createdAt" +
                         ", $.entry.entryData.modifiedAt" +
-                        ", $.authorsFormatted.authorsFormatted" + // Authors
+                        ", $.formattedLists.formattedLists.authorsFormatted" + // Authors
                         ", $.entry.entryData.schema.id" +
                         ", $.entry.entryData.schema.name" +
-                        ", $.fieldsFormatted.fieldsFormatted" + // Fields
-                        ", $.customFieldsFormatted.customFieldsFormatted" + // Custom fields
+                        ", $.formattedLists.formattedLists.fieldsFormatted" + // Fields
+                        ", $.formattedLists.formattedLists.customFieldsFormatted" + // Custom fields
                         ")",
                 },
                 resultPath: "$.content",
@@ -53,7 +53,7 @@ export class ReadmeTemplate extends BaseTemplate {
             "SetupREADME",
             {
                 parameters: {
-                    "FILES": FILES,
+                    "FILES": FILES
                 },
                 resultPath: "$.files",
             },
@@ -88,19 +88,20 @@ export class ReadmeTemplate extends BaseTemplate {
 
         return new stepfunctions.Map(this.scope, 'FormatAuthors', {
             itemsPath: '$.entry.entryData.authors',
-            resultPath: '$.authorsFormatted',
+            resultPath: "$.authorsFormatted"
         }).itemProcessor(appendFormattedAuthor);
     }
 
     private joinListVariables(): stepfunctions.Pass {
-        // Use States.JsonToString to serialize arrays to strings, which can be post-processed in Lambda if needed.
         return new stepfunctions.Pass(this.scope, 'JoinFormattedLists', {
             parameters: {
-                "fieldsFormatted.$": "States.JsonToString($.fieldsFormatted.fieldsFormatted)",
-                "customFieldsFormatted.$": "States.JsonToString($.customFieldsFormatted.customFieldsFormatted)",
-                "authorsFormatted.$": "States.JsonToString($.authorsFormatted.authorsFormatted)"
+                "formattedLists": {
+                    "fieldsFormatted.$": "States.JsonToString($.fieldsFormatted)",
+                    "customFieldsFormatted.$": "States.JsonToString($.customFieldsFormatted)", 
+                    "authorsFormatted.$": "States.JsonToString($.authorsFormatted[*].formattedAuthor)"
+                }
             },
-            resultPath: "$"
+            resultPath: "$.formattedLists"
         });
     }
 
