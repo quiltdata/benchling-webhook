@@ -4,16 +4,21 @@ import { BaseTemplate } from "./base-template";
 
 export class ReadmeTemplate extends BaseTemplate {
     protected template(): string {
-        return "# {} ({})\n\n" +
-            "## Benchling Webhook Example\n\n" +
-            "This auto-generated package uses Amazon Step Functions and the " +
-            "[Quilt Packaging Engine]" +
-            "(https://docs.quilt.bio/quilt-platform-catalog-user/packaging) " +
-            "to collect data and metadata " +
-            "for a Benchling Notebook entry.\n\n" +
-            "## Files\n\n" +
-            "- [{}](./{}): Entry data\n" +
-            "- [{}](./{}): Webhook event message\n";
+        return "# [{}]({})\n\n" +
+            "* **id**: {}\n" +
+            "* **displayId**: {}\n" +
+            "* **folderId**: {}\n" +
+            "* **createdAt**: {}\n" +
+            "* **modifiedAt**: {}\n\n" +
+            "## Authors:\n" +
+            "{}\n" +
+            "## Schema\n\n" +
+            "* **id**: {}\n" +
+            "* **name**: {}\n\n" +
+            "## Fields\n" +
+            "{}\n\n" +
+            "## Custom fields\n" +
+            "{}";
     }
 
     protected createContent(): stepfunctions.Pass {
@@ -23,10 +28,18 @@ export class ReadmeTemplate extends BaseTemplate {
             {
                 parameters: {
                     "content.$": "States.Format('" + this.template() + "'" +
-                        ", $.entry.entryData.name" +
+                        ", $.entry.entryData.name" +  // {title}
+                        ", $.entry.entryData.webURL" + // {url}
                         ", $.entry.entryData.id" +
-                        ", $.files.FILES.ENTRY_JSON,  $.files.FILES.ENTRY_JSON" +
-                        ", $.files.FILES.INPUT_JSON,  $.files.FILES.INPUT_JSON" +
+                        ", $.entry.entryData.displayId" +
+                        ", $.entry.entryData.folderId" +
+                        ", $.entry.entryData.createdAt" +
+                        ", $.entry.entryData.modifiedAt" +
+                        ", $.formattedLists.formattedLists.authorsFormatted" + // Authors
+                        ", $.entry.entryData.schema.id" +
+                        ", $.entry.entryData.schema.name" +
+                        ", $.formattedLists.formattedLists.fieldsFormatted" + // Fields
+                        ", $.formattedLists.formattedLists.customFieldsFormatted" + // Custom fields
                         ")",
                 },
                 resultPath: "$.content",
@@ -40,16 +53,65 @@ export class ReadmeTemplate extends BaseTemplate {
             "SetupREADME",
             {
                 parameters: {
-                    "FILES": FILES,
+                    "FILES": FILES
                 },
                 resultPath: "$.files",
             },
         );
     }
 
+    private formatFields(): stepfunctions.Pass {
+        return new stepfunctions.Pass(this.scope, 'FormatFields', {
+            parameters: {
+                "fieldsFormatted.$": "States.Array(States.Format('* Project: {}', $.entry.entryData.fields.Project.displayValue), States.Format('* Study: {}', $.entry.entryData.fields.Study.displayValue))"
+            },
+            resultPath: "$.fieldsFormatted"
+        });
+    }
+
+    private formatCustomFields(): stepfunctions.Pass {
+        return new stepfunctions.Pass(this.scope, 'FormatCustomFields', {
+            parameters: {
+                "customFieldsFormatted.$": "States.Array('* No custom fields defined')"
+            },
+            resultPath: "$.customFieldsFormatted"
+        });
+    }
+
+    private formatAuthors(): stepfunctions.Map {
+        const appendFormattedAuthor = new stepfunctions.Pass(this.scope, 'AppendFormattedAuthor', {
+            parameters: {
+                "formattedAuthor.$": "States.Format('* {} <{}@{}>', $.name, $.handle, $.id)"
+            },
+            resultPath: "$.formattedAuthor"
+        });
+
+        return new stepfunctions.Map(this.scope, 'FormatAuthors', {
+            itemsPath: '$.entry.entryData.authors',
+            resultPath: "$.authorsFormatted"
+        }).itemProcessor(appendFormattedAuthor);
+    }
+
+    private joinListVariables(): stepfunctions.Pass {
+        return new stepfunctions.Pass(this.scope, 'JoinFormattedLists', {
+            parameters: {
+                "formattedLists": {
+                    "fieldsFormatted.$": "States.JsonToString($.fieldsFormatted)",
+                    "customFieldsFormatted.$": "States.JsonToString($.customFieldsFormatted)", 
+                    "authorsFormatted.$": "States.JsonToString($.authorsFormatted[*].formattedAuthor)"
+                }
+            },
+            resultPath: "$.formattedLists"
+        });
+    }
+
     public createMarkdown(): stepfunctions.Chain {
         return stepfunctions.Chain
             .start(this.setupFiles())
+            .next(this.formatFields())
+            .next(this.formatCustomFields())
+            .next(this.formatAuthors())
+            .next(this.joinListVariables())
             .next(super.createMarkdown());
     }
 }
