@@ -134,24 +134,104 @@ export class WebhookStateMachine extends Construct {
                     "packageName.$":
                         `States.Format('{}/{}', '${this.props.prefix}', $.message.buttonId)`,
                     "registry": this.props.bucket.bucketName,
+                    "catalog": this.props.quiltCatalog,
                 },
                 resultPath: "$.var",
             },
         );
 
-        const successResponse = new stepfunctions.Pass(this, "ButtonSuccess", {
-            parameters: {
-                statusCode: 200,
-                body: JSON.stringify({
-                    message: "Package creation started",
-                    status: "success"
-                })
-            }
-        });
+        const makeQuiltLinksTask = new stepfunctions.CustomState(
+            this,
+            "MakeButtonQuiltLinks",
+            {
+                stateJson: {
+                    Type: "Pass",
+                    Parameters: {
+                        "catalog_url.$":
+                            "States.Format('https://{}/b/{}/packages/{}', $.var.catalog, $.var.registry, $.var.packageName)",
+                        "revise_url.$":
+                            "States.Format('https://{}/b/{}/packages/{}?action=revisePackage', $.var.catalog, $.var.registry, $.var.packageName)",
+                        "sync_uri.$":
+                            "States.Format('quilt+s3://{}#package={}&catalog={}', $.var.registry, $.var.packageName, $.var.catalog)",
+                    },
+                    ResultPath: "$.links",
+                },
+            },
+        );
+
+        const makeMarkdownTask = new stepfunctions.CustomState(
+            this,
+            "MakeButtonMarkdown",
+            {
+                stateJson: {
+                    Type: "Pass",
+                    Parameters: {
+                        "links.$": stepfunctions.JsonPath.stringAt(
+                            "States.Format('" +
+                                "# Quilt Links\n" +
+                                "---\n" +
+                                "- [Quilt Catalog]({})\n" +
+                                "- [Drop Zone]({})\n" +
+                                "- Quilt+ URI: {}\n" +
+                                "---\n" +
+                                "> NOTE: It may take a minute for the package to be created asynchronously.\n"+
+                                "', " +
+                                "$.links.catalog_url, " +
+                                "$.links.revise_url, " +
+                                "$.links.sync_uri" +
+                                ")",
+                        ),
+                    },
+                    ResultPath: "$.markdown",
+                },
+            },
+        );
+
+        const updateCanvasTask = new stepfunctions.CustomState(
+            this,
+            "UpdateButtonCanvas",
+            {
+                stateJson: {
+                    Type: "Task",
+                    Resource: "arn:aws:states:::http:invoke",
+                    Parameters: {
+                        "ApiEndpoint.$":
+                            "States.Format('{}/api/v2/app-canvases/{}', $.baseURL, $.message.canvasId)",
+                        Method: "PATCH",
+                        Authentication: {
+                            ConnectionArn: this.props.benchlingConnection.attrArn,
+                        },
+                        RequestBody: {
+                            "blocks": [
+                                {
+                                    "id": "md1",
+                                    "type": "MARKDOWN",
+                                    "value.$": "$.markdown.links",
+                                },
+                                {
+                                    "id.$": "$.message.buttonId",
+                                    "type": "BUTTON",
+                                    "text": "Update Package",
+                                    "enabled": true,
+                                },
+                            ],
+                            "enabled": true,
+                            "featureId": "quilt_integration",
+                        },
+                    },
+                    ResultSelector: {
+                        "canvasId.$": "$.ResponseBody.id",
+                    },
+                    ResultPath: "$.canvas",
+                },
+            },
+        );
 
         return buttonMetadataTask
-            .next(startPackagingExecution)
-            .next(successResponse);
+            .next(makeQuiltLinksTask)
+            .next(makeMarkdownTask)
+            .next(updateCanvasTask)
+            .next(startPackagingExecution);
     }
 
     private createCanvasWorkflow(
