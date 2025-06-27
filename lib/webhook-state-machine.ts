@@ -191,7 +191,7 @@ export class WebhookStateMachine extends Construct {
                     ),
                     stepfunctions.Condition.stringEquals(
                         "$.message.type",
-                        "v2-beta.canvas.created",
+                        "v2.canvas.created",
                     ),
                     stepfunctions.Condition.stringEquals(
                         "$.message.type",
@@ -288,7 +288,7 @@ export class WebhookStateMachine extends Construct {
                                 "---\n" +
                                 "- [Quilt Catalog]({})\n" +
                                 "- [Drop Zone]({})\n" +
-                                "- Quilt+ URI: {}\n" +
+                                "- [QuiltSync]({})\n" +
                                 "---\n" +
                                 "> NOTE: It may take a minute for the package to be created asynchronously.\n"+
                                 "', " +
