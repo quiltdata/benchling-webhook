@@ -30,10 +30,18 @@ Create a `.env` file with the following content:
 export CDK_DEFAULT_ACCOUNT=XXXXXXXXXXXX
 export CDK_DEFAULT_REGION=us-west-2
 export BUCKET_NAME=bucket-in-that-region
-export PREFIX=test/benchling-webhook
-export QUEUE_NAME=STACK_NAME-PackagerQueue-XXXXXXX
+export PREFIX=benchling
+export QUILT_CATALOG=stable.quilttest.com
+export QUEUE_NAME=tf-stable-PackagerQueue-4g1PXC9992vI
 export QUEUE_URL=https://sqs.$CDK_DEFAULT_REGION.amazonaws.com/$CDK_DEFAULT_ACCOUNT/$QUEUE_NAME
+export BENCHLING_TENANT=<YOUR_BENCHLING_TENANT>
+export BENCHLING_CLIENT_ID=<YOUR_BENCHLING_APP_CLIENT_ID>
+export BENCHLING_CLIENT_SECRET=<YOUR_BENCHLING_CLIENT_SECRET>
 ```
+Notes:
+* Choose an S3 bucket that is already connected to your Quilt stack and in the same region as the Quilt CloudFormation stack and this CloudFormation stack.
+* QUEUE_NAME: Choose the name of the "PackagerQueue" in your Quilt stack. This will allow the BenchlingWebhookStack to send messages to the Quilt Packaging Engine
+* BENCHLING_TENANT: Use XXX if you login to benchling at XXX.benchling.com  
 
 ## Deployment
 
