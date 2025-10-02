@@ -1,8 +1,6 @@
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
 import * as tasks from "aws-cdk-lib/aws-stepfunctions-tasks";
 import * as logs from "aws-cdk-lib/aws-logs";
-import * as s3 from "aws-cdk-lib/aws-s3";
-import * as events from "aws-cdk-lib/aws-events";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
@@ -97,19 +95,19 @@ export class WebhookStateMachine extends Construct {
     ): stepfunctions.IChainable {
         const startPackagingExecution = new tasks
             .StepFunctionsStartExecution(this, "StartPackagingExecution", {
-            stateMachine: packagingStateMachine,
-            input: stepfunctions.TaskInput.fromObject({
-                entity: stepfunctions.JsonPath.stringAt("$.var.entity"),
-                packageName: stepfunctions.JsonPath.stringAt(
-                    `States.Format('{}/{}', '${this.props.prefix}', $.var.entity)`,
-                ),
-                registry: this.props.bucket.bucketName,
-                baseURL: stepfunctions.JsonPath.stringAt("$.baseURL"),
-                message: stepfunctions.JsonPath.stringAt("$.message"),
-            }),
-            integrationPattern:
-                stepfunctions.IntegrationPattern.REQUEST_RESPONSE,
-        });
+                stateMachine: packagingStateMachine,
+                input: stepfunctions.TaskInput.fromObject({
+                    entity: stepfunctions.JsonPath.stringAt("$.var.entity"),
+                    packageName: stepfunctions.JsonPath.stringAt(
+                        `States.Format('{}/{}', '${this.props.prefix}', $.var.entity)`,
+                    ),
+                    registry: this.props.bucket.bucketName,
+                    baseURL: stepfunctions.JsonPath.stringAt("$.baseURL"),
+                    message: stepfunctions.JsonPath.stringAt("$.message"),
+                }),
+                integrationPattern:
+                    stepfunctions.IntegrationPattern.REQUEST_RESPONSE,
+            });
 
         const errorHandler = new stepfunctions.Pass(this, "HandleError", {
             parameters: {
@@ -144,9 +142,9 @@ export class WebhookStateMachine extends Construct {
                 statusCode: 200,
                 body: JSON.stringify({
                     message: "Package creation started",
-                    status: "success"
-                })
-            }
+                    status: "success",
+                }),
+            },
         });
 
         return buttonMetadataTask
@@ -181,7 +179,7 @@ export class WebhookStateMachine extends Construct {
                     },
                     resultPath: "$.var",
                 })
-                .next(startPackagingExecution),
+                    .next(startPackagingExecution),
             )
             .when(
                 stepfunctions.Condition.or(

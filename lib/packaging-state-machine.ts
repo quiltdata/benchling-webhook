@@ -5,14 +5,12 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as nodejs from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "path";
 import * as tasks from "aws-cdk-lib/aws-stepfunctions-tasks";
-import * as events from "aws-cdk-lib/aws-events";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { ExportStatus, PackagingStateMachineProps } from "./types";
 import { EXPORT_STATUS, FILES } from "./constants";
 import { ReadmeTemplate } from "./templates/readme";
-import { EntryTemplate } from "./templates/entry";
 
 export class PackagingStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
@@ -132,7 +130,7 @@ export class PackagingStateMachine extends Construct {
         // const entryTemplate = new EntryTemplate(this);
 
         return readmeTemplate.write(this.stringProcessor, this.props.bucket, FILES.README_MD);
-            //.next(entryTemplate.write(this.stringProcessor, this.props.bucket, FILES.ENTRY_MD));
+        //.next(entryTemplate.write(this.stringProcessor, this.props.bucket, FILES.ENTRY_MD));
     }
 
     private createDefinition(): stepfunctions.IChainable {
@@ -328,7 +326,7 @@ export class PackagingStateMachine extends Construct {
         }S3`;
         const resultPath = bodyPath.replace("Body", "put") + "Result";
 
-        const parameters: Record<string, any> = {
+        const parameters: Record<string, string> = {
             Bucket: bucket.bucketName,
             "Key.$": `States.Format('{}/{}', $.packageName, '${filename}')`,
             "Body.$": bodyPath,
