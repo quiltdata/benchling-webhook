@@ -1,9 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
-import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as nodejs from "aws-cdk-lib/aws-lambda-nodejs";
-import * as path from "path";
 import { Construct } from "constructs";
 import { WebhookApi } from "./api-gateway";
 import { WebhookStateMachine } from "./webhook-state-machine";
