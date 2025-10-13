@@ -132,24 +132,21 @@ export class WebhookStateMachine extends Construct {
                     "packageName.$":
                         `States.Format('{}/{}', '${this.props.prefix}', $.message.buttonId)`,
                     "registry": this.props.bucket.bucketName,
+                    "catalog": this.props.quiltCatalog,
+                    "baseURL.$": "$.baseURL",
+                    "message.$": "$.message",
                 },
                 resultPath: "$.var",
             },
         );
 
-        const successResponse = new stepfunctions.Pass(this, "ButtonSuccess", {
-            parameters: {
-                statusCode: 200,
-                body: JSON.stringify({
-                    message: "Package creation started",
-                    status: "success",
-                }),
-            },
-        });
+        const updateCanvasTask = this.createUpdateCanvasTask();
 
         return buttonMetadataTask
+            .next(this.createQuiltLinksTask("MakeQuiltLinksButton"))
+            .next(this.createMarkdownTask("MakeMarkdownButton", "Package update started. It may take a minute to complete."))
             .next(startPackagingExecution)
-            .next(successResponse);
+            .next(updateCanvasTask);
     }
 
     private createCanvasWorkflow(
@@ -254,60 +251,67 @@ export class WebhookStateMachine extends Construct {
             },
         );
 
-        const makeQuiltLinksTask = new stepfunctions.CustomState(
-            this,
-            "MakeQuiltLinks",
-            {
-                stateJson: {
-                    Type: "Pass",
-                    Parameters: {
-                        "catalog_url.$":
-                            "States.Format('https://{}/b/{}/packages/{}', $.var.catalog, $.var.registry, $.var.packageName)",
-                        "revise_url.$":
-                            "States.Format('https://{}/b/{}/packages/{}?action=revisePackage', $.var.catalog, $.var.registry, $.var.packageName)",
-                        "sync_uri.$":
-                            "States.Format('quilt+s3://{}#package={}&catalog={}', $.var.registry, $.var.packageName, $.var.catalog)",
-                    },
-                    ResultPath: "$.links",
-                },
-            },
-        );
-
-        const makeMarkdownTask = new stepfunctions.CustomState(
-            this,
-            "MakeMarkdown",
-            {
-                stateJson: {
-                    Type: "Pass",
-                    Parameters: {
-                        "links.$": stepfunctions.JsonPath.stringAt(
-                            "States.Format('" +
-                                "# Quilt Links\n" +
-                                "---\n" +
-                                "- [Quilt Catalog]({})\n" +
-                                "- [Drop Zone]({})\n" +
-                                "- [QuiltSync]({})\n" +
-                                "---\n" +
-                                "> NOTE: It may take a minute for the package to be created asynchronously.\n"+
-                                "', " +
-                                "$.links.catalog_url, " +
-                                "$.links.revise_url, " +
-                                "$.links.sync_uri" +
-                                ")",
-                        ),
-                    },
-                    ResultPath: "$.markdown",
-                },
-            },
-        );
-
         return setupCanvasMetadataTask
-            .next(makeQuiltLinksTask)
-            .next(makeMarkdownTask);
+            .next(this.createQuiltLinksTask("MakeQuiltLinks"))
+            .next(this.createMarkdownTask("MakeMarkdown", "It may take a minute for the package to be created asynchronously."));
+    }
+
+    private createQuiltLinksTask(id: string): stepfunctions.CustomState {
+        return new stepfunctions.CustomState(this, id, {
+            stateJson: {
+                Type: "Pass",
+                Parameters: {
+                    "catalog_url.$":
+                        "States.Format('https://{}/b/{}/packages/{}', $.var.catalog, $.var.registry, $.var.packageName)",
+                    "revise_url.$":
+                        "States.Format('https://{}/b/{}/packages/{}?action=revisePackage', $.var.catalog, $.var.registry, $.var.packageName)",
+                    "sync_uri.$":
+                        "States.Format('quilt+s3://{}#package={}&catalog={}', $.var.registry, $.var.packageName, $.var.catalog)",
+                },
+                ResultPath: "$.links",
+            },
+        });
+    }
+
+    private createMarkdownTask(id: string, note: string): stepfunctions.CustomState {
+        return new stepfunctions.CustomState(this, id, {
+            stateJson: {
+                Type: "Pass",
+                Parameters: {
+                    "links.$": stepfunctions.JsonPath.stringAt(
+                        "States.Format('" +
+                            "# Quilt Links\n" +
+                            "---\n" +
+                            "- [Quilt Catalog]({})\n" +
+                            "- [Drop Zone]({})\n" +
+                            "- [QuiltSync]({})\n" +
+                            "---\n" +
+                            `> NOTE: ${note}\n` +
+                            "', " +
+                            "$.links.catalog_url, " +
+                            "$.links.revise_url, " +
+                            "$.links.sync_uri" +
+                            ")",
+                    ),
+                },
+                ResultPath: "$.markdown",
+            },
+        });
     }
 
     private createCanvasTask(): stepfunctions.CustomState {
-        return new stepfunctions.CustomState(this, "CreateCanvas", {
+        return this.createCanvasPatchTask("CreateCanvas", "$.appEntries.entry.id");
+    }
+
+    private createUpdateCanvasTask(): stepfunctions.CustomState {
+        return this.createCanvasPatchTask("UpdateCanvas", "$.var.message.buttonId");
+    }
+
+    private createCanvasPatchTask(
+        id: string,
+        buttonIdPath: string,
+    ): stepfunctions.CustomState {
+        return new stepfunctions.CustomState(this, id, {
             stateJson: {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
@@ -326,7 +330,7 @@ export class WebhookStateMachine extends Construct {
                                 "value.$": "$.markdown.links",
                             },
                             {
-                                "id.$": "$.appEntries.entry.id",
+                                "id.$": buttonIdPath,
                                 "type": "BUTTON",
                                 "text": "Update Package",
                                 "enabled": true,
