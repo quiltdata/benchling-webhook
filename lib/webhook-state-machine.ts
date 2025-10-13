@@ -144,9 +144,33 @@ export class WebhookStateMachine extends Construct {
 
         return buttonMetadataTask
             .next(this.createQuiltLinksTask("MakeQuiltLinksButton"))
-            .next(this.createMarkdownTask("MakeMarkdownButton", "Package update started. It may take a minute to complete."))
+            .next(this.createMarkdownButton())
             .next(startPackagingExecution)
             .next(updateCanvasTask);
+    }
+
+    private createMarkdownButton(): stepfunctions.Pass {
+        return new stepfunctions.Pass(this, "MakeMarkdownButton", {
+            parameters: {
+                "links.$": "$.links",
+                "var.$": "$.var",
+                "markdown.$": stepfunctions.JsonPath.stringAt(
+                    "States.Format('" +
+                        "# Quilt Links\n" +
+                        "---\n" +
+                        "- [Quilt Catalog]({})\n" +
+                        "- [Drop Zone]({})\n" +
+                        "- [QuiltSync]({})\n" +
+                        "---\n" +
+                        "> NOTE: Package update started. It may take a minute to complete.\n" +
+                        "', " +
+                        "$.links.catalog_url, " +
+                        "$.links.revise_url, " +
+                        "$.links.sync_uri" +
+                        ")",
+                ),
+            },
+        });
     }
 
     private createCanvasWorkflow(
@@ -304,20 +328,24 @@ export class WebhookStateMachine extends Construct {
     }
 
     private createUpdateCanvasTask(): stepfunctions.CustomState {
-        return this.createCanvasPatchTask("UpdateCanvas", "$.var.message.buttonId");
+        return this.createCanvasPatchTask("UpdateCanvas", "$.var.message.buttonId", true);
     }
 
     private createCanvasPatchTask(
         id: string,
         buttonIdPath: string,
+        useVarContext: boolean = false,
     ): stepfunctions.CustomState {
+        const baseURLPath = useVarContext ? "$.var.baseURL" : "$.baseURL";
+        const canvasIdPath = useVarContext ? "$.var.message.canvasId" : "$.message.canvasId";
+
         return new stepfunctions.CustomState(this, id, {
             stateJson: {
                 Type: "Task",
                 Resource: "arn:aws:states:::http:invoke",
                 Parameters: {
                     "ApiEndpoint.$":
-                        "States.Format('{}/api/v2/app-canvases/{}', $.baseURL, $.message.canvasId)",
+                        `States.Format('{}/api/v2/app-canvases/{}', ${baseURLPath}, ${canvasIdPath})`,
                     Method: "PATCH",
                     Authentication: {
                         ConnectionArn: this.props.benchlingConnection.attrArn,
