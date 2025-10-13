@@ -1,27 +1,20 @@
 manifestVersion: 1
 info:
   name: package-with-quilt
-  description: Uses Quilt Package Engine
-  version: 0.2.2
+  description: Benchling Webhook + Quilt Package Engine
+  version: 0.3.0
 features:
-  - name: Quilt Integration
+  - name: Package Benchling Notebooks
     id: quilt_integration
     type: CANVAS
-  - name: Quilt Homepage
-    id: quilt_homepage
-    type: APP_HOMEPAGE
 subscriptions:
   deliveryMethod: WEBHOOK
+  # `app` events  go to /lifecycle
+  # `canvas` events go to /canvas (including interaction?)
+  # All other events go to /event
   messages:
-    - type: v2.app.activateRequested
-    - type: v2.app.deactivated
-    - type: v2.app.installed
-    - type: v2-beta.app.configuration.updated
-    - type: v2.canvas.initialized
     - type: v2.canvas.userInteracted
-    - type: v2.canvas.created
+    - type: v2.canvas.created # user clicks 'Create'
     - type: v2.entity.registered
-    - type: v2.entry.created
+    - type: v2.entry.created # new notebook created
     - type: v2.entry.updated.fields
-    - type: v2.entry.updated.reviewRecord
-    - type: v2.request.created
