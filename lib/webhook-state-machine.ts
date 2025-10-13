@@ -107,6 +107,7 @@ export class WebhookStateMachine extends Construct {
                 }),
                 integrationPattern:
                     stepfunctions.IntegrationPattern.REQUEST_RESPONSE,
+                resultPath: "$.packagingResult",
             });
 
         const errorHandler = new stepfunctions.Pass(this, "HandleError", {
@@ -149,26 +150,19 @@ export class WebhookStateMachine extends Construct {
             .next(updateCanvasTask);
     }
 
-    private createMarkdownButton(): stepfunctions.Pass {
-        return new stepfunctions.Pass(this, "MakeMarkdownButton", {
-            parameters: {
-                "links.$": "$.links",
-                "var.$": "$.var",
-                "markdown.$": stepfunctions.JsonPath.stringAt(
-                    "States.Format('" +
-                        "# Quilt Links\n" +
-                        "---\n" +
-                        "- [Quilt Catalog]({})\n" +
-                        "- [Drop Zone]({})\n" +
-                        "- [QuiltSync]({})\n" +
-                        "---\n" +
-                        "> NOTE: Package update started. It may take a minute to complete.\n" +
-                        "', " +
-                        "$.links.catalog_url, " +
-                        "$.links.revise_url, " +
-                        "$.links.sync_uri" +
-                        ")",
-                ),
+    private createMarkdownButton(): stepfunctions.CustomState {
+        return new stepfunctions.CustomState(this, "MakeMarkdownButton", {
+            stateJson: {
+                Type: "Pass",
+                Parameters: {
+                    "links.$": "$.links",
+                    "var.$": "$.var",
+                    "baseURL.$": "$.var.baseURL",
+                    "message.$": "$.var.message",
+                    "markdown": {
+                        "links.$": "States.Format('# Quilt Links\n---\n- [Quilt Catalog]({})\n- [Drop Zone]({})\n- [QuiltSync]({})\n---\n> NOTE: Package update started. It may take a minute to complete.\n', $.links.catalog_url, $.links.revise_url, $.links.sync_uri)",
+                    },
+                },
             },
         });
     }
@@ -270,6 +264,8 @@ export class WebhookStateMachine extends Construct {
                         `States.Format('{}/{}', '${this.props.prefix}', $.appEntries.entry.id)`,
                     "registry": this.props.bucket.bucketName,
                     "catalog": this.props.quiltCatalog,
+                    "baseURL.$": "$.baseURL",
+                    "message.$": "$.message",
                 },
                 resultPath: "$.var",
             },
