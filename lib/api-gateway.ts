@@ -4,20 +4,35 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
 import { Construct } from "constructs";
 
+export interface WebhookApiProps {
+    stateMachine: stepfunctions.StateMachine;
+    webhookAllowList?: string;
+}
+
 export class WebhookApi {
     public readonly api: apigateway.RestApi;
 
     constructor(
         scope: Construct,
         id: string,
-        stateMachine: stepfunctions.StateMachine,
+        props: WebhookApiProps,
     ) {
         const logGroup = new logs.LogGroup(scope, "ApiGatewayAccessLogs");
-        const apiRole = this.createApiRole(scope, stateMachine);
+        const apiRole = this.createApiRole(scope, props.stateMachine);
         this.createCloudWatchRole(scope);
+
+        // Parse IP allowlist for resource policy
+        const allowedIps = props.webhookAllowList
+            ? props.webhookAllowList.split(",").map((ip) => ip.trim())
+            : [];
+
+        // Create resource policy for IP filtering at the edge
+        // This blocks requests from non-allowlisted IPs before any AWS service is invoked
+        const policyDocument = this.createResourcePolicy(allowedIps);
 
         this.api = new apigateway.RestApi(scope, "BenchlingWebhookAPI", {
             restApiName: "BenchlingWebhookAPI",
+            policy: policyDocument,
             deployOptions: {
                 stageName: "prod",
                 accessLogDestination: new apigateway.LogGroupLogDestination(logGroup),
@@ -30,7 +45,29 @@ export class WebhookApi {
             },
         });
 
-        this.addWebhookEndpoints(stateMachine, apiRole);
+        this.addWebhookEndpoints(props.stateMachine, apiRole);
+    }
+
+    private createResourcePolicy(allowedIps: string[]): iam.PolicyDocument | undefined {
+        if (allowedIps.length === 0) {
+            return undefined;
+        }
+
+        return new iam.PolicyDocument({
+            statements: [
+                new iam.PolicyStatement({
+                    effect: iam.Effect.ALLOW,
+                    principals: [new iam.AnyPrincipal()],
+                    actions: ["execute-api:Invoke"],
+                    resources: ["execute-api:/*"],
+                    conditions: {
+                        IpAddress: {
+                            "aws:SourceIp": allowedIps,
+                        },
+                    },
+                }),
+            ],
+        });
     }
 
     private createCloudWatchRole(scope: Construct): iam.Role {
