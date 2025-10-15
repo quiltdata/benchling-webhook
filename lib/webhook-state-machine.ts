@@ -129,7 +129,6 @@ export class WebhookStateMachine extends Construct {
     private createVerificationTask(): tasks.LambdaInvoke {
         return new tasks.LambdaInvoke(this, "VerifyWebhook", {
             lambdaFunction: this.verificationFunction,
-            payload: stepfunctions.TaskInput.fromJsonPathAt("$"),
             resultPath: "$",
             payloadResponseOnly: true,
         });
