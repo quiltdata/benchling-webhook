@@ -23,7 +23,7 @@ export class WebhookApi {
 
         // Parse IP allowlist for resource policy
         const allowedIps = props.webhookAllowList
-            ? props.webhookAllowList.split(",").map((ip) => ip.trim())
+            ? props.webhookAllowList.split(",").map((ip) => ip.trim()).filter((ip) => ip.length > 0)
             : [];
 
         // Create resource policy for IP filtering at the edge
