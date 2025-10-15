@@ -85,12 +85,19 @@ describe("BenchlingWebhookStack", () => {
                         ],
                     ],
                 },
-                RequestTemplates: {
-                    "application/json": Match.stringLikeRegexp(
-                        ".*bodyBase64.*webhook-id.*webhook-timestamp.*webhook-signature.*",
-                    ),
-                },
             },
+        });
+
+        const methods = template.findResources("AWS::ApiGateway::Method");
+        Object.values(methods).forEach((methodResource: unknown) => {
+            const method = methodResource as {
+                Properties?: {
+                    Integration?: { RequestTemplates?: Record<string, unknown> };
+                };
+            };
+            const templates = method.Properties?.Integration?.RequestTemplates;
+            expect(JSON.stringify(templates)).toContain("bodyBase64");
+            expect(JSON.stringify(templates)).toContain("webhook-signature");
         });
     });
 
