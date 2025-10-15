@@ -37,11 +37,13 @@ export QUEUE_URL=https://sqs.$CDK_DEFAULT_REGION.amazonaws.com/$CDK_DEFAULT_ACCO
 export BENCHLING_TENANT=<YOUR_BENCHLING_TENANT>
 export BENCHLING_CLIENT_ID=<YOUR_BENCHLING_APP_CLIENT_ID>
 export BENCHLING_CLIENT_SECRET=<YOUR_BENCHLING_CLIENT_SECRET>
+export WEBHOOK_ALLOW_LIST="203.0.113.10,198.51.100.5" # optional: comma-separated source IPs
 ```
 Notes:
 * Choose an S3 bucket that is already connected to your Quilt stack and in the same region as the Quilt CloudFormation stack and this CloudFormation stack.
 * QUEUE_NAME: Choose the name of the "PackagerQueue" in your Quilt stack. This will allow the BenchlingWebhookStack to send messages to the Quilt Packaging Engine
 * BENCHLING_TENANT: Use XXX if you login to benchling at XXX.benchling.com  
+* Set `WEBHOOK_ALLOW_LIST` to the public IPs Benchling uses for webhook delivery to add an IP-based guardrail around signature verification. Leave unset to accept Benchling traffic from any source.
 
 ## Deployment
 
