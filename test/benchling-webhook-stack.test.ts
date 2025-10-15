@@ -95,9 +95,32 @@ describe("BenchlingWebhookStack", () => {
                     Integration?: { RequestTemplates?: Record<string, unknown> };
                 };
             };
-            const templates = method.Properties?.Integration?.RequestTemplates;
-            expect(JSON.stringify(templates)).toContain("bodyBase64");
-            expect(JSON.stringify(templates)).toContain("webhook-signature");
+            const requestTemplate = method
+                .Properties?.Integration?.RequestTemplates?.["application/json"] as
+                | { "Fn::Join": [string, unknown[]] }
+                | undefined;
+            expect(requestTemplate).toBeDefined();
+
+            const joinExpression = requestTemplate?.["Fn::Join"] as
+                | [string, unknown[]]
+                | undefined;
+            expect(joinExpression?.[0]).toBe("");
+
+            const joinSegments = joinExpression?.[1] as unknown[] | undefined;
+            expect(Array.isArray(joinSegments)).toBe(true);
+
+            const renderedTemplate = (joinSegments ?? [])
+                .map((segment) => (typeof segment === "string" ? segment : JSON.stringify(segment)))
+                .join("");
+
+            expect(renderedTemplate).toContain("\"stateMachineArn\"");
+            expect(renderedTemplate).toContain("\"input\"");
+            expect(renderedTemplate).toContain("\"name\"");
+            expect(renderedTemplate).toContain("bodyBase64");
+            expect(renderedTemplate).toContain("webhook-id");
+            expect(renderedTemplate).toContain("webhook-timestamp");
+            expect(renderedTemplate).toContain("webhook-signature");
+            expect(renderedTemplate).toContain("sourceIp");
         });
     });
 

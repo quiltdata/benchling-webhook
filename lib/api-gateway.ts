@@ -81,7 +81,7 @@ export class WebhookApi {
                 requestTemplates: {
                     "application/json": `{
                         "stateMachineArn": "${stateMachine.stateMachineArn}",
-                        "input": "{\\"bodyBase64\\":\\"$util.base64Encode($input.body)\\",\\"headers\\":{\\"webhook-id\\":\\"$input.params('header','webhook-id')\\",\\"webhook-timestamp\\":\\"$input.params('header','webhook-timestamp')\\",\\"webhook-signature\\":\\"$input.params('header','webhook-signature')\\",\\"x-forwarded-for\\":\\"$input.params('header','x-forwarded-for')\\"},\\"sourceIp\\":\\"$context.identity.sourceIp\\"}",
+                        "input": "{\\"bodyBase64\\":\\"$util.base64Encode($input.body)\\",\\"headers\\":{\\"webhook-id\\":\\"$input.params('header','webhook-id')\\",\\"webhook-timestamp\\":\\"$input.params('header','webhook-timestamp')\\",\\"webhook-signature\\":\\"$input.params('header','webhook-signature')\\"},\\"sourceIp\\":\\"$context.identity.sourceIp\\"}",
                         "name": "$context.requestId"
                     }`,
                 },
