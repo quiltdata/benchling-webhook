@@ -4,17 +4,46 @@ This stack supports runtime-configurable parameters that can be updated without 
 
 ## Available Parameters
 
-### WebhookAllowList
+### Security and Configuration
+
+#### WebhookAllowList
+
 - **Type**: String (comma-separated IP addresses)
 - **Description**: List of IP addresses allowed to send webhooks
 - **Default**: Value from `WEBHOOK_ALLOW_LIST` environment variable (or empty to allow all IPs)
 - **Example**: `34.216.192.90,34.217.183.162`
 
-### QuiltCatalog
+#### QuiltCatalog
+
 - **Type**: String
 - **Description**: Quilt catalog URL for package links
 - **Default**: `open.quiltdata.com`
 - **Example**: `catalog.example.com`
+
+### Infrastructure Parameters
+
+#### BucketName
+
+- **Type**: String
+- **Description**: S3 bucket name for storing packages
+- **Default**: Value from `BUCKET_NAME` environment variable
+- **Example**: `my-packages-bucket`
+
+#### PackagePrefix
+
+- **Type**: String
+- **Description**: Prefix for package names (no slashes allowed)
+- **Default**: Value from `PREFIX` environment variable
+- **Example**: `benchling` or `my-org`
+
+#### QueueName
+
+- **Type**: String
+- **Description**: SQS queue name for package notifications
+- **Default**: Value from `QUEUE_NAME` environment variable
+- **Example**: `my-packager-queue`
+
+**Note**: Benchling credentials (CLIENT_ID, CLIENT_SECRET, TENANT) are **not** parameters because they're used to create AWS resources at deployment time and contain sensitive information.
 
 ## Updating Parameters
 
@@ -23,21 +52,27 @@ This stack supports runtime-configurable parameters that can be updated without 
 Update parameters without redeploying the stack:
 
 ```bash
-# Update webhook allow list
+# Update webhook allow list only
 aws cloudformation update-stack \
   --stack-name BenchlingWebhookStack \
   --use-previous-template \
   --parameters \
     ParameterKey=WebhookAllowList,ParameterValue="1.2.3.4,5.6.7.8" \
-    ParameterKey=QuiltCatalog,UsePreviousValue=true
+    ParameterKey=QuiltCatalog,UsePreviousValue=true \
+    ParameterKey=BucketName,UsePreviousValue=true \
+    ParameterKey=PackagePrefix,UsePreviousValue=true \
+    ParameterKey=QueueName,UsePreviousValue=true
 
-# Update both parameters
+# Update multiple parameters
 aws cloudformation update-stack \
   --stack-name BenchlingWebhookStack \
   --use-previous-template \
   --parameters \
     ParameterKey=WebhookAllowList,ParameterValue="34.216.192.90,34.217.183.162" \
-    ParameterKey=QuiltCatalog,ParameterValue="my-catalog.quiltdata.com"
+    ParameterKey=QuiltCatalog,ParameterValue="my-catalog.quiltdata.com" \
+    ParameterKey=BucketName,ParameterValue="new-bucket-name" \
+    ParameterKey=PackagePrefix,UsePreviousValue=true \
+    ParameterKey=QueueName,UsePreviousValue=true
 ```
 
 ### Using AWS Console
@@ -47,9 +82,12 @@ aws cloudformation update-stack \
 3. Click **Update**
 4. Select **Use current template**
 5. Click **Next**
-6. Update the parameter values:
-   - **WebhookAllowList**: Enter comma-separated IP addresses
-   - **QuiltCatalog**: Enter catalog URL
+6. Update the parameter values as needed:
+   - **WebhookAllowList**: Comma-separated IP addresses
+   - **QuiltCatalog**: Catalog URL
+   - **BucketName**: S3 bucket name
+   - **PackagePrefix**: Package prefix
+   - **QueueName**: SQS queue name
 7. Click **Next** through the remaining screens
 8. Click **Update stack**
 
@@ -75,11 +113,13 @@ Parameters are automatically created during CDK deployment. The initial values c
 ### How It Works
 
 The stack uses a hybrid approach:
+
 - **Initial Deployment**: Uses environment variable values from `bin/benchling-webhook.ts`
 - **Subsequent Updates**: Uses CloudFormation parameter values
 - **Lambda Environment**: Automatically reflects parameter changes via CloudFormation
 
 When you update a parameter via CloudFormation:
+
 1. CloudFormation updates the Lambda function's environment variables
 2. CloudFormation updates the API Gateway Resource Policy
 3. Lambda automatically picks up the new values on next invocation (no cold start required)
@@ -98,10 +138,13 @@ aws cloudformation update-stack \
   --use-previous-template \
   --parameters \
     ParameterKey=WebhookAllowList,ParameterValue="34.216.192.90,34.217.183.162,203.0.113.10" \
-    ParameterKey=QuiltCatalog,UsePreviousValue=true
+    ParameterKey=QuiltCatalog,UsePreviousValue=true \
+    ParameterKey=BucketName,UsePreviousValue=true \
+    ParameterKey=PackagePrefix,UsePreviousValue=true \
+    ParameterKey=QueueName,UsePreviousValue=true
 ```
 
-### Switch to a different Quilt catalog
+### Switch to a different S3 bucket
 
 ```bash
 aws cloudformation update-stack \
@@ -109,7 +152,24 @@ aws cloudformation update-stack \
   --use-previous-template \
   --parameters \
     ParameterKey=WebhookAllowList,UsePreviousValue=true \
-    ParameterKey=QuiltCatalog,ParameterValue="prod-catalog.quiltdata.com"
+    ParameterKey=QuiltCatalog,UsePreviousValue=true \
+    ParameterKey=BucketName,ParameterValue="new-packages-bucket" \
+    ParameterKey=PackagePrefix,UsePreviousValue=true \
+    ParameterKey=QueueName,UsePreviousValue=true
+```
+
+### Change package prefix
+
+```bash
+aws cloudformation update-stack \
+  --stack-name BenchlingWebhookStack \
+  --use-previous-template \
+  --parameters \
+    ParameterKey=WebhookAllowList,UsePreviousValue=true \
+    ParameterKey=QuiltCatalog,UsePreviousValue=true \
+    ParameterKey=BucketName,UsePreviousValue=true \
+    ParameterKey=PackagePrefix,ParameterValue="my-new-prefix" \
+    ParameterKey=QueueName,UsePreviousValue=true
 ```
 
 ### Allow all IPs (remove IP filtering)
@@ -120,7 +180,10 @@ aws cloudformation update-stack \
   --use-previous-template \
   --parameters \
     ParameterKey=WebhookAllowList,ParameterValue="" \
-    ParameterKey=QuiltCatalog,UsePreviousValue=true
+    ParameterKey=QuiltCatalog,UsePreviousValue=true \
+    ParameterKey=BucketName,UsePreviousValue=true \
+    ParameterKey=PackagePrefix,UsePreviousValue=true \
+    ParameterKey=QueueName,UsePreviousValue=true
 ```
 
 ## Troubleshooting
@@ -128,6 +191,7 @@ aws cloudformation update-stack \
 ### Parameter update fails
 
 If the CloudFormation update fails, check:
+
 - IP addresses are valid (no spaces, proper CIDR notation if needed)
 - Catalog URL is a valid hostname
 - You're using `--use-previous-template` flag
