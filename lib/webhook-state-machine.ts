@@ -34,6 +34,9 @@ export class WebhookStateMachine extends Construct {
             },
         );
 
+        // Create verification Lambda for Step Functions
+        // IP filtering happens at API Gateway level via Resource Policy
+        // Signature verification happens here in Step Functions
         this.verificationFunction = new nodejs.NodejsFunction(
             this,
             "WebhookVerificationFunction",

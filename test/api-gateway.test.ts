@@ -14,7 +14,10 @@ describe("WebhookApi", () => {
                 new stepfunctions.Pass(stack, "TestPass"),
             ),
         });
-        new WebhookApi(stack, "TestApi", stateMachine);
+        new WebhookApi(stack, "TestApi", {
+            stateMachine,
+            webhookAllowList: "203.0.113.10,198.51.100.5",
+        });
         template = Template.fromStack(stack);
     });
 
