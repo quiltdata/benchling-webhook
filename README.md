@@ -37,11 +37,16 @@ export QUEUE_URL=https://sqs.$CDK_DEFAULT_REGION.amazonaws.com/$CDK_DEFAULT_ACCO
 export BENCHLING_TENANT=<YOUR_BENCHLING_TENANT>
 export BENCHLING_CLIENT_ID=<YOUR_BENCHLING_APP_CLIENT_ID>
 export BENCHLING_CLIENT_SECRET=<YOUR_BENCHLING_CLIENT_SECRET>
+export WEBHOOK_ALLOW_LIST="203.0.113.10,198.51.100.5" # optional: comma-separated source IPs
 ```
-Notes:
-* Choose an S3 bucket that is already connected to your Quilt stack and in the same region as the Quilt CloudFormation stack and this CloudFormation stack.
-* QUEUE_NAME: Choose the name of the "PackagerQueue" in your Quilt stack. This will allow the BenchlingWebhookStack to send messages to the Quilt Packaging Engine
-* BENCHLING_TENANT: Use XXX if you login to benchling at XXX.benchling.com  
+
+### Configuration Notes
+
+**IMPORTANT - S3 Bucket Region:** The `BUCKET_NAME` must be an S3 bucket located in the **same region** as `CDK_DEFAULT_REGION`. If you specify a bucket in a different region, the packaging state machine will fail with a `PermanentRedirect` error. The bucket must also be connected to your Quilt stack.
+
+- **QUEUE_NAME**: Choose the name of the "PackagerQueue" in your Quilt stack. This will allow the BenchlingWebhookStack to send messages to the Quilt Packaging Engine
+- **BENCHLING_TENANT**: Use XXX if you login to benchling at XXX.benchling.com
+- **WEBHOOK_ALLOW_LIST**: Set to the public IPs Benchling uses for webhook delivery to add an IP-based guardrail around signature verification. Leave unset to accept Benchling traffic from any source.
 
 ## Deployment
 
@@ -72,7 +77,7 @@ npx cdk deploy
     1. Verify it is in Apps
     2. Go to Organizations -> "your org"
 11. Go to "Apps" tab
-    1. Start typing 'package-with-quilt' in the search box
+    1. Start typing 'benchling-webhook' in the search box
     2. Click "Add app"
     3. Select the app
     4. Change the 'Role' to 'Admin'

@@ -14,6 +14,7 @@ export interface WebhookStateMachineProps extends BaseStateMachineProps {
     account: string;
     benchlingTenant: string;
     quiltCatalog?: string;
+    webhookAllowList?: string;
 }
 
 export interface PackagingStateMachineProps extends BaseStateMachineProps {
