@@ -68,13 +68,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
             default: props.queueName,
         });
 
-        // Use props values on first deploy, then use parameters for updates
-        // This ensures we don't have empty parameter issues during initial deployment
-        const webhookAllowListValue = props.webhookAllowList || webhookAllowListParam.valueAsString;
-        const quiltCatalogValue = props.quiltCatalog || quiltCatalogParam.valueAsString;
-        const bucketNameValue = props.bucketName || bucketNameParam.valueAsString;
-        const prefixValue = props.prefix || prefixParam.valueAsString;
-        const queueNameValue = props.queueName || queueNameParam.valueAsString;
+        // Use parameter values (which have props as defaults)
+        // This allows runtime updates via CloudFormation
+        const webhookAllowListValue = webhookAllowListParam.valueAsString;
+        const quiltCatalogValue = quiltCatalogParam.valueAsString;
+        const bucketNameValue = bucketNameParam.valueAsString;
+        const prefixValue = prefixParam.valueAsString;
+        const queueNameValue = queueNameParam.valueAsString;
 
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", bucketNameValue);
 
