@@ -1,4 +1,4 @@
-import { createPublicKey, createVerify } from "crypto";
+import { createPublicKey, createVerify, JsonWebKey as NodeJsonWebKey } from "crypto";
 
 const WEBHOOK_TOLERANCE_MS = 5 * 60 * 1000;
 const allowList = (process.env.WEBHOOK_ALLOW_LIST || "")
@@ -12,14 +12,7 @@ interface VerificationEvent {
     sourceIp?: string;
 }
 
-interface JwkKey {
-    use?: string;
-    crv: string;
-    kid: string;
-    kty: string;
-    x: string;
-    y: string;
-}
+type JwkKey = NodeJsonWebKey & { kid: string };
 
 interface JwkResponse {
     keys: JwkKey[];
@@ -158,7 +151,7 @@ const verifyWithJwk = (
         return false;
     }
 
-    const publicKey = createPublicKey({ key: jwk as unknown as JsonWebKey, format: "jwk" });
+    const publicKey = createPublicKey({ key: jwk, format: "jwk" });
 
     return signatures.some((signature) => {
         const verifier = createVerify("sha256");
@@ -202,7 +195,8 @@ export const handler = async (
         throw new WebhookVerificationError("Request body is not valid JSON");
     }
 
-    const appDefinitionId = parsedBody?.appDefinition && (parsedBody.appDefinition as { id?: string }).id;
+    const appDefinition = parsedBody.appDefinition as { id?: string } | undefined;
+    const appDefinitionId = appDefinition?.id;
     if (!appDefinitionId) {
         throw new WebhookVerificationError("Missing appDefinition.id in payload");
     }
