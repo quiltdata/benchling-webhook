@@ -81,30 +81,29 @@ export class WebhookApi {
                 requestTemplates: {
                     "application/json": `{
                         "stateMachineArn": "${stateMachine.stateMachineArn}",
-                        "input": "{\\"bodyBase64\\":\\"$util.base64Encode($input.body)\\",\\"headers\\":{\\"webhook-id\\":\\"$input.params('header','webhook-id')\\",\\"webhook-timestamp\\":\\"$input.params('header','webhook-timestamp')\\",\\"webhook-signature\\":\\"$input.params('header','webhook-signature')\\"},\\"sourceIp\\":\\"$context.identity.sourceIp\\"}",
+                        "input": "{\\"bodyBase64\\":\\"$util.base64Encode($input.body)\\",\\"headers\\":{\\"webhook-id\\":\\"$util.escapeJavaScript($input.params('webhook-id'))\\",\\"webhook-timestamp\\":\\"$util.escapeJavaScript($input.params('webhook-timestamp'))\\",\\"webhook-signature\\":\\"$util.escapeJavaScript($input.params('webhook-signature'))\\"},\\"sourceIp\\":\\"$context.identity.sourceIp\\"}",
                         "name": "$context.requestId"
                     }`,
                 },
                 integrationResponses: [
                     {
-                        statusCode: "200",
+                        statusCode: "202",
                         responseTemplates: {
-                            "application/json": `
-                            #set($execution = $util.parseJson($input.body))
-                            #if($context.requestId)
-                                {"status": "success", "executionArn": "$execution.executionArn"}
-                            #else
-                                #set($context.responseOverride.status = 500)
-                                {"error": "State machine execution failed", "cause": "Check CloudWatch logs for details"}
-                            #end
-                            `,
+                            "application/json": `{
+    "status": "accepted",
+    "message": "Webhook received and processing started",
+    "executionArn": "$util.escapeJavaScript($input.path('$.executionArn'))"
+}`,
                         },
                     },
                     {
                         selectionPattern: "4\\d{2}",
                         statusCode: "400",
                         responseTemplates: {
-                            "application/json": JSON.stringify({ error: "Bad request" }),
+                            "application/json": JSON.stringify({
+                                error: "Bad request",
+                                message: "Invalid webhook payload"
+                            }),
                         },
                     },
                     {
@@ -113,6 +112,7 @@ export class WebhookApi {
                         responseTemplates: {
                             "application/json": JSON.stringify({
                                 error: "Internal server error",
+                                message: "Failed to start webhook processing"
                             }),
                         },
                     },
@@ -125,7 +125,7 @@ export class WebhookApi {
             const resource = this.api.root.addResource(endpoint);
             resource.addMethod("POST", sfnIntegration, {
                 methodResponses: [
-                    { statusCode: "200" },
+                    { statusCode: "202" },
                     { statusCode: "400" },
                     { statusCode: "500" },
                 ],

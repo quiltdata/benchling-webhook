@@ -162,6 +162,8 @@ const verifyWithJwk = (
 export const handler = async (
     event: VerificationEvent,
 ): Promise<Record<string, unknown>> => {
+    console.log("Received event:", JSON.stringify(event, null, 2));
+
     if (!event || !event.bodyBase64) {
         throw new WebhookVerificationError("Missing request body");
     }
