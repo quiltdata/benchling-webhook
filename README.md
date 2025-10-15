@@ -74,7 +74,7 @@ npx cdk deploy
     1. Verify it is in Apps
     2. Go to Organizations -> "your org"
 11. Go to "Apps" tab
-    1. Start typing 'package-with-quilt' in the search box
+    1. Start typing 'benchling-webhook' in the search box
     2. Click "Add app"
     3. Select the app
     4. Change the 'Role' to 'Admin'

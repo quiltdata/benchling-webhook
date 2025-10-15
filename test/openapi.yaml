@@ -9760,7 +9760,7 @@ paths:
         in: query
         name: returning
         schema:
-          example: features.id,features.modifiedAt
+          example: package_links,features.modifiedAt
           type: string
       responses:
         '200':
