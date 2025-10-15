@@ -51,7 +51,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         this.api = new WebhookApi(this, "WebhookApi", this.stateMachine.stateMachine);
 
-        this.createOutputs();
+        // this.createOutputs();
     }
 
 
