@@ -1,7 +1,11 @@
+import * as cdk from "aws-cdk-lib";
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
 import * as tasks from "aws-cdk-lib/aws-stepfunctions-tasks";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as nodejs from "aws-cdk-lib/aws-lambda-nodejs";
+import * as path from "path";
 import { Construct } from "constructs";
 
 import { WebhookStateMachineProps } from "./types";
@@ -10,6 +14,7 @@ import { PackagingStateMachine } from "./packaging-state-machine";
 export class WebhookStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
     private readonly props: WebhookStateMachineProps;
+    private readonly verificationFunction: lambda.IFunction;
 
     constructor(scope: Construct, id: string, props: WebhookStateMachineProps) {
         super(scope, id);
@@ -26,6 +31,38 @@ export class WebhookStateMachine extends Construct {
                 queueName: props.queueName,
                 region: props.region,
                 account: props.account,
+            },
+        );
+
+        // Create verification Lambda for Step Functions
+        // IP filtering happens at API Gateway level via Resource Policy
+        // Signature verification happens here in Step Functions
+        this.verificationFunction = new nodejs.NodejsFunction(
+            this,
+            "WebhookVerificationFunction",
+            {
+                entry: path.join(__dirname, "lambda/verify-webhook.ts"),
+                handler: "handler",
+                runtime: lambda.Runtime.NODEJS_18_X,
+                timeout: cdk.Duration.seconds(10),
+                memorySize: 256,
+                environment: {
+                    NODE_OPTIONS: "--enable-source-maps",
+                    WEBHOOK_ALLOW_LIST: props.webhookAllowList ?? "",
+                },
+                architecture: lambda.Architecture.ARM_64,
+                bundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [],
+                    forceDockerBundling: false,
+                    target: "node18",
+                    define: {
+                        "process.env.NODE_ENV": JSON.stringify(
+                            process.env.NODE_ENV || "production",
+                        ),
+                    },
+                },
             },
         );
 
@@ -73,28 +110,38 @@ export class WebhookStateMachine extends Construct {
     private createDefinition(
         packagingStateMachine: stepfunctions.StateMachine,
     ): stepfunctions.IChainable {
-        const startPackagingExecution = this.createStartPackagingTask(
-            packagingStateMachine,
-        );
+        // Create separate packaging task invocations for each workflow path
+        // to avoid shared state mutation when .next() is called
         const canvasWorkflow = this.createCanvasWorkflow(
-            startPackagingExecution,
+            this.createStartPackagingTask(packagingStateMachine, "StartPackagingExecutionCanvas"),
         );
         const buttonWorkflow = this.createButtonWorkflow(
-            startPackagingExecution,
+            this.createStartPackagingTask(packagingStateMachine, "StartPackagingExecutionButton"),
         );
 
-        return this.createChannelChoice(
-            startPackagingExecution,
+        const channelChoice = this.createChannelChoice(
+            this.createStartPackagingTask(packagingStateMachine, "StartPackagingExecutionEvent"),
             canvasWorkflow,
             buttonWorkflow,
         );
+
+        return this.createVerificationTask().next(channelChoice);
+    }
+
+    private createVerificationTask(): tasks.LambdaInvoke {
+        return new tasks.LambdaInvoke(this, "VerifyWebhook", {
+            lambdaFunction: this.verificationFunction,
+            resultPath: "$",
+            payloadResponseOnly: true,
+        });
     }
 
     private createStartPackagingTask(
         packagingStateMachine: stepfunctions.StateMachine,
+        id: string = "StartPackagingExecution",
     ): stepfunctions.IChainable {
         const startPackagingExecution = new tasks
-            .StepFunctionsStartExecution(this, "StartPackagingExecution", {
+            .StepFunctionsStartExecution(this, id, {
                 stateMachine: packagingStateMachine,
                 input: stepfunctions.TaskInput.fromObject({
                     entity: stepfunctions.JsonPath.stringAt("$.var.entity"),
@@ -110,7 +157,7 @@ export class WebhookStateMachine extends Construct {
                 resultPath: "$.packagingResult",
             });
 
-        const errorHandler = new stepfunctions.Pass(this, "HandleError", {
+        const errorHandler = new stepfunctions.Pass(this, `${id}HandleError`, {
             parameters: {
                 "error.$": "$.Error",
                 "cause.$": "$.Cause",
