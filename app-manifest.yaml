@@ -1,6 +1,6 @@
 manifestVersion: 1
 info:
-  name: package-with-quilt
+  name: benchling-webhook
   description: Benchling Webhook + Quilt Package Engine
   version: 0.3.0
 features:
