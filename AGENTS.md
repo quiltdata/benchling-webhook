@@ -3,6 +3,7 @@
 ## Project Structure & Module Organization
 - `bin/` contains the CDK entry point and helper scripts; start from `bin/benchling-webhook.ts` when adding new stacks or app wiring.
 - `lib/` holds the CDK constructs, Step Function definitions, and Lambda handlers (`lib/lambda/*.ts`); keep shared constants in `lib/constants.ts` and types in `lib/types.ts`.
+- `lib/lambda/verify-webhook.ts` enforces Benchling's signature and timestamp checks before the Step Function runs; update this when the verification contract changes.
 - `lib/templates/` stores JSON/Lambda templates and `lib/README.md` expands on the architecture.
 - `test/` includes Jest specs (`*.test.ts`) and sample Benchling payloads used as fixtures; prefer adding new fixtures beside related tests.
 
