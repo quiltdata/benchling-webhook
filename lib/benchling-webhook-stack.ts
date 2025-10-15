@@ -35,6 +35,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // Create CloudFormation parameters for runtime-configurable values
         // Note: Use actual values from props during initial deployment to avoid empty string issues
         // Parameters can be updated later via CloudFormation stack updates
+
+        // Security and configuration parameters
         const webhookAllowListParam = new cdk.CfnParameter(this, "WebhookAllowList", {
             type: "String",
             description: "Comma-separated list of IP addresses allowed to send webhooks (leave empty to allow all IPs)",
@@ -47,20 +49,42 @@ export class BenchlingWebhookStack extends cdk.Stack {
             default: props.quiltCatalog || "open.quiltdata.com",
         });
 
+        // Infrastructure parameters - these can be updated without redeploying
+        const bucketNameParam = new cdk.CfnParameter(this, "BucketName", {
+            type: "String",
+            description: "S3 bucket name for storing packages",
+            default: props.bucketName,
+        });
+
+        const prefixParam = new cdk.CfnParameter(this, "PackagePrefix", {
+            type: "String",
+            description: "Prefix for package names (no slashes)",
+            default: props.prefix,
+        });
+
+        const queueNameParam = new cdk.CfnParameter(this, "QueueName", {
+            type: "String",
+            description: "SQS queue name for package notifications",
+            default: props.queueName,
+        });
+
         // Use props values on first deploy, then use parameters for updates
         // This ensures we don't have empty parameter issues during initial deployment
         const webhookAllowListValue = props.webhookAllowList || webhookAllowListParam.valueAsString;
         const quiltCatalogValue = props.quiltCatalog || quiltCatalogParam.valueAsString;
+        const bucketNameValue = props.bucketName || bucketNameParam.valueAsString;
+        const prefixValue = props.prefix || prefixParam.valueAsString;
+        const queueNameValue = props.queueName || queueNameParam.valueAsString;
 
-        this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", props.bucketName);
+        this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", bucketNameValue);
 
         const benchlingConnection = this.createBenchlingConnection(props);
 
         // Create the webhook state machine
         this.stateMachine = new WebhookStateMachine(this, "StateMachine", {
             bucket: this.bucket,
-            prefix: props.prefix,
-            queueName: props.queueName,
+            prefix: prefixValue,
+            queueName: queueNameValue,
             region: this.region,
             account: this.account,
             benchlingConnection,
