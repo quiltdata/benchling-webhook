@@ -59,11 +59,14 @@ const enforceAllowList = (
     sourceIp: string | undefined,
 ): void => {
     if (allowList.length === 0) {
+        console.log("IP allow list is empty, accepting all source IPs");
         return;
     }
+    console.log(`Checking sourceIp "${sourceIp}" against allow list: [${allowList.join(", ")}]`);
     if (!sourceIp || !allowList.includes(sourceIp)) {
-        throw new WebhookVerificationError("source IP not in allow list");
+        throw new WebhookVerificationError(`source IP "${sourceIp}" not in allow list`);
     }
+    console.log(`sourceIp "${sourceIp}" is in allow list`);
 };
 
 const enforceTimestampTolerance = (timestampHeader: string): void => {
