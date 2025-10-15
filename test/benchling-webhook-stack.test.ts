@@ -16,6 +16,7 @@ describe("BenchlingWebhookStack", () => {
             benchlingClientSecret: "test-client-secret",
             benchlingTenant: "test-tenant",
             quiltCatalog: "https://quilt-example.com",
+            webhookAllowList: "203.0.113.10,198.51.100.5",
         });
         template = Template.fromStack(stack);
     });
@@ -84,19 +85,42 @@ describe("BenchlingWebhookStack", () => {
                         ],
                     ],
                 },
-                RequestTemplates: {
-                    "application/json": {
-                        "Fn::Join": [
-                            "",
-                            [
-                                Match.stringLikeRegexp(".*\"stateMachineArn\".*"),
-                                { "Ref": "WebhookStateMachine1016675F" },
-                                Match.stringLikeRegexp(".*\"input\".*\\$input\\.json\\('\\$'\\).*"),
-                            ],
-                        ],
-                    },
-                },
             },
+        });
+
+        const methods = template.findResources("AWS::ApiGateway::Method");
+        Object.values(methods).forEach((methodResource: unknown) => {
+            const method = methodResource as {
+                Properties?: {
+                    Integration?: { RequestTemplates?: Record<string, unknown> };
+                };
+            };
+            const requestTemplate = method
+                .Properties?.Integration?.RequestTemplates?.["application/json"] as
+                | { "Fn::Join": [string, unknown[]] }
+                | undefined;
+            expect(requestTemplate).toBeDefined();
+
+            const joinExpression = requestTemplate?.["Fn::Join"] as
+                | [string, unknown[]]
+                | undefined;
+            expect(joinExpression?.[0]).toBe("");
+
+            const joinSegments = joinExpression?.[1] as unknown[] | undefined;
+            expect(Array.isArray(joinSegments)).toBe(true);
+
+            const renderedTemplate = (joinSegments ?? [])
+                .map((segment) => (typeof segment === "string" ? segment : JSON.stringify(segment)))
+                .join("");
+
+            expect(renderedTemplate).toContain("\"stateMachineArn\"");
+            expect(renderedTemplate).toContain("\"input\"");
+            expect(renderedTemplate).toContain("\"name\"");
+            expect(renderedTemplate).toContain("bodyBase64");
+            expect(renderedTemplate).toContain("webhook-id");
+            expect(renderedTemplate).toContain("webhook-timestamp");
+            expect(renderedTemplate).toContain("webhook-signature");
+            expect(renderedTemplate).toContain("sourceIp");
         });
     });
 

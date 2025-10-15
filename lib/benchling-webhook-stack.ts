@@ -14,6 +14,7 @@ interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
     readonly quiltCatalog?: string;
+    readonly webhookAllowList?: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
@@ -31,25 +32,73 @@ export class BenchlingWebhookStack extends cdk.Stack {
             throw new Error("Prefix should not contain a '/' character.");
         }
 
-        this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", props.bucketName);
+        // Create CloudFormation parameters for runtime-configurable values
+        // Note: Use actual values from props during initial deployment to avoid empty string issues
+        // Parameters can be updated later via CloudFormation stack updates
+
+        // Security and configuration parameters
+        const webhookAllowListParam = new cdk.CfnParameter(this, "WebhookAllowList", {
+            type: "String",
+            description: "Comma-separated list of IP addresses allowed to send webhooks (leave empty to allow all IPs)",
+            default: props.webhookAllowList || "",
+        });
+
+        const quiltCatalogParam = new cdk.CfnParameter(this, "QuiltCatalog", {
+            type: "String",
+            description: "Quilt catalog URL for package links",
+            default: props.quiltCatalog || "open.quiltdata.com",
+        });
+
+        // Infrastructure parameters - these can be updated without redeploying
+        const bucketNameParam = new cdk.CfnParameter(this, "BucketName", {
+            type: "String",
+            description: "S3 bucket name for storing packages",
+            default: props.bucketName,
+        });
+
+        const prefixParam = new cdk.CfnParameter(this, "PackagePrefix", {
+            type: "String",
+            description: "Prefix for package names (no slashes)",
+            default: props.prefix,
+        });
+
+        const queueNameParam = new cdk.CfnParameter(this, "QueueName", {
+            type: "String",
+            description: "SQS queue name for package notifications",
+            default: props.queueName,
+        });
+
+        // Use parameter values (which have props as defaults)
+        // This allows runtime updates via CloudFormation
+        const webhookAllowListValue = webhookAllowListParam.valueAsString;
+        const quiltCatalogValue = quiltCatalogParam.valueAsString;
+        const bucketNameValue = bucketNameParam.valueAsString;
+        const prefixValue = prefixParam.valueAsString;
+        const queueNameValue = queueNameParam.valueAsString;
+
+        this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", bucketNameValue);
 
         const benchlingConnection = this.createBenchlingConnection(props);
 
         // Create the webhook state machine
         this.stateMachine = new WebhookStateMachine(this, "StateMachine", {
             bucket: this.bucket,
-            prefix: props.prefix,
-            queueName: props.queueName,
+            prefix: prefixValue,
+            queueName: queueNameValue,
             region: this.region,
             account: this.account,
             benchlingConnection,
             benchlingTenant: props.benchlingTenant,
-            quiltCatalog: props.quiltCatalog,
+            quiltCatalog: quiltCatalogValue,
+            webhookAllowList: webhookAllowListValue,
         });
 
-        this.api = new WebhookApi(this, "WebhookApi", this.stateMachine.stateMachine);
+        this.api = new WebhookApi(this, "WebhookApi", {
+            stateMachine: this.stateMachine.stateMachine,
+            webhookAllowList: webhookAllowListValue,
+        });
 
-        this.createOutputs();
+        // this.createOutputs();
     }
 
 

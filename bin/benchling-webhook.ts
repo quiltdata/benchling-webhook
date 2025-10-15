@@ -12,4 +12,5 @@ new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
     benchlingClientSecret: process.env.BENCHLING_CLIENT_SECRET || "",
     benchlingTenant: process.env.BENCHLING_TENANT || "",
     quiltCatalog: process.env.QUILT_CATALOG || "open.quiltdata.com",
+    webhookAllowList: process.env.WEBHOOK_ALLOW_LIST,
 });

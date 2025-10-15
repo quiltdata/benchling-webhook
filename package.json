@@ -13,11 +13,13 @@
   "devDependencies": {
     "@eslint/js": "^9.22.0",
     "@types/adm-zip": "^0.5.7",
+    "@types/aws-lambda": "^8.10.156",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.33",
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
     "aws-cdk": "2.1030.0",
+    "esbuild": "0.21.5",
     "eslint": "^9.22.0",
     "globals": "^16.0.0",
     "jest": "^30.0.0",
