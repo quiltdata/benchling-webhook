@@ -14,6 +14,7 @@ interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
     readonly quiltCatalog?: string;
+    readonly webhookAllowList?: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
@@ -45,6 +46,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             benchlingConnection,
             benchlingTenant: props.benchlingTenant,
             quiltCatalog: props.quiltCatalog,
+            webhookAllowList: props.webhookAllowList,
         });
 
         this.api = new WebhookApi(this, "WebhookApi", this.stateMachine.stateMachine);
