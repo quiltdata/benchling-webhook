@@ -32,6 +32,26 @@ export class BenchlingWebhookStack extends cdk.Stack {
             throw new Error("Prefix should not contain a '/' character.");
         }
 
+        // Create CloudFormation parameters for runtime-configurable values
+        // Note: Use actual values from props during initial deployment to avoid empty string issues
+        // Parameters can be updated later via CloudFormation stack updates
+        const webhookAllowListParam = new cdk.CfnParameter(this, "WebhookAllowList", {
+            type: "String",
+            description: "Comma-separated list of IP addresses allowed to send webhooks (leave empty to allow all IPs)",
+            default: props.webhookAllowList || "",
+        });
+
+        const quiltCatalogParam = new cdk.CfnParameter(this, "QuiltCatalog", {
+            type: "String",
+            description: "Quilt catalog URL for package links",
+            default: props.quiltCatalog || "open.quiltdata.com",
+        });
+
+        // Use props values on first deploy, then use parameters for updates
+        // This ensures we don't have empty parameter issues during initial deployment
+        const webhookAllowListValue = props.webhookAllowList || webhookAllowListParam.valueAsString;
+        const quiltCatalogValue = props.quiltCatalog || quiltCatalogParam.valueAsString;
+
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", props.bucketName);
 
         const benchlingConnection = this.createBenchlingConnection(props);
@@ -45,13 +65,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
             account: this.account,
             benchlingConnection,
             benchlingTenant: props.benchlingTenant,
-            quiltCatalog: props.quiltCatalog,
-            webhookAllowList: props.webhookAllowList,
+            quiltCatalog: quiltCatalogValue,
+            webhookAllowList: webhookAllowListValue,
         });
 
         this.api = new WebhookApi(this, "WebhookApi", {
             stateMachine: this.stateMachine.stateMachine,
-            webhookAllowList: props.webhookAllowList,
+            webhookAllowList: webhookAllowListValue,
         });
 
         // this.createOutputs();
