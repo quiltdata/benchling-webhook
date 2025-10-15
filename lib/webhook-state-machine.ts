@@ -107,18 +107,17 @@ export class WebhookStateMachine extends Construct {
     private createDefinition(
         packagingStateMachine: stepfunctions.StateMachine,
     ): stepfunctions.IChainable {
-        const startPackagingExecution = this.createStartPackagingTask(
-            packagingStateMachine,
-        );
+        // Create separate packaging task invocations for each workflow path
+        // to avoid shared state mutation when .next() is called
         const canvasWorkflow = this.createCanvasWorkflow(
-            startPackagingExecution,
+            this.createStartPackagingTask(packagingStateMachine, "StartPackagingExecutionCanvas"),
         );
         const buttonWorkflow = this.createButtonWorkflow(
-            startPackagingExecution,
+            this.createStartPackagingTask(packagingStateMachine, "StartPackagingExecutionButton"),
         );
 
         const channelChoice = this.createChannelChoice(
-            startPackagingExecution,
+            this.createStartPackagingTask(packagingStateMachine, "StartPackagingExecutionEvent"),
             canvasWorkflow,
             buttonWorkflow,
         );
@@ -136,9 +135,10 @@ export class WebhookStateMachine extends Construct {
 
     private createStartPackagingTask(
         packagingStateMachine: stepfunctions.StateMachine,
+        id: string = "StartPackagingExecution",
     ): stepfunctions.IChainable {
         const startPackagingExecution = new tasks
-            .StepFunctionsStartExecution(this, "StartPackagingExecution", {
+            .StepFunctionsStartExecution(this, id, {
                 stateMachine: packagingStateMachine,
                 input: stepfunctions.TaskInput.fromObject({
                     entity: stepfunctions.JsonPath.stringAt("$.var.entity"),
@@ -154,7 +154,7 @@ export class WebhookStateMachine extends Construct {
                 resultPath: "$.packagingResult",
             });
 
-        const errorHandler = new stepfunctions.Pass(this, "HandleError", {
+        const errorHandler = new stepfunctions.Pass(this, `${id}HandleError`, {
             parameters: {
                 "error.$": "$.Error",
                 "cause.$": "$.Cause",
