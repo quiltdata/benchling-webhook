@@ -34,6 +34,7 @@ describe("WebhookStateMachine", () => {
             account: "123456789012",
             benchlingConnection,
             benchlingTenant: "test-tenant",
+            webhookAllowList: "203.0.113.10",
         });
 
         template = Template.fromStack(stack);

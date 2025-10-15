@@ -16,6 +16,7 @@ describe("BenchlingWebhookStack", () => {
             benchlingClientSecret: "test-client-secret",
             benchlingTenant: "test-tenant",
             quiltCatalog: "https://quilt-example.com",
+            webhookAllowList: "203.0.113.10,198.51.100.5",
         });
         template = Template.fromStack(stack);
     });
@@ -85,16 +86,9 @@ describe("BenchlingWebhookStack", () => {
                     ],
                 },
                 RequestTemplates: {
-                    "application/json": {
-                        "Fn::Join": [
-                            "",
-                            [
-                                Match.stringLikeRegexp(".*\"stateMachineArn\".*"),
-                                { "Ref": "WebhookStateMachine1016675F" },
-                                Match.stringLikeRegexp(".*\"input\".*\\$input\\.json\\('\\$'\\).*"),
-                            ],
-                        ],
-                    },
+                    "application/json": Match.stringLikeRegexp(
+                        ".*bodyBase64.*webhook-id.*webhook-timestamp.*webhook-signature.*",
+                    ),
                 },
             },
         });
