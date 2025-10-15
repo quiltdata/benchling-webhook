@@ -1,7 +1,11 @@
+import * as cdk from "aws-cdk-lib";
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
 import * as tasks from "aws-cdk-lib/aws-stepfunctions-tasks";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as nodejs from "aws-cdk-lib/aws-lambda-nodejs";
+import * as path from "path";
 import { Construct } from "constructs";
 
 import { WebhookStateMachineProps } from "./types";
@@ -10,6 +14,7 @@ import { PackagingStateMachine } from "./packaging-state-machine";
 export class WebhookStateMachine extends Construct {
     public readonly stateMachine: stepfunctions.StateMachine;
     private readonly props: WebhookStateMachineProps;
+    private readonly verificationFunction: lambda.IFunction;
 
     constructor(scope: Construct, id: string, props: WebhookStateMachineProps) {
         super(scope, id);
@@ -26,6 +31,35 @@ export class WebhookStateMachine extends Construct {
                 queueName: props.queueName,
                 region: props.region,
                 account: props.account,
+            },
+        );
+
+        this.verificationFunction = new nodejs.NodejsFunction(
+            this,
+            "WebhookVerificationFunction",
+            {
+                entry: path.join(__dirname, "lambda/verify-webhook.ts"),
+                handler: "handler",
+                runtime: lambda.Runtime.NODEJS_18_X,
+                timeout: cdk.Duration.seconds(10),
+                memorySize: 256,
+                environment: {
+                    NODE_OPTIONS: "--enable-source-maps",
+                    WEBHOOK_ALLOW_LIST: props.webhookAllowList ?? "",
+                },
+                architecture: lambda.Architecture.ARM_64,
+                bundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [],
+                    forceDockerBundling: false,
+                    target: "node18",
+                    define: {
+                        "process.env.NODE_ENV": JSON.stringify(
+                            process.env.NODE_ENV || "production",
+                        ),
+                    },
+                },
             },
         );
 
@@ -83,11 +117,22 @@ export class WebhookStateMachine extends Construct {
             startPackagingExecution,
         );
 
-        return this.createChannelChoice(
+        const channelChoice = this.createChannelChoice(
             startPackagingExecution,
             canvasWorkflow,
             buttonWorkflow,
         );
+
+        return this.createVerificationTask().next(channelChoice);
+    }
+
+    private createVerificationTask(): tasks.LambdaInvoke {
+        return new tasks.LambdaInvoke(this, "VerifyWebhook", {
+            lambdaFunction: this.verificationFunction,
+            payload: stepfunctions.TaskInput.fromJsonPathAt("$"),
+            resultPath: "$",
+            payloadResponseOnly: true,
+        });
     }
 
     private createStartPackagingTask(
