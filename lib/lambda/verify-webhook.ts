@@ -51,11 +51,7 @@ const ensureHeader = (
 
 const resolveSourceIp = (
     eventSourceIp: string | undefined,
-    forwardedForHeader: string | undefined,
 ): string | undefined => {
-    if (forwardedForHeader) {
-        return forwardedForHeader.split(",")[0]?.trim();
-    }
     return eventSourceIp;
 };
 
@@ -66,9 +62,7 @@ const enforceAllowList = (
         return;
     }
     if (!sourceIp || !allowList.includes(sourceIp)) {
-        throw new WebhookVerificationError(
-            "Request rejected: source IP not in allow list",
-        );
+        throw new WebhookVerificationError("source IP not in allow list");
     }
 };
 
@@ -174,7 +168,7 @@ export const handler = async (
 
     const headers = normalizeHeaders(event.headers);
 
-    const sourceIp = resolveSourceIp(event.sourceIp, headers["x-forwarded-for"]);
+    const sourceIp = resolveSourceIp(event.sourceIp);
     enforceAllowList(sourceIp);
 
     const webhookId = ensureHeader(headers, "webhook-id");

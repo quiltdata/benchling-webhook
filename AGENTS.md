@@ -10,7 +10,7 @@
 ## Build, Test, and Development Commands
 - `npm install` sets up dependencies; run after cloning or updating lockfiles.
 - `npm run lint` applies the ESLint ruleset (TypeScript + Node); use before committing to catch style regressions.
-- `npm run test` executes the Jest suite with `ts-jest`; include its output in pull requests when relevant.
+- `npm run test` executes the Jest suite; include its output in pull requests when relevant.
 - `npm run clean` clears generated JS and `cdk.out`; use when switching branches to avoid stale artifacts.
 - `npm run cdk` runs tests then deploys via `cdk deploy --require-approval never`; prefer `npx cdk synth` or `npx cdk diff` locally before invoking full deploys.
 
