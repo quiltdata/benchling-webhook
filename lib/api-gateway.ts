@@ -1,3 +1,4 @@
+import * as cdk from "aws-cdk-lib";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
@@ -22,8 +23,9 @@ export class WebhookApi {
         this.createCloudWatchRole(scope);
 
         // Parse IP allowlist for resource policy
-        const allowedIps = props.webhookAllowList
-            ? props.webhookAllowList.split(",").map((ip) => ip.trim()).filter((ip) => ip.length > 0)
+        // Use CloudFormation intrinsic functions to handle token/parameter values
+        const allowedIps = props.webhookAllowList && props.webhookAllowList.trim() !== ""
+            ? cdk.Fn.split(",", props.webhookAllowList)
             : [];
 
         // Create resource policy for IP filtering at the edge
@@ -48,8 +50,11 @@ export class WebhookApi {
         this.addWebhookEndpoints(props.stateMachine, apiRole);
     }
 
-    private createResourcePolicy(allowedIps: string[]): iam.PolicyDocument | undefined {
-        if (allowedIps.length === 0) {
+    private createResourcePolicy(allowedIps: string[] | string): iam.PolicyDocument | undefined {
+        if (Array.isArray(allowedIps) && allowedIps.length === 0) {
+            return undefined;
+        }
+        if (!allowedIps) {
             return undefined;
         }
 
