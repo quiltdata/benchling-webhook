@@ -12,8 +12,7 @@ export class ReadmeTemplate extends BaseTemplate {
             "* **API URL**: {}\n" +
             "* **Created**: {} by {}\n" +
             "* **Modified**: {}\n\n" +
-            "## Authors\n\n" +
-            "{}\n\n" +
+            "## Authors\n\n{}\n\n" +
             "## Files\n\n" +
             "- [{}](./{}): Entry data\n" +
             "- [{}](./{}): Webhook event message\n";
@@ -36,7 +35,7 @@ export class ReadmeTemplate extends BaseTemplate {
                         ", $.entry.entryData.createdAt" + // Created timestamp
                         ", $.entry.entryData.creator.name" + // Creator name
                         ", $.entry.entryData.modifiedAt" + // Modified timestamp
-                        ", $.formattedLists.formattedLists.authorsFormatted" + // Authors
+                        ", States.Format('* {} <{}@{}>', $.entry.entryData.authors[0].name, $.entry.entryData.authors[0].handle, $.entry.entryData.authors[0].id)" + // First author only for simplicity
                         ", $.files.FILES.ENTRY_JSON, $.files.FILES.ENTRY_JSON" + // Files section - entry.json
                         ", $.files.FILES.INPUT_JSON, $.files.FILES.INPUT_JSON" + // Files section - input.json
                         ")",
@@ -59,38 +58,17 @@ export class ReadmeTemplate extends BaseTemplate {
         );
     }
 
-    private formatAuthors(): stepfunctions.Map {
-        const appendFormattedAuthor = new stepfunctions.Pass(this.scope, "AppendFormattedAuthor", {
-            parameters: {
-                "formattedAuthor.$": "States.Format('* {} <{}@{}>', $.name, $.handle, $.id)",
-            },
-            outputPath: "$.formattedAuthor",
+    private formatAuthors(): stepfunctions.Pass {
+        // Simple pass - just pass through the authors array
+        return new stepfunctions.Pass(this.scope, "FormatAuthors", {
+            resultPath: stepfunctions.JsonPath.DISCARD,
         });
-
-        return new stepfunctions.Map(this.scope, "FormatAuthors", {
-            itemsPath: "$.entry.entryData.authors",
-            resultPath: "$.authorsFormattedArray",
-        }).itemProcessor(appendFormattedAuthor);
     }
 
-    private joinListVariables(): stepfunctions.Chain {
-        const joinAuthors = new stepfunctions.Pass(this.scope, "JoinAuthors", {
-            parameters: {
-                "authorsFormatted.$": "States.ArrayJoin($.authorsFormattedArray, '\n')",
-            },
-            resultPath: "$.joinedAuthors",
+    private joinListVariables(): stepfunctions.Pass {
+        return new stepfunctions.Pass(this.scope, "JoinFormattedLists", {
+            resultPath: stepfunctions.JsonPath.DISCARD,
         });
-
-        const packageLists = new stepfunctions.Pass(this.scope, "PackageFormattedLists", {
-            parameters: {
-                "formattedLists": {
-                    "authorsFormatted.$": "$.joinedAuthors.authorsFormatted",
-                },
-            },
-            resultPath: "$.formattedLists",
-        });
-
-        return stepfunctions.Chain.start(joinAuthors).next(packageLists);
     }
 
     public createMarkdown(): stepfunctions.Chain {
