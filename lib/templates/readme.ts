@@ -12,7 +12,7 @@ export class ReadmeTemplate extends BaseTemplate {
             "* **API URL**: {}\n" +
             "* **Created**: {} by {}\n" +
             "* **Modified**: {}\n\n" +
-            "## Authors\n\n{}\n\n" +
+            "## Author (first only)\n\n{}\n\n" +
             "## Files\n\n" +
             "- [{}](./{}): Entry data\n" +
             "- [{}](./{}): Webhook event message\n";
