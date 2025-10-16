@@ -98,6 +98,11 @@ npx cdk deploy
     3. Command-Click "Quilt Catalog" to open the package in a new window
 4. Drag in an attachment to the Benchling entry
     1. Click "Update package" to create a new version
+    2. The package will include:
+       - entry.json: Entry metadata
+       - assay-results.json: Associated assay results
+       - input.json: Original webhook payload
+       - README.md: Package documentation
 
 ## Testing
 

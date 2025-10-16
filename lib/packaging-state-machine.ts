@@ -133,10 +133,14 @@ export class PackagingStateMachine extends Construct {
 
     private createDefinition(): stepfunctions.IChainable {
         const fetchEntryTask = this.createFetchEntryTask();
+        const fetchAssayResults = this.createFetchAssayResultsTask();
         const templates = this.writeTemplates();
         const exportWorkflow = this.createExportWorkflow();
 
-        return fetchEntryTask.next(templates).next(exportWorkflow);
+        return fetchEntryTask
+            .next(fetchAssayResults)
+            .next(templates)
+            .next(exportWorkflow);
     }
 
 
@@ -226,6 +230,11 @@ export class PackagingStateMachine extends Construct {
             FILES.ENTRY_JSON,
             "$.entry.entryData",
         );
+        const writeAssayResultsToS3Task = this.createS3WriteTask(
+            this.props.bucket,
+            FILES.ASSAY_RESULTS_JSON,
+            "$.assayResults.assayResults",
+        );
         const writeMetadataTask = this.createS3WriteTask(
             this.props.bucket,
             FILES.INPUT_JSON,
@@ -236,8 +245,30 @@ export class PackagingStateMachine extends Construct {
         return extractDownloadURL
             .next(processExportTask)
             .next(writeEntryToS3Task)
+            .next(writeAssayResultsToS3Task)
             .next(writeMetadataTask)
             .next(sendToSQSTask);
+    }
+
+    private createFetchAssayResultsTask(): stepfunctions.CustomState {
+        return new stepfunctions.CustomState(this, "FetchAssayResults", {
+            stateJson: {
+                Type: "Task",
+                Resource: "arn:aws:states:::http:invoke",
+                Parameters: {
+                    "ApiEndpoint.$": 
+                        "States.Format('{}/api/v2/assay-results?entryId={}', $.baseURL, $.entity)",
+                    Method: "GET",
+                    Authentication: {
+                        ConnectionArn: this.props.benchlingConnection.attrArn,
+                    },
+                },
+                ResultSelector: {
+                    "assayResults.$": "$.ResponseBody.assayResults",
+                },
+                ResultPath: "$.assayResults",
+            },
+        });
     }
 
     private createFetchEntryTask(): stepfunctions.CustomState {
