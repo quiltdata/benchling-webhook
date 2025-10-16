@@ -29,7 +29,7 @@ export class WebhookApi {
             // Check if this is a CloudFormation token/parameter (starts with ${Token[)
             if (cdk.Token.isUnresolved(props.webhookAllowList)) {
                 // Use CloudFormation intrinsic function for token values
-                allowedIps = cdk.Fn.split(",", props.webhookAllowList) as any;
+                allowedIps = cdk.Fn.split(",", props.webhookAllowList) as unknown as string[];
             } else {
                 // For regular strings, split and trim at synth time
                 allowedIps = props.webhookAllowList

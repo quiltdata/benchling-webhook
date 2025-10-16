@@ -77,7 +77,7 @@ export class ReadmeTemplate extends BaseTemplate {
         return new stepfunctions.Pass(this.scope, "JoinFormattedLists", {
             parameters: {
                 "formattedLists": {
-                    "authorsFormatted.$": "States.ArrayJoin($.authorsFormatted[*].formattedAuthor.formattedAuthor, '\n')",
+                    "authorsFormatted.$": "States.ArrayJoin($.authorsFormatted[*].formattedAuthor, '\n')",
                 },
             },
             resultPath: "$.formattedLists",
