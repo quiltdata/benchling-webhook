@@ -17,11 +17,11 @@ export class EntryTemplate extends BaseTemplate {
                         "createdAt.$": "$.entry.entryData.createdAt",
                         "modifiedAt.$": "$.entry.entryData.modifiedAt",
                         "schemaId.$": "$.entry.entryData.schema.id",
-                        "schemaName.$": "$.entry.entryData.schema.name"
-                    }
+                        "schemaName.$": "$.entry.entryData.schema.name",
+                    },
                 },
                 resultPath: "$.content",
-            }
+            },
         );
     }
 

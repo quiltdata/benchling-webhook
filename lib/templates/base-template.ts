@@ -24,10 +24,10 @@ export abstract class BaseTemplate {
                 `Create${this.name}Markdown`,
                 {
                     parameters: {
-                        "markdown.$": "$.content.content"
+                        "markdown.$": "$.content.content",
                     },
                     resultPath: "$.markdown",
-                }
+                },
             ));
     }
 
@@ -46,7 +46,7 @@ export abstract class BaseTemplate {
                         body: stepfunctions.JsonPath.stringAt("$.markdown.markdown"),
                     }),
                     resultPath: "$.writeResult",
-                }
+                },
             ));
     }
 }
