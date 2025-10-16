@@ -64,12 +64,12 @@ export class ReadmeTemplate extends BaseTemplate {
             parameters: {
                 "formattedAuthor.$": "States.Format('* {} <{}@{}>', $.name, $.handle, $.id)",
             },
-            resultPath: "$.formattedAuthor",
+            outputPath: "$.formattedAuthor",
         });
 
         return new stepfunctions.Map(this.scope, "FormatAuthors", {
             itemsPath: "$.entry.entryData.authors",
-            resultPath: "$.authorsFormatted",
+            resultPath: "$.authorsFormattedArray",
         }).itemProcessor(appendFormattedAuthor);
     }
 
@@ -77,7 +77,7 @@ export class ReadmeTemplate extends BaseTemplate {
         return new stepfunctions.Pass(this.scope, "JoinFormattedLists", {
             parameters: {
                 "formattedLists": {
-                    "authorsFormatted.$": "States.ArrayJoin($.authorsFormatted[*].formattedAuthor, '\n')",
+                    "authorsFormatted.$": "States.ArrayJoin($.authorsFormattedArray, '\n')",
                 },
             },
             resultPath: "$.formattedLists",
