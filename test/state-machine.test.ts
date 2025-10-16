@@ -2,7 +2,6 @@ import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
-import * as lambda from "aws-cdk-lib/aws-lambda";
 import { WebhookStateMachine } from "../lib/webhook-state-machine";
 
 describe("WebhookStateMachine", () => {

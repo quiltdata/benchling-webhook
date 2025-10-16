@@ -16,6 +16,6 @@ export async function handler(event: ProcessStringEvent): Promise<void> {
             Bucket: bucket,
             Key: key,
             Body: body,
-        })
+        }),
     );
 }

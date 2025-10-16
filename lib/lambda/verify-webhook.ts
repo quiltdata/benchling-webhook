@@ -190,7 +190,7 @@ export const handler = async (
     let parsedBody: Record<string, unknown>;
     try {
         parsedBody = JSON.parse(rawBody) as Record<string, unknown>;
-    } catch (error) {
+    } catch {
         throw new WebhookVerificationError("Request body is not valid JSON");
     }
 
