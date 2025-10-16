@@ -2,7 +2,7 @@ manifestVersion: 1
 info:
   name: benchling-webhook
   description: Benchling Webhook + Quilt Package Engine
-  version: 0.3.1
+  version: 0.3.2
 features:
   - name: Package Benchling Notebooks
     id: quilt_integration

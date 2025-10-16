@@ -1,6 +1,5 @@
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
-import * as lambda from "aws-cdk-lib/aws-lambda";
 
 export interface BaseStateMachineProps {
     bucket: s3.IBucket;
