@@ -36,7 +36,7 @@ export class ReadmeTemplate extends BaseTemplate {
                         ", $.entry.entryData.createdAt" + // Created timestamp
                         ", $.entry.entryData.creator.name" + // Creator name
                         ", $.entry.entryData.modifiedAt" + // Modified timestamp
-                        ", $.formattedLists.formattedLists.authorsFormatted" + // Authors
+                        ", States.ArrayJoin($.formattedLists.formattedLists.authorsFormattedArray, '\\n')" + // Authors
                         ", $.files.FILES.ENTRY_JSON, $.files.FILES.ENTRY_JSON" + // Files section - entry.json
                         ", $.files.FILES.INPUT_JSON, $.files.FILES.INPUT_JSON" + // Files section - input.json
                         ")",
@@ -77,7 +77,7 @@ export class ReadmeTemplate extends BaseTemplate {
         return new stepfunctions.Pass(this.scope, "JoinFormattedLists", {
             parameters: {
                 "formattedLists": {
-                    "authorsFormatted.$": "States.ArrayJoin($.authorsFormattedArray, '\n')",
+                    "authorsFormattedArray.$": "$.authorsFormattedArray",
                 },
             },
             resultPath: "$.formattedLists",
