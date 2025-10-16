@@ -5,7 +5,7 @@ import { BaseTemplate } from "./base-template";
 export class ReadmeTemplate extends BaseTemplate {
     protected template(): string {
         return "# [{}]({})\n\n" +
-            "> {}\n\n" +
+            "## {}\n\n" +
             "* **Entry ID**: {}\n" +
             "* **Display ID**: {}\n" +
             "* **Folder ID**: {}\n" +
@@ -77,7 +77,7 @@ export class ReadmeTemplate extends BaseTemplate {
         return new stepfunctions.Pass(this.scope, "JoinFormattedLists", {
             parameters: {
                 "formattedLists": {
-                    "authorsFormatted.$": "States.JsonToString($.authorsFormatted[*].formattedAuthor)",
+                    "authorsFormatted.$": "States.ArrayJoin($.authorsFormatted[*].formattedAuthor.formattedAuthor, '\n')",
                 },
             },
             resultPath: "$.formattedLists",
