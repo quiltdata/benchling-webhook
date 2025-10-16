@@ -23,10 +23,21 @@ export class WebhookApi {
         this.createCloudWatchRole(scope);
 
         // Parse IP allowlist for resource policy
-        // Use CloudFormation intrinsic functions to handle token/parameter values
-        const allowedIps = props.webhookAllowList && props.webhookAllowList.trim() !== ""
-            ? cdk.Fn.split(",", props.webhookAllowList)
-            : [];
+        // Split and clean up the IP list at synth time (not deploy time)
+        let allowedIps: string[] = [];
+        if (props.webhookAllowList && props.webhookAllowList.trim() !== "") {
+            // Check if this is a CloudFormation token/parameter (starts with ${Token[)
+            if (cdk.Token.isUnresolved(props.webhookAllowList)) {
+                // Use CloudFormation intrinsic function for token values
+                allowedIps = cdk.Fn.split(",", props.webhookAllowList) as any;
+            } else {
+                // For regular strings, split and trim at synth time
+                allowedIps = props.webhookAllowList
+                    .split(",")
+                    .map(ip => ip.trim())
+                    .filter(ip => ip.length > 0);
+            }
+        }
 
         // Create resource policy for IP filtering at the edge
         // This blocks requests from non-allowlisted IPs before any AWS service is invoked
@@ -144,7 +155,7 @@ export class WebhookApi {
                         responseTemplates: {
                             "application/json": JSON.stringify({
                                 error: "Bad request",
-                                message: "Invalid webhook payload"
+                                message: "Invalid webhook payload",
                             }),
                         },
                     },
@@ -154,7 +165,7 @@ export class WebhookApi {
                         responseTemplates: {
                             "application/json": JSON.stringify({
                                 error: "Internal server error",
-                                message: "Failed to start webhook processing"
+                                message: "Failed to start webhook processing",
                             }),
                         },
                     },
