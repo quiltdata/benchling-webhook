@@ -36,7 +36,7 @@ export class ReadmeTemplate extends BaseTemplate {
                         ", $.entry.entryData.createdAt" + // Created timestamp
                         ", $.entry.entryData.creator.name" + // Creator name
                         ", $.entry.entryData.modifiedAt" + // Modified timestamp
-                        ", States.ArrayJoin($.formattedLists.formattedLists.authorsFormattedArray, '\\n')" + // Authors
+                        ", $.formattedLists.formattedLists.authorsFormatted" + // Authors
                         ", $.files.FILES.ENTRY_JSON, $.files.FILES.ENTRY_JSON" + // Files section - entry.json
                         ", $.files.FILES.INPUT_JSON, $.files.FILES.INPUT_JSON" + // Files section - input.json
                         ")",
@@ -73,15 +73,24 @@ export class ReadmeTemplate extends BaseTemplate {
         }).itemProcessor(appendFormattedAuthor);
     }
 
-    private joinListVariables(): stepfunctions.Pass {
-        return new stepfunctions.Pass(this.scope, "JoinFormattedLists", {
+    private joinListVariables(): stepfunctions.Chain {
+        const joinAuthors = new stepfunctions.Pass(this.scope, "JoinAuthors", {
+            parameters: {
+                "authorsFormatted.$": "States.ArrayJoin($.authorsFormattedArray, '\n')",
+            },
+            resultPath: "$.joinedAuthors",
+        });
+
+        const packageLists = new stepfunctions.Pass(this.scope, "PackageFormattedLists", {
             parameters: {
                 "formattedLists": {
-                    "authorsFormattedArray.$": "$.authorsFormattedArray",
+                    "authorsFormatted.$": "$.joinedAuthors.authorsFormatted",
                 },
             },
             resultPath: "$.formattedLists",
         });
+
+        return stepfunctions.Chain.start(joinAuthors).next(packageLists);
     }
 
     public createMarkdown(): stepfunctions.Chain {
