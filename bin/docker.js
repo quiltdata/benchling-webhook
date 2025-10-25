@@ -153,7 +153,7 @@ function dockerBuild(repositoryName = ECR_REPO, force = false) {
 
   try {
     console.log(`Building image: ${imageTag}`);
-    execSync(`docker build -t ${imageTag} -t ${latestTag} ${dockerPath}`, { stdio: 'inherit' });
+    execSync(`docker build --platform linux/amd64 -t ${imageTag} -t ${latestTag} ${dockerPath}`, { stdio: 'inherit' });
     console.log(`✓ Successfully built ${imageTag}`);
     console.log(`✓ Also tagged as ${latestTag}`);
   } catch (error) {
