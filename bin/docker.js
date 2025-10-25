@@ -334,8 +334,7 @@ function dockerCheckSingle(repositoryName, ecrRegistry, showHeader = true) {
         console.log(`Architecture: ${manifest.architecture || 'unknown'}`);
         console.log(`OS: ${manifest.os || 'unknown'}`);
       } else {
-        console.error('✗ Unable to determine architecture from manifest');
-        process.exit(1);
+        console.log('⚠ Warning: Unable to determine architecture from manifest');
       }
     } else {
       console.error('✗ Unsupported manifest format');
