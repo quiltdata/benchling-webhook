@@ -31,5 +31,5 @@ jobs:
         run: npm test
 
       - name: Push Docker images
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/enterprise-docker')
         run: npm run docker-push
