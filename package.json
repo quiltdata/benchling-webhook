@@ -9,7 +9,10 @@
     "test": "NODE_ENV=test node --max-old-space-size=4096 ./node_modules/.bin/jest",
     "cdk": "npm run test && npx cdk deploy --require-approval never",
     "lint": "eslint . --ext .ts --fix",
-    "docker-sync": "node bin/docker.js sync"
+    "docker-sync": "node bin/docker.js sync",
+    "docker-build": "node bin/docker.js build",
+    "docker-push": "node bin/docker.js push",
+    "docker-check": "node bin/docker.js check"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
