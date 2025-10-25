@@ -1,4 +1,4 @@
-name: Test
+name: CI
 
 on:
   push:
@@ -29,3 +29,7 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Push Docker images
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: npm run docker-push
