@@ -18,7 +18,11 @@ export class WebhookApi {
         id: string,
         props: WebhookApiProps,
     ) {
-        const logGroup = new logs.LogGroup(scope, "ApiGatewayAccessLogs");
+        const logGroup = new logs.LogGroup(scope, "ApiGatewayAccessLogs", {
+            logGroupName: "/aws/apigateway/benchling-webhook",
+            retention: logs.RetentionDays.ONE_WEEK,
+            removalPolicy: cdk.RemovalPolicy.RETAIN,
+        });
         const apiRole = this.createApiRole(scope, props.stateMachine);
         this.createCloudWatchRole(scope);
 
