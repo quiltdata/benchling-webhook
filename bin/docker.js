@@ -153,7 +153,20 @@ function dockerBuild(repositoryName = ECR_REPO, force = false) {
 
   try {
     console.log(`Building image: ${imageTag}`);
-    execSync(`docker build --platform linux/amd64 -t ${imageTag} -t ${latestTag} ${dockerPath}`, { stdio: 'inherit' });
+
+    // Use buildx to create manifest list with explicit architecture metadata
+    // In CI: use --push to build and push directly (more efficient)
+    // Locally: use --load to load into local Docker daemon for testing
+    const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+
+    if (isCI) {
+      console.log('CI environment detected: building and pushing with buildx');
+      execSync(`docker buildx build --platform linux/amd64 --push -t ${imageTag} -t ${latestTag} ${dockerPath}`, { stdio: 'inherit' });
+    } else {
+      console.log('Local environment: building with buildx --load');
+      execSync(`docker buildx build --platform linux/amd64 --load -t ${imageTag} -t ${latestTag} ${dockerPath}`, { stdio: 'inherit' });
+    }
+
     console.log(`✓ Successfully built ${imageTag}`);
     console.log(`✓ Also tagged as ${latestTag}`);
   } catch (error) {
@@ -165,43 +178,41 @@ function dockerBuild(repositoryName = ECR_REPO, force = false) {
 function dockerPush(repositoryName = ECR_REPO) {
   console.log(`\n=== Docker Push: ${repositoryName} ===\n`);
 
-  // Check architecture for regular push (not dev)
-  if (repositoryName === ECR_REPO) {
-    const currentArch = getCurrentArchitecture();
-    if (currentArch !== 'amd64') {
-      console.error(`✗ Error: Regular push requires amd64 architecture`);
-      console.error(`  Current architecture: ${currentArch}`);
-      console.error(`  Use 'npm run docker-dev' for architecture-specific builds`);
-      process.exit(1);
-    }
-  }
+  // Note: Architecture check is no longer needed because we use buildx with --platform linux/amd64
+  // which ensures the correct architecture regardless of the host machine's architecture
 
   // Step 1: Build if needed
   console.log('Step 1: Building image...');
+  const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+
   dockerBuild(repositoryName, false);
 
-  // Step 2: Push to ECR
-  console.log('\nStep 2: Pushing to ECR...');
+  // Step 2: Push to ECR (skip if already pushed in CI by buildx)
+  if (isCI) {
+    console.log('\nStep 2: Image already pushed by buildx in CI, skipping separate push');
+  } else {
+    console.log('\nStep 2: Pushing to ECR...');
 
-  // Get version from package.json
-  const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf-8'));
-  const version = packageJson.version || 'latest';
+    // Get version from package.json
+    const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf-8'));
+    const version = packageJson.version || 'latest';
 
-  const { ecrRegistry } = getECRLogin();
-  const imageTag = `${ecrRegistry}/${repositoryName}:${version}`;
-  const latestTag = `${ecrRegistry}/${repositoryName}:latest`;
+    const { ecrRegistry } = getECRLogin();
+    const imageTag = `${ecrRegistry}/${repositoryName}:${version}`;
+    const latestTag = `${ecrRegistry}/${repositoryName}:latest`;
 
-  try {
-    console.log(`Pushing ${imageTag}...`);
-    execSync(`docker push ${imageTag}`, { stdio: 'inherit' });
-    console.log(`✓ Successfully pushed ${imageTag}`);
+    try {
+      console.log(`Pushing ${imageTag}...`);
+      execSync(`docker push ${imageTag}`, { stdio: 'inherit' });
+      console.log(`✓ Successfully pushed ${imageTag}`);
 
-    console.log(`Pushing ${latestTag}...`);
-    execSync(`docker push ${latestTag}`, { stdio: 'inherit' });
-    console.log(`✓ Successfully pushed ${latestTag}`);
-  } catch (error) {
-    console.error('Error pushing Docker image:', error.message);
-    process.exit(1);
+      console.log(`Pushing ${latestTag}...`);
+      execSync(`docker push ${latestTag}`, { stdio: 'inherit' });
+      console.log(`✓ Successfully pushed ${latestTag}`);
+    } catch (error) {
+      console.error('Error pushing Docker image:', error.message);
+      process.exit(1);
+    }
   }
 
   // Step 3: Verify with check
