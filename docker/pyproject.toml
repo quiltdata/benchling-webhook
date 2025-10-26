@@ -28,7 +28,7 @@ dependencies = [
     "dataclasses-json>=0.5.2,<0.6.0",
     "python-dotenv==1.0.0",
     "structlog==23.2.0",
-    "requests==2.31.0",
+    "requests==2.32.4",
     "tenacity>=8.2.0",
     "benchling-sdk>=1.23.0",
     "quilt3>=7.0.0",
