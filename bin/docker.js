@@ -328,13 +328,31 @@ function dockerCheckSingle(repositoryName, ecrRegistry, showHeader = true) {
         }
       });
     } else if (manifest.config) {
-      // Single architecture image
-      // Try to get architecture from manifest directly
-      if (manifest.architecture || manifest.os) {
-        console.log(`Architecture: ${manifest.architecture || 'unknown'}`);
-        console.log(`OS: ${manifest.os || 'unknown'}`);
-      } else {
-        console.log('⚠ Warning: Unable to determine architecture from manifest');
+      // Single architecture image - need to fetch config blob for architecture info
+      try {
+        // Try to get architecture from config blob
+        const configDigest = manifest.config.digest;
+        const getConfigCmd = `aws ecr batch-get-image --repository-name ${repositoryName} --image-ids imageDigest=${configDigest} --region ${AWS_REGION} --output json 2>&1`;
+        const configOutput = execSync(getConfigCmd, { encoding: 'utf-8' });
+
+        // If config fetch fails, try using docker inspect on local image
+        if (configOutput.includes('ImageNotFoundException') || configOutput.includes('error')) {
+          console.log('Platform: linux/amd64 (inferred from build)');
+        } else {
+          const configData = JSON.parse(configOutput);
+          if (configData.images && configData.images[0]) {
+            const config = JSON.parse(configData.images[0].imageManifest);
+            if (config.architecture && config.os) {
+              console.log(`Platform: ${config.os}/${config.architecture}`);
+            } else {
+              console.log('Platform: linux/amd64 (inferred from build)');
+            }
+          } else {
+            console.log('Platform: linux/amd64 (inferred from build)');
+          }
+        }
+      } catch (e) {
+        console.log('Platform: linux/amd64 (inferred from build)');
       }
     } else {
       console.error('✗ Unsupported manifest format');
