@@ -1,9 +1,9 @@
 import * as cdk from "aws-cdk-lib";
 import * as s3 from "aws-cdk-lib/aws-s3";
-import * as events from "aws-cdk-lib/aws-events";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
 import { Construct } from "constructs";
-import { WebhookApi } from "./api-gateway";
-import { WebhookStateMachine } from "./webhook-state-machine";
+import { FargateService } from "./fargate-service";
+import { AlbApiGateway } from "./alb-api-gateway";
 
 interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
@@ -19,8 +19,8 @@ interface BenchlingWebhookStackProps extends cdk.StackProps {
 
 export class BenchlingWebhookStack extends cdk.Stack {
     private readonly bucket: s3.IBucket;
-    private readonly stateMachine: WebhookStateMachine;
-    private readonly api: WebhookApi;
+    private readonly fargateService: FargateService;
+    private readonly api: AlbApiGateway;
 
     constructor(
         scope: Construct,
@@ -78,72 +78,36 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", bucketNameValue);
 
-        const benchlingConnection = this.createBenchlingConnection(props);
+        // Get the default VPC or create a new one
+        const vpc = ec2.Vpc.fromLookup(this, "DefaultVPC", {
+            isDefault: true,
+        });
 
-        // Create the webhook state machine
-        this.stateMachine = new WebhookStateMachine(this, "StateMachine", {
+        // ECR image URI for the Benchling webhook Docker container
+        const ecrImageUri = "712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest";
+
+        // Create the Fargate service
+        this.fargateService = new FargateService(this, "FargateService", {
+            vpc,
             bucket: this.bucket,
-            prefix: prefixValue,
             queueName: queueNameValue,
             region: this.region,
             account: this.account,
-            benchlingConnection,
+            prefix: prefixValue,
+            benchlingClientId: props.benchlingClientId,
+            benchlingClientSecret: props.benchlingClientSecret,
             benchlingTenant: props.benchlingTenant,
             quiltCatalog: quiltCatalogValue,
             webhookAllowList: webhookAllowListValue,
+            ecrImageUri,
         });
 
-        this.api = new WebhookApi(this, "WebhookApi", {
-            stateMachine: this.stateMachine.stateMachine,
+        // Create API Gateway that routes to the ALB
+        this.api = new AlbApiGateway(this, "ApiGateway", {
+            loadBalancer: this.fargateService.loadBalancer,
             webhookAllowList: webhookAllowListValue,
         });
-
-        // this.createOutputs();
     }
 
 
-    private createBenchlingConnection(
-        props: BenchlingWebhookStackProps,
-    ): events.CfnConnection {
-        const benchlingConnection = new events.CfnConnection(
-            this,
-            "BenchlingOAuthConnection",
-            {
-                authorizationType: "OAUTH_CLIENT_CREDENTIALS",
-                authParameters: {
-                    oAuthParameters: {
-                        authorizationEndpoint:
-                            `https://${props.benchlingTenant}.benchling.com/api/v2/token`,
-                        clientParameters: {
-                            clientId: props.benchlingClientId,
-                            clientSecret: props.benchlingClientSecret,
-                        },
-                        httpMethod: "POST",
-                        oAuthHttpParameters: {
-                            headerParameters: [
-                                {
-                                    key: "Content-Type",
-                                    value: "application/x-www-form-urlencoded",
-                                },
-                            ],
-                            bodyParameters: [
-                                {
-                                    key: "grant_type",
-                                    value: "client_credentials",
-                                },
-                            ],
-                        },
-                    },
-                },
-            },
-        );
-        return benchlingConnection;
-    }
-
-    private createOutputs(): void {
-        new cdk.CfnOutput(this, "ApiUrl", {
-            value: this.api.api.url,
-            description: "API Gateway endpoint URL",
-        });
-    }
 }

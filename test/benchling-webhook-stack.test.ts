@@ -17,28 +17,41 @@ describe("BenchlingWebhookStack", () => {
             benchlingTenant: "test-tenant",
             quiltCatalog: "https://quilt-example.com",
             webhookAllowList: "203.0.113.10,198.51.100.5",
+            env: {
+                account: "123456789012",
+                region: "us-east-1",
+            },
         });
         template = Template.fromStack(stack);
     });
 
-    test("creates Benchling connection", () => {
-        template.hasResourceProperties("AWS::Events::Connection", {
-            AuthorizationType: "OAUTH_CLIENT_CREDENTIALS",
-            AuthParameters: {
-                OAuthParameters: {
-                    AuthorizationEndpoint: "https://test-tenant.benchling.com/api/v2/token",
-                    HttpMethod: "POST",
-                },
-            },
+    test("creates ECS cluster", () => {
+        template.hasResourceProperties("AWS::ECS::Cluster", {
+            ClusterName: "benchling-webhook-cluster",
+            ClusterSettings: [{
+                Name: "containerInsights",
+                Value: "enabled",
+            }],
         });
     });
 
-    test("creates state machines", () => {
-        template.resourceCountIs("AWS::StepFunctions::StateMachine", 2);
+    test("creates Fargate service", () => {
+        template.hasResourceProperties("AWS::ECS::Service", {
+            ServiceName: "benchling-webhook-service",
+            LaunchType: "FARGATE",
+            DesiredCount: 2,
+        });
+    });
+
+    test("does not create Lambda functions or Step Functions", () => {
+        // Ensure Lambda and Step Functions are removed
+        template.resourceCountIs("AWS::Lambda::Function", 0);
+        template.resourceCountIs("AWS::StepFunctions::StateMachine", 0);
+        template.resourceCountIs("AWS::Events::Connection", 0);
     });
 
     test("creates CloudWatch log groups", () => {
-        template.resourceCountIs("AWS::Logs::LogGroup", 2); // One for API Gateway, one for Step Functions
+        template.resourceCountIs("AWS::Logs::LogGroup", 2); // One for API Gateway, one for container logs
 
         template.hasResourceProperties("AWS::ApiGateway::Stage", {
             AccessLogSetting: {
@@ -67,60 +80,31 @@ describe("BenchlingWebhookStack", () => {
             }],
         });
 
+        // Check that API Gateway has HTTP_PROXY integration to ALB (not Step Functions)
         template.hasResourceProperties("AWS::ApiGateway::Method", {
-            HttpMethod: "POST",
+            HttpMethod: "ANY",
             AuthorizationType: "NONE",
             Integration: {
-                IntegrationHttpMethod: "POST",
-                Type: "AWS",
-                Uri: {
-                    "Fn::Join": [
-                        "",
-                        [
-                            "arn:",
-                            { "Ref": "AWS::Partition" },
-                            ":apigateway:",
-                            { "Ref": "AWS::Region" },
-                            ":states:action/StartExecution",
-                        ],
-                    ],
-                },
+                Type: "HTTP_PROXY",
             },
         });
+    });
 
-        const methods = template.findResources("AWS::ApiGateway::Method");
-        Object.values(methods).forEach((methodResource: unknown) => {
-            const method = methodResource as {
-                Properties?: {
-                    Integration?: { RequestTemplates?: Record<string, unknown> };
-                };
-            };
-            const requestTemplate = method
-                .Properties?.Integration?.RequestTemplates?.["application/json"] as
-                | { "Fn::Join": [string, unknown[]] }
-                | undefined;
-            expect(requestTemplate).toBeDefined();
+    test("creates Application Load Balancer", () => {
+        template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
+            Name: "benchling-webhook-alb",
+            Scheme: "internet-facing",
+            Type: "application",
+        });
+    });
 
-            const joinExpression = requestTemplate?.["Fn::Join"] as
-                | [string, unknown[]]
-                | undefined;
-            expect(joinExpression?.[0]).toBe("");
-
-            const joinSegments = joinExpression?.[1] as unknown[] | undefined;
-            expect(Array.isArray(joinSegments)).toBe(true);
-
-            const renderedTemplate = (joinSegments ?? [])
-                .map((segment) => (typeof segment === "string" ? segment : JSON.stringify(segment)))
-                .join("");
-
-            expect(renderedTemplate).toContain("\"stateMachineArn\"");
-            expect(renderedTemplate).toContain("\"input\"");
-            expect(renderedTemplate).toContain("\"name\"");
-            expect(renderedTemplate).toContain("bodyBase64");
-            expect(renderedTemplate).toContain("webhook-id");
-            expect(renderedTemplate).toContain("webhook-timestamp");
-            expect(renderedTemplate).toContain("webhook-signature");
-            expect(renderedTemplate).toContain("sourceIp");
+    test("creates ALB target group with health checks", () => {
+        template.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
+            Port: 5000,
+            Protocol: "HTTP",
+            TargetType: "ip",
+            HealthCheckPath: "/health/ready",
+            HealthCheckIntervalSeconds: 30,
         });
     });
 
@@ -136,11 +120,16 @@ describe("BenchlingWebhookStack", () => {
                 benchlingClientSecret: "test-client-secret",
                 benchlingTenant: "test-tenant",
                 quiltCatalog: "https://quilt-example.com",
+                env: {
+                    account: "123456789012",
+                    region: "us-east-1",
+                },
             });
         }).toThrow("Prefix should not contain a '/' character.");
     });
 
     test("creates IAM role with correct permissions", () => {
+        // Check for ECS Task Execution Role
         template.hasResourceProperties("AWS::IAM::Role", {
             AssumeRolePolicyDocument: Match.objectLike({
                 Statement: Match.arrayWith([
@@ -148,22 +137,80 @@ describe("BenchlingWebhookStack", () => {
                         Action: "sts:AssumeRole",
                         Effect: "Allow",
                         Principal: {
-                            Service: "apigateway.amazonaws.com",
+                            Service: "ecs-tasks.amazonaws.com",
                         },
                     }),
                 ]),
             }),
         });
 
-        template.hasResourceProperties("AWS::IAM::Policy", {
-            PolicyDocument: Match.objectLike({
-                Statement: Match.arrayWith([
-                    Match.objectLike({
-                        Action: "states:StartExecution",
-                        Effect: "Allow",
-                    }),
-                ]),
-            }),
+        // Check for S3 permissions in task role policy
+        const policies = template.findResources("AWS::IAM::Policy");
+        let foundS3Policy = false;
+        let foundSQSPolicy = false;
+
+        Object.values(policies).forEach((policy: any) => {
+            const statements = policy.Properties?.PolicyDocument?.Statement || [];
+            statements.forEach((statement: any) => {
+                if (Array.isArray(statement.Action)) {
+                    if (statement.Action.some((action: string) => action.startsWith("s3:"))) {
+                        foundS3Policy = true;
+                    }
+                    if (statement.Action.includes("sqs:SendMessage")) {
+                        foundSQSPolicy = true;
+                    }
+                }
+            });
+        });
+
+        expect(foundS3Policy).toBe(true);
+        expect(foundSQSPolicy).toBe(true);
+    });
+
+    test("creates Secrets Manager secret for Benchling credentials", () => {
+        template.hasResourceProperties("AWS::SecretsManager::Secret", {
+            Name: "benchling-webhook/credentials",
+            Description: "Benchling API credentials for webhook processor",
+        });
+    });
+
+    test("creates task definition with correct container configuration", () => {
+        template.hasResourceProperties("AWS::ECS::TaskDefinition", {
+            Family: "benchling-webhook-task",
+            Cpu: "1024",
+            Memory: "2048",
+            NetworkMode: "awsvpc",
+            RequiresCompatibilities: ["FARGATE"],
+        });
+    });
+
+    test("configures auto-scaling for Fargate service", () => {
+        template.hasResourceProperties("AWS::ApplicationAutoScaling::ScalableTarget", {
+            MinCapacity: 2,
+            MaxCapacity: 10,
+            ServiceNamespace: "ecs",
+        });
+
+        // Check for CPU-based scaling policy
+        template.hasResourceProperties("AWS::ApplicationAutoScaling::ScalingPolicy", {
+            PolicyType: "TargetTrackingScaling",
+            TargetTrackingScalingPolicyConfiguration: {
+                PredefinedMetricSpecification: {
+                    PredefinedMetricType: "ECSServiceAverageCPUUtilization",
+                },
+                TargetValue: 70,
+            },
+        });
+
+        // Check for memory-based scaling policy
+        template.hasResourceProperties("AWS::ApplicationAutoScaling::ScalingPolicy", {
+            PolicyType: "TargetTrackingScaling",
+            TargetTrackingScalingPolicyConfiguration: {
+                PredefinedMetricSpecification: {
+                    PredefinedMetricType: "ECSServiceAverageMemoryUtilization",
+                },
+                TargetValue: 80,
+            },
         });
     });
 });
