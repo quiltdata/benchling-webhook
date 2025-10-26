@@ -432,6 +432,147 @@ function dockerDev() {
   dockerPush(devRepo);
 }
 
+function dockerHealth() {
+  console.log('\n=== Docker Health Check ===\n');
+
+  // Get account ID and construct image name
+  const accountId = execSync(`aws sts get-caller-identity --query Account --output text`, { encoding: 'utf-8' }).trim();
+  const ecrRegistry = `${accountId}.dkr.ecr.${AWS_REGION}.amazonaws.com`;
+  const imageTag = `${ecrRegistry}/${ECR_REPO}:latest`;
+
+  console.log(`Testing image: ${imageTag}\n`);
+
+  // Check if image exists locally
+  try {
+    const imageExists = execSync(`docker images -q ${imageTag}`, { encoding: 'utf-8' }).trim();
+    if (!imageExists) {
+      console.log('Image not found locally. Pulling from ECR...');
+      getECRLogin();
+      execSync(`docker pull ${imageTag}`, { stdio: 'inherit' });
+    }
+  } catch (error) {
+    console.error('Error checking/pulling image:', error.message);
+    process.exit(1);
+  }
+
+  // Check container name
+  const containerName = 'benchling-webhook-health-test';
+
+  // Stop and remove existing container if it exists
+  try {
+    execSync(`docker stop ${containerName} 2>/dev/null || true`, { stdio: 'ignore' });
+    execSync(`docker rm ${containerName} 2>/dev/null || true`, { stdio: 'ignore' });
+  } catch (e) {
+    // Ignore errors if container doesn't exist
+  }
+
+  console.log('\nStarting container...');
+
+  // Map environment variables from .env format to application format
+  const envMapping = {
+    'S3_BUCKET_NAME': process.env.BUCKET_NAME,
+    'SQS_QUEUE_URL': `https://sqs.${AWS_REGION}.amazonaws.com/${process.env.CDK_DEFAULT_ACCOUNT || accountId}/${process.env.QUEUE_NAME}`,
+    'PREFIX': process.env.PREFIX,
+    'BENCHLING_TENANT': process.env.BENCHLING_TENANT,
+    'BENCHLING_CLIENT_ID': process.env.BENCHLING_CLIENT_ID,
+    'BENCHLING_CLIENT_SECRET': process.env.BENCHLING_CLIENT_SECRET,
+    'QUILT_CATALOG': process.env.QUILT_CATALOG,
+    'WEBHOOK_ALLOW_LIST': process.env.WEBHOOK_ALLOW_LIST,
+    'AWS_DEFAULT_REGION': AWS_REGION,
+    'ENABLE_WEBHOOK_VERIFICATION': 'false'
+  };
+
+  // Build docker run command with environment variables
+  const envArgs = Object.entries(envMapping)
+    .filter(([, value]) => value)
+    .map(([key, value]) => `-e ${key}="${value}"`)
+    .join(' ');
+
+  // Start container in background
+  try {
+    const runCmd = `docker run -d --name ${containerName} -p 5001:5000 ${envArgs} ${imageTag}`;
+    execSync(runCmd, { stdio: 'inherit' });
+    console.log('✓ Container started');
+  } catch (error) {
+    console.error('Error starting container:', error.message);
+    process.exit(1);
+  }
+
+  // Wait for container to start
+  console.log('\nWaiting for container to be ready (10 seconds)...');
+  execSync('sleep 10', { stdio: 'inherit' });
+
+  // Check if container is still running
+  try {
+    const isRunning = execSync(`docker ps -q -f name=${containerName}`, { encoding: 'utf-8' }).trim();
+    if (!isRunning) {
+      console.error('\n✗ Container is not running. Checking logs:\n');
+      execSync(`docker logs ${containerName}`, { stdio: 'inherit' });
+      execSync(`docker rm ${containerName}`, { stdio: 'ignore' });
+      process.exit(1);
+    }
+  } catch (error) {
+    console.error('Error checking container status:', error.message);
+    process.exit(1);
+  }
+
+  // Test health endpoints
+  console.log('\n=== Testing Health Endpoints ===\n');
+
+  const endpoints = [
+    { path: '/health', name: 'Basic Health' },
+    { path: '/health/ready', name: 'Readiness Check' }
+  ];
+
+  let allHealthy = true;
+
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`Testing ${endpoint.name} (${endpoint.path})...`);
+      const response = execSync(`curl -s -o /dev/null -w "%{http_code}" http://localhost:5001${endpoint.path}`, { encoding: 'utf-8' });
+
+      if (response === '200') {
+        console.log(`✓ ${endpoint.name}: OK (HTTP ${response})`);
+      } else {
+        console.error(`✗ ${endpoint.name}: Failed (HTTP ${response})`);
+        allHealthy = false;
+      }
+    } catch (error) {
+      console.error(`✗ ${endpoint.name}: Error - ${error.message}`);
+      allHealthy = false;
+    }
+  }
+
+  // Show container logs
+  console.log('\n=== Container Logs (last 20 lines) ===\n');
+  try {
+    execSync(`docker logs --tail 20 ${containerName}`, { stdio: 'inherit' });
+  } catch (e) {
+    console.error('Error fetching logs:', e.message);
+  }
+
+  // Cleanup
+  console.log('\n=== Cleanup ===\n');
+  try {
+    execSync(`docker stop ${containerName}`, { stdio: 'inherit' });
+    execSync(`docker rm ${containerName}`, { stdio: 'inherit' });
+    console.log('✓ Container stopped and removed');
+  } catch (error) {
+    console.error('Error cleaning up container:', error.message);
+  }
+
+  // Summary
+  console.log('\n=== Summary ===\n');
+  if (allHealthy) {
+    console.log('✓ All health checks passed!');
+    console.log(`✓ Image ${imageTag} is healthy and ready for deployment`);
+  } else {
+    console.error('✗ Some health checks failed');
+    console.error('Review the logs above for details');
+    process.exit(1);
+  }
+}
+
 // Parse command
 const command = process.argv[2] || 'sync';
 
@@ -448,23 +589,28 @@ switch (command) {
   case 'check':
     dockerCheck();
     break;
+  case 'health':
+    dockerHealth();
+    break;
   case 'dev':
     dockerDev();
     break;
   default:
     console.error(`Unknown command: ${command}`);
-    console.log('Usage: docker.js [sync|build|push|check|dev]');
+    console.log('Usage: docker.js [sync|build|push|check|health|dev]');
     console.log('');
     console.log('Commands:');
     console.log('  sync   - Sync and extract latest build from enterprise repository');
     console.log('  build  - Build Docker image and tag for ECR');
     console.log('  push   - Build (if needed), push to ECR, and verify with check (amd64 only)');
     console.log('  check  - Display information about images in ECR (including architecture)');
+    console.log('  health - Run image locally and test health endpoints');
     console.log('  dev    - Like push, but uses arch-specific repository (e.g., quiltdata/benchling-arm64)');
     console.log('');
     console.log('Notes:');
     console.log('  - Regular push (to quiltdata/benchling) requires amd64 architecture');
     console.log('  - Use dev command for arm64 or other architectures');
+    console.log('  - Health check requires .env file with all required environment variables');
     console.log('');
     console.log('Environment variables:');
     console.log('  CDK_DEFAULT_REGION - AWS region (checked first)');

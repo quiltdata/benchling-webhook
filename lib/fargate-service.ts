@@ -64,6 +64,19 @@ export class FargateService extends Construct {
             ],
         });
 
+        // Grant ECR pull permissions to task execution role
+        taskExecutionRole.addToPolicy(
+            new iam.PolicyStatement({
+                actions: [
+                    "ecr:GetAuthorizationToken",
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage",
+                ],
+                resources: ["*"],
+            }),
+        );
+
         // Create IAM Task Role (for the container to access AWS services)
         const taskRole = new iam.Role(this, "TaskRole", {
             assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
@@ -116,8 +129,8 @@ export class FargateService extends Construct {
                 logGroup: logGroup,
             }),
             environment: {
-                BUCKET_NAME: props.bucket.bucketName,
-                QUEUE_NAME: props.queueName,
+                S3_BUCKET_NAME: props.bucket.bucketName,
+                SQS_QUEUE_URL: `https://sqs.${props.region}.amazonaws.com/${props.account}/${props.queueName}`,
                 PREFIX: props.prefix,
                 BENCHLING_TENANT: props.benchlingTenant,
                 QUILT_CATALOG: props.quiltCatalog,
@@ -125,6 +138,7 @@ export class FargateService extends Construct {
                 AWS_DEFAULT_REGION: props.region,
                 FLASK_ENV: "production",
                 LOG_LEVEL: "INFO",
+                ENABLE_WEBHOOK_VERIFICATION: "false",
             },
             secrets: {
                 BENCHLING_CLIENT_ID: ecs.Secret.fromSecretsManager(

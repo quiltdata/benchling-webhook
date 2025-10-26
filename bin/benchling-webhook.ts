@@ -4,6 +4,10 @@ import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
 
 const app = new cdk.App();
 new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
+    env: {
+        account: process.env.CDK_DEFAULT_ACCOUNT,
+        region: process.env.CDK_DEFAULT_REGION,
+    },
     bucketName: process.env.BUCKET_NAME || "my-bucket-name",
     queueName: process.env.QUEUE_NAME || "my-queue-name",
     environment: process.env.STAGE || "prod",
