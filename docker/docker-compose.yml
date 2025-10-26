@@ -1,0 +1,64 @@
+services:
+  app:
+    build: .
+    ports:
+      - "5003:5000"
+    environment:
+      - FLASK_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - AWS_REGION=${AWS_REGION:-us-east-2}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - PKG_PREFIX=${PKG_PREFIX:-benchling}
+      - PKG_KEY=${PKG_KEY:-experiment_id}
+      - PKG_BUCKET_ONLY=${PKG_BUCKET_ONLY:-false}
+      - QUILT_CATALOG=${QUILT_CATALOG:-stable.quilttest.com}
+      - QUILT_DATABASE=${QUILT_DATABASE}
+      - SQS_QUEUE_URL=${SQS_QUEUE_URL}
+      - BENCHLING_TENANT=${BENCHLING_TENANT}
+      - BENCHLING_CLIENT_ID=${BENCHLING_CLIENT_ID}
+      - BENCHLING_CLIENT_SECRET=${BENCHLING_CLIENT_SECRET}
+      - BENCHLING_APP_DEFINITION_ID=${BENCHLING_APP_DEFINITION_ID}
+      - ENABLE_WEBHOOK_VERIFICATION=${ENABLE_WEBHOOK_VERIFICATION:-true}
+    volumes:
+      - ~/.aws:/home/appuser/.aws:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Local development with hot reload
+  app-dev:
+    build: .
+    profiles: ["dev"]
+    ports:
+      - "5002:5000"
+    environment:
+      - FLASK_ENV=development
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+      - AWS_REGION=${AWS_REGION:-us-east-2}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - PKG_PREFIX=${PKG_PREFIX:-benchling}
+      - PKG_KEY=${PKG_KEY:-experiment_id}
+      - PKG_BUCKET_ONLY=${PKG_BUCKET_ONLY:-false}
+      - QUILT_CATALOG=${QUILT_CATALOG:-stable.quilttest.com}
+      - QUILT_DATABASE=${QUILT_DATABASE}
+      - SQS_QUEUE_URL=${SQS_QUEUE_URL}
+      - BENCHLING_TENANT=${BENCHLING_TENANT}
+      - BENCHLING_CLIENT_ID=${BENCHLING_CLIENT_ID}
+      - BENCHLING_CLIENT_SECRET=${BENCHLING_CLIENT_SECRET}
+      - BENCHLING_APP_DEFINITION_ID=${BENCHLING_APP_DEFINITION_ID}
+      - ENABLE_WEBHOOK_VERIFICATION=${ENABLE_WEBHOOK_VERIFICATION:-true}
+    volumes:
+      - ~/.aws:/home/appuser/.aws:ro
+      - ./src:/app/src
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./uv.lock:/app/uv.lock
+    command: ["sh", "-c", "uv sync --all-extras --frozen && uv run python -m src.app"]
