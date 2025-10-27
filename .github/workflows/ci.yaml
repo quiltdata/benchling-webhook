@@ -108,6 +108,16 @@ jobs:
         with:
           platforms: linux/amd64
 
+      - name: Ensure ECR repository exists
+        run: |
+          REPO_NAME="quiltdata/benchling"
+          if ! aws ecr describe-repositories --repository-names "$REPO_NAME" --region us-east-1 >/dev/null 2>&1; then
+            echo "Creating ECR repository: $REPO_NAME"
+            aws ecr create-repository --repository-name "$REPO_NAME" --region us-east-1
+          else
+            echo "ECR repository already exists: $REPO_NAME"
+          fi
+
       - name: Extract version from tag
         id: version
         run: |
