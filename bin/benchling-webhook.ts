@@ -50,6 +50,7 @@ new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
     benchlingClientSecret: process.env.BENCHLING_CLIENT_SECRET || "",
     benchlingTenant: process.env.BENCHLING_TENANT || "",
     quiltCatalog: process.env.QUILT_CATALOG || "open.quiltdata.com",
+    quiltDatabase: process.env.QUILT_DATABASE || "",
     webhookAllowList: process.env.WEBHOOK_ALLOW_LIST,
     // ECR repository configuration
     createEcrRepository: process.env.CREATE_ECR_REPOSITORY === "true",

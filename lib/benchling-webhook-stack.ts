@@ -16,6 +16,7 @@ interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
     readonly quiltCatalog?: string;
+    readonly quiltDatabase: string;
     readonly webhookAllowList?: string;
     readonly createEcrRepository?: boolean;
     readonly ecrRepositoryName?: string;
@@ -117,6 +118,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             benchlingClientSecret: props.benchlingClientSecret,
             benchlingTenant: props.benchlingTenant,
             quiltCatalog: quiltCatalogValue,
+            quiltDatabase: props.quiltDatabase,
             webhookAllowList: webhookAllowListValue,
             ecrRepository: ecrRepo,
             imageTag: "latest",

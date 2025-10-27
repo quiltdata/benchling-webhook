@@ -16,6 +16,7 @@ describe("BenchlingWebhookStack", () => {
             benchlingClientSecret: "test-client-secret",
             benchlingTenant: "test-tenant",
             quiltCatalog: "https://quilt-example.com",
+            quiltDatabase: "test-database",
             webhookAllowList: "203.0.113.10,198.51.100.5",
             env: {
                 account: "123456789012",
@@ -119,6 +120,7 @@ describe("BenchlingWebhookStack", () => {
                 benchlingClientSecret: "test-client-secret",
                 benchlingTenant: "test-tenant",
                 quiltCatalog: "https://quilt-example.com",
+                quiltDatabase: "test-database",
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
