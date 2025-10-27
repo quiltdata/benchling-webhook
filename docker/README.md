@@ -1,5 +1,7 @@
 # Benchling-Quilt Integration Service
 
+> **Note**: This is the primary Python application code for the Benchling-Quilt webhook integration. The parent directory contains the AWS CDK infrastructure for deployment.
+
 A webhook-driven automation system that bridges Benchling laboratory entries with Quilt data packages using Python-based workflow orchestration.
 
 ## Features
