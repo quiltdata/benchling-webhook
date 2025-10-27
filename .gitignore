@@ -2,8 +2,17 @@
 !eslint.config.js
 *.d.ts
 node_modules
+.jest-cache
+.tmp
 
 # CDK asset staging directory
 .cdk.staging
 cdk.out
+cdk-outputs.json
+
+# Environment files
 .env*
+!.env.example
+
+# Deployment outputs
+.env.deploy

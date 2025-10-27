@@ -165,12 +165,27 @@ export class FargateService extends Construct {
             protocol: ecs.Protocol.TCP,
         });
 
+        // Create S3 bucket for ALB access logs
+        const albLogsBucket = new s3.Bucket(this, "AlbLogsBucket", {
+            bucketName: `benchling-webhook-alb-logs-${props.account}`,
+            removalPolicy: cdk.RemovalPolicy.DESTROY,
+            autoDeleteObjects: true,
+            lifecycleRules: [
+                {
+                    expiration: cdk.Duration.days(7),
+                },
+            ],
+        });
+
         // Create Application Load Balancer
         this.loadBalancer = new elbv2.ApplicationLoadBalancer(this, "ALB", {
             vpc: props.vpc,
             internetFacing: true,
             loadBalancerName: "benchling-webhook-alb",
         });
+
+        // Enable ALB access logs
+        this.loadBalancer.logAccessLogs(albLogsBucket, "alb-access-logs");
 
         // Create ALB Target Group
         const targetGroup = new elbv2.ApplicationTargetGroup(this, "TargetGroup", {

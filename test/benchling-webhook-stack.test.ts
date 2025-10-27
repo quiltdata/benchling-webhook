@@ -43,9 +43,8 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
-    test("does not create Lambda functions or Step Functions", () => {
-        // Ensure Lambda and Step Functions are removed
-        template.resourceCountIs("AWS::Lambda::Function", 0);
+    test("does not create Step Functions", () => {
+        // Ensure Step Functions are removed (Lambda for S3 auto-delete is OK)
         template.resourceCountIs("AWS::StepFunctions::StateMachine", 0);
         template.resourceCountIs("AWS::Events::Connection", 0);
     });

@@ -249,6 +249,37 @@ function dockerCheckSingle(repositoryName, ecrRegistry, showHeader = true) {
   }
 
   try {
+    // Check repository policy for public access
+    console.log('=== Repository Access Configuration ===');
+    const getPolicyCmd = `aws ecr get-repository-policy --repository-name ${repositoryName} --region ${AWS_REGION} --output json 2>&1`;
+    try {
+      const policyOutput = execSync(getPolicyCmd, { encoding: 'utf-8' });
+      const policyData = JSON.parse(policyOutput);
+      const policy = JSON.parse(policyData.policyText);
+
+      const hasPublicRead = policy.Statement?.some(stmt =>
+        stmt.Effect === 'Allow' &&
+        stmt.Principal === '*' &&
+        (stmt.Action.includes('ecr:GetDownloadUrlForLayer') ||
+         stmt.Action.includes('ecr:BatchGetImage'))
+      );
+
+      if (hasPublicRead) {
+        console.log('✓ Repository has public read access enabled');
+      } else {
+        console.log('⚠ Repository does not have public read access');
+        console.log('  To enable, add a repository policy with public read permissions');
+      }
+    } catch (error) {
+      if (error.message && error.message.includes('RepositoryPolicyNotFoundException')) {
+        console.log('⚠ No repository policy found (private access only)');
+        console.log('  To enable public access, add a repository policy');
+      } else {
+        console.log('⚠ Could not retrieve repository policy');
+      }
+    }
+    console.log('');
+
     // List all images in the repository
     console.log('=== Available Images ===');
     const listImagesCmd = `aws ecr list-images --repository-name ${repositoryName} --region ${AWS_REGION} --output json 2>&1`;
@@ -432,6 +463,145 @@ function dockerDev() {
   dockerPush(devRepo);
 }
 
+function dockerLogs() {
+  console.log('\n=== Fetching AWS Logs ===\n');
+
+  const AWS_REGION = process.env.CDK_DEFAULT_REGION || process.env.AWS_REGION || 'us-east-1';
+
+  // Log group names from the CDK stack
+  const LOG_GROUPS = {
+    'API Gateway': '/aws/apigateway/benchling-webhook',
+    'ECS Container': '/ecs/benchling-webhook'
+  };
+
+  // Parse command line arguments
+  const args = process.argv.slice(3);
+  let tailLines = 50; // default
+  let since = '30m'; // default to last 30 minutes
+  let follow = false;
+  let filterPattern = null;
+  let showErrors = false;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '-n' || args[i] === '--lines') {
+      tailLines = parseInt(args[i + 1]) || 50;
+      i++;
+    } else if (args[i] === '--since') {
+      since = args[i + 1] || '30m';
+      i++;
+    } else if (args[i] === '-f' || args[i] === '--follow') {
+      follow = true;
+    } else if (args[i] === '--filter') {
+      filterPattern = args[i + 1] || null;
+      i++;
+    } else if (args[i] === '--errors') {
+      showErrors = true;
+    }
+  }
+
+  // Convert since to milliseconds for CloudWatch
+  const sinceMs = parseSinceToMs(since);
+  const startTime = Date.now() - sinceMs;
+
+  console.log(`Region: ${AWS_REGION}`);
+  console.log(`Time range: Last ${since}`);
+  console.log(`Max lines per log group: ${tailLines}\n`);
+
+  // Fetch logs from each log group
+  for (const [name, logGroup] of Object.entries(LOG_GROUPS)) {
+    console.log(`${'='.repeat(80)}`);
+    console.log(`${name} Logs (${logGroup})`);
+    console.log(`${'='.repeat(80)}\n`);
+
+    try {
+      // Check if log group exists
+      const checkCmd = `aws logs describe-log-groups --log-group-name-prefix "${logGroup}" --region ${AWS_REGION} --output json 2>&1`;
+      const checkOutput = execSync(checkCmd, { encoding: 'utf-8' });
+      const checkData = JSON.parse(checkOutput);
+
+      if (!checkData.logGroups || checkData.logGroups.length === 0) {
+        console.log(`⚠ Log group not found (may not be deployed yet)\n`);
+        continue;
+      }
+
+      // Get log streams
+      const streamsCmd = `aws logs describe-log-streams --log-group-name "${logGroup}" --order-by LastEventTime --descending --max-items 5 --region ${AWS_REGION} --output json`;
+      const streamsOutput = execSync(streamsCmd, { encoding: 'utf-8' });
+      const streamsData = JSON.parse(streamsOutput);
+
+      if (!streamsData.logStreams || streamsData.logStreams.length === 0) {
+        console.log(`⚠ No log streams found in this log group\n`);
+        continue;
+      }
+
+      console.log(`Found ${streamsData.logStreams.length} recent log stream(s)\n`);
+
+      // Fetch logs using filter-log-events for more efficient querying
+      const filterCmd = `aws logs filter-log-events --log-group-name "${logGroup}" --start-time ${startTime} --region ${AWS_REGION} --output json --max-items ${tailLines}`;
+
+      try {
+        const logsOutput = execSync(filterCmd, { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 });
+        const logsData = JSON.parse(logsOutput);
+
+        if (!logsData.events || logsData.events.length === 0) {
+          console.log(`No log events found in the specified time range\n`);
+          continue;
+        }
+
+        // Sort events by timestamp
+        const events = logsData.events.sort((a, b) => a.timestamp - b.timestamp);
+
+        console.log(`Showing ${events.length} log event(s):\n`);
+
+        events.forEach(event => {
+          const timestamp = new Date(event.timestamp).toISOString();
+          const streamName = event.logStreamName.split('/').pop(); // Get last part for brevity
+          console.log(`[${timestamp}] [${streamName}]`);
+          console.log(event.message);
+          console.log('');
+        });
+      } catch (error) {
+        if (error.message && error.message.includes('ResourceNotFoundException')) {
+          console.log(`⚠ No logs found (log group may be empty)\n`);
+        } else {
+          throw error;
+        }
+      }
+    } catch (error) {
+      console.error(`✗ Error fetching logs from ${logGroup}:`, error.message);
+      console.log('');
+    }
+  }
+
+  console.log(`${'='.repeat(80)}`);
+  console.log('Log fetch complete');
+  console.log(`${'='.repeat(80)}\n`);
+
+  if (follow) {
+    console.log('Note: --follow mode is not yet implemented. Use AWS CloudWatch Console for live tailing.');
+  }
+}
+
+function parseSinceToMs(since) {
+  const match = since.match(/^(\d+)([smhd])$/);
+  if (!match) {
+    console.warn(`Invalid --since format: ${since}, using default 30m`);
+    return 30 * 60 * 1000;
+  }
+
+  const value = parseInt(match[1]);
+  const unit = match[2];
+
+  const multipliers = {
+    's': 1000,
+    'm': 60 * 1000,
+    'h': 60 * 60 * 1000,
+    'd': 24 * 60 * 60 * 1000
+  };
+
+  return value * multipliers[unit];
+}
+
 function dockerHealth() {
   console.log('\n=== Docker Health Check ===\n');
 
@@ -595,22 +765,33 @@ switch (command) {
   case 'dev':
     dockerDev();
     break;
+  case 'logs':
+    dockerLogs();
+    break;
   default:
     console.error(`Unknown command: ${command}`);
-    console.log('Usage: docker.js [sync|build|push|check|health|dev]');
+    console.log('Usage: docker.js [sync|build|push|check|health|dev|logs]');
     console.log('');
     console.log('Commands:');
     console.log('  sync   - Sync and extract latest build from enterprise repository');
     console.log('  build  - Build Docker image and tag for ECR');
     console.log('  push   - Build (if needed), push to ECR, and verify with check (amd64 only)');
-    console.log('  check  - Display information about images in ECR (including architecture)');
+    console.log('  check  - Display information about images in ECR (including architecture and access)');
     console.log('  health - Run image locally and test health endpoints');
     console.log('  dev    - Like push, but uses arch-specific repository (e.g., quiltdata/benchling-arm64)');
+    console.log('  logs   - Fetch logs from deployed API Gateway and ECS containers');
+    console.log('');
+    console.log('Logs options:');
+    console.log('  -n, --lines N  - Show last N lines per log group (default: 50)');
+    console.log('  --since TIME   - Show logs since TIME (e.g., 5m, 1h, 2d; default: 30m)');
+    console.log('  -f, --follow   - Follow log output (not yet implemented)');
     console.log('');
     console.log('Notes:');
     console.log('  - Regular push (to quiltdata/benchling) requires amd64 architecture');
     console.log('  - Use dev command for arm64 or other architectures');
     console.log('  - Health check requires .env file with all required environment variables');
+    console.log('  - Check command now displays ECR repository access configuration');
+    console.log('  - Logs command requires AWS CLI credentials and deployed stack');
     console.log('');
     console.log('Environment variables:');
     console.log('  CDK_DEFAULT_REGION - AWS region (checked first)');

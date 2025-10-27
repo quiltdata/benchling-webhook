@@ -4,5 +4,6 @@ module.exports = {
   testMatch: ['**/*.test.ts'],
   transform: {
     '^.+\\.tsx?$': 'ts-jest'
-  }
+  },
+  cacheDirectory: '<rootDir>/.jest-cache'
 };

@@ -4,6 +4,7 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
 import { AlbApiGateway } from "./alb-api-gateway";
+import { EcrRepository } from "./ecr-repository";
 
 interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
@@ -15,12 +16,15 @@ interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly benchlingTenant: string;
     readonly quiltCatalog?: string;
     readonly webhookAllowList?: string;
+    readonly createEcrRepository?: boolean;
+    readonly ecrRepositoryName?: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
     private readonly bucket: s3.IBucket;
     private readonly fargateService: FargateService;
     private readonly api: AlbApiGateway;
+    public readonly webhookEndpoint: string;
 
     constructor(
         scope: Construct,
@@ -83,8 +87,18 @@ export class BenchlingWebhookStack extends cdk.Stack {
             isDefault: true,
         });
 
-        // ECR image URI for the Benchling webhook Docker container
-        const ecrImageUri = "712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest";
+        // Optionally create ECR repository
+        let ecrImageUri: string;
+        if (props.createEcrRepository) {
+            const ecrRepo = new EcrRepository(this, "EcrRepository", {
+                repositoryName: props.ecrRepositoryName || "quiltdata/benchling",
+                publicReadAccess: true,
+            });
+            ecrImageUri = `${ecrRepo.repositoryUri}:latest`;
+        } else {
+            // Use existing ECR repository
+            ecrImageUri = `${this.account}.dkr.ecr.${this.region}.amazonaws.com/${props.ecrRepositoryName || "quiltdata/benchling"}:latest`;
+        }
 
         // Create the Fargate service
         this.fargateService = new FargateService(this, "FargateService", {
@@ -106,6 +120,30 @@ export class BenchlingWebhookStack extends cdk.Stack {
         this.api = new AlbApiGateway(this, "ApiGateway", {
             loadBalancer: this.fargateService.loadBalancer,
             webhookAllowList: webhookAllowListValue,
+        });
+
+        // Store webhook endpoint for easy access
+        this.webhookEndpoint = this.api.api.url;
+
+        // Export webhook endpoint as a stack output
+        new cdk.CfnOutput(this, "WebhookEndpoint", {
+            value: this.webhookEndpoint,
+            description: "Webhook endpoint URL - use this in Benchling app configuration",
+            exportName: "BenchlingWebhookEndpoint",
+        });
+
+        // Export Docker image information
+        new cdk.CfnOutput(this, "DockerImageUri", {
+            value: ecrImageUri,
+            description: "Docker image URI used for deployment",
+            exportName: "BenchlingWebhookDockerImage",
+        });
+
+        // Export version information
+        new cdk.CfnOutput(this, "StackVersion", {
+            value: this.node.tryGetContext("version") || require("../package.json").version,
+            description: "Stack version",
+            exportName: "BenchlingWebhookVersion",
         });
     }
 
