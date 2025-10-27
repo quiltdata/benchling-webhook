@@ -143,6 +143,7 @@ function printHelp() {
     console.log("");
     console.log("Arguments:");
     console.log("  event-name         Name of test event file (without .json extension)");
+    console.log("                     Defaults to 'canvas-created' if not specified");
     console.log("");
     console.log("Options:");
     console.log("  --list, -l         List available test events");
@@ -150,7 +151,8 @@ function printHelp() {
     console.log("  --help, -h         Show this help message");
     console.log("");
     console.log("Examples:");
-    console.log("  npm run event canvas-created          # Send canvas-created.json event");
+    console.log("  npm run event                          # Send canvas-created.json (default)");
+    console.log("  npm run event canvas-created           # Send canvas-created.json event");
     console.log("  npm run event entry-updated            # Send entry-updated.json event");
     console.log("  npm run event -- --list                # List all available events");
     console.log("  npm run event canvas-created -- --dry-run   # Preview without sending");
@@ -173,15 +175,11 @@ function main() {
     }
 
     const dryRun = args.includes("--dry-run") || args.includes("-d");
-    const eventName = args.find(arg => !arg.startsWith("-"));
+    const eventName = args.find(arg => !arg.startsWith("-")) || "canvas-created";
 
-    if (!eventName) {
-        console.error("Error: No event name provided\n");
-        listTestEvents();
-        console.log("");
-        console.log("Usage: npm run event <event-name>");
-        console.log("   or: npm run event -- --list");
-        process.exit(1);
+    // If using default event, notify the user
+    if (!args.find(arg => !arg.startsWith("-"))) {
+        console.log("No event specified, using default: canvas-created\n");
     }
 
     // Get webhook endpoint from stack outputs

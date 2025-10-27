@@ -18,7 +18,7 @@
     "diff": "npx cdk diff",
     "logs": "node bin/check-logs.js",
     "event": "node bin/send-event.js",
-    "check": "npm run cdk && npm run event",
+    "check": "npm run cdk && npm run event && sleep 45 && npm run logs",
     "docker:test": "make -C docker test"
   },
   "keywords": [
