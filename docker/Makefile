@@ -14,7 +14,7 @@ PORT_LOCAL := 5001
 PORT_DOCKER_DEV := 5002
 PORT_DOCKER_PROD := 5003
 
-.PHONY: help build test clean install lint ngrok kill dist dist-dry-run \
+.PHONY: help build test clean install lint ngrok kill \
         check-env check-ngrok run-local run-local-verbose run-dev run run-local-ngrok run-ecr \
         test test-unit test-integration test-dev test-prod test-ecr test-local test-benchling test-query \
         health-local health-dev health logs-dev logs
@@ -57,8 +57,6 @@ help:
 	@echo ""
 	@echo "Deployment:"
 	@echo "  build                 - Build Docker image (local development)"
-	@echo "  dist                  - Create versioned distribution archive (.scratch/dist/)"
-	@echo "  dist-dry-run          - Preview what would be included in distribution"
 	@echo "  deploy-help           - Show detailed deployment and Docker commands (see make.deploy)"
 	@echo "  push-local            - Push with arch in image name (auto-creates ECR repo)"
 	@echo "  push-ci               - Push with generic image name (auto-creates ECR repo)"
@@ -79,9 +77,9 @@ help:
 
 # Verify .env exists (auto-create from template if missing)
 check-env:
-	@if [ ! -f .env ]; then \
-		cp env.template .env; \
-		echo "✅ Created .env from template"; \
+	@if [ ! -f ../.env ]; then \
+		cp ../.env.template ../.env; \
+		echo "✅ Created .env from template in project root"; \
 		echo "⚠️  Edit .env with your Benchling/AWS configuration before running"; \
 		exit 1; \
 	fi
@@ -247,17 +245,6 @@ lint:
 # Build Docker image (local development)
 build:
 	docker build -t benchling-webhook .
-
-# Create distribution archive for building in other repos
-dist:
-	@echo "Creating distribution archive..."
-	uv run python scripts/create_dist.py
-	@echo "💡 Archive created in .scratch/dist/"
-	@echo "💡 Use DRY_RUN=1 to preview: make dist DRY_RUN=1"
-
-# Create distribution archive (dry run)
-dist-dry-run:
-	uv run python scripts/create_dist.py --dry-run
 
 # ==============================================================================
 # Health & Monitoring
