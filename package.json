@@ -19,7 +19,15 @@
     "logs": "node bin/check-logs.js",
     "event": "node bin/send-event.js",
     "check": "npm run cdk && npm run event && sleep 45 && npm run logs",
-    "docker:test": "make -C docker test"
+    "docker:test": "make -C docker test",
+    "docker-push": "make -C docker push-local",
+    "docker-check": "make -C docker docker-validate",
+    "version:major": "node bin/version.js major",
+    "version:minor": "node bin/version.js minor",
+    "version:patch": "node bin/version.js patch",
+    "version:dev": "node bin/version.js dev",
+    "version:dev-bump": "node bin/version.js dev-bump",
+    "release": "node bin/version.js"
   },
   "keywords": [
     "benchling",
