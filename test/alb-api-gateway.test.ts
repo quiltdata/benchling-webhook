@@ -316,18 +316,42 @@ describe("AlbApiGateway", () => {
     });
 
     describe("Outputs", () => {
-        test("exports API URL as CloudFormation output", () => {
+        test("exports API Gateway ID as CloudFormation output", () => {
             new AlbApiGateway(stack, "TestApiGateway", {
                 loadBalancer,
             });
 
             const template = Template.fromStack(stack);
 
-            template.hasOutput("ApiUrl", {
-                Description: "API Gateway endpoint URL",
-                Export: {
-                    Name: "BenchlingWebhookApiUrl",
-                },
+            template.hasOutput("ApiGatewayId", {
+                Description: "API Gateway REST API ID",
+            });
+        });
+
+        test("exports execution log group name as CloudFormation output", () => {
+            new AlbApiGateway(stack, "TestApiGateway", {
+                loadBalancer,
+            });
+
+            const template = Template.fromStack(stack);
+
+            // Just verify the output exists with the right description
+            const outputs = template.toJSON().Outputs;
+            expect(outputs.ApiGatewayExecutionLogGroup).toBeDefined();
+            expect(outputs.ApiGatewayExecutionLogGroup.Description).toBe(
+                "API Gateway execution log group for detailed request/response logs"
+            );
+        });
+
+        test("exports Load Balancer DNS as CloudFormation output", () => {
+            new AlbApiGateway(stack, "TestApiGateway", {
+                loadBalancer,
+            });
+
+            const template = Template.fromStack(stack);
+
+            template.hasOutput("LoadBalancerDNS", {
+                Description: "Application Load Balancer DNS name for direct testing",
             });
         });
     });

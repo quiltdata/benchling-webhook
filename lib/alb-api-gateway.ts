@@ -60,32 +60,22 @@ export class AlbApiGateway {
 
         this.addWebhookEndpoints(props.loadBalancer);
 
-        // Output the API URL
-        new cdk.CfnOutput(scope, "ApiUrl", {
-            value: this.api.url,
-            description: "API Gateway endpoint URL",
-            exportName: "BenchlingWebhookApiUrl",
-        });
-
         // Output API Gateway ID for execution logs
         new cdk.CfnOutput(scope, "ApiGatewayId", {
             value: this.api.restApiId,
             description: "API Gateway REST API ID",
-            exportName: "BenchlingWebhookApiGatewayId",
         });
 
         // Output execution log group name
         new cdk.CfnOutput(scope, "ApiGatewayExecutionLogGroup", {
             value: `API-Gateway-Execution-Logs_${this.api.restApiId}/prod`,
             description: "API Gateway execution log group for detailed request/response logs",
-            exportName: "BenchlingWebhookApiGatewayExecutionLogGroup",
         });
 
         // Output ALB DNS for direct testing
         new cdk.CfnOutput(scope, "LoadBalancerDNS", {
             value: props.loadBalancer.loadBalancerDnsName,
             description: "Application Load Balancer DNS name for direct testing",
-            exportName: "BenchlingWebhookLoadBalancerDNS",
         });
     }
 

@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
+import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
 import { AlbApiGateway } from "./alb-api-gateway";
@@ -87,17 +88,21 @@ export class BenchlingWebhookStack extends cdk.Stack {
             isDefault: true,
         });
 
-        // Optionally create ECR repository
+        // Get or create ECR repository
+        let ecrRepo: ecr.IRepository;
         let ecrImageUri: string;
         if (props.createEcrRepository) {
-            const ecrRepo = new EcrRepository(this, "EcrRepository", {
+            const newRepo = new EcrRepository(this, "EcrRepository", {
                 repositoryName: props.ecrRepositoryName || "quiltdata/benchling",
                 publicReadAccess: true,
             });
-            ecrImageUri = `${ecrRepo.repositoryUri}:latest`;
+            ecrRepo = newRepo.repository;
+            ecrImageUri = `${newRepo.repositoryUri}:latest`;
         } else {
-            // Use existing ECR repository
-            ecrImageUri = `${this.account}.dkr.ecr.${this.region}.amazonaws.com/${props.ecrRepositoryName || "quiltdata/benchling"}:latest`;
+            // Reference existing ECR repository
+            const repoName = props.ecrRepositoryName || "quiltdata/benchling";
+            ecrRepo = ecr.Repository.fromRepositoryName(this, "ExistingEcrRepository", repoName);
+            ecrImageUri = `${this.account}.dkr.ecr.${this.region}.amazonaws.com/${repoName}:latest`;
         }
 
         // Create the Fargate service
@@ -113,7 +118,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
             benchlingTenant: props.benchlingTenant,
             quiltCatalog: quiltCatalogValue,
             webhookAllowList: webhookAllowListValue,
-            ecrImageUri,
+            ecrRepository: ecrRepo,
+            imageTag: "latest",
         });
 
         // Create API Gateway that routes to the ALB
@@ -129,34 +135,29 @@ export class BenchlingWebhookStack extends cdk.Stack {
         new cdk.CfnOutput(this, "WebhookEndpoint", {
             value: this.webhookEndpoint,
             description: "Webhook endpoint URL - use this in Benchling app configuration",
-            exportName: "BenchlingWebhookEndpoint",
         });
 
         // Export Docker image information
         new cdk.CfnOutput(this, "DockerImageUri", {
             value: ecrImageUri,
             description: "Docker image URI used for deployment",
-            exportName: "BenchlingWebhookDockerImage",
         });
 
         // Export version information
         new cdk.CfnOutput(this, "StackVersion", {
             value: this.node.tryGetContext("version") || require("../package.json").version,
             description: "Stack version",
-            exportName: "BenchlingWebhookVersion",
         });
 
         // Export CloudWatch log groups
         new cdk.CfnOutput(this, "EcsLogGroup", {
             value: this.fargateService.logGroup.logGroupName,
             description: "CloudWatch log group for ECS container logs",
-            exportName: "BenchlingWebhookEcsLogGroup",
         });
 
         new cdk.CfnOutput(this, "ApiGatewayLogGroup", {
             value: this.api.logGroup.logGroupName,
             description: "CloudWatch log group for API Gateway access logs",
-            exportName: "BenchlingWebhookApiGatewayLogGroup",
         });
     }
 
