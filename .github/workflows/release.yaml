@@ -1,0 +1,176 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install esbuild
+        run: npm install -g esbuild
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Create temp directory for tests
+        run: mkdir -p .tmp
+
+      - name: Install Python dependencies
+        working-directory: docker
+        run: uv sync --all-extras
+
+      - name: Run Python tests
+        working-directory: docker
+        run: uv run pytest -v -m "not local"
+
+      - name: Run Node.js tests
+        run: npm test
+
+      - name: Build package
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/amd64
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        run: npm run docker-push
+        env:
+          DOCKER_DEFAULT_PLATFORM: linux/amd64
+
+      - name: Get Docker image URI
+        id: docker
+        run: |
+          source .env
+          IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${{ steps.version.outputs.VERSION }}"
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_OUTPUT
+          echo "Docker Image: $IMAGE_URI"
+
+      - name: Extract release notes
+        id: release_notes
+        run: |
+          # Extract the section for this version from RELEASE_NOTES.md
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          if [ -f RELEASE_NOTES.md ]; then
+            # Get content between this version header and the next version or end of file
+            NOTES=$(sed -n "/^## Version $VERSION/,/^## Version /p" RELEASE_NOTES.md | sed '$d')
+
+            # If empty, create a default note
+            if [ -z "$NOTES" ]; then
+              cat > /tmp/release_notes.md << 'EOFNOTES'
+          ## Version ${{ steps.version.outputs.VERSION }}
+
+          Released on $(date -u +"%Y-%m-%d")
+
+          ### Docker Image
+          ```
+          ${{ steps.docker.outputs.IMAGE_URI }}
+          ```
+
+          ### Changes
+          See commit history for details.
+          EOFNOTES
+            else
+              echo "$NOTES" > /tmp/release_notes.md
+            fi
+          else
+            cat > /tmp/release_notes.md << 'EOFNOTES'
+          ## Release ${{ steps.version.outputs.TAG }}
+
+          ### Docker Image
+          ```
+          ${{ steps.docker.outputs.IMAGE_URI }}
+          ```
+
+          ### Changes
+          See commit history for details.
+          EOFNOTES
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ steps.version.outputs.TAG }}
+          body_path: /tmp/release_notes.md
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to NPM
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true
+
+      - name: Publish to GitHub Packages
+        run: |
+          # Update package.json to point to GitHub Packages registry
+          jq '.publishConfig = {"registry": "https://npm.pkg.github.com"}' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+          # Publish to GitHub Packages
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Docker Image:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.docker.outputs.IMAGE_URI }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Package:**" >> $GITHUB_STEP_SUMMARY
+          echo "- NPM: https://www.npmjs.com/package/quilt-benchling-webhook" >> $GITHUB_STEP_SUMMARY
+          echo "- GitHub: https://github.com/quiltdata/benchling-webhook/pkgs/npm/quilt-benchling-webhook" >> $GITHUB_STEP_SUMMARY

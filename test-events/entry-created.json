@@ -1,0 +1,24 @@
+{
+    "version": "0",
+    "baseURL": "https://quilt-dtt.benchling.com",
+    "targetPath": "/event",
+    "tenantId": "ten_dsrealahhb",
+    "app": {
+        "id": "app_ap4JMzJp4a2hxOMD"
+    },
+    "appDefinition": {
+        "id": "appdef_xn6FfeCgZU",
+        "versionNumber": "0.4.0"
+    },
+    "channel": "events",
+    "message": {
+        "createdAt": "2024-06-07T21:46:48.111811+00:00",
+        "deprecated": false,
+        "id": "evt_dVhELK94T1Jy",
+        "resourceId": "8316d144-745d-4276-a389-f8afc8ff3115",
+        "schema": {
+            "id": "assaysch_2kecxvp3851btml"
+        },
+        "type": "v2.entry.created"
+    }
+}

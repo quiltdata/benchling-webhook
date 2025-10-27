@@ -50,10 +50,10 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/quiltdata/enterprise"
-Repository = "https://github.com/quiltdata/enterprise.git"
-Documentation = "https://github.com/quiltdata/enterprise/tree/master/benchling"
-Issues = "https://github.com/quiltdata/enterprise/issues"
+Homepage = "https://github.com/quiltdata/benchling-webhook"
+Repository = "https://github.com/quiltdata/benchling-webhook.git"
+Documentation = "https://github.com/quiltdata/benchling-webhook/tree/main/docker"
+Issues = "https://github.com/quiltdata/benchling-webhook/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]

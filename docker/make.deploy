@@ -1,0 +1,199 @@
+# Deployment and Docker operations for Benchling Integration
+# This file contains production deployment targets, Docker image building, and ECR push operations
+
+# Docker base image name for ECR (without architecture suffix)
+DOCKER_IMAGE_BASE := quiltdata/benchling
+
+# Version is read from pyproject.toml by docker.py
+# Can be overridden with VERSION=x.y.z
+VERSION ?=
+
+# Detect architecture and set appropriate image name
+ARCH := $(shell uname -m | tr '[:upper:]' '[:lower:]')
+ifeq ($(ARCH),x86_64)
+	ARCH := amd64
+endif
+ifeq ($(ARCH),aarch64)
+	ARCH := arm64
+endif
+
+# Export appropriate image name based on target
+export DOCKER_IMAGE_NAME ?= $(DOCKER_IMAGE_BASE)
+
+# AWS region for ECR
+AWS_REGION ?= us-east-1
+
+.PHONY: deploy-help docker-build-local push-local push-ci \
+        docker-tools docker-ecr-setup docker-ecr-login docker-validate deploy-clean \
+        docker-ecr-create
+
+# ==============================================================================
+# Help
+# ==============================================================================
+
+deploy-help:
+	@echo "Benchling Integration - Deployment & Docker Commands"
+	@echo ""
+	@echo "Docker Build & Push (Simplified):"
+	@echo "  push-local            - Build and push with arch in image name"
+	@echo "                          → quiltdata/benchling-arm64:v1.0.0, :latest"
+	@echo "                          Use for local development and testing"
+	@echo "                          (Auto-creates both arch-specific and generic ECR repos)"
+	@echo "  push-ci               - Build and push with generic image name"
+	@echo "                          → quiltdata/benchling:v1.0.0, :latest"
+	@echo "                          Use in CI/CD pipeline on benchling-docker branch"
+	@echo "                          (Requires ECR repos to exist - run push-local first)"
+	@echo "  docker-build-local    - Build Docker image locally without pushing"
+	@echo ""
+	@echo "  Add DRY_RUN=1 to any push command for dry run mode:"
+	@echo "    make push-local DRY_RUN=1"
+	@echo "    make push-ci DRY_RUN=1"
+	@echo ""
+	@echo "Docker Tools & Setup:"
+	@echo "  docker-tools          - Verify Docker is installed and running"
+	@echo "  docker-ecr-setup      - Create ECR repository if it doesn't exist"
+	@echo "  docker-ecr-login      - Login to ECR registry"
+	@echo "  docker-ecr-create     - Manually create both arch-specific and generic ECR repos"
+	@echo "  docker-validate       - Validate pushed Docker images in registry"
+	@echo ""
+	@echo "Maintenance:"
+	@echo "  deploy-clean          - Clean deployment artifacts"
+	@echo ""
+	@echo "Workflow:"
+	@echo "  Local:  make push-local  → quiltdata/benchling-$(ARCH):v1.0.0"
+	@echo "  CI:     make push-ci     → quiltdata/benchling:v1.0.0"
+	@echo ""
+	@echo "Environment Variables:"
+	@echo "  VERSION               - Docker image version (default: git describe)"
+	@echo "  AWS_REGION            - AWS region for ECR (default: us-east-1)"
+	@echo "  DOCKER_IMAGE_BASE     - Base Docker image name (default: quiltdata/benchling)"
+
+# ==============================================================================
+# Docker Tools & Prerequisites
+# ==============================================================================
+
+docker-tools:
+	@command -v docker >/dev/null 2>&1 || { echo "❌ Docker not found - install Docker"; exit 1; }
+	@docker info >/dev/null 2>&1 || { echo "❌ Docker daemon not running or not accessible"; exit 1; }
+	@command -v uv >/dev/null 2>&1 || { echo "❌ uv not found - install uv package manager"; exit 1; }
+	@echo "✅ Docker tools available"
+
+docker-ecr-login: docker-tools
+	@echo "🔐 Logging in to ECR..."
+	@AWS_ACCOUNT_ID=$$(aws sts get-caller-identity --query Account --output text 2>/dev/null) || \
+		{ echo "❌ Failed to get AWS account ID - check AWS credentials"; exit 1; }; \
+	aws ecr get-login-password --region $(AWS_REGION) | \
+		docker login --username AWS --password-stdin $$AWS_ACCOUNT_ID.dkr.ecr.$(AWS_REGION).amazonaws.com
+	@echo "✅ ECR login successful"
+
+docker-ecr-setup: docker-tools
+	@echo "🔍 Checking ECR repository..."
+	@AWS_ACCOUNT_ID=$$(aws sts get-caller-identity --query Account --output text 2>/dev/null) || \
+		{ echo "❌ Failed to get AWS account ID - check AWS credentials"; exit 1; }; \
+	echo "📦 AWS Account: $$AWS_ACCOUNT_ID (region: $(AWS_REGION))"; \
+	aws ecr describe-repositories --repository-names $(DOCKER_IMAGE_NAME) --region $(AWS_REGION) >/dev/null 2>&1 || \
+		{ echo "📦 Creating ECR repository..."; \
+		  aws ecr create-repository --repository-name $(DOCKER_IMAGE_NAME) --region $(AWS_REGION) >/dev/null; }; \
+	echo "✅ ECR repository ready"
+
+# Create both architecture-specific and generic ECR repositories
+# Use this before running push-local for the first time
+# Creates:
+#   1. Architecture-specific repo (e.g., quiltdata/benchling-arm64)
+#   2. Generic repo (e.g., quiltdata/benchling)
+docker-ecr-create: docker-tools
+	@echo "📦 Creating ECR repositories..."
+	@AWS_ACCOUNT_ID=$$(aws sts get-caller-identity --query Account --output text 2>/dev/null) || \
+		{ echo "❌ Failed to get AWS account ID - check AWS credentials"; exit 1; }; \
+	echo "Account: $$AWS_ACCOUNT_ID"; \
+	echo "Region: $(AWS_REGION)"; \
+	echo ""; \
+	ARCH_REPO=$(DOCKER_IMAGE_BASE)-$(ARCH); \
+	GENERIC_REPO=$(DOCKER_IMAGE_BASE); \
+	echo "Creating architecture-specific repository: $$ARCH_REPO"; \
+	if aws ecr describe-repositories --repository-names $$ARCH_REPO --region $(AWS_REGION) >/dev/null 2>&1; then \
+		echo "✅ Repository already exists: $$ARCH_REPO"; \
+	else \
+		aws ecr create-repository --repository-name $$ARCH_REPO --region $(AWS_REGION) >/dev/null; \
+		echo "✅ Successfully created repository: $$ARCH_REPO"; \
+	fi; \
+	echo ""; \
+	echo "Creating generic repository: $$GENERIC_REPO"; \
+	if aws ecr describe-repositories --repository-names $$GENERIC_REPO --region $(AWS_REGION) >/dev/null 2>&1; then \
+		echo "✅ Repository already exists: $$GENERIC_REPO"; \
+	else \
+		aws ecr create-repository --repository-name $$GENERIC_REPO --region $(AWS_REGION) >/dev/null; \
+		echo "✅ Successfully created repository: $$GENERIC_REPO"; \
+	fi
+
+# ==============================================================================
+# Docker Build Operations
+# ==============================================================================
+
+docker-build-local: check-env docker-tools
+	@echo "🐳 Building Docker image locally..."
+	@echo "Version: $(VERSION)"
+	@echo "Architecture: $(shell uname -m)"
+	uv run python scripts/docker.py build --version $(VERSION)
+
+# ==============================================================================
+# Docker Push Operations (Simplified)
+# ==============================================================================
+
+# Push from local machine with architecture in image name (e.g., quiltdata/benchling-arm64:v1.0.0)
+# Use this for local development and testing
+# Set DRY_RUN=1 for dry run mode
+push-local: check-env docker-tools docker-ecr-create
+	@if [ "$(DRY_RUN)" = "1" ]; then \
+		echo "🔍 DRY RUN: Would push architecture-specific Docker image (local)..."; \
+	else \
+		echo "🐳 Building and pushing architecture-specific Docker image (local)..."; \
+		$(MAKE) -f make.deploy docker-ecr-login; \
+	fi
+	@echo "Image: $(DOCKER_IMAGE_BASE)-$(ARCH)"
+	@echo "Architecture: $(ARCH)"
+	@echo ""
+	@if [ "$(DRY_RUN)" = "1" ]; then \
+		DOCKER_IMAGE_NAME=$(DOCKER_IMAGE_BASE)-$(ARCH) uv run python scripts/docker.py push $(if $(VERSION),--version $(VERSION)) --no-arch-suffix --dry-run; \
+	else \
+		DOCKER_IMAGE_NAME=$(DOCKER_IMAGE_BASE)-$(ARCH) uv run python scripts/docker.py push $(if $(VERSION),--version $(VERSION)) --no-arch-suffix; \
+	fi
+
+# Push from CI with generic image name (e.g., quiltdata/benchling:v1.0.0)
+# Use this in CI/CD on merge to benchling-docker branch
+# Set DRY_RUN=1 for dry run mode
+# Note: Does NOT auto-create ECR repos (assumes they exist from previous push-local)
+# Note: Does NOT require check-env since CI provides credentials via OIDC
+push-ci: docker-tools
+	@if [ "$(DRY_RUN)" = "1" ]; then \
+		echo "🔍 DRY RUN: Would push unified Docker image (CI)..."; \
+	else \
+		echo "🐳 Building and pushing unified Docker image (CI)..."; \
+		$(MAKE) -f make.deploy docker-ecr-login; \
+	fi
+	@echo "Image: $(DOCKER_IMAGE_BASE)"
+	@echo "Architecture: $(ARCH)"
+	@echo ""
+	@if [ "$(DRY_RUN)" = "1" ]; then \
+		DOCKER_IMAGE_NAME=$(DOCKER_IMAGE_BASE) uv run python scripts/docker.py push $(if $(VERSION),--version $(VERSION)) --no-arch-suffix --dry-run; \
+	else \
+		DOCKER_IMAGE_NAME=$(DOCKER_IMAGE_BASE) uv run python scripts/docker.py push $(if $(VERSION),--version $(VERSION)) --no-arch-suffix; \
+	fi
+
+# ==============================================================================
+# Docker Validation
+# ==============================================================================
+
+docker-validate: docker-tools docker-ecr-login
+	@echo "🔍 Validating Docker images in registry..."
+	@echo "Version: $(VERSION)"
+	uv run python scripts/docker.py validate --version $(VERSION)
+
+# ==============================================================================
+# Cleanup
+# ==============================================================================
+
+deploy-clean:
+	@echo "🧹 Cleaning deployment artifacts..."
+	@docker system prune -f
+	@echo "✅ Deployment cleanup completed"
