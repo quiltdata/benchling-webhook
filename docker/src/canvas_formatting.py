@@ -187,6 +187,24 @@ Error: {error}
 """
 
 
+def format_error_notification(errors: List[str]) -> str:
+    """Format error notification section to display at bottom of Canvas.
+
+    Args:
+        errors: List of error messages to display
+
+    Returns:
+        Formatted markdown string with error notification, or empty string if no errors
+    """
+    if not errors:
+        return ""
+
+    content = "\n---\n\n### ⚠️ Warnings\n\n"
+    for error in errors:
+        content += f"> {error}\n\n"
+    return content
+
+
 def dict_to_markdown_list(data: Dict[str, Any], indent_level: int = 0) -> str:
     """Convert a dictionary to markdown bulleted list with sublists.
 
