@@ -12,13 +12,14 @@ export interface AlbApiGatewayProps {
 
 export class AlbApiGateway {
     public readonly api: apigateway.RestApi;
+    public readonly logGroup: logs.ILogGroup;
 
     constructor(
         scope: Construct,
         id: string,
         props: AlbApiGatewayProps,
     ) {
-        const logGroup = new logs.LogGroup(scope, "ApiGatewayAccessLogs", {
+        this.logGroup = new logs.LogGroup(scope, "ApiGatewayAccessLogs", {
             logGroupName: "/aws/apigateway/benchling-webhook",
             retention: logs.RetentionDays.ONE_WEEK,
             removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -47,7 +48,7 @@ export class AlbApiGateway {
             policy: policyDocument,
             deployOptions: {
                 stageName: "prod",
-                accessLogDestination: new apigateway.LogGroupLogDestination(logGroup),
+                accessLogDestination: new apigateway.LogGroupLogDestination(this.logGroup),
                 methodOptions: {
                     "/*/*": {
                         loggingLevel: apigateway.MethodLoggingLevel.INFO,
@@ -64,6 +65,27 @@ export class AlbApiGateway {
             value: this.api.url,
             description: "API Gateway endpoint URL",
             exportName: "BenchlingWebhookApiUrl",
+        });
+
+        // Output API Gateway ID for execution logs
+        new cdk.CfnOutput(scope, "ApiGatewayId", {
+            value: this.api.restApiId,
+            description: "API Gateway REST API ID",
+            exportName: "BenchlingWebhookApiGatewayId",
+        });
+
+        // Output execution log group name
+        new cdk.CfnOutput(scope, "ApiGatewayExecutionLogGroup", {
+            value: `API-Gateway-Execution-Logs_${this.api.restApiId}/prod`,
+            description: "API Gateway execution log group for detailed request/response logs",
+            exportName: "BenchlingWebhookApiGatewayExecutionLogGroup",
+        });
+
+        // Output ALB DNS for direct testing
+        new cdk.CfnOutput(scope, "LoadBalancerDNS", {
+            value: props.loadBalancer.loadBalancerDnsName,
+            description: "Application Load Balancer DNS name for direct testing",
+            exportName: "BenchlingWebhookLoadBalancerDNS",
         });
     }
 
