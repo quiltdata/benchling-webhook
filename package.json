@@ -1,6 +1,6 @@
 {
   "name": "quilt-benchling-webhook",
-  "version": "0.4.7",
+  "version": "0.4.8-dev.0",
   "description": "AWS CDK deployment for Benchling webhook processing using Fargate",
   "main": "lib/benchling-webhook-stack.ts",
   "bin": {
@@ -19,7 +19,15 @@
     "logs": "node bin/check-logs.js",
     "event": "node bin/send-event.js",
     "check": "npm run cdk && npm run event && sleep 45 && npm run logs",
-    "docker:test": "make -C docker test"
+    "docker:test": "make -C docker test",
+    "docker-push": "make -C docker push-local",
+    "docker-check": "make -C docker docker-validate",
+    "release": "node bin/version.js release",
+    "dev": "node bin/version.js dev",
+    "version:major": "node bin/version.js major",
+    "version:minor": "node bin/version.js minor",
+    "version:patch": "node bin/version.js patch",
+    "version:dev": "node bin/version.js dev-bump"
   },
   "keywords": [
     "benchling",
