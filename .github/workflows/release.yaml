@@ -41,6 +41,9 @@ jobs:
       - name: Install Node.js dependencies
         run: npm ci
 
+      - name: Create temp directory for tests
+        run: mkdir -p .tmp
+
       - name: Install Python dependencies
         working-directory: docker
         run: uv sync --all-extras
