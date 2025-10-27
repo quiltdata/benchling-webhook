@@ -1,6 +1,6 @@
 # Benchling-Quilt Integration Makefile
 
--include .env
+-include ../.env
 .EXPORT_ALL_VARIABLES:
 
 # Include deployment targets

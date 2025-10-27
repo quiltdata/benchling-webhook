@@ -80,6 +80,31 @@ Benchling → API Gateway → ALB → Fargate (Flask app) → S3 + SQS
 - Benchling credentials are stored in AWS Secrets Manager (created by `lib/fargate-service.ts`) and injected into Fargate containers at runtime.
 - Use `WEBHOOK_ALLOW_LIST` to restrict webhook sources to Benchling's public IP ranges for defense-in-depth security.
 
+### Required Environment Variables
+
+The following must be set in `.env` for both CDK deployment and runtime (validated in `bin/benchling-webhook.ts`):
+
+- `CDK_DEFAULT_ACCOUNT`, `CDK_DEFAULT_REGION` - AWS deployment target
+- `BENCHLING_CLIENT_ID`, `BENCHLING_CLIENT_SECRET`, `BENCHLING_TENANT` - Benchling OAuth credentials
+- `BUCKET_NAME`, `S3_BUCKET_NAME` - S3 bucket for packages (CDK parameter and Python app)
+- `QUEUE_NAME`, `SQS_QUEUE_URL` - SQS queue name and full URL
+- `QUILT_CATALOG`, `QUILT_DATABASE` - Quilt catalog URL and Athena database name
+- `BENCHLING_APP_DEFINITION_ID` - Required when `ENABLE_WEBHOOK_VERIFICATION=true` (default)
+
+### Optional Environment Variables
+
+Defaults are provided; override as needed:
+
+- `WEBHOOK_ALLOW_LIST` - Comma-separated IPs (empty = allow all)
+- `CREATE_ECR_REPOSITORY` - Create new ECR repo (default: false)
+- `ECR_REPOSITORY_NAME` - ECR repo name (default: "quiltdata/benchling")
+- `STAGE` - Environment stage (default: "prod")
+- `PREFIX` - Package prefix (default: "benchling")
+- `FLASK_ENV`, `LOG_LEVEL`, `PORT` - Flask app configuration
+- `ENABLE_WEBHOOK_VERIFICATION` - Verify webhook signatures (default: "true")
+- `BENCHLING_API_KEY` - For MCP server integration
+- `AWS_PROFILE` - AWS profile for local development
+
 ## Debugging & Troubleshooting
 
 - **Check deployment outputs**: After deployment, view `.env.deploy` for webhook endpoint URL and other stack outputs.

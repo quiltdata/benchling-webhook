@@ -4,26 +4,19 @@
   "description": "AWS CDK deployment for Benchling webhook processing using Fargate",
   "main": "lib/benchling-webhook-stack.ts",
   "bin": {
-    "benchling-webhook": "bin/benchling-webhook.ts",
-    "benchling-webhook-deploy": "bin/deploy.sh"
+    "benchling-webhook": "bin/benchling-webhook.ts"
   },
   "scripts": {
     "sync-version": "node bin/sync-version.js",
     "clean": "rm -rf cdk.out */{*.js,*.d.ts}",
     "test": "NODE_ENV=test TMPDIR=./.tmp node --max-old-space-size=4096 ./node_modules/.bin/jest",
     "cdk": "npm run test && npx cdk deploy --require-approval never",
-    "deploy": "bash bin/deploy.sh",
-    "deploy:skip-tests": "bash bin/deploy.sh --skip-tests",
     "lint": "eslint . --ext .ts --fix",
     "build": "tsc --noEmit",
     "watch": "tsc --noEmit -w",
     "synth": "npx cdk synth",
     "diff": "npx cdk diff",
-    "docker:build": "make -C docker build",
-    "docker:test": "make -C docker test",
-    "docker:push": "make -C docker push-local",
-    "docker:health": "make -C docker health",
-    "docker:logs": "make -C docker logs"
+    "docker:test": "make -C docker test"
   },
   "keywords": [
     "benchling",
@@ -49,6 +42,7 @@
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
     "aws-cdk": "2.1031.0",
+    "dotenv": "^17.2.3",
     "esbuild": "0.25.11",
     "eslint": "^9.22.0",
     "globals": "^16.0.0",
