@@ -27,6 +27,7 @@ export class FargateService extends Construct {
     public readonly service: ecs.FargateService;
     public readonly loadBalancer: elbv2.ApplicationLoadBalancer;
     public readonly cluster: ecs.Cluster;
+    public readonly logGroup: logs.ILogGroup;
 
     constructor(scope: Construct, id: string, props: FargateServiceProps) {
         super(scope, id);
@@ -48,7 +49,7 @@ export class FargateService extends Construct {
         ];
 
         // Create CloudWatch Log Group for container logs
-        const logGroup = new logs.LogGroup(this, "ContainerLogGroup", {
+        this.logGroup = new logs.LogGroup(this, "ContainerLogGroup", {
             logGroupName: "/ecs/benchling-webhook",
             retention: logs.RetentionDays.ONE_WEEK,
             removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -126,7 +127,7 @@ export class FargateService extends Construct {
             image: ecs.ContainerImage.fromRegistry(props.ecrImageUri),
             logging: ecs.LogDriver.awsLogs({
                 streamPrefix: "benchling-webhook",
-                logGroup: logGroup,
+                logGroup: this.logGroup,
             }),
             environment: {
                 S3_BUCKET_NAME: props.bucket.bucketName,

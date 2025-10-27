@@ -145,6 +145,19 @@ export class BenchlingWebhookStack extends cdk.Stack {
             description: "Stack version",
             exportName: "BenchlingWebhookVersion",
         });
+
+        // Export CloudWatch log groups
+        new cdk.CfnOutput(this, "EcsLogGroup", {
+            value: this.fargateService.logGroup.logGroupName,
+            description: "CloudWatch log group for ECS container logs",
+            exportName: "BenchlingWebhookEcsLogGroup",
+        });
+
+        new cdk.CfnOutput(this, "ApiGatewayLogGroup", {
+            value: this.api.logGroup.logGroupName,
+            description: "CloudWatch log group for API Gateway access logs",
+            exportName: "BenchlingWebhookApiGatewayLogGroup",
+        });
     }
 
 

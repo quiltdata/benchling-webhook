@@ -16,6 +16,7 @@
     "watch": "tsc --noEmit -w",
     "synth": "npx cdk synth",
     "diff": "npx cdk diff",
+    "logs": "node bin/check-logs.js",
     "docker:test": "make -C docker test"
   },
   "keywords": [
