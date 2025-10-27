@@ -61,6 +61,7 @@ class CanvasManager:
         self.payload = payload
         self._entry = None
         self._package = None
+        self._errors: List[str] = []  # Track errors to display in notification section
 
         # Dependency injection with fallback to default instances
         self._package_query = package_query or PackageQuery(
@@ -180,6 +181,7 @@ class CanvasManager:
         1. Primary package information
         2. Notice and status
         3. Linked packages (if any)
+        4. Error notifications (if any)
 
         Returns:
             Formatted markdown string with package links
@@ -209,6 +211,8 @@ class CanvasManager:
             content += fmt.format_linked_packages(linked_packages)
 
         except Exception as e:
+            error_msg = f"Failed to search for linked packages: {str(e)}"
+            self._errors.append(error_msg)
             logger.warning(
                 "Failed to search for linked packages",
                 entry_id=self.entry_id,
@@ -216,6 +220,9 @@ class CanvasManager:
                 error=str(e),
             )
             # Continue without linked packages if search fails
+
+        # Error notifications (at the bottom)
+        content += fmt.format_error_notification(self._errors)
 
         return content
 
