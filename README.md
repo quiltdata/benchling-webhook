@@ -318,7 +318,7 @@ curl $WEBHOOK_ENDPOINT/health
 # Test with sample payload
 curl -X POST $WEBHOOK_ENDPOINT/event \
   -H "Content-Type: application/json" \
-  -d @test/entry-updated.json
+  -d @test-events/entry-updated.json
 ```
 
 ## Monitoring and Operations

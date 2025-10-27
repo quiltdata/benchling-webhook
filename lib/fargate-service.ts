@@ -1,5 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
+import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
@@ -20,7 +21,8 @@ export interface FargateServiceProps {
     readonly benchlingTenant: string;
     readonly quiltCatalog: string;
     readonly webhookAllowList: string;
-    readonly ecrImageUri: string;
+    readonly ecrRepository: ecr.IRepository;
+    readonly imageTag?: string;
 }
 
 export class FargateService extends Construct {
@@ -65,18 +67,7 @@ export class FargateService extends Construct {
             ],
         });
 
-        // Grant ECR pull permissions to task execution role
-        taskExecutionRole.addToPolicy(
-            new iam.PolicyStatement({
-                actions: [
-                    "ecr:GetAuthorizationToken",
-                    "ecr:BatchCheckLayerAvailability",
-                    "ecr:GetDownloadUrlForLayer",
-                    "ecr:BatchGetImage",
-                ],
-                resources: ["*"],
-            }),
-        );
+        // Note: ECR pull permissions will be automatically granted by fromEcrRepository()
 
         // Create IAM Task Role (for the container to access AWS services)
         const taskRole = new iam.Role(this, "TaskRole", {
@@ -124,7 +115,10 @@ export class FargateService extends Construct {
 
         // Add container to task definition
         const container = taskDefinition.addContainer("BenchlingWebhookContainer", {
-            image: ecs.ContainerImage.fromRegistry(props.ecrImageUri),
+            image: ecs.ContainerImage.fromEcrRepository(
+                props.ecrRepository,
+                props.imageTag || "latest"
+            ),
             logging: ecs.LogDriver.awsLogs({
                 streamPrefix: "benchling-webhook",
                 logGroup: this.logGroup,

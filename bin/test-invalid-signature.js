@@ -13,7 +13,7 @@ if (args.length === 0) {
 const webhookUrl = args[0];
 
 // Read the test payload
-const testPayload = JSON.parse(fs.readFileSync('test/app-installed.json', 'utf8'));
+const testPayload = JSON.parse(fs.readFileSync('test-events/app-installed.json', 'utf8'));
 const rawBody = JSON.stringify(testPayload);
 
 // Generate a WRONG key pair (not the one Benchling has)

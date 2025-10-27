@@ -61,7 +61,7 @@ Benchling → API Gateway → ALB → Fargate (Flask app) → S3 + SQS
 ## Testing Guidelines
 
 - Write focused Jest tests in `test/` mirroring the module under test (e.g., `alb-api-gateway.test.ts`).
-- Reuse payload fixtures in `test/*.json` to simulate webhook flows; document new fixtures inline.
+- Reuse payload fixtures in `test-events/*.json` to simulate webhook flows; document new fixtures inline.
 - Tests focus on CDK infrastructure and API Gateway configuration; the Flask application has its own test suite.
 - Run `npm run test` before requesting review; add `--watch` locally when iterating.
 - Use `npm run docker-logs` after deployment to verify webhook processing in CloudWatch logs.

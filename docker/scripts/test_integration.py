@@ -20,25 +20,25 @@ class IntegrationTest:
     MANIFEST_EVENTS = [
         {
             "name": "v2.canvas.userInteracted",
-            "file": "tests/test_data/canvas-interaction.json",
+            "file": "../test-events/canvas-interaction.json",
             "endpoint": "/canvas",
             "expected_status": 202,
         },
         {
             "name": "v2.canvas.created",
-            "file": "tests/test_data/canvas-created.json",
+            "file": "../test-events/canvas-created.json",
             "endpoint": "/canvas",
             "expected_status": 202,
         },
         {
             "name": "v2.entry.created",
-            "file": "tests/test_data/entry-created.json",
+            "file": "../test-events/entry-created.json",
             "endpoint": "/event",
             "expected_status": 200,
         },
         {
             "name": "v2.entry.updated.fields",
-            "file": "tests/test_data/entry-updated.json",
+            "file": "../test-events/entry-updated.json",
             "endpoint": "/event",
             "expected_status": 200,
         },
