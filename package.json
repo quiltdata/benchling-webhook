@@ -1,18 +1,40 @@
 {
-  "name": "benchling-webhook",
+  "name": "quilt-benchling-webhook",
   "version": "0.4.7",
+  "description": "AWS CDK deployment for Benchling webhook processing using Fargate",
+  "main": "lib/benchling-webhook-stack.ts",
   "bin": {
-    "benchling-webhook": "bin/benchling-webhook.js"
+    "benchling-webhook": "bin/benchling-webhook.ts"
   },
   "scripts": {
+    "sync-version": "node bin/sync-version.js",
     "clean": "rm -rf cdk.out */{*.js,*.d.ts}",
-    "test": "NODE_ENV=test node --max-old-space-size=4096 ./node_modules/.bin/jest",
+    "test": "NODE_ENV=test TMPDIR=./.tmp node --max-old-space-size=4096 ./node_modules/.bin/jest",
     "cdk": "npm run test && npx cdk deploy --require-approval never",
     "lint": "eslint . --ext .ts --fix",
-    "docker-sync": "node bin/docker.js sync",
-    "docker-build": "node bin/docker.js build",
-    "docker-push": "node bin/docker.js push",
-    "docker-check": "node bin/docker.js check"
+    "build": "tsc --noEmit",
+    "watch": "tsc --noEmit -w",
+    "synth": "npx cdk synth",
+    "diff": "npx cdk diff",
+    "logs": "node bin/check-logs.js",
+    "event": "node bin/send-event.js",
+    "check": "npm run cdk && npm run event && sleep 45 && npm run logs",
+    "docker:test": "make -C docker test"
+  },
+  "keywords": [
+    "benchling",
+    "webhook",
+    "aws",
+    "cdk",
+    "fargate",
+    "docker",
+    "quilt"
+  ],
+  "author": "Quilt Data",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quiltdata/benchling-webhook.git"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
@@ -23,6 +45,7 @@
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
     "aws-cdk": "2.1031.0",
+    "dotenv": "^17.2.3",
     "esbuild": "0.25.11",
     "eslint": "^9.22.0",
     "globals": "^16.0.0",
@@ -37,5 +60,9 @@
     "aws-cdk-lib": "2.221.0",
     "aws-sdk": "^2.1574.0",
     "constructs": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   }
 }

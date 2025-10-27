@@ -1,9 +1,11 @@
 import * as cdk from "aws-cdk-lib";
 import * as s3 from "aws-cdk-lib/aws-s3";
-import * as events from "aws-cdk-lib/aws-events";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
+import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Construct } from "constructs";
-import { WebhookApi } from "./api-gateway";
-import { WebhookStateMachine } from "./webhook-state-machine";
+import { FargateService } from "./fargate-service";
+import { AlbApiGateway } from "./alb-api-gateway";
+import { EcrRepository } from "./ecr-repository";
 
 interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
@@ -14,13 +16,17 @@ interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
     readonly quiltCatalog?: string;
+    readonly quiltDatabase: string;
     readonly webhookAllowList?: string;
+    readonly createEcrRepository?: boolean;
+    readonly ecrRepositoryName?: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
     private readonly bucket: s3.IBucket;
-    private readonly stateMachine: WebhookStateMachine;
-    private readonly api: WebhookApi;
+    private readonly fargateService: FargateService;
+    private readonly api: AlbApiGateway;
+    public readonly webhookEndpoint: string;
 
     constructor(
         scope: Construct,
@@ -78,72 +84,84 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", bucketNameValue);
 
-        const benchlingConnection = this.createBenchlingConnection(props);
+        // Get the default VPC or create a new one
+        const vpc = ec2.Vpc.fromLookup(this, "DefaultVPC", {
+            isDefault: true,
+        });
 
-        // Create the webhook state machine
-        this.stateMachine = new WebhookStateMachine(this, "StateMachine", {
+        // Get or create ECR repository
+        let ecrRepo: ecr.IRepository;
+        let ecrImageUri: string;
+        if (props.createEcrRepository) {
+            const newRepo = new EcrRepository(this, "EcrRepository", {
+                repositoryName: props.ecrRepositoryName || "quiltdata/benchling",
+                publicReadAccess: true,
+            });
+            ecrRepo = newRepo.repository;
+            ecrImageUri = `${newRepo.repositoryUri}:latest`;
+        } else {
+            // Reference existing ECR repository
+            const repoName = props.ecrRepositoryName || "quiltdata/benchling";
+            ecrRepo = ecr.Repository.fromRepositoryName(this, "ExistingEcrRepository", repoName);
+            ecrImageUri = `${this.account}.dkr.ecr.${this.region}.amazonaws.com/${repoName}:latest`;
+        }
+
+        // Create the Fargate service
+        this.fargateService = new FargateService(this, "FargateService", {
+            vpc,
             bucket: this.bucket,
-            prefix: prefixValue,
             queueName: queueNameValue,
             region: this.region,
             account: this.account,
-            benchlingConnection,
+            prefix: prefixValue,
+            benchlingClientId: props.benchlingClientId,
+            benchlingClientSecret: props.benchlingClientSecret,
             benchlingTenant: props.benchlingTenant,
             quiltCatalog: quiltCatalogValue,
+            quiltDatabase: props.quiltDatabase,
+            webhookAllowList: webhookAllowListValue,
+            ecrRepository: ecrRepo,
+            imageTag: "latest",
+        });
+
+        // Create API Gateway that routes to the ALB
+        this.api = new AlbApiGateway(this, "ApiGateway", {
+            loadBalancer: this.fargateService.loadBalancer,
             webhookAllowList: webhookAllowListValue,
         });
 
-        this.api = new WebhookApi(this, "WebhookApi", {
-            stateMachine: this.stateMachine.stateMachine,
-            webhookAllowList: webhookAllowListValue,
+        // Store webhook endpoint for easy access
+        this.webhookEndpoint = this.api.api.url;
+
+        // Export webhook endpoint as a stack output
+        new cdk.CfnOutput(this, "WebhookEndpoint", {
+            value: this.webhookEndpoint,
+            description: "Webhook endpoint URL - use this in Benchling app configuration",
         });
 
-        // this.createOutputs();
-    }
+        // Export Docker image information
+        new cdk.CfnOutput(this, "DockerImageUri", {
+            value: ecrImageUri,
+            description: "Docker image URI used for deployment",
+        });
 
+        // Export version information
+        new cdk.CfnOutput(this, "StackVersion", {
+            value: this.node.tryGetContext("version") || require("../package.json").version,
+            description: "Stack version",
+        });
 
-    private createBenchlingConnection(
-        props: BenchlingWebhookStackProps,
-    ): events.CfnConnection {
-        const benchlingConnection = new events.CfnConnection(
-            this,
-            "BenchlingOAuthConnection",
-            {
-                authorizationType: "OAUTH_CLIENT_CREDENTIALS",
-                authParameters: {
-                    oAuthParameters: {
-                        authorizationEndpoint:
-                            `https://${props.benchlingTenant}.benchling.com/api/v2/token`,
-                        clientParameters: {
-                            clientId: props.benchlingClientId,
-                            clientSecret: props.benchlingClientSecret,
-                        },
-                        httpMethod: "POST",
-                        oAuthHttpParameters: {
-                            headerParameters: [
-                                {
-                                    key: "Content-Type",
-                                    value: "application/x-www-form-urlencoded",
-                                },
-                            ],
-                            bodyParameters: [
-                                {
-                                    key: "grant_type",
-                                    value: "client_credentials",
-                                },
-                            ],
-                        },
-                    },
-                },
-            },
-        );
-        return benchlingConnection;
-    }
+        // Export CloudWatch log groups
+        new cdk.CfnOutput(this, "EcsLogGroup", {
+            value: this.fargateService.logGroup.logGroupName,
+            description: "CloudWatch log group for ECS container logs",
+        });
 
-    private createOutputs(): void {
-        new cdk.CfnOutput(this, "ApiUrl", {
-            value: this.api.api.url,
-            description: "API Gateway endpoint URL",
+        new cdk.CfnOutput(this, "ApiGatewayLogGroup", {
+            value: this.api.logGroup.logGroupName,
+            description: "CloudWatch log group for API Gateway access logs",
         });
     }
+
+
 }

@@ -1,0 +1,20 @@
+manifestVersion: 1
+info:
+  name: quilt-docker
+  description: Packaging Benchling Notebooks as Quilt packages
+  version: 0.4.7
+features:
+  - name: Quilt Connector
+    id: quilt_entry
+    type: CANVAS
+subscriptions:
+  deliveryMethod: WEBHOOK
+  # `app` events  go to /lifecycle
+  # `canvas` events go to /canvas (including interaction?)
+  # All other events go to /event
+  messages:
+    - type: v2.canvas.userInteracted
+    - type: v2.canvas.created # user clicks 'Create'
+    - type: v2.entry.created # new notebook created
+    - type: v2.entry.updated.fields
+#  - type: v2.entity.registered

@@ -21,13 +21,34 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
       - name: Install esbuild
         run: npm install -g esbuild
 
-      - name: Install dependencies
+      - name: Install Node.js dependencies
         run: npm ci
 
-      - name: Run tests
+      - name: Create temp directory for tests
+        run: mkdir -p .tmp
+
+      - name: Install Python dependencies
+        working-directory: docker
+        run: uv sync --all-extras
+
+      - name: Run Python tests
+        working-directory: docker
+        run: uv run pytest -v -m "not local"
+
+      - name: Run Node.js tests
         run: npm test
 
       - name: Configure AWS credentials

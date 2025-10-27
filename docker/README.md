@@ -1,5 +1,7 @@
 # Benchling-Quilt Integration Service
 
+> **Note**: This is the primary Python application code for the Benchling-Quilt webhook integration. The parent directory contains the AWS CDK infrastructure for deployment.
+
 A webhook-driven automation system that bridges Benchling laboratory entries with Quilt data packages using Python-based workflow orchestration.
 
 ## Features
@@ -147,7 +149,6 @@ Run `make help` for full command list. Key commands:
 **Docker & Deployment:**
 
 - `make build` - Build Docker image locally
-- `make dist` - Create versioned distribution archive (.scratch/dist/)
 - `make push-local` - Build and push to ECR (arch-specific tag)
 - `make run-ecr` - Pull and run latest ECR image (port 5003)
 - `make clean` - Remove containers and images
@@ -172,7 +173,7 @@ See the [Complete Guide](../../../meta/docs/enterprise_benchling.md) for complet
 
 ## Environment Configuration
 
-The `env.template` file is organized into three sections:
+The `.env.template` file in the project root is organized into three sections:
 
 ### 1. Required User Values (Set before deployment)
 

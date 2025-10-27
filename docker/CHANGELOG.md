@@ -6,6 +6,21 @@ All notable changes to the Benchling-Quilt Integration project will be documente
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Repository Consolidation** - Established benchling-webhook as primary source repository
+  - Copied application files from enterprise/benchling to docker/ directory
+  - Removed docker-sync workflow (no longer syncing from enterprise repo)
+  - Updated repository URLs in pyproject.toml to point to benchling-webhook
+  - Simplified package.json scripts to delegate Docker operations to Makefile
+  - Added version sync script to maintain consistency between package.json and pyproject.toml
+
+### Removed
+
+- **bin/docker.js** - Eliminated duplicate Docker tooling in favor of docker/Makefile and docker/scripts/docker.py
+
 ## [0.4.7] - 2025-10-25
 
 ### Added
