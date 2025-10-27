@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- `docker-validate` target now validates ECR repository is publicly accessible without authentication
+- `docker-validate` reads Docker image URI from `cdk-outputs.json` instead of requiring version parameter
+- `docker-validate` will fail if repository requires authentication, ensuring public access is maintained
+
 ## [0.4.10] - 2025-10-27
 
 ### Added
