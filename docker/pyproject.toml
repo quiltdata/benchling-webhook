@@ -25,7 +25,7 @@ requires-python = ">=3.11"
 dependencies = [
     "Flask==3.1.2",
     "boto3==1.40.60",
-    "dataclasses-json>=0.5.2,<0.6.0",
+    "dataclasses-json>=0.6.7,<0.7.0",
     "python-dotenv==1.2.1",
     "structlog==25.5.0",
     "requests==2.32.5",
