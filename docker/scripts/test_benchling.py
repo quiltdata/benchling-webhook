@@ -330,15 +330,20 @@ Examples:
     parser.add_argument("--entry-id", "-e", help="Specific entry ID to test")
     args = parser.parse_args()
 
-    # Load environment variables
-    env_path = Path(args.env_file)
-    if env_path.exists():
-        print(f"Loading credentials from: {env_path.absolute()}\n")
-        load_dotenv(env_path)
-    elif not (args.tenant and args.client_id and args.client_secret):
-        print(f"❌ Error: .env file not found at {env_path}")
-        print(f"   Provide credentials via CLI or create .env file")
-        sys.exit(1)
+    # Load environment variables (check if already set first, e.g., from Makefile)
+    env_already_set = os.getenv("BENCHLING_TENANT") and os.getenv("BENCHLING_CLIENT_ID")
+
+    if not env_already_set:
+        env_path = Path(args.env_file)
+        if env_path.exists():
+            print(f"Loading credentials from: {env_path.absolute()}\n")
+            load_dotenv(env_path)
+        elif not (args.tenant and args.client_id and args.client_secret):
+            print(f"❌ Error: .env file not found at {env_path}")
+            print(f"   Provide credentials via CLI or create .env file")
+            sys.exit(1)
+    else:
+        print(f"Using credentials from environment variables\n")
 
     # Get credentials (CLI overrides env)
     tenant = args.tenant or os.getenv("BENCHLING_TENANT")
