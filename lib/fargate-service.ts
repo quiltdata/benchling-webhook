@@ -91,6 +91,56 @@ export class FargateService extends Construct {
             }),
         );
 
+        // Grant Athena access to task role for package querying
+        taskRole.addToPolicy(
+            new iam.PolicyStatement({
+                actions: [
+                    "athena:StartQueryExecution",
+                    "athena:GetQueryExecution",
+                    "athena:GetQueryResults",
+                    "athena:StopQueryExecution",
+                    "athena:GetWorkGroup",
+                ],
+                resources: [
+                    `arn:aws:athena:${props.region}:${props.account}:workgroup/primary`,
+                ],
+            }),
+        );
+
+        // Grant Glue Data Catalog access (required for Athena queries)
+        taskRole.addToPolicy(
+            new iam.PolicyStatement({
+                actions: [
+                    "glue:GetDatabase",
+                    "glue:GetTable",
+                    "glue:GetPartitions",
+                ],
+                resources: [
+                    `arn:aws:glue:${props.region}:${props.account}:catalog`,
+                    `arn:aws:glue:${props.region}:${props.account}:database/${props.quiltDatabase}`,
+                    `arn:aws:glue:${props.region}:${props.account}:table/${props.quiltDatabase}/*`,
+                ],
+            }),
+        );
+
+        // Grant S3 access for Athena query results
+        // Athena needs to write query results to an S3 bucket
+        const athenaResultsBucketArn = `arn:aws:s3:::aws-athena-query-results-${props.account}-${props.region}`;
+        taskRole.addToPolicy(
+            new iam.PolicyStatement({
+                actions: [
+                    "s3:GetBucketLocation",
+                    "s3:GetObject",
+                    "s3:ListBucket",
+                    "s3:PutObject",
+                ],
+                resources: [
+                    athenaResultsBucketArn,
+                    `${athenaResultsBucketArn}/*`,
+                ],
+            }),
+        );
+
         // Create or reference Secrets Manager secret for Benchling credentials
         // In production, this should be created separately and referenced
         const benchlingSecret = new secretsmanager.Secret(this, "BenchlingCredentials", {

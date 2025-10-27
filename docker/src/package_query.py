@@ -36,8 +36,6 @@ class PackageQuery:
 
     The Athena database contains a packages view per bucket:
     - {bucket}_packages-view: Contains pkg_name, timestamp, message, user_meta
-
-    See PackageSearcher in packages.py for the Elasticsearch-based alternative.
     """
 
     def __init__(
@@ -259,11 +257,16 @@ class PackageQuery:
             }
 
         except Exception as e:
+            error_msg = str(e)
+            # Extract more helpful information from AWS errors
+            if "AccessDeniedException" in error_msg or "not authorized" in error_msg.lower():
+                error_msg = f"AWS Athena access denied. Please check IAM permissions for athena:StartQueryExecution on database '{self.database}'"
+
             self.logger.error(
                 "Query failed",
                 key=key,
                 value=value,
-                error=str(e),
+                error=error_msg,
                 error_type=type(e).__name__,
             )
-            raise
+            raise RuntimeError(error_msg) from e
