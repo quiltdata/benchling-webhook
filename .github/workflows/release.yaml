@@ -50,7 +50,7 @@ jobs:
 
       - name: Run Python tests
         working-directory: docker
-        run: uv run pytest -v
+        run: uv run pytest -v -m "not local"
 
       - name: Run Node.js tests
         run: npm test
