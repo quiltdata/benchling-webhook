@@ -17,6 +17,8 @@
     "synth": "npx cdk synth",
     "diff": "npx cdk diff",
     "logs": "node bin/check-logs.js",
+    "event": "node bin/send-event.js",
+    "check": "npm run cdk && npm run event",
     "docker:test": "make -C docker test"
   },
   "keywords": [
