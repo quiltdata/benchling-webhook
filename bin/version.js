@@ -4,8 +4,8 @@
  * Version management script for releases
  *
  * Usage:
- *   node bin/version.js release      # Create production release, tag docker as 'latest', push tag
- *   node bin/version.js dev          # Create dev release, do NOT tag as 'latest', push tag
+ *   node bin/version.js release      # Create production release tag from current version, push tag
+ *   node bin/version.js dev          # Create dev release tag from current version, push tag
  *   node bin/version.js patch        # 0.4.7 -> 0.4.8
  *   node bin/version.js minor        # 0.4.7 -> 0.5.0
  *   node bin/version.js major        # 0.4.7 -> 1.0.0
@@ -154,10 +154,10 @@ function main() {
     console.log('Usage: node bin/version.js <command> [options]');
     console.log('');
     console.log('Commands:');
-    console.log('  release    - Create production release (patch bump), tag as latest, and push');
-    console.log('  dev        - Create dev release, do NOT tag as latest, and push');
+    console.log('  release    - Create production release tag from current version and push');
+    console.log('  dev        - Create dev release tag from current version and push');
     console.log('');
-    console.log('Advanced Commands:');
+    console.log('Version Bump Commands:');
     console.log('  major      - Bump major version (1.0.0 -> 2.0.0)');
     console.log('  minor      - Bump minor version (0.4.7 -> 0.5.0)');
     console.log('  patch      - Bump patch version (0.4.7 -> 0.4.8)');
@@ -176,24 +176,37 @@ function main() {
   // Handle simplified commands
   let bumpType;
   let autoPush = false;
+  let skipVersionBump = false;
 
   if (command === 'release') {
-    bumpType = 'patch';
+    bumpType = null;
     autoPush = true;
+    skipVersionBump = true;
   } else if (command === 'dev') {
-    bumpType = 'dev';
+    bumpType = null;
     autoPush = true;
+    skipVersionBump = true;
   } else {
     bumpType = command;
   }
 
   try {
     const currentVersion = pkg.version;
-    const newVersion = bumpVersion(currentVersion, bumpType);
-    const isDev = newVersion.includes('-dev.');
+    let newVersion;
 
-    console.log(`Bumping version: ${currentVersion} -> ${newVersion}`);
-    console.log('');
+    if (skipVersionBump) {
+      // For release and dev commands, use current version without bumping
+      newVersion = currentVersion;
+      console.log(`Using current version: ${currentVersion}`);
+      console.log('');
+    } else {
+      // For other commands, bump the version
+      newVersion = bumpVersion(currentVersion, bumpType);
+      console.log(`Bumping version: ${currentVersion} -> ${newVersion}`);
+      console.log('');
+    }
+
+    const isDev = newVersion.includes('-dev.');
 
     // Check for uncommitted changes
     try {
@@ -204,14 +217,14 @@ function main() {
       process.exit(1);
     }
 
-    // Update package.json
-    updatePackageVersion(newVersion);
-
-    // Commit the version change
-    execSync('git add package.json', { stdio: 'inherit' });
-    execSync(`git commit -m "chore: bump version to ${newVersion}"`, { stdio: 'inherit' });
-    console.log(`✅ Committed version change`);
-    console.log('');
+    // Update package.json and commit only if we're bumping the version
+    if (!skipVersionBump) {
+      updatePackageVersion(newVersion);
+      execSync('git add package.json', { stdio: 'inherit' });
+      execSync(`git commit -m "chore: bump version to ${newVersion}"`, { stdio: 'inherit' });
+      console.log(`✅ Committed version change`);
+      console.log('');
+    }
 
     // Create tag unless --no-tag is specified
     if (!noTag) {
