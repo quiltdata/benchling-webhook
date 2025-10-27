@@ -8,22 +8,22 @@
     "benchling-webhook-deploy": "bin/deploy.sh"
   },
   "scripts": {
+    "sync-version": "node bin/sync-version.js",
     "clean": "rm -rf cdk.out */{*.js,*.d.ts}",
     "test": "NODE_ENV=test TMPDIR=./.tmp node --max-old-space-size=4096 ./node_modules/.bin/jest",
     "cdk": "npm run test && npx cdk deploy --require-approval never",
     "deploy": "bash bin/deploy.sh",
     "deploy:skip-tests": "bash bin/deploy.sh --skip-tests",
     "lint": "eslint . --ext .ts --fix",
-    "docker-sync": "node bin/docker.js sync",
-    "docker-build": "node bin/docker.js build",
-    "docker-push": "node bin/docker.js push",
-    "docker-check": "node bin/docker.js check",
-    "docker-health": "node bin/docker.js health",
-    "docker-logs": "node bin/docker.js logs",
     "build": "tsc --noEmit",
     "watch": "tsc --noEmit -w",
     "synth": "npx cdk synth",
-    "diff": "npx cdk diff"
+    "diff": "npx cdk diff",
+    "docker:build": "make -C docker build",
+    "docker:test": "make -C docker test",
+    "docker:push": "make -C docker push-local",
+    "docker:health": "make -C docker health",
+    "docker:logs": "make -C docker logs"
   },
   "keywords": [
     "benchling",
