@@ -4,10 +4,11 @@
  * Version management script for releases
  *
  * Usage:
+ *   node bin/version.js release      # Create production release, tag docker as 'latest', push tag
+ *   node bin/version.js dev          # Create dev release, do NOT tag as 'latest', push tag
  *   node bin/version.js patch        # 0.4.7 -> 0.4.8
  *   node bin/version.js minor        # 0.4.7 -> 0.5.0
  *   node bin/version.js major        # 0.4.7 -> 1.0.0
- *   node bin/version.js dev          # 0.4.7 -> 0.4.8-dev.0
  *   node bin/version.js dev-bump     # 0.4.8-dev.0 -> 0.4.8-dev.1
  */
 
@@ -123,28 +124,68 @@ function createGitTag(version, isDev) {
   console.log('  - Publish to GitHub Packages');
 }
 
+function pushTag(tagName) {
+  console.log(`Pushing tag ${tagName} to origin...`);
+  try {
+    execSync(`git push origin ${tagName}`, { stdio: 'inherit' });
+    console.log(`✅ Pushed tag ${tagName} to origin`);
+    console.log('');
+    console.log('CI/CD pipeline will now:');
+    console.log('  - Run all tests');
+    console.log('  - Build and push Docker image to ECR');
+    console.log('  - Create GitHub release');
+    console.log('  - Publish to NPM (production releases only)');
+    console.log('  - Publish to GitHub Packages');
+    console.log('');
+    console.log('Monitor progress at: https://github.com/quiltdata/benchling-webhook/actions');
+  } catch (error) {
+    console.error(`❌ Failed to push tag ${tagName}`);
+    console.error('You can manually push with: git push origin ' + tagName);
+    process.exit(1);
+  }
+}
+
 function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
     console.log('Current version:', pkg.version);
     console.log('');
-    console.log('Usage: node bin/version.js <bump-type> [--no-tag]');
+    console.log('Usage: node bin/version.js <command> [options]');
     console.log('');
-    console.log('Bump types:');
+    console.log('Commands:');
+    console.log('  release    - Create production release (patch bump), tag as latest, and push');
+    console.log('  dev        - Create dev release, do NOT tag as latest, and push');
+    console.log('');
+    console.log('Advanced Commands:');
     console.log('  major      - Bump major version (1.0.0 -> 2.0.0)');
     console.log('  minor      - Bump minor version (0.4.7 -> 0.5.0)');
     console.log('  patch      - Bump patch version (0.4.7 -> 0.4.8)');
-    console.log('  dev        - Create/bump dev version (0.4.7 -> 0.4.8-dev.0 or 0.4.8-dev.0 -> 0.4.8-dev.1)');
     console.log('  dev-bump   - Bump dev counter only (0.4.8-dev.0 -> 0.4.8-dev.1)');
     console.log('');
     console.log('Options:');
     console.log('  --no-tag   - Update package.json only, do not create git tag');
+    console.log('  --no-push  - Create tag but do not push to origin');
     process.exit(0);
   }
 
-  const bumpType = args[0];
+  const command = args[0];
   const noTag = args.includes('--no-tag');
+  const noPush = args.includes('--no-push');
+
+  // Handle simplified commands
+  let bumpType;
+  let autoPush = false;
+
+  if (command === 'release') {
+    bumpType = 'patch';
+    autoPush = true;
+  } else if (command === 'dev') {
+    bumpType = 'dev';
+    autoPush = true;
+  } else {
+    bumpType = command;
+  }
 
   try {
     const currentVersion = pkg.version;
@@ -174,7 +215,13 @@ function main() {
 
     // Create tag unless --no-tag is specified
     if (!noTag) {
+      const tagName = `v${newVersion}`;
       createGitTag(newVersion, isDev);
+
+      // Auto-push if this is a release or dev command and --no-push is not specified
+      if (autoPush && !noPush) {
+        pushTag(tagName);
+      }
     } else {
       console.log('Skipped tag creation (--no-tag specified)');
       console.log('To create tag later: git tag -a v' + newVersion + ' -m "Release v' + newVersion + '"');

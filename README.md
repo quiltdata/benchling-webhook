@@ -160,106 +160,110 @@ To enable public access, set `CREATE_ECR_REPOSITORY=true` in your `.env` file an
 
 ## Creating Releases
 
-### Automated Release Process (Recommended)
+### Quick Start
 
-The project includes a CI/CD workflow that automatically publishes releases when you push a version tag:
+The release process is now streamlined into two simple commands:
 
 ```bash
-# 1. Update version in package.json (if needed)
-npm version patch  # or minor, or major
+# Production release (patches version, tags Docker as 'latest', and pushes)
+npm run release
 
-# 2. Create and push release tag
-bash bin/create-release.sh
-
-# This script will:
-# - Check for uncommitted changes
-# - Verify Docker image exists in ECR (or build it)
-# - Update RELEASE_NOTES.md
-# - Create a git tag with release information
-# - Show instructions for pushing
-
-# 3. Push the tag to trigger the release workflow
-git push origin vX.Y.Z
-
-# The GitHub Actions workflow will automatically:
-# ✓ Build and test the package
-# ✓ Build and push Docker image to ECR
-# ✓ Create GitHub Release with release notes
-# ✓ Publish package to NPM (if NPM_TOKEN secret is configured)
-# ✓ Publish package to GitHub Packages
+# Development release (creates dev version, does NOT tag as 'latest', and pushes)
+npm run dev
 ```
+
+That's it! The CI/CD workflow will automatically:
+- Run all tests
+- Build and push Docker image to ECR (with `latest` tag for production releases)
+- Create GitHub Release with release notes
+- Publish to NPM (production releases only)
+- Publish to GitHub Packages
+
+Monitor the release progress at: https://github.com/quiltdata/benchling-webhook/actions
+
+### Required Environment Variables & Secrets
+
+For the automated release workflow to work, you need:
+
+**GitHub Secrets** (configure in repository Settings → Secrets and variables → Actions):
+- `AWS_ACCESS_KEY_ID` - AWS credentials for ECR access
+- `AWS_SECRET_ACCESS_KEY` - AWS credentials for ECR access
+- `NPM_TOKEN` - (Optional) For publishing to NPM registry
+
+**Local Environment** (for running release commands):
+- No special environment variables required
+- Must have git configured with push access to the repository
 
 ### What Gets Published
 
-When you push a version tag (e.g., `v0.5.0`), the release workflow publishes:
+When you run `npm run release` or `npm run dev`, the CI/CD workflow automatically publishes:
 
-1. **NPM Package**: `quilt-benchling-webhook@X.Y.Z`
+1. **NPM Package**: `quilt-benchling-webhook@X.Y.Z` (production releases only)
    - Installable via: `npm install quilt-benchling-webhook`
    - Or directly: `npx quilt-benchling-webhook`
 
 2. **GitHub Package**: `@quiltdata/quilt-benchling-webhook@X.Y.Z`
    - Available at: `https://github.com/quiltdata/benchling-webhook/pkgs/npm/quilt-benchling-webhook`
 
-3. **Docker Image**: Tagged in ECR with version and `latest`
-   - `ACCOUNT.dkr.ecr.REGION.amazonaws.com/quiltdata/benchling:X.Y.Z`
-   - `ACCOUNT.dkr.ecr.REGION.amazonaws.com/quiltdata/benchling:latest`
+3. **Docker Image**: Tagged in ECR with version
+   - Production: `ACCOUNT.dkr.ecr.REGION.amazonaws.com/quiltdata/benchling:X.Y.Z` AND `:latest`
+   - Development: `ACCOUNT.dkr.ecr.REGION.amazonaws.com/quiltdata/benchling:X.Y.Z-dev.N` (no `:latest` tag)
 
 4. **GitHub Release**: With release notes and Docker image information
+   - Production releases are marked as "Release"
+   - Development releases are marked as "Pre-release"
 
-### Manual Release Process
+### Advanced Release Options
 
-If you need to release manually without the CI/CD workflow:
+For more control over the release process:
 
-1. **Update Version**
-   ```bash
-   npm run docker-sync  # Version auto-synced from docker build
-   ```
+```bash
+# Bump major version (breaking changes: 0.4.7 -> 1.0.0)
+npm run version:major
 
-2. **Build and Push Docker Image**
-   ```bash
-   npm run docker-push
-   ```
+# Bump minor version (new features: 0.4.7 -> 0.5.0)
+npm run version:minor
 
-3. **Create Git Tag**
-   ```bash
-   VERSION=$(node -e "console.log(require('./package.json').version)")
-   git tag -a "v$VERSION" -m "Release v$VERSION"
-   git push origin "v$VERSION"
-   ```
+# Bump patch version (bug fixes: 0.4.7 -> 0.4.8)
+npm run version:patch
 
-4. **Deploy**
-   ```bash
-   npm run deploy
-   ```
+# Bump dev counter only (0.4.8-dev.0 -> 0.4.8-dev.1)
+npm run version:dev-bump
+```
 
-### GitHub Secrets Configuration
+Note: These advanced commands create and push tags automatically. Use `--no-push` flag if you want to review before pushing:
 
-For the automated release workflow to work, configure these secrets in your GitHub repository settings:
-
-**Required:**
-- `AWS_ACCESS_KEY_ID` - AWS credentials for ECR access
-- `AWS_SECRET_ACCESS_KEY` - AWS credentials for ECR access
-
-**Optional:**
-- `NPM_TOKEN` - For publishing to NPM registry (if you want public NPM releases)
-- `GITHUB_TOKEN` - Automatically provided by GitHub Actions
-
-To configure secrets:
-1. Go to repository Settings → Secrets and variables → Actions
-2. Click "New repository secret"
-3. Add each secret with its value
+```bash
+node bin/version.js major --no-push
+git push origin vX.Y.Z  # Push when ready
+```
 
 ### Release Information
 
 Each release includes:
-- Git tag: `vX.Y.Z`
-- Docker image tags: `X.Y.Z` and `latest`
-- Full release notes in `RELEASE_NOTES.md`
-- Deployment metadata in `.env.deploy`
-- NPM package: `quilt-benchling-webhook@X.Y.Z`
+- Git tag: `vX.Y.Z` (or `vX.Y.Z-dev.N` for dev releases)
+- Docker image tags: Version-specific tag (e.g., `0.4.8`) and `latest` (production only)
+- GitHub Release with auto-generated release notes
+- NPM package: `quilt-benchling-webhook@X.Y.Z` (production only)
 - GitHub Package: `@quiltdata/quilt-benchling-webhook@X.Y.Z`
 
-See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for detailed release history and Docker image information for each version.
+### Troubleshooting Releases
+
+**"You have uncommitted changes" error:**
+- Commit or stash your changes before creating a release
+- Run `git status` to see what needs to be committed
+
+**Tag push fails:**
+- Verify you have push access to the repository
+- Check that you're authenticated with GitHub (try `git push --dry-run`)
+- If tag already exists, delete it first: `git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z`
+
+**CI/CD workflow fails:**
+- Check GitHub Actions logs at https://github.com/quiltdata/benchling-webhook/actions
+- Verify AWS secrets are configured correctly in repository settings
+- Ensure ECR repository exists or can be created
+
+See [doc/RELEASE.md](./doc/RELEASE.md) for detailed release process documentation.
 
 ## Benchling Setup
 

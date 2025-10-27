@@ -5,6 +5,7 @@ This document describes how to create releases for the benchling-webhook project
 ## Overview
 
 The project uses an automated CI/CD pipeline that:
+
 1. Runs tests on all pushes and pull requests
 2. Builds and pushes Docker images when tags are created
 3. Creates GitHub releases with auto-generated release notes
@@ -44,11 +45,13 @@ git push origin v0.4.8
 Before creating a release:
 
 1. **Ensure all changes are committed and pushed**
+
    ```bash
    git status  # Should show "nothing to commit, working tree clean"
    ```
 
 2. **Update CHANGELOG.md** (optional but recommended)
+
    ```markdown
    ## [0.4.8] - 2025-10-27
 
@@ -63,6 +66,7 @@ Before creating a release:
    ```
 
 3. **Ensure you're on the main branch**
+
    ```bash
    git checkout main
    git pull origin main
@@ -83,6 +87,7 @@ npm run version:dev-bump
 ```
 
 This will:
+
 - Update `package.json` with the new version
 - Commit the version change
 - Create a git tag (e.g., `v0.4.8-dev.0`)
@@ -107,23 +112,24 @@ git push origin v0.4.8  # Replace with your actual tag
 
 ### 4. Monitor the Release
 
-1. **Watch the GitHub Actions workflow**: https://github.com/quiltdata/benchling-webhook/actions
+1. **Watch the GitHub Actions workflow**: <https://github.com/quiltdata/benchling-webhook/actions>
 2. **Check the workflow progress**:
    - Test job runs first (Python + Node.js tests)
    - Docker job runs after tests pass (builds and pushes image)
    - Release job creates GitHub release and publishes packages
 
 3. **Verify the release**:
-   - GitHub Release: https://github.com/quiltdata/benchling-webhook/releases
+   - GitHub Release: <https://github.com/quiltdata/benchling-webhook/releases>
    - Docker Image in ECR: `{account-id}.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:{version}`
-   - NPM Package: https://www.npmjs.com/package/quilt-benchling-webhook
-   - GitHub Package: https://github.com/quiltdata/benchling-webhook/pkgs/npm/quilt-benchling-webhook
+   - NPM Package: <https://www.npmjs.com/package/quilt-benchling-webhook>
+   - GitHub Package: <https://github.com/quiltdata/benchling-webhook/pkgs/npm/quilt-benchling-webhook>
 
 ## CI/CD Pipeline Details
 
 ### Workflow Triggers
 
 The CI workflow (`.github/workflows/ci.yaml`) is triggered by:
+
 - **Push to main**: Runs tests only
 - **Pull requests**: Runs tests only
 - **Tags matching `v*.*.*`**: Runs tests, builds Docker, creates release
@@ -171,10 +177,12 @@ node bin/version.js patch --no-tag
 ## Docker Images
 
 Docker images are automatically built and pushed to ECR with:
+
 - Version tag: `quiltdata/benchling:0.4.8`
 - Latest tag: `quiltdata/benchling:latest`
 
 To pull and run:
+
 ```bash
 docker pull {account-id}.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:0.4.8
 docker run -p 5000:5000 --env-file .env {account-id}.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:0.4.8
@@ -183,6 +191,7 @@ docker run -p 5000:5000 --env-file .env {account-id}.dkr.ecr.us-east-1.amazonaws
 ## Troubleshooting
 
 ### Tag already exists
+
 ```bash
 # Delete local tag
 git tag -d v0.4.8
@@ -192,6 +201,7 @@ git push origin :refs/tags/v0.4.8
 ```
 
 ### Workflow failed
+
 1. Check the GitHub Actions logs
 2. Common issues:
    - Tests failing: Fix tests and create a new tag
@@ -200,6 +210,7 @@ git push origin :refs/tags/v0.4.8
    - ECR repository doesn't exist: Run `make -C docker docker-ecr-create`
 
 ### Need to re-release
+
 1. Delete the tag (locally and remotely)
 2. Delete the GitHub release
 3. Create a new tag with the same or different version
