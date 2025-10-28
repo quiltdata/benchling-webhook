@@ -1,10 +1,6 @@
 # Release Notes - v0.4.12
 
-## Benchling Webhook Integration for Quilt
-
-Serverless webhook processor that connects Benchling lab notebook entries to Quilt data packages, enabling seamless data versioning and tracking for scientific workflows.
-
-### Docker Images
+## Docker Images
 
 **Latest Release (v0.4.12):**
 - Production: `public.ecr.aws/quiltdata/benchling:0.4.12`
@@ -19,106 +15,54 @@ Serverless webhook processor that connects Benchling lab notebook entries to Qui
 - Refactored release script to separate version bumping from tag creation
 - version.js now outputs just the version number when called with no arguments
 
-## Architecture Overview
+---
 
-This AWS CDK application deploys a highly available, auto-scaling webhook processor using:
+# Benchling Webhook Integration for Quilt
 
-- **Amazon API Gateway** → Routes HTTPS webhooks with IP-based access control
-- **Application Load Balancer (ALB)** → Distributes traffic across container instances
-- **AWS Fargate on Amazon ECS** → Runs containerized webhook processor (auto-scales 2-10 tasks)
-- **Amazon S3** → Stores webhook payloads and package data
-- **Amazon SQS** → Queues package creation requests for Quilt
-- **AWS Secrets Manager** → Securely stores Benchling OAuth credentials
-- **Amazon CloudWatch** → Provides centralized logging and monitoring
-- **AWS IAM** → Enforces least-privilege access controls
+Connects Benchling lab notebook entries to Quilt data packages via webhooks.
 
-## Prerequisites
+## Quick Install
 
-- **AWS Account** with appropriate IAM permissions
-- **AWS CLI** v2.x configured with credentials
-- **Node.js** >= 18.0.0
-- **Docker** for container builds
-- **Quilt Stack** deployed with S3 bucket and SQS queue configured
-- **Benchling Account** with app creation permissions
-
-## Quick Start
-
-### 1. Clone and Install
+**Prerequisites:** AWS account, Node.js 18+, Docker, existing Quilt deployment
 
 ```bash
+# 1. Clone and install
 git clone https://github.com/quiltdata/benchling-webhook.git
 cd benchling-webhook
 npm install
-```
 
-### 2. Configure Environment
+# 2. Configure (auto-infer from Quilt catalog)
+npm run infer-config -- https://your-catalog.quiltdata.com --write
+cp .env.inferred .env
+# Edit .env to add Benchling credentials
 
-```bash
-cp env.template .env
-```
-
-Edit `.env` with your configuration:
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `CDK_DEFAULT_ACCOUNT` | ✅ | AWS Account ID (12 digits) |
-| `CDK_DEFAULT_REGION` | ✅ | AWS Region (e.g., `us-east-1`) |
-| `BUCKET_NAME` | ✅ | S3 bucket connected to Quilt |
-| `QUEUE_NAME` | ✅ | SQS queue from Quilt stack |
-| `BENCHLING_TENANT` | ✅ | Benchling subdomain (e.g., `myorg` from `myorg.benchling.com`) |
-| `BENCHLING_CLIENT_ID` | ✅ | OAuth client ID from Benchling app |
-| `BENCHLING_CLIENT_SECRET` | ✅ | OAuth client secret from Benchling app |
-| `QUILT_DATABASE` | ✅ | Athena database name for Quilt catalog |
-| `WEBHOOK_ALLOW_LIST` | ⚪ | Comma-separated IP allowlist |
-| `PREFIX` | ⚪ | S3 key prefix (default: `benchling`) |
-| `QUILT_CATALOG` | ⚪ | Quilt catalog URL (default: `open.quiltdata.com`) |
-
-### 3. Deploy Infrastructure
-
-```bash
-# Bootstrap CDK (first time only)
+# 3. Deploy
 source .env
-npx cdk bootstrap aws://$CDK_DEFAULT_ACCOUNT/$CDK_DEFAULT_REGION
-
-# Deploy stack
+npx cdk bootstrap aws://$CDK_DEFAULT_ACCOUNT/$CDK_DEFAULT_REGION  # first time only
 npm run deploy
-```
 
-The webhook URL will be saved to `.env.deploy`:
+# 4. Configure Benchling app
+# - Create app from app-manifest.yaml
+# - Set webhook URL from .env.deploy
+# - Install and activate
 
-```bash
-WEBHOOK_ENDPOINT=https://abc123.execute-api.us-east-1.amazonaws.com/prod
-```
-
-## Post-Deployment Configuration
-
-### Configure Benchling App
-
-1. **Create App**: Benchling → Developer Console → Apps → Create app → From manifest
-2. **Upload Manifest**: Use `app-manifest.yaml` from this repository
-3. **Set Credentials**: Create Client Secret → Copy ID and Secret to `.env`
-4. **Configure Webhook**: Overview → Webhook URL → Paste URL from `.env.deploy`
-5. **Install App**: Version History → Install → Activate
-6. **Grant Permissions**: Tenant Admin → Organizations → Apps → Add app → Set role to Admin
-
-### Verify Deployment
-
-```bash
-# Health check
+# 5. Verify
 source .env.deploy
 curl $WEBHOOK_ENDPOINT/health
-
-# Monitor logs
-aws logs tail /ecs/benchling-webhook --follow
 ```
 
 ## Usage
 
-1. **Create Entry** in Benchling notebook
-2. **Insert Canvas** → Select "Quilt Integration"
-3. **Create Package** → Generates versioned Quilt package
-4. **Add Files** → Attach experimental data
-5. **Update Package** → Creates new version with attachments
+1. Create entry in Benchling
+2. Insert Canvas → "Quilt Integration"
+3. Click "Create" to make package
+4. Add files and click "Update package"
+
+## Documentation
+
+- [AGENTS.md](AGENTS.md) - Complete deployment guide, architecture, configuration
+- [docker/README.md](docker/README.md) - Development workflows
+- [doc/RELEASE.md](doc/RELEASE.md) - Release process
 
 ## Recent Changes
 
