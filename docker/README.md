@@ -173,7 +173,7 @@ See the [Complete Guide](../../../meta/docs/enterprise_benchling.md) for complet
 
 ## Environment Configuration
 
-The `.env.template` file in the project root is organized into three sections:
+The `env.template` file in the project root is organized into three sections:
 
 ### 1. Required User Values (Set before deployment)
 

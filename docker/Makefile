@@ -78,7 +78,7 @@ help:
 # Verify .env exists (auto-create from template if missing)
 check-env:
 	@if [ ! -f ../.env ]; then \
-		cp ../.env.template ../.env; \
+		cp ../env.template ../.env; \
 		echo "✅ Created .env from template in project root"; \
 		echo "⚠️  Edit .env with your Benchling/AWS configuration before running"; \
 		exit 1; \
