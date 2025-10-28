@@ -106,7 +106,14 @@ function updateAppManifestVersion(newVersion) {
 }
 
 function createGitTag(version, isDev) {
-  const tagName = `v${version}`;
+  let tagName = `v${version}`;
+
+  // For dev releases, append timestamp to make unique
+  if (isDev) {
+    const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+    tagName = `v${version}-${timestamp}`;
+  }
+
   const tagType = isDev ? 'pre-release (dev)' : 'release';
 
   // Check if tag already exists
