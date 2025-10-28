@@ -32,8 +32,8 @@ cd benchling-webhook
 npm install
 
 # 2. Configure (auto-infer from Quilt catalog)
-npm run infer-config -- https://your-catalog.quiltdata.com --write
-cp .env.inferred .env
+npm run get-env -- https://your-catalog.quiltdata.com --write
+cp env.inferred .env
 # Edit .env to add Benchling credentials
 
 # 3. Deploy

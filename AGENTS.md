@@ -54,13 +54,13 @@ If you have an existing Quilt deployment, you can automatically infer most confi
 
 ```bash
 # Infer config from your Quilt catalog
-npm run infer-config -- https://your-catalog.quiltdata.com --write
+npm run get-env -- https://your-catalog.quiltdata.com --write
 
-# Review the generated .env.inferred file
-cat .env.inferred
+# Review the generated env.inferred file
+cat env.inferred
 
 # Copy to .env and fill in Benchling credentials
-cp .env.inferred .env
+cp env.inferred .env
 # Then edit .env to add your Benchling-specific values
 ```
 

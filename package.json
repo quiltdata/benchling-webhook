@@ -19,7 +19,7 @@
     "logs": "node bin/check-logs.js",
     "event": "node bin/send-event.js",
     "check": "npm run cdk && npm run event && sleep 45 && npm run logs",
-    "infer-config": "node bin/infer-config.js",
+    "get-env": "node bin/get-env.js",
     "dev": "npm run build && npm run docker:test && npm run lint",
     "docker:test": "make -C docker test",
     "docker-push": "make -C docker push-local",
