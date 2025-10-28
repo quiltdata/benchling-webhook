@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.12] - 2025-10-27
+
+### Added
+
+- Dev release workflow with timestamped pre-release tags for testing CI/CD pipeline
+
+### Changed
+
+- Refactored release script to separate version bumping from tag creation
+- version.js now outputs just the version number when called with no arguments
+
 ## [0.4.11] - 2025-10-27
 
 ### Added

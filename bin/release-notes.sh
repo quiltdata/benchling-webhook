@@ -31,15 +31,25 @@ cp env.template .env
 # 2. Install app-manifest.yaml as a Benchling app
 
 # 3. Deploy
-source .env
+
+```
+set -a; source .env; set +a
 npx cdk bootstrap aws://\$CDK_DEFAULT_ACCOUNT/\$CDK_DEFAULT_REGION
 npm run check
+```
 
 # 4. Set Benchling webhook URL in the app overview page
+
+# 5. Insert a canvas into a notebook entry and click "Create"
+
+# 6. Set `experiment_id` in a package's metadata to link it to a notebook'
+
 
 \`\`\`
 
 ## Docker Image
+
+For custom deployments, use the following Docker image:
 
 \`\`\`
 ${IMAGE_URI}
