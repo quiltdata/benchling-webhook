@@ -6,7 +6,7 @@ import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
 import { AlbApiGateway } from "./alb-api-gateway";
 import { EcrRepository } from "./ecr-repository";
-import packageJson from "../package.json" with { type: "json" };
+import packageJson from "../package.json";
 
 interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
