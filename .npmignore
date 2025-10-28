@@ -1,5 +1,10 @@
+# Source TypeScript files (compiled JS in dist/ will be published)
+# Exclude all .ts files except .d.ts files
 *.ts
 !*.d.ts
+
+# But include everything in dist/
+!dist/
 
 # CDK asset staging directory
 .cdk.staging

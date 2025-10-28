@@ -217,7 +217,7 @@ git push origin :refs/tags/v0.4.8
 
 ## Manual NPM Publishing
 
-In cases where you need to manually publish to NPM (e.g., CI/CD is unavailable, emergency hotfix, or testing), you can use the manual publish script:
+In cases where you need to manually publish to NPM (e.g., CI/CD is unavailable, emergency hotfix, or testing), you can use the publish script:
 
 ### Prerequisites
 
@@ -230,26 +230,41 @@ In cases where you need to manually publish to NPM (e.g., CI/CD is unavailable, 
 ### Usage
 
 ```bash
+# Check current package status on npm (no auth needed)
+npm run publish -- --check
+
+# Publish as dev/prerelease (default)
+NPM_TOKEN=npm_xxxxx npm run publish
+
 # Test the publish process (dry-run)
-NPM_TOKEN=npm_xxxxx npm run publish:manual -- --dry-run
+NPM_TOKEN=npm_xxxxx npm run publish -- --dry-run
 
-# Publish to NPM
-NPM_TOKEN=npm_xxxxx npm run publish:manual
+# Publish as production (latest tag)
+NPM_TOKEN=npm_xxxxx npm run publish -- --prod
 
-# Publish with a specific dist-tag
-NPM_TOKEN=npm_xxxxx npm run publish:manual -- --tag beta
+# Test production publish
+NPM_TOKEN=npm_xxxxx npm run publish -- --prod --dry-run
 
 # View help
-npm run publish:manual -- --help
+npm run publish -- --help
 ```
+
+### Publishing Modes
+
+- **Dev (default)**: Publishes with `dev` tag (prerelease)
+  - Install with: `npm install @quiltdata/benchling-webhook@dev`
+  - Use for: Testing, development, pre-release versions
+- **Production**: Publishes with `latest` tag (use `--prod` flag)
+  - Install with: `npm install @quiltdata/benchling-webhook`
+  - Use for: Stable releases only
 
 ### How It Works
 
 The script:
-1. Validates your NPM token
+1. Validates your NPM token (not needed for `--check`)
 2. Checks for uncommitted changes (with confirmation prompt)
 3. Creates a temporary `.npmrc` file with your token
-4. Runs `npm publish --access public`
+4. Runs `npm publish --access public --tag <dev|latest>`
 5. Cleans up the temporary `.npmrc` file
 6. Restores any existing `.npmrc` backup
 
@@ -259,6 +274,7 @@ The script:
 - Your token is never committed to git (`.npmrc` is in `.gitignore`)
 - The temporary `.npmrc` is automatically cleaned up, even on errors
 - Always use `--dry-run` first to test before publishing
+- Use `--check` to view package status without authentication
 
 ## NPM Scripts Reference
 
@@ -272,7 +288,8 @@ The script:
 | `npm run version:dev-bump` | Bump dev counter only |
 | `npm run docker-push` | Build and push Docker image locally |
 | `npm run docker-check` | Validate Docker images in registry |
-| `npm run publish:manual` | Manually publish to NPM using access token |
+| `npm run publish` | Publish to NPM (dev by default, use --prod for production) |
+| `npm run publish -- --check` | Check package status on npm registry |
 
 ## Best Practices
 

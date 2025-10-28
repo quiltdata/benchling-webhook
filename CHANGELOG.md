@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **NPM publish workflow**: Package now publishes compiled JavaScript instead of TypeScript source
+  - Renamed `publish:manual` → `publish` for simpler usage
+  - Publishes with `dev` tag by default (prerelease), use `--prod` for production
+  - Added `--check` flag to view package status without authentication
+  - Build artifacts (`dist/`) automatically compiled and cleaned during publish
+  - Updated `package.json` to point to compiled files: `dist/lib/index.js`
+
 ## [0.4.13] - 2025-10-28
 
 ### Changed
