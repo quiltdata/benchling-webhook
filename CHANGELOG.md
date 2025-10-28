@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.13] - 2025-10-28
+
+### Changed
+
+- **Simplified configuration**: Auto-infer AWS and Quilt config from catalog at deployment time
+- **Reduced required .env variables**: From 20+ to just 6 (catalog URL, user bucket, 4 Benchling credentials)
+- **Renamed `BUCKET_NAME` → `QUILT_USER_BUCKET`**: Clearer distinction between user data bucket and Quilt system buckets
+- **Added CDK bootstrap validation**: Fails fast with helpful error if account/region not bootstrapped
+- **Made LOG_LEVEL configurable**: Override default INFO level for production debugging
+
+### Removed
+
+- Unused environment variables: `BENCHLING_API_KEY`, `PKG_BUCKET_ONLY`, `PREFIX`, `STAGE`, `FLASK_ENV`
+
+### Fixed
+
+- Module import issue: CLI argument parsing now only runs when executed directly, not on import
+
 ## [0.4.12] - 2025-10-27
 
 ### Added
