@@ -127,7 +127,7 @@ describe("AlbApiGateway", () => {
             // Ensure no role with "StepFunctions" in the logical ID
             const resources = template.toJSON().Resources;
             const stepFunctionRoles = Object.keys(resources).filter(key =>
-                key.includes("StepFunctions")
+                key.includes("StepFunctions"),
             );
             expect(stepFunctionRoles).toHaveLength(0);
         });
@@ -141,11 +141,11 @@ describe("AlbApiGateway", () => {
 
             // Get all methods and verify none use AWS integration
             const resources = template.toJSON().Resources;
-            const methods = Object.entries(resources).filter(([_, resource]: [string, any]) =>
-                resource.Type === "AWS::ApiGateway::Method"
+            const methods = Object.entries(resources).filter(([, resource]: [string, any]) =>
+                resource.Type === "AWS::ApiGateway::Method",
             );
 
-            methods.forEach(([logicalId, method]: [string, any]) => {
+            methods.forEach(([, method]: [string, any]) => {
                 expect(method.Properties.Integration.Type).not.toBe("AWS");
                 expect(method.Properties.Integration.Type).toBe("HTTP_PROXY");
             });
@@ -187,7 +187,7 @@ describe("AlbApiGateway", () => {
             const resources = template.toJSON().Resources;
             const anyMethods = Object.values(resources).filter((resource: any) =>
                 resource.Type === "AWS::ApiGateway::Method" &&
-                resource.Properties.HttpMethod === "ANY"
+                resource.Properties.HttpMethod === "ANY",
             );
 
             expect(anyMethods.length).toBeGreaterThanOrEqual(2);
@@ -339,7 +339,7 @@ describe("AlbApiGateway", () => {
             const outputs = template.toJSON().Outputs;
             expect(outputs.ApiGatewayExecutionLogGroup).toBeDefined();
             expect(outputs.ApiGatewayExecutionLogGroup.Description).toBe(
-                "API Gateway execution log group for detailed request/response logs"
+                "API Gateway execution log group for detailed request/response logs",
             );
         });
 
@@ -380,7 +380,7 @@ describe("AlbApiGateway", () => {
             const resources = template.toJSON().Resources;
 
             // Check all IAM roles
-            Object.entries(resources).forEach(([logicalId, resource]: [string, any]) => {
+            Object.entries(resources).forEach(([, resource]: [string, any]) => {
                 if (resource.Type === "AWS::IAM::Role") {
                     // Should not have states:StartExecution permission
                     const policies = resource.Properties.Policies || [];
@@ -407,7 +407,7 @@ describe("AlbApiGateway", () => {
             // Get all methods
             const resources = template.toJSON().Resources;
             const methods = Object.values(resources).filter((resource: any) =>
-                resource.Type === "AWS::ApiGateway::Method"
+                resource.Type === "AWS::ApiGateway::Method",
             );
 
             methods.forEach((method: any) => {

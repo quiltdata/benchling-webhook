@@ -6,6 +6,7 @@ import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
 import { AlbApiGateway } from "./alb-api-gateway";
 import { EcrRepository } from "./ecr-repository";
+import packageJson from "../package.json";
 
 interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
@@ -147,7 +148,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         // Export version information
         new cdk.CfnOutput(this, "StackVersion", {
-            value: this.node.tryGetContext("version") || require("../package.json").version,
+            value: this.node.tryGetContext("version") || packageJson.version,
             description: "Stack version",
         });
 

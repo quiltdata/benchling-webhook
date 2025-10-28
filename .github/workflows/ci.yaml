@@ -175,44 +175,10 @@ jobs:
         id: release_notes
         run: |
           VERSION="${{ needs.docker.outputs.version }}"
-          TAG="${{ needs.docker.outputs.tag }}"
           IMAGE_URI="${{ needs.docker.outputs.image_uri }}"
           IS_PRERELEASE="${{ needs.docker.outputs.is_prerelease }}"
 
-          # Check if CHANGELOG.md exists and extract notes
-          if [ -f CHANGELOG.md ]; then
-            # Try to extract version-specific notes from CHANGELOG
-            CHANGELOG_NOTES=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$d' | sed '1d')
-          fi
-
-          # Generate release notes
-          cat > /tmp/release_notes.md << 'EOFNOTES'
-          ## Docker Image
-
-          ```
-          ${{ needs.docker.outputs.image_uri }}
-          ```
-
-          Pull and run:
-          ```bash
-          docker pull ${{ needs.docker.outputs.image_uri }}
-          ```
-
-          ## Installation
-
-          ```bash
-          npm install quilt-benchling-webhook@${{ needs.docker.outputs.version }}
-          ```
-
-          EOFNOTES
-
-          # Add changelog notes if available
-          if [ -n "$CHANGELOG_NOTES" ]; then
-            echo "" >> /tmp/release_notes.md
-            echo "## Changes" >> /tmp/release_notes.md
-            echo "" >> /tmp/release_notes.md
-            echo "$CHANGELOG_NOTES" >> /tmp/release_notes.md
-          fi
+          ./bin/release-notes.sh "$VERSION" "$IMAGE_URI" "$IS_PRERELEASE" > /tmp/release_notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -222,6 +188,8 @@ jobs:
           draft: false
           prerelease: ${{ needs.docker.outputs.is_prerelease == 'true' }}
           generate_release_notes: true
+          files: |
+            docker/app-manifest.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

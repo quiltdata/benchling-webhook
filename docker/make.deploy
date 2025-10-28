@@ -184,10 +184,27 @@ push-ci: docker-tools
 # Docker Validation
 # ==============================================================================
 
-docker-validate: docker-tools docker-ecr-login
-	@echo "🔍 Validating Docker images in registry..."
-	@echo "Version: $(VERSION)"
-	uv run python scripts/docker.py validate --version $(VERSION)
+docker-validate: docker-tools
+	@echo "🔍 Validating Docker images in public registry (WITHOUT login)..."
+	@if [ ! -f ../cdk-outputs.json ]; then \
+		echo "❌ Error: cdk-outputs.json not found"; \
+		echo "Run CDK deploy first to generate outputs"; \
+		exit 1; \
+	fi
+	@DOCKER_IMAGE_URI=$$(cat ../cdk-outputs.json | grep -o '"DockerImageUri"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"DockerImageUri"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'); \
+	if [ -z "$$DOCKER_IMAGE_URI" ]; then \
+		echo "❌ Error: DockerImageUri not found in cdk-outputs.json"; \
+		exit 1; \
+	fi; \
+	echo "Image URI: $$DOCKER_IMAGE_URI"; \
+	echo "⚠️  This validation will FAIL if the repository is not public"; \
+	echo "Attempting to pull image WITHOUT authentication..."; \
+	if docker pull "$$DOCKER_IMAGE_URI" 2>&1 | tee /dev/stderr | grep -q "unauthorized\|authentication required\|no basic auth credentials"; then \
+		echo "❌ VALIDATION FAILED: Repository is NOT public (requires authentication)"; \
+		exit 1; \
+	else \
+		echo "✅ VALIDATION PASSED: Repository is publicly accessible"; \
+	fi
 
 # ==============================================================================
 # Cleanup
