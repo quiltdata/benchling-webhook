@@ -15,5 +15,9 @@ cdk-outputs.json
 !.env.example
 env.inferred
 
+# NPM credentials
+.npmrc
+.npmrc.backup
+
 # Deployment outputs
 .env.deploy

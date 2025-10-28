@@ -29,7 +29,8 @@
     "version:major": "node bin/version.js major",
     "version:minor": "node bin/version.js minor",
     "version:patch": "node bin/version.js patch",
-    "version:dev": "node bin/version.js dev"
+    "version:dev": "node bin/version.js dev",
+    "publish:manual": "node bin/publish-manual.js"
   },
   "keywords": [
     "benchling",

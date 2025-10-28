@@ -215,6 +215,51 @@ git push origin :refs/tags/v0.4.8
 2. Delete the GitHub release
 3. Create a new tag with the same or different version
 
+## Manual NPM Publishing
+
+In cases where you need to manually publish to NPM (e.g., CI/CD is unavailable, emergency hotfix, or testing), you can use the manual publish script:
+
+### Prerequisites
+
+1. **NPM Access Token**: You need an NPM access token with publish permissions
+   - Visit: <https://www.npmjs.com/settings/[your-username]/tokens>
+   - Click "Generate New Token"
+   - Choose "Automation" (for CI/CD) or "Publish" (for manual use)
+   - Copy the token (it starts with `npm_`)
+
+### Usage
+
+```bash
+# Test the publish process (dry-run)
+NPM_TOKEN=npm_xxxxx npm run publish:manual -- --dry-run
+
+# Publish to NPM
+NPM_TOKEN=npm_xxxxx npm run publish:manual
+
+# Publish with a specific dist-tag
+NPM_TOKEN=npm_xxxxx npm run publish:manual -- --tag beta
+
+# View help
+npm run publish:manual -- --help
+```
+
+### How It Works
+
+The script:
+1. Validates your NPM token
+2. Checks for uncommitted changes (with confirmation prompt)
+3. Creates a temporary `.npmrc` file with your token
+4. Runs `npm publish --access public`
+5. Cleans up the temporary `.npmrc` file
+6. Restores any existing `.npmrc` backup
+
+### Security Notes
+
+- The script creates `.npmrc` with restricted permissions (0600)
+- Your token is never committed to git (`.npmrc` is in `.gitignore`)
+- The temporary `.npmrc` is automatically cleaned up, even on errors
+- Always use `--dry-run` first to test before publishing
+
 ## NPM Scripts Reference
 
 | Script | Description |
@@ -227,6 +272,7 @@ git push origin :refs/tags/v0.4.8
 | `npm run version:dev-bump` | Bump dev counter only |
 | `npm run docker-push` | Build and push Docker image locally |
 | `npm run docker-check` | Validate Docker images in registry |
+| `npm run publish:manual` | Manually publish to NPM using access token |
 
 ## Best Practices
 
