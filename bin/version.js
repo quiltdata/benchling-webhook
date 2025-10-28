@@ -108,12 +108,20 @@ function updateAppManifestVersion(newVersion) {
 function main() {
   const args = process.argv.slice(2);
 
-  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+  // No args: just output the version number (for scripting)
+  if (args.length === 0) {
+    console.log(pkg.version);
+    process.exit(0);
+  }
+
+  // Help
+  if (args.includes('--help') || args.includes('-h')) {
     console.log('Current version:', pkg.version);
     console.log('');
-    console.log('Usage: node bin/version.js <command>');
+    console.log('Usage: node bin/version.js [command]');
     console.log('');
     console.log('Commands:');
+    console.log('  (no args)  - Output current version');
     console.log('  major      - Bump major version (1.0.0 -> 2.0.0)');
     console.log('  minor      - Bump minor version (0.4.7 -> 0.5.0)');
     console.log('  patch      - Bump patch version (0.4.7 -> 0.4.8)');
