@@ -168,7 +168,7 @@ export class FargateService extends Construct {
         const container = taskDefinition.addContainer("BenchlingWebhookContainer", {
             image: ecs.ContainerImage.fromEcrRepository(
                 props.ecrRepository,
-                props.imageTag || "latest"
+                props.imageTag || "latest",
             ),
             logging: ecs.LogDriver.awsLogs({
                 streamPrefix: "benchling-webhook",
