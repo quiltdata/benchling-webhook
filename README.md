@@ -12,10 +12,13 @@ git clone https://github.com/quiltdata/benchling-webhook.git
 cd benchling-webhook
 npm install
 
-# 2. Configure (auto-infer from Quilt catalog)
-npm run get-env -- https://your-catalog.quiltdata.com --write
-cp env.inferred .env
-# Edit .env to add Benchling credentials
+# 2. Configure minimal .env
+cp env.template .env
+# Edit .env to set:
+# - QUILT_CATALOG=quilt-catalog.yourcompany.com
+# - QUILT_USER_BUCKET=your-data-bucket
+# - Benchling credentials (5 values)
+# Everything else is auto-inferred at deploy time!
 
 # 3. Deploy
 source .env

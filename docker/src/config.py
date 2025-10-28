@@ -6,7 +6,7 @@ from dataclasses import dataclass
 class Config:
     flask_env: str = os.getenv("FLASK_ENV", "development")
     aws_region: str = os.getenv("AWS_REGION", "us-east-2")
-    s3_bucket_name: str = os.getenv("S3_BUCKET_NAME", "")
+    s3_bucket_name: str = os.getenv("QUILT_USER_BUCKET", "")
     s3_prefix: str = os.getenv("PKG_PREFIX", "benchling")
     package_key: str = os.getenv("PKG_KEY", "experiment_id")
     package_bucket_only: bool = os.getenv("PKG_BUCKET_ONLY", "false").lower() == "true"

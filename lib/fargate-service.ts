@@ -175,7 +175,7 @@ export class FargateService extends Construct {
                 logGroup: this.logGroup,
             }),
             environment: {
-                S3_BUCKET_NAME: props.bucket.bucketName,
+                QUILT_USER_BUCKET: props.bucket.bucketName,
                 SQS_QUEUE_URL: `https://sqs.${props.region}.amazonaws.com/${props.account}/${props.queueName}`,
                 PKG_PREFIX: props.prefix,
                 BENCHLING_TENANT: props.benchlingTenant,

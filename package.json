@@ -2,7 +2,7 @@
   "name": "quilt-benchling-webhook",
   "version": "0.4.12",
   "description": "AWS CDK deployment for Benchling webhook processing using Fargate",
-  "main": "lib/benchling-webhook-stack.ts",
+  "main": "lib/index.ts",
   "bin": {
     "benchling-webhook": "bin/benchling-webhook.ts"
   },

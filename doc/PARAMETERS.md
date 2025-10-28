@@ -25,8 +25,8 @@ This stack supports runtime-configurable parameters that can be updated without 
 #### BucketName
 
 - **Type**: String
-- **Description**: S3 bucket name for storing packages
-- **Default**: Value from `BUCKET_NAME` environment variable
+- **Description**: S3 bucket name for storing packages (your data bucket)
+- **Default**: Value from `QUILT_USER_BUCKET` environment variable
 - **Example**: `my-packages-bucket`
 
 #### PackagePrefix

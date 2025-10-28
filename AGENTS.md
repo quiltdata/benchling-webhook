@@ -54,7 +54,7 @@ If you have an existing Quilt deployment, you can automatically infer most confi
 
 ```bash
 # Infer config from your Quilt catalog
-npm run get-env -- https://your-catalog.quiltdata.com --write
+npm run get-env -- https://quilt-catalog.yourcompany.com --write
 
 # Review the generated env.inferred file
 cat env.inferred
@@ -81,21 +81,36 @@ cp env.template .env
 
 Edit `.env` with your configuration:
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `CDK_DEFAULT_ACCOUNT` | ✅ | AWS Account ID (12 digits) |
-| `CDK_DEFAULT_REGION` | ✅ | AWS Region (e.g., `us-east-1`) |
-| `BUCKET_NAME` | ✅ | S3 bucket connected to Quilt |
-| `QUEUE_NAME` | ✅ | SQS queue from Quilt stack |
-| `BENCHLING_TENANT` | ✅ | Benchling subdomain (e.g., `myorg` from `myorg.benchling.com`) |
-| `BENCHLING_CLIENT_ID` | ✅ | OAuth client ID from Benchling app |
-| `BENCHLING_CLIENT_SECRET` | ✅ | OAuth client secret from Benchling app |
-| `QUILT_DATABASE` | ✅ | Athena database name for Quilt catalog |
-| `WEBHOOK_ALLOW_LIST` | ⚪ | Comma-separated IP allowlist |
-| `PREFIX` | ⚪ | S3 key prefix (default: `benchling`) |
-| `QUILT_CATALOG` | ⚪ | Quilt catalog URL (default: `open.quiltdata.com`) |
-| `ENABLE_WEBHOOK_VERIFICATION` | ⚪ | Verify signatures (default: true) |
-| `ECR_REPOSITORY_NAME` | ⚪ | Custom ECR repo name |
+**Required Variables** (you must provide these):
+
+| Variable | Description |
+|----------|-------------|
+| `QUILT_CATALOG` | Quilt catalog URL (e.g., `quilt-catalog.yourcompany.com`) |
+| `QUILT_USER_BUCKET` | Your S3 bucket for Benchling exports |
+| `BENCHLING_TENANT` | Benchling subdomain (e.g., `myorg` from `myorg.benchling.com`) |
+| `BENCHLING_CLIENT_ID` | OAuth client ID from Benchling app |
+| `BENCHLING_CLIENT_SECRET` | OAuth client secret from Benchling app |
+| `BENCHLING_API_KEY` | API key for Benchling access |
+| `BENCHLING_APP_DEFINITION_ID` | App definition ID for webhook verification |
+
+**Auto-Inferred Variables** (automatically determined from your Quilt catalog):
+
+| Variable | How It's Inferred |
+|----------|-------------------|
+| `CDK_DEFAULT_ACCOUNT` | From AWS STS (your current account) |
+| `CDK_DEFAULT_REGION` | From catalog config.json |
+| `QUEUE_NAME` | From Quilt stack outputs |
+| `SQS_QUEUE_URL` | From Quilt stack outputs |
+| `QUILT_DATABASE` | From Quilt stack outputs |
+
+**Optional Variables** (have sensible defaults):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WEBHOOK_ALLOW_LIST` | (empty) | Comma-separated IP allowlist |
+| `PREFIX` | `benchling` | S3 key prefix |
+| `ENABLE_WEBHOOK_VERIFICATION` | `true` | Verify webhook signatures |
+| `ECR_REPOSITORY_NAME` | `quiltdata/benchling` | Custom ECR repo name |
 
 See [doc/PARAMETERS.md](doc/PARAMETERS.md) for complete reference.
 

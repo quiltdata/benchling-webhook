@@ -9,8 +9,8 @@
  * 4. Generate environment variables for .env
  *
  * Usage:
- *   node bin/get-env.js https://your-catalog.quiltdata.com
- *   node bin/get-env.js https://your-catalog.quiltdata.com --write
+ *   node bin/get-env.js https://quilt-catalog.yourcompany.com
+ *   node bin/get-env.js https://quilt-catalog.yourcompany.com --write
  */
 
 const https = require("https");
@@ -363,8 +363,7 @@ function buildInferredConfig(config, stackName, stackDetails, region, accountId,
     const dataBucket = bucketOutput?.OutputValue || serviceBucket;
 
     if (dataBucket) {
-        vars.BUCKET_NAME = dataBucket;
-        vars.S3_BUCKET_NAME = dataBucket;
+        vars.QUILT_USER_BUCKET = `${dataBucket} # Verify this is YOUR data bucket`;
     }
 
     // Try to find database name from stack
@@ -469,7 +468,7 @@ function printHelp() {
     console.log("Usage: node bin/get-env.js <catalog-url> [options]");
     console.log("");
     console.log("Arguments:");
-    console.log("  catalog-url    URL of Quilt catalog (e.g., https://your-catalog.quiltdata.com)");
+    console.log("  catalog-url    URL of Quilt catalog (e.g., https://quilt-catalog.yourcompany.com)");
     console.log("");
     console.log("Options:");
     console.log("  --output=FILE  Write output to FILE instead of stdout");

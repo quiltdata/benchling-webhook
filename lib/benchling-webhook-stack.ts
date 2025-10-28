@@ -8,7 +8,7 @@ import { AlbApiGateway } from "./alb-api-gateway";
 import { EcrRepository } from "./ecr-repository";
 import packageJson from "../package.json";
 
-interface BenchlingWebhookStackProps extends cdk.StackProps {
+export interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
     readonly environment: string;
     readonly prefix: string;
