@@ -17,6 +17,8 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const packagePath = path.join(__dirname, '..', 'package.json');
+const pyprojectPath = path.join(__dirname, '..', 'docker', 'pyproject.toml');
+const appManifestPath = path.join(__dirname, '..', 'docker', 'app-manifest.yaml');
 const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 
 function parseVersion(version) {
@@ -87,6 +89,20 @@ function updatePackageVersion(newVersion) {
   pkg.version = newVersion;
   fs.writeFileSync(packagePath, JSON.stringify(pkg, null, 2) + '\n');
   console.log(`✅ Updated package.json to version ${newVersion}`);
+}
+
+function updatePyprojectVersion(newVersion) {
+  let content = fs.readFileSync(pyprojectPath, 'utf8');
+  content = content.replace(/^version\s*=\s*"[^"]+"/m, `version = "${newVersion}"`);
+  fs.writeFileSync(pyprojectPath, content);
+  console.log(`✅ Updated docker/pyproject.toml to version ${newVersion}`);
+}
+
+function updateAppManifestVersion(newVersion) {
+  let content = fs.readFileSync(appManifestPath, 'utf8');
+  content = content.replace(/^(\s*)version:\s*.+$/m, `$1version: ${newVersion}`);
+  fs.writeFileSync(appManifestPath, content);
+  console.log(`✅ Updated docker/app-manifest.yaml to version ${newVersion}`);
 }
 
 function createGitTag(version, isDev) {
@@ -217,10 +233,12 @@ function main() {
       process.exit(1);
     }
 
-    // Update package.json and commit only if we're bumping the version
+    // Update all version files and commit only if we're bumping the version
     if (!skipVersionBump) {
       updatePackageVersion(newVersion);
-      execSync('git add package.json', { stdio: 'inherit' });
+      updatePyprojectVersion(newVersion);
+      updateAppManifestVersion(newVersion);
+      execSync('git add package.json docker/pyproject.toml docker/app-manifest.yaml', { stdio: 'inherit' });
       execSync(`git commit -m "chore: bump version to ${newVersion}"`, { stdio: 'inherit' });
       console.log(`✅ Committed version change`);
       console.log('');
