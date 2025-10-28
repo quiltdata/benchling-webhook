@@ -19,15 +19,18 @@ const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
-// Parse command line arguments
-const args = process.argv.slice(2);
-const catalogUrl = args.find((arg) => !arg.startsWith("--"));
-const outputFile = args.find((arg) => arg.startsWith("--output="))?.split("=")[1];
-const writeFile = args.includes("--write");
+// Parse command line arguments (only when run directly)
+let args, catalogUrl, outputFile, writeFile;
+if (require.main === module) {
+    args = process.argv.slice(2);
+    catalogUrl = args.find((arg) => !arg.startsWith("--"));
+    outputFile = args.find((arg) => arg.startsWith("--output="))?.split("=")[1];
+    writeFile = args.includes("--write");
 
-if (!catalogUrl || args.includes("--help") || args.includes("-h")) {
-    printHelp();
-    process.exit(catalogUrl ? 0 : 1);
+    if (!catalogUrl || args.includes("--help") || args.includes("-h")) {
+        printHelp();
+        process.exit(catalogUrl ? 0 : 1);
+    }
 }
 
 /**

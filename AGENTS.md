@@ -90,7 +90,6 @@ Edit `.env` with your configuration:
 | `BENCHLING_TENANT` | Benchling subdomain (e.g., `myorg` from `myorg.benchling.com`) |
 | `BENCHLING_CLIENT_ID` | OAuth client ID from Benchling app |
 | `BENCHLING_CLIENT_SECRET` | OAuth client secret from Benchling app |
-| `BENCHLING_API_KEY` | API key for Benchling access |
 | `BENCHLING_APP_DEFINITION_ID` | App definition ID for webhook verification |
 
 **Auto-Inferred Variables** (automatically determined from your Quilt catalog):
@@ -107,9 +106,11 @@ Edit `.env` with your configuration:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WEBHOOK_ALLOW_LIST` | (empty) | Comma-separated IP allowlist |
-| `PREFIX` | `benchling` | S3 key prefix |
+| `PKG_PREFIX` | `benchling` | Quilt package name prefix |
+| `PKG_KEY` | `experiment_id` | Metadata key for linking entries to packages |
+| `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
 | `ENABLE_WEBHOOK_VERIFICATION` | `true` | Verify webhook signatures |
+| `WEBHOOK_ALLOW_LIST` | (empty) | Comma-separated IP allowlist |
 | `ECR_REPOSITORY_NAME` | `quiltdata/benchling` | Custom ECR repo name |
 
 See [doc/PARAMETERS.md](doc/PARAMETERS.md) for complete reference.

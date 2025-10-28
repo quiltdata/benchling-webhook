@@ -5,11 +5,11 @@ from dataclasses import dataclass
 @dataclass
 class Config:
     flask_env: str = os.getenv("FLASK_ENV", "development")
+    log_level: str = os.getenv("LOG_LEVEL", "INFO")
     aws_region: str = os.getenv("AWS_REGION", "us-east-2")
     s3_bucket_name: str = os.getenv("QUILT_USER_BUCKET", "")
     s3_prefix: str = os.getenv("PKG_PREFIX", "benchling")
     package_key: str = os.getenv("PKG_KEY", "experiment_id")
-    package_bucket_only: bool = os.getenv("PKG_BUCKET_ONLY", "false").lower() == "true"
     quilt_catalog: str = os.getenv("QUILT_CATALOG", "stable.quilttest.com")
     quilt_database: str = os.getenv("QUILT_DATABASE", "")
     sqs_queue_url: str = os.getenv("SQS_QUEUE_URL", "")

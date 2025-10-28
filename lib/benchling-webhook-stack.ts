@@ -21,6 +21,7 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly webhookAllowList?: string;
     readonly createEcrRepository?: boolean;
     readonly ecrRepositoryName?: string;
+    readonly logLevel?: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
@@ -123,6 +124,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             webhookAllowList: webhookAllowListValue,
             ecrRepository: ecrRepo,
             imageTag: "latest",
+            logLevel: props.logLevel,
         });
 
         // Create API Gateway that routes to the ALB

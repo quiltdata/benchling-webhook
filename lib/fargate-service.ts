@@ -24,6 +24,7 @@ export interface FargateServiceProps {
     readonly webhookAllowList: string;
     readonly ecrRepository: ecr.IRepository;
     readonly imageTag?: string;
+    readonly logLevel?: string;
 }
 
 export class FargateService extends Construct {
@@ -185,7 +186,7 @@ export class FargateService extends Construct {
                 AWS_REGION: props.region,
                 AWS_DEFAULT_REGION: props.region,
                 FLASK_ENV: "production",
-                LOG_LEVEL: "INFO",
+                LOG_LEVEL: props.logLevel || "INFO",
                 ENABLE_WEBHOOK_VERIFICATION: "false",
             },
             secrets: {
