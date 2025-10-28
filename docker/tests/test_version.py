@@ -31,7 +31,7 @@ def get_app_manifest_version():
     manifest_path = Path(__file__).parent.parent / "app-manifest.yaml"
     with open(manifest_path) as f:
         content = f.read()
-        match = re.search(r'^\s*version:\s*(.+)$', content, re.MULTILINE)
+        match = re.search(r"^\s*version:\s*(.+)$", content, re.MULTILINE)
         if match:
             return match.group(1).strip()
         raise ValueError("Could not find version in app-manifest.yaml")
@@ -44,13 +44,11 @@ def test_versions_match():
     manifest_version = get_app_manifest_version()
 
     assert package_version == pyproject_version, (
-        f"package.json version ({package_version}) does not match "
-        f"pyproject.toml version ({pyproject_version})"
+        f"package.json version ({package_version}) does not match " f"pyproject.toml version ({pyproject_version})"
     )
 
     assert package_version == manifest_version, (
-        f"package.json version ({package_version}) does not match "
-        f"app-manifest.yaml version ({manifest_version})"
+        f"package.json version ({package_version}) does not match " f"app-manifest.yaml version ({manifest_version})"
     )
 
     assert pyproject_version == manifest_version, (
