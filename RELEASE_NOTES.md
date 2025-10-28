@@ -1,6 +1,23 @@
-# Benchling Webhook Integration for Quilt
+# Release Notes - v0.4.12
+
+## Benchling Webhook Integration for Quilt
 
 Serverless webhook processor that connects Benchling lab notebook entries to Quilt data packages, enabling seamless data versioning and tracking for scientific workflows.
+
+### Docker Images
+
+**Latest Release (v0.4.12):**
+- Production: `public.ecr.aws/quiltdata/benchling:0.4.12`
+- Latest: `public.ecr.aws/quiltdata/benchling:latest`
+
+## What's New in v0.4.12
+
+### Added
+- Dev release workflow with timestamped pre-release tags for testing CI/CD pipeline
+
+### Changed
+- Refactored release script to separate version bumping from tag creation
+- version.js now outputs just the version number when called with no arguments
 
 ## Architecture Overview
 
@@ -35,33 +52,6 @@ npm install
 ```
 
 ### 2. Configure Environment
-
-#### Option A: Auto-infer from Quilt Catalog (Recommended)
-
-If you have an existing Quilt deployment, you can automatically infer most configuration values:
-
-```bash
-# Infer config from your Quilt catalog
-npm run infer-config -- https://your-catalog.quiltdata.com --write
-
-# Review the generated .env.inferred file
-cat .env.inferred
-
-# Copy to .env and fill in Benchling credentials
-cp .env.inferred .env
-# Then edit .env to add your Benchling-specific values
-```
-
-The script will:
-
-- Fetch `config.json` from your Quilt catalog
-- Query AWS CloudFormation to find your Quilt stack
-- Extract bucket names, queue names, region, and account ID
-- Generate a `.env.inferred` file with pre-filled AWS/Quilt configuration
-
-**Note:** You'll still need to manually add Benchling credentials (tenant, client ID, client secret, etc.).
-
-#### Option B: Manual Configuration
 
 ```bash
 cp env.template .env
@@ -130,20 +120,28 @@ aws logs tail /ecs/benchling-webhook --follow
 4. **Add Files** → Attach experimental data
 5. **Update Package** → Creates new version with attachments
 
-## Development
+## Recent Changes
 
-```bash
-# Run tests
-npm test
+### v0.4.11
+- Added version synchronization test to ensure package.json, docker/pyproject.toml, and docker/app-manifest.yaml remain in sync
+- app-manifest.yaml now published as GitHub release asset for Benchling App installations
+- Fixed version bump script to update all three version files
+- Fixed `docker-validate` to ensure ECR repository is publicly accessible
 
-# Build Docker image
-npm run docker-push
+### v0.4.10
+- Added Canvas error notification section to display warnings and errors to users
+- Added Athena permissions to ECS task role for Quilt queries
+- Fixed Canvas error handling for AWS permission issues
 
-# Create release
-npm run release
-```
+### v0.4.9
+- Integrated release workflow into CI pipeline for automated GitHub releases
+- Updated Python to 3.14 in CI workflows
+- Streamlined release process with automated tagging and publishing
 
-See [docker/README.md](docker/README.md) for detailed development workflows.
+### v0.4.8
+- **Infrastructure Migration**: Migrated from Lambda to Docker/Fargate for improved scalability
+- **Improved Deployment**: Streamlined Docker-based deployment workflow
+- **Enhanced Testing**: Added comprehensive test commands
 
 ## Security Best Practices
 
@@ -160,6 +158,12 @@ See [docker/README.md](docker/README.md) for detailed development workflows.
 - **ECS Task Metrics**: CPU, memory, task count
 - **API Gateway Metrics**: Request count, latency, 4XX/5XX errors
 - **ALB Target Health**: Monitor unhealthy targets
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/quiltdata/benchling-webhook/issues)
+- **Documentation**: [Full Documentation](https://github.com/quiltdata/benchling-webhook)
+- **Release History**: [CHANGELOG.md](CHANGELOG.md)
 
 ## License
 
