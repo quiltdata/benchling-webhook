@@ -1,22 +1,3 @@
-# Release Notes - v0.4.12
-
-## Docker Images
-
-**Latest Release (v0.4.12):**
-- Production: `public.ecr.aws/quiltdata/benchling:0.4.12`
-- Latest: `public.ecr.aws/quiltdata/benchling:latest`
-
-## What's New in v0.4.12
-
-### Added
-- Dev release workflow with timestamped pre-release tags for testing CI/CD pipeline
-
-### Changed
-- Refactored release script to separate version bumping from tag creation
-- version.js now outputs just the version number when called with no arguments
-
----
-
 # Benchling Webhook Integration for Quilt
 
 Connects Benchling lab notebook entries to Quilt data packages via webhooks.
@@ -64,51 +45,20 @@ curl $WEBHOOK_ENDPOINT/health
 - [docker/README.md](docker/README.md) - Development workflows
 - [doc/RELEASE.md](doc/RELEASE.md) - Release process
 
-## Recent Changes
-
-### v0.4.11
-- Added version synchronization test to ensure package.json, docker/pyproject.toml, and docker/app-manifest.yaml remain in sync
-- app-manifest.yaml now published as GitHub release asset for Benchling App installations
-- Fixed version bump script to update all three version files
-- Fixed `docker-validate` to ensure ECR repository is publicly accessible
-
-### v0.4.10
-- Added Canvas error notification section to display warnings and errors to users
-- Added Athena permissions to ECS task role for Quilt queries
-- Fixed Canvas error handling for AWS permission issues
-
-### v0.4.9
-- Integrated release workflow into CI pipeline for automated GitHub releases
-- Updated Python to 3.14 in CI workflows
-- Streamlined release process with automated tagging and publishing
-
-### v0.4.8
-- **Infrastructure Migration**: Migrated from Lambda to Docker/Fargate for improved scalability
-- **Improved Deployment**: Streamlined Docker-based deployment workflow
-- **Enhanced Testing**: Added comprehensive test commands
-
-## Security Best Practices
-
-- OAuth credentials stored in AWS Secrets Manager
-- IP-based access control via API Gateway resource policies
-- Container images scanned for vulnerabilities via Amazon ECR
-- IAM roles follow least-privilege principle
-- All traffic encrypted in transit (TLS 1.2+)
-- CloudWatch logs encrypted at rest
-
-## Monitoring & Troubleshooting
-
-- **CloudWatch Logs**: `/ecs/benchling-webhook`
-- **ECS Task Metrics**: CPU, memory, task count
-- **API Gateway Metrics**: Request count, latency, 4XX/5XX errors
-- **ALB Target Health**: Monitor unhealthy targets
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/quiltdata/benchling-webhook/issues)
-- **Documentation**: [Full Documentation](https://github.com/quiltdata/benchling-webhook)
-- **Release History**: [CHANGELOG.md](CHANGELOG.md)
-
 ## License
 
-Apache-2.0 - See [LICENSE](LICENSE) file for details
+Apache-2.0
+
+---
+
+## Docker Images (for custom deployments)
+
+**Latest Release (v0.4.12):**
+- Production: `public.ecr.aws/quiltdata/benchling:0.4.12`
+- Latest: `public.ecr.aws/quiltdata/benchling:latest`
+
+Pull and run:
+```bash
+docker pull public.ecr.aws/quiltdata/benchling:0.4.12
+docker run -p 5000:5000 --env-file .env public.ecr.aws/quiltdata/benchling:0.4.12
+```
