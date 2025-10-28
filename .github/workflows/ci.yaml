@@ -222,6 +222,8 @@ jobs:
           draft: false
           prerelease: ${{ needs.docker.outputs.is_prerelease == 'true' }}
           generate_release_notes: true
+          files: |
+            docker/app-manifest.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
