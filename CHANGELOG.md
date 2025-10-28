@@ -14,6 +14,10 @@ All notable changes to this project will be documented in this file.
   - Build artifacts (`dist/`) automatically compiled and cleaned during publish
   - Updated `package.json` to point to compiled files: `dist/lib/index.js`
 
+### Removed
+
+- Unused script: `bin/sync-version.js` (version syncing now handled directly by version.js)
+
 ## [0.4.13] - 2025-10-28
 
 ### Changed
