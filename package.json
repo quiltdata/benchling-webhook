@@ -75,7 +75,7 @@
     "adm-zip": "^0.5.10",
     "aws-cdk-lib": "2.221.1",
     "aws-sdk": "^2.1574.0",
-    "boxen": "^5.1.2",
+    "boxen": "^8.0.0",
     "chalk": "^4.1.2",
     "commander": "^14.0.2",
     "constructs": "^10.0.0",
