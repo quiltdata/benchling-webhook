@@ -27,8 +27,6 @@ cat README.md
 # Add package and Docker image information
 # Convert package name for URLs (replace @ with %40, / with %2F)
 PACKAGE_URL=$(echo "$PACKAGE_NAME" | sed 's/@/%40/g' | sed 's/\//%2F/g')
-PACKAGE_SCOPE=$(echo "$PACKAGE_NAME" | sed 's/@//g' | cut -d'/' -f1)
-PACKAGE_SHORT=$(echo "$PACKAGE_NAME" | cut -d'/' -f2)
 
 cat << EOFPACKAGES
 
@@ -38,9 +36,7 @@ cat << EOFPACKAGES
 npm install ${PACKAGE_NAME}@${VERSION}
 \`\`\`
 
-**Registry Links:**
-- [npmjs.com](https://www.npmjs.com/package/${PACKAGE_URL}/v/${VERSION})
-- [GitHub Packages](https://github.com/${PACKAGE_SCOPE}/benchling-webhook/pkgs/npm/${PACKAGE_SHORT})
+**View on npmjs.com:** [${PACKAGE_NAME}@${VERSION}](https://www.npmjs.com/package/${PACKAGE_URL}/v/${VERSION})
 
 ## Docker Image
 
