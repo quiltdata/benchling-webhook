@@ -202,18 +202,6 @@ jobs:
         run: npm publish --provenance --access public
         continue-on-error: true
 
-      - name: Publish to GitHub Packages
-        run: |
-          # Update package.json to point to GitHub Packages registry
-          jq '.publishConfig = {"registry": "https://npm.pkg.github.com"}' package.json > package.json.tmp
-          mv package.json.tmp package.json
-
-          # Publish to GitHub Packages
-          npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-
       - name: Summary
         run: |
           echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
@@ -226,6 +214,4 @@ jobs:
           echo "${{ needs.docker.outputs.image_uri }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Package:**" >> $GITHUB_STEP_SUMMARY
-          echo "- NPM: https://www.npmjs.com/package/quilt-benchling-webhook" >> $GITHUB_STEP_SUMMARY
-          echo "- GitHub: https://github.com/quiltdata/benchling-webhook/pkgs/npm/quilt-benchling-webhook" >> $GITHUB_STEP_SUMMARY
+          echo "**NPM Package:** https://www.npmjs.com/package/@quiltdata/benchling-webhook" >> $GITHUB_STEP_SUMMARY
