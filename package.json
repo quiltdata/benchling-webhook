@@ -44,7 +44,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/quiltdata/benchling-webhook.git"
+    "url": "git+https://github.com/quiltdata/benchling-webhook.git"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
