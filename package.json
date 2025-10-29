@@ -73,7 +73,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.758.0",
     "adm-zip": "^0.5.10",
-    "aws-cdk-lib": "2.221.0",
+    "aws-cdk-lib": "2.221.1",
     "aws-sdk": "^2.1574.0",
     "boxen": "^5.1.2",
     "chalk": "^4.1.2",
