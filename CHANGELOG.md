@@ -3,38 +3,22 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.5.0] - 2025-10-29
 
 ### Added
 
-- **CLI support for npx execution** - Deploy directly without cloning repository (#TBD)
-  - Interactive `init` command for configuration setup
-  - `validate` command for pre-deployment validation
-  - `deploy` command with enhanced UX and progress indicators
-  - Automatic configuration inference from Quilt catalog
-  - Support for `.env` files, environment variables, and CLI flags with priority ordering
+- **CLI support for npx execution** - Deploy directly without cloning repository
+  - Run `npx @quiltdata/benchling-webhook init` to set up configuration interactively
+  - Run `npx @quiltdata/benchling-webhook validate` to check configuration before deployment
+  - Run `npx @quiltdata/benchling-webhook deploy` to deploy your stack
+  - Automatic configuration inference from your Quilt catalog
+  - Support for `.env` files, environment variables, and CLI flags with intelligent priority ordering
   - Clear, actionable error messages with solution guidance
-  - Beautiful terminal output with colors, spinners, and boxes
-- New utilities in `lib/utils/config.ts` for configuration loading and validation
-- Comprehensive help text for all CLI commands
+  - Beautiful terminal output with colors, spinners, and progress indicators
 
-### Changed
+### Fixed
 
-- **Refactored deployment logic** to support both CLI and programmatic usage
-  - Extracted pure functions: `checkCdkBootstrap()`, `inferConfiguration()`, `createStack()`
-  - Maintained backwards compatibility with existing `npm run cdk` workflow
-- Updated `package.json`:
-  - Added `bin` entry pointing to `./dist/bin/cli.js`
-  - Added CLI-related keywords (`cli`, `npx`)
-  - Updated description to mention npx support
-  - Added `env.template` to published files
-  - Updated build scripts to copy JavaScript files
-- Updated `tsconfig.json` for proper CLI compilation with CommonJS module system
-- Configuration loading now supports priority: CLI options > environment variables > .env file > inferred values
-
-### Dependencies
-
-- Added CLI dependencies: `commander@^14.0.2`, `dotenv-expand@^12.0.3`, `chalk@^4.1.2`, `ora@^5.4.1`, `enquirer@^2.4.1`, `boxen@^5.1.2`
+- **Improved database detection** - Configuration inference now correctly detects the `UserAthenaDatabase` from Quilt CloudFormation stacks
 
 ## [0.4.14] - 2025-10-29
 
