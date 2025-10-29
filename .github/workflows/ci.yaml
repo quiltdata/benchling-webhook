@@ -14,6 +14,7 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write  # Required for OIDC authentication to npm
 
 jobs:
   test:
@@ -167,6 +168,8 @@ jobs:
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+          # OIDC authentication is automatically configured when registry-url is set
+          # No NODE_AUTH_TOKEN needed - npm will use OIDC tokens via GitHub's id-token
 
       - name: Install Node.js dependencies
         run: npm ci
@@ -195,9 +198,7 @@ jobs:
 
       - name: Publish to NPM
         if: needs.docker.outputs.is_prerelease == 'false'
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
         continue-on-error: true
 
       - name: Publish to GitHub Packages

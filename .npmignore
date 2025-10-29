@@ -1,6 +1,54 @@
+# Source TypeScript files (compiled JS in dist/ will be published)
+# Exclude all .ts files except .d.ts files
 *.ts
 !*.d.ts
+
+# But include everything in dist/
+!dist/
 
 # CDK asset staging directory
 .cdk.staging
 cdk.out
+
+# Environment files - NEVER publish credentials
+.env*
+!env.template
+
+# Test files and artifacts
+test/
+test-events/
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+.jest-cache/
+coverage/
+.tmp/
+.scratch/
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# IDE and editor files
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+
+# Docker and deployment
+docker/
+Makefile
+cdk-outputs.json
+.env.deploy
+
+# Development config
+eslint.config.js
+renovate.json
+
+# Git files
+.gitignore
+.gitattributes

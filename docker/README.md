@@ -177,7 +177,7 @@ The `env.template` file in the project root is organized into three sections:
 
 ### 1. Required User Values (Set before deployment)
 
-- `S3_BUCKET_NAME` - S3 bucket for package storage
+- `QUILT_USER_BUCKET` - S3 bucket for package storage
 - `QUILT_CATALOG` - Quilt catalog URL
 - `SQS_QUEUE_URL` - SQS queue for Quilt packaging
 - `BENCHLING_TENANT` - Your Benchling tenant ID

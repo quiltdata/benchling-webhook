@@ -97,7 +97,7 @@ The service requires these environment variables:
 - `BENCHLING_CLIENT_ID` - OAuth client ID
 - `BENCHLING_CLIENT_SECRET` - OAuth client secret
 - `AWS_REGION` - AWS region for S3 operations
-- `S3_BUCKET_NAME` - Target S3 bucket
+- `QUILT_USER_BUCKET` - Target S3 bucket
 - `SQS_QUEUE_URL` - SQS queue for async processing
 - `QUILT_CATALOG` - Quilt catalog endpoint
 

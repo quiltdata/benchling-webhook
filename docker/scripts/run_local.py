@@ -26,7 +26,7 @@ LOG_FILE = LOG_DIR / "benchling_webhook.log"
 os.environ.setdefault("FLASK_ENV", "development")
 os.environ.setdefault("FLASK_DEBUG", "true")
 os.environ.setdefault("AWS_REGION", "us-west-2")
-os.environ.setdefault("S3_BUCKET_NAME", "local-test-bucket")
+os.environ.setdefault("QUILT_USER_BUCKET", "local-test-bucket")
 os.environ.setdefault("PKG_PREFIX", "benchling")
 os.environ.setdefault("QUILT_CATALOG", "test.quilttest.com")
 os.environ.setdefault("SQS_QUEUE_URL", "https://sqs.us-west-2.amazonaws.com/123456789012/test-queue")
