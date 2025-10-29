@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.14] - 2025-10-29
+
 ### Added
 
 - OIDC authentication for npm publishing (#137)
