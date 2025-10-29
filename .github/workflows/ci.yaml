@@ -198,8 +198,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to NPM
-        if: needs.docker.outputs.is_prerelease == 'false'
-        run: npm publish --provenance --access public
+        run: |
+          if [ "${{ needs.docker.outputs.is_prerelease }}" == "true" ]; then
+            echo "Publishing pre-release to npm with 'dev' tag"
+            npm publish --provenance --access public --tag dev
+          else
+            echo "Publishing production release to npm with 'latest' tag"
+            npm publish --provenance --access public --tag latest
+          fi
         continue-on-error: true
 
       - name: Summary
