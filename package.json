@@ -25,11 +25,10 @@
     "docker:test": "make -C docker test",
     "docker-push": "make -C docker push-local",
     "docker-check": "make -C docker docker-validate",
-    "release": "node bin/release.js",
-    "release:dev": "node bin/release.js dev",
+    "release": "npm run test && node bin/release.js",
+    "release:dev": "npm run test && node bin/release.js dev",
     "version": "node bin/version.js patch",
-    "version:dev": "node bin/version.js dev",
-    "publish": "node bin/publish.js"
+    "version:patch": "npm run version -- patch"
   },
   "keywords": [
     "benchling",
