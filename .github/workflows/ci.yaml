@@ -197,10 +197,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Update package.json version for pre-releases
+        if: needs.docker.outputs.is_prerelease == 'true'
+        run: |
+          VERSION="${{ needs.docker.outputs.version }}"
+          echo "Temporarily updating package.json version to $VERSION for pre-release publish"
+          npm version $VERSION --no-git-tag-version
+
       - name: Publish to NPM
         run: |
           echo "=== NPM Configuration Debug ==="
           echo "Registry: $(npm config get registry)"
+          echo "Package version: $(jq -r .version package.json)"
           echo "Checking authentication..."
           npm whoami || echo "npm whoami failed"
           cat $NPM_CONFIG_USERCONFIG || echo "No .npmrc found"
