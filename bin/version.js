@@ -4,12 +4,11 @@
  * Version management script - bumps version numbers across all files
  *
  * Usage:
- *   node bin/version.js          # Show current version
+ *   node bin/version.js          # Show all three version files
  *   node bin/version.js patch    # 0.4.7 -> 0.4.8
  *   node bin/version.js minor    # 0.4.7 -> 0.5.0
  *   node bin/version.js major    # 0.4.7 -> 1.0.0
- *   node bin/version.js dev      # 0.4.7 -> 0.4.8-dev.0
- *   node bin/version.js dev-bump # 0.4.8-dev.0 -> 0.4.8-dev.1
+ *   node bin/version.js sync     # Force TOML and YAML to match JSON version
  */
 
 const fs = require('fs');
@@ -21,25 +20,32 @@ const pyprojectPath = path.join(__dirname, '..', 'docker', 'pyproject.toml');
 const appManifestPath = path.join(__dirname, '..', 'docker', 'app-manifest.yaml');
 const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 
+function readPyprojectVersion() {
+  const content = fs.readFileSync(pyprojectPath, 'utf8');
+  const match = content.match(/^version\s*=\s*"([^"]+)"/m);
+  return match ? match[1] : null;
+}
+
+function readAppManifestVersion() {
+  const content = fs.readFileSync(appManifestPath, 'utf8');
+  const match = content.match(/^\s*version:\s*(.+)$/m);
+  return match ? match[1].trim() : null;
+}
+
 function parseVersion(version) {
-  const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-dev\.(\d+))?$/);
+  const match = version.match(/^(\d+)\.(\d+)\.(\d+)$/);
   if (!match) {
     throw new Error(`Invalid version format: ${version}`);
   }
   return {
     major: parseInt(match[1]),
     minor: parseInt(match[2]),
-    patch: parseInt(match[3]),
-    dev: match[4] ? parseInt(match[4]) : null
+    patch: parseInt(match[3])
   };
 }
 
 function formatVersion(ver) {
-  let version = `${ver.major}.${ver.minor}.${ver.patch}`;
-  if (ver.dev !== null) {
-    version += `-dev.${ver.dev}`;
-  }
-  return version;
+  return `${ver.major}.${ver.minor}.${ver.patch}`;
 }
 
 function bumpVersion(currentVersion, bumpType) {
@@ -50,33 +56,13 @@ function bumpVersion(currentVersion, bumpType) {
       ver.major++;
       ver.minor = 0;
       ver.patch = 0;
-      ver.dev = null;
       break;
     case 'minor':
       ver.minor++;
       ver.patch = 0;
-      ver.dev = null;
       break;
     case 'patch':
       ver.patch++;
-      ver.dev = null;
-      break;
-    case 'dev':
-      // If already a dev version, increment dev counter
-      // Otherwise, bump patch and add dev.0
-      if (ver.dev !== null) {
-        ver.dev++;
-      } else {
-        ver.patch++;
-        ver.dev = 0;
-      }
-      break;
-    case 'dev-bump':
-      // Only bump dev counter, error if not a dev version
-      if (ver.dev === null) {
-        throw new Error('Cannot bump dev counter on non-dev version. Use "dev" instead.');
-      }
-      ver.dev++;
       break;
     default:
       throw new Error(`Unknown bump type: ${bumpType}`);
@@ -108,9 +94,22 @@ function updateAppManifestVersion(newVersion) {
 function main() {
   const args = process.argv.slice(2);
 
-  // No args: just output the version number (for scripting)
+  // No args: display all three versions
   if (args.length === 0) {
-    console.log(pkg.version);
+    const jsonVersion = pkg.version;
+    const tomlVersion = readPyprojectVersion();
+    const yamlVersion = readAppManifestVersion();
+
+    console.log('Version files:');
+    console.log(`  package.json:              ${jsonVersion}`);
+    console.log(`  docker/pyproject.toml:     ${tomlVersion}`);
+    console.log(`  docker/app-manifest.yaml:  ${yamlVersion}`);
+
+    if (jsonVersion === tomlVersion && jsonVersion === yamlVersion) {
+      console.log('\n✅ All versions are in sync');
+    } else {
+      console.log('\n⚠️  Versions are out of sync! Run "node bin/version.js sync" to fix.');
+    }
     process.exit(0);
   }
 
@@ -121,14 +120,13 @@ function main() {
     console.log('Usage: node bin/version.js [command]');
     console.log('');
     console.log('Commands:');
-    console.log('  (no args)  - Output current version');
+    console.log('  (no args)  - Display all three version files');
     console.log('  major      - Bump major version (1.0.0 -> 2.0.0)');
     console.log('  minor      - Bump minor version (0.4.7 -> 0.5.0)');
     console.log('  patch      - Bump patch version (0.4.7 -> 0.4.8)');
-    console.log('  dev        - Bump to dev version (0.4.7 -> 0.4.8-dev.0 or 0.4.8-dev.0 -> 0.4.8-dev.1)');
-    console.log('  dev-bump   - Bump dev counter only (0.4.8-dev.0 -> 0.4.8-dev.1)');
+    console.log('  sync       - Force TOML and YAML to match JSON version');
     console.log('');
-    console.log('This script only updates version numbers in:');
+    console.log('This script updates version numbers in:');
     console.log('  - package.json');
     console.log('  - docker/pyproject.toml');
     console.log('  - docker/app-manifest.yaml');
@@ -138,6 +136,44 @@ function main() {
   }
 
   const bumpType = args[0];
+
+  // Sync command - force TOML and YAML to match JSON
+  if (bumpType === 'sync') {
+    const jsonVersion = pkg.version;
+    const tomlVersion = readPyprojectVersion();
+    const yamlVersion = readAppManifestVersion();
+
+    console.log('Syncing versions to match package.json:');
+    console.log(`  package.json:              ${jsonVersion}`);
+    console.log(`  docker/pyproject.toml:     ${tomlVersion} -> ${jsonVersion}`);
+    console.log(`  docker/app-manifest.yaml:  ${yamlVersion} -> ${jsonVersion}`);
+    console.log('');
+
+    try {
+      updatePyprojectVersion(jsonVersion);
+      updateAppManifestVersion(jsonVersion);
+
+      // Check if version files have changes
+      let hasChanges = false;
+      try {
+        execSync('git diff --quiet docker/pyproject.toml docker/app-manifest.yaml', { stdio: 'ignore' });
+      } catch (e) {
+        hasChanges = true;
+      }
+
+      if (hasChanges) {
+        execSync('git add docker/pyproject.toml docker/app-manifest.yaml', { stdio: 'inherit' });
+        execSync(`git commit -m "chore: sync versions to ${jsonVersion}"`, { stdio: 'inherit' });
+        console.log('✅ Committed version sync');
+      } else {
+        console.log('✅ All versions already in sync (no changes to commit)');
+      }
+    } catch (error) {
+      console.error('❌ Error:', error.message);
+      process.exit(1);
+    }
+    process.exit(0);
+  }
 
   // Check for uncommitted changes
   try {

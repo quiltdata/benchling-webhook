@@ -2,63 +2,157 @@
 import "dotenv/config";
 import * as cdk from "aws-cdk-lib";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
+import { execSync } from "child_process";
+import type { Config } from "../lib/utils/config";
 
-// Import get-env to infer configuration from catalog
+// Import get-env for library usage
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { inferStackConfig } = require("./get-env.js");
-const { execSync } = require("child_process");
+
+/**
+ * Result of CDK bootstrap check
+ */
+export interface BootstrapStatus {
+  bootstrapped: boolean;
+  status?: string;
+  message?: string;
+  command?: string;
+  warning?: string;
+}
+
+/**
+ * Result of deployment
+ */
+export interface DeploymentResult {
+  app: cdk.App;
+  stack: BenchlingWebhookStack;
+  stackName: string;
+  stackId: string;
+}
+
+/**
+ * Configuration inference result
+ */
+export interface InferenceResult {
+  success: boolean;
+  inferredVars: Record<string, string>;
+  error?: string;
+}
 
 /**
  * Check if CDK is bootstrapped for the given account/region
+ * Returns status object instead of exiting
  */
-async function checkCdkBootstrap(account: string, region: string): Promise<void> {
+export async function checkCdkBootstrap(
+    account: string,
+    region: string,
+): Promise<BootstrapStatus> {
     try {
-        console.log(`Checking CDK bootstrap for account ${account} in ${region}...`);
-
-        // Check if bootstrap stack exists
         const result = execSync(
             `aws cloudformation describe-stacks --region ${region} --stack-name CDKToolkit --query "Stacks[0].StackStatus" --output text 2>&1`,
-            { encoding: "utf-8" }
+            { encoding: "utf-8" },
         );
 
         const stackStatus = result.trim();
 
-        if (stackStatus.includes("does not exist") || stackStatus.includes("ValidationError")) {
-            console.error("\n❌ CDK Bootstrap Error");
-            console.error("=".repeat(80));
-            console.error(`CDK is not bootstrapped for account ${account} in region ${region}`);
-            console.error("\nTo bootstrap CDK, run:");
-            console.error(`  npx cdk bootstrap aws://${account}/${region}`);
-            console.error("\nOr source your .env and run:");
-            console.error(`  source .env`);
-            console.error(`  npx cdk bootstrap aws://\${CDK_DEFAULT_ACCOUNT}/\${CDK_DEFAULT_REGION}`);
-            console.error("=".repeat(80));
-            process.exit(1);
+        if (
+            stackStatus.includes("does not exist") ||
+      stackStatus.includes("ValidationError")
+        ) {
+            return {
+                bootstrapped: false,
+                message: `CDK is not bootstrapped for account ${account} in region ${region}`,
+                command: `npx cdk bootstrap aws://${account}/${region}`,
+            };
         }
 
-        // Check if the stack is in a good state
         if (!stackStatus.includes("COMPLETE")) {
-            console.error("\n⚠️  CDK Bootstrap Warning");
-            console.error("=".repeat(80));
-            console.error(`CDKToolkit stack is in state: ${stackStatus}`);
-            console.error("This may cause deployment issues.");
-            console.error("=".repeat(80));
-        } else {
-            console.log(`✓ CDK is bootstrapped (CDKToolkit stack: ${stackStatus})\n`);
+            return {
+                bootstrapped: true,
+                status: stackStatus,
+                warning: `CDKToolkit stack is in state: ${stackStatus}. This may cause deployment issues.`,
+            };
         }
+
+        return {
+            bootstrapped: true,
+            status: stackStatus,
+        };
     } catch (error) {
-        console.error("\n⚠️  Warning: Could not verify CDK bootstrap status");
-        console.error(`Error: ${(error as Error).message}`);
-        console.error("\nProceeding anyway, but deployment may fail if CDK is not bootstrapped.\n");
+        return {
+            bootstrapped: false,
+            message: `Could not verify CDK bootstrap status: ${(error as Error).message}`,
+        };
     }
 }
 
 /**
- * Get environment configuration with catalog inference
- *
+ * Attempt to infer configuration from catalog
+ * Non-fatal - returns success flag and inferred values
+ */
+export async function inferConfiguration(catalogUrl: string): Promise<InferenceResult> {
+    try {
+    // Normalize URL
+        const normalizedUrl = catalogUrl.startsWith("http")
+            ? catalogUrl
+            : `https://${catalogUrl}`;
+
+        const result = await inferStackConfig(normalizedUrl);
+
+        return {
+            success: true,
+            inferredVars: result.inferredVars,
+        };
+    } catch (error) {
+        return {
+            success: false,
+            inferredVars: {},
+            error: (error as Error).message,
+        };
+    }
+}
+
+/**
+ * Create CDK app and stack (synthesis only, no deployment)
+ * Pure function - returns app and stack objects
+ */
+export function createStack(config: Config): DeploymentResult {
+    const app = new cdk.App();
+
+    const stack = new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
+        env: {
+            account: config.cdkAccount,
+            region: config.cdkRegion,
+        },
+        bucketName: config.quiltUserBucket,
+        queueName: config.queueName,
+        environment: "production",
+        prefix: config.pkgPrefix || "benchling",
+        benchlingClientId: config.benchlingClientId,
+        benchlingClientSecret: config.benchlingClientSecret,
+        benchlingTenant: config.benchlingTenant,
+        quiltCatalog: config.quiltCatalog,
+        quiltDatabase: config.quiltDatabase,
+        webhookAllowList: config.webhookAllowList,
+        logLevel: config.logLevel || "INFO",
+        createEcrRepository: config.createEcrRepository === "true",
+        ecrRepositoryName: config.ecrRepositoryName || "quiltdata/benchling",
+    });
+
+    return {
+        app,
+        stack,
+        stackName: stack.stackName,
+        stackId: stack.stackId,
+    };
+}
+
+/**
+ * DEPRECATED: Legacy getConfig function for backwards compatibility
  * This combines user-provided values from .env with inferred values from the Quilt catalog.
  * User values always take precedence over inferred values.
  */
-async function getConfig() {
+async function legacyGetConfig(): Promise<Record<string, string | undefined>> {
     const userEnv = process.env;
     let inferredEnv: Record<string, string> = {};
 
@@ -66,11 +160,15 @@ async function getConfig() {
     if (userEnv.QUILT_CATALOG) {
         try {
             console.log(`Inferring configuration from catalog: ${userEnv.QUILT_CATALOG}`);
-            const result = await inferStackConfig(`https://${userEnv.QUILT_CATALOG.replace(/^https?:\/\//, '')}`);
+            const result = await inferStackConfig(
+                `https://${userEnv.QUILT_CATALOG.replace(/^https?:\/\//, "")}`,
+            );
             inferredEnv = result.inferredVars;
             console.log("✓ Successfully inferred stack configuration\n");
         } catch (error) {
-            console.error(`Warning: Could not infer configuration from catalog: ${(error as Error).message}`);
+            console.error(
+                `Warning: Could not infer configuration from catalog: ${(error as Error).message}`,
+            );
             console.error("Falling back to environment variables only.\n");
         }
     }
@@ -99,7 +197,7 @@ async function getConfig() {
         process.exit(1);
     }
 
-    // Validate inferred values are present (should be available if catalog lookup succeeded)
+    // Validate inferred values are present
     const requiredInferredVars = [
         "CDK_DEFAULT_ACCOUNT",
         "CDK_DEFAULT_REGION",
@@ -108,14 +206,18 @@ async function getConfig() {
         "QUILT_DATABASE",
     ];
 
-    const missingInferredVars = requiredInferredVars.filter((varName) => !config[varName]);
+    const missingInferredVars = requiredInferredVars.filter(
+        (varName) => !config[varName],
+    );
 
     if (missingInferredVars.length > 0) {
         console.error("Error: Could not infer required configuration:");
         missingInferredVars.forEach((varName) => {
             console.error(`  - ${varName}`);
         });
-        console.error("\nThese values should be automatically inferred from your Quilt catalog.");
+        console.error(
+            "\nThese values should be automatically inferred from your Quilt catalog.",
+        );
         console.error("Please ensure:");
         console.error("  1. QUILT_CATALOG is set correctly");
         console.error("  2. Your AWS credentials have CloudFormation read permissions");
@@ -125,9 +227,16 @@ async function getConfig() {
     }
 
     // Validate conditional requirements
-    if (config.ENABLE_WEBHOOK_VERIFICATION !== "false" && !config.BENCHLING_APP_DEFINITION_ID) {
-        console.error("Error: BENCHLING_APP_DEFINITION_ID is required when webhook verification is enabled.");
-        console.error("Either set BENCHLING_APP_DEFINITION_ID or set ENABLE_WEBHOOK_VERIFICATION=false");
+    if (
+        config.ENABLE_WEBHOOK_VERIFICATION !== "false" &&
+    !config.BENCHLING_APP_DEFINITION_ID
+    ) {
+        console.error(
+            "Error: BENCHLING_APP_DEFINITION_ID is required when webhook verification is enabled.",
+        );
+        console.error(
+            "Either set BENCHLING_APP_DEFINITION_ID or set ENABLE_WEBHOOK_VERIFICATION=false",
+        );
         process.exit(1);
     }
 
@@ -135,14 +244,38 @@ async function getConfig() {
 }
 
 /**
- * Main execution
+ * DEPRECATED: Legacy main function for backwards compatibility
+ * Use createStack() + CDK CLI for new code
  */
-async function main() {
-    const config = await getConfig();
+async function legacyMain(): Promise<void> {
+    const config = await legacyGetConfig();
 
-    // Validate CDK bootstrap before proceeding
-    await checkCdkBootstrap(config.CDK_DEFAULT_ACCOUNT!, config.CDK_DEFAULT_REGION!);
+    // Check bootstrap
+    const bootstrapStatus = await checkCdkBootstrap(
+    config.CDK_DEFAULT_ACCOUNT!,
+    config.CDK_DEFAULT_REGION!,
+    );
 
+    if (!bootstrapStatus.bootstrapped) {
+        console.error("\n❌ CDK Bootstrap Error");
+        console.error("=".repeat(80));
+        console.error(bootstrapStatus.message);
+        console.error("\nTo bootstrap CDK, run:");
+        console.error(`  ${bootstrapStatus.command}`);
+        console.error("=".repeat(80));
+        process.exit(1);
+    }
+
+    if (bootstrapStatus.warning) {
+        console.error("\n⚠️  CDK Bootstrap Warning");
+        console.error("=".repeat(80));
+        console.error(bootstrapStatus.warning);
+        console.error("=".repeat(80));
+    } else {
+        console.log(`✓ CDK is bootstrapped (CDKToolkit stack: ${bootstrapStatus.status})\n`);
+    }
+
+    // Create stack
     const app = new cdk.App();
     new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
         env: {
@@ -166,7 +299,13 @@ async function main() {
     });
 }
 
-main().catch((error) => {
-    console.error("Fatal error during CDK synthesis:", error);
-    process.exit(1);
-});
+// Only run if called directly (not imported)
+if (require.main === module) {
+    legacyMain().catch((error) => {
+        console.error("Fatal error during CDK synthesis:", error);
+        process.exit(1);
+    });
+}
+
+// Export functions for library usage
+export { inferStackConfig };

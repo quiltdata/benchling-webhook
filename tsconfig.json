@@ -1,12 +1,15 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "node20",
+    "module": "commonjs",
     "lib": [
-      "es2020",
-      "dom"
+      "ES2020"
     ],
+    "outDir": "./dist",
+    "rootDir": "./",
     "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -16,19 +19,24 @@
     "noUnusedParameters": false,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": false,
-    "inlineSourceMap": true,
-    "inlineSources": true,
     "experimentalDecorators": true,
     "strictPropertyInitialization": false,
     "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "noEmit": true,
-    "typeRoots": [
-      "./node_modules/@types"
-    ]
+    "moduleResolution": "node"
   },
+  "include": [
+    "bin/**/*",
+    "lib/**/*"
+  ],
   "exclude": [
     "node_modules",
-    "cdk.out"
+    "dist",
+    "cdk.out",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    ".scratch"
   ]
 }

@@ -1,23 +1,26 @@
 {
   "name": "@quiltdata/benchling-webhook",
-  "version": "0.4.14",
-  "description": "AWS CDK deployment for Benchling webhook processing using Fargate",
+  "version": "0.5.0",
+  "description": "AWS CDK deployment for Benchling webhook processing using Fargate - Deploy directly with npx",
   "main": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
   "files": [
     "dist/",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "env.template"
   ],
   "bin": {
-    "benchling-webhook": "bin/benchling-webhook.ts"
+    "benchling-webhook": "./dist/bin/cli.js"
   },
   "scripts": {
     "clean": "rm -rf cdk.out */{*.js,*.d.ts}",
     "test": "NODE_ENV=test TMPDIR=./.tmp node --max-old-space-size=4096 ./node_modules/.bin/jest",
     "cdk": "npm run test && npx cdk deploy --require-approval never",
     "lint": "eslint . --ext .ts --fix",
-    "build": "tsc --noEmit",
+    "build": "tsc",
+    "prebuild": "rm -rf dist",
+    "postbuild": "chmod +x dist/bin/cli.js && cp bin/*.js dist/bin/ 2>/dev/null || true",
     "synth": "npx cdk synth",
     "logs": "node bin/check-logs.js",
     "event": "node bin/send-event.js",
@@ -25,11 +28,12 @@
     "docker:test": "make -C docker test",
     "docker-push": "make -C docker push-local",
     "docker-check": "make -C docker docker-validate",
-    "release": "node bin/release.js",
-    "release:dev": "node bin/release.js dev",
+    "release": "npm run test && node bin/release.js",
+    "release:dev": "npm run test && node bin/release.js dev",
+    "notes": "bin/release-notes.sh \"$(jq -r .version package.json)\" \"712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:$(jq -r .version package.json)\" \"false\" \"$(jq -r .name package.json)\"",
     "version": "node bin/version.js patch",
-    "version:dev": "node bin/version.js dev",
-    "publish": "node bin/publish.js"
+    "version:patch": "npm run version -- patch",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "benchling",
@@ -38,7 +42,9 @@
     "cdk",
     "fargate",
     "docker",
-    "quilt"
+    "quilt",
+    "cli",
+    "npx"
   ],
   "author": "Quilt Data",
   "license": "Apache-2.0",
@@ -69,7 +75,13 @@
     "adm-zip": "^0.5.10",
     "aws-cdk-lib": "2.221.1",
     "aws-sdk": "^2.1574.0",
-    "constructs": "^10.0.0"
+    "boxen": "^5.1.2",
+    "chalk": "^4.1.2",
+    "commander": "^14.0.2",
+    "constructs": "^10.0.0",
+    "dotenv-expand": "^12.0.3",
+    "enquirer": "^2.4.1",
+    "ora": "^5.4.1"
   },
   "engines": {
     "node": ">=18.0.0",
