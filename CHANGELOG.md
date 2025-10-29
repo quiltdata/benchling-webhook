@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- OIDC authentication for npm publishing (#137)
+
 ### Changed
 
 - **NPM publish workflow**: Package now publishes compiled JavaScript instead of TypeScript source
@@ -13,6 +17,14 @@ All notable changes to this project will be documented in this file.
   - Added `--check` flag to view package status without authentication
   - Build artifacts (`dist/`) automatically compiled and cleaned during publish
   - Updated `package.json` to point to compiled files: `dist/lib/index.js`
+- Updated TypeScript and ESLint to v24 (major) (#134)
+- Updated AWS CDK dependencies (#135)
+- Updated @types/node to v24.9.2 (#136)
+- Updated boto3 to v1.40.61 (#120)
+
+### Fixed
+
+- docker-validate now ensures ECR repository is publicly accessible (#133)
 
 ### Removed
 
