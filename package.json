@@ -27,6 +27,7 @@
     "docker-check": "make -C docker docker-validate",
     "release": "npm run test && node bin/release.js",
     "release:dev": "npm run test && node bin/release.js dev",
+    "notes": "bin/release-notes.sh \"$(jq -r .version package.json)\" \"712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:$(jq -r .version package.json)\" \"false\" \"$(jq -r .name package.json)\"",
     "version": "node bin/version.js patch",
     "version:patch": "npm run version -- patch"
   },
