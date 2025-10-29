@@ -127,8 +127,8 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
 
-          # Check if this is a prerelease (contains -dev, -alpha, -beta, -rc)
-          if [[ "$VERSION" =~ -dev\. ]] || [[ "$VERSION" =~ -(alpha|beta|rc) ]]; then
+          # Check if this is a prerelease (contains timestamp, -dev, -alpha, -beta, -rc)
+          if [[ "$VERSION" =~ -[0-9]{8}T[0-9]{6}Z$ ]] || [[ "$VERSION" =~ -(dev|alpha|beta|rc) ]]; then
             echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
             echo "This is a prerelease: $TAG"
           else
