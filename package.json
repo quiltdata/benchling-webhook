@@ -1,34 +1,35 @@
 {
-  "name": "quilt-benchling-webhook",
-  "version": "0.4.12",
+  "name": "@quiltdata/benchling-webhook",
+  "version": "0.4.14-dev.0",
   "description": "AWS CDK deployment for Benchling webhook processing using Fargate",
-  "main": "lib/benchling-webhook-stack.ts",
+  "main": "dist/lib/index.js",
+  "types": "dist/lib/index.d.ts",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "bin": {
     "benchling-webhook": "bin/benchling-webhook.ts"
   },
   "scripts": {
-    "sync-version": "node bin/sync-version.js",
     "clean": "rm -rf cdk.out */{*.js,*.d.ts}",
     "test": "NODE_ENV=test TMPDIR=./.tmp node --max-old-space-size=4096 ./node_modules/.bin/jest",
     "cdk": "npm run test && npx cdk deploy --require-approval never",
     "lint": "eslint . --ext .ts --fix",
     "build": "tsc --noEmit",
-    "watch": "tsc --noEmit -w",
     "synth": "npx cdk synth",
-    "diff": "npx cdk diff",
     "logs": "node bin/check-logs.js",
     "event": "node bin/send-event.js",
     "check": "npm run cdk && npm run event && sleep 45 && npm run logs",
-    "dev": "npm run build && npm run docker:test && npm run lint",
     "docker:test": "make -C docker test",
     "docker-push": "make -C docker push-local",
     "docker-check": "make -C docker docker-validate",
     "release": "node bin/release.js",
     "release:dev": "node bin/release.js dev",
-    "version:major": "node bin/version.js major",
-    "version:minor": "node bin/version.js minor",
-    "version:patch": "node bin/version.js patch",
-    "version:dev": "node bin/version.js dev"
+    "version": "node bin/version.js patch",
+    "version:dev": "node bin/version.js dev",
+    "publish": "node bin/publish.js"
   },
   "keywords": [
     "benchling",
@@ -43,7 +44,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/quiltdata/benchling-webhook.git"
+    "url": "git+https://github.com/quiltdata/benchling-webhook.git"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

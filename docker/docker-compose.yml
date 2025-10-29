@@ -9,7 +9,7 @@ services:
       - FLASK_ENV=production
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - AWS_REGION=${AWS_REGION:-us-east-2}
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - QUILT_USER_BUCKET=${QUILT_USER_BUCKET}
       - PKG_PREFIX=${PKG_PREFIX:-benchling}
       - PKG_KEY=${PKG_KEY:-experiment_id}
       - PKG_BUCKET_ONLY=${PKG_BUCKET_ONLY:-false}
@@ -48,7 +48,7 @@ services:
       - FLASK_ENV=development
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - AWS_REGION=${AWS_REGION:-us-east-2}
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - QUILT_USER_BUCKET=${QUILT_USER_BUCKET}
       - PKG_PREFIX=${PKG_PREFIX:-benchling}
       - PKG_KEY=${PKG_KEY:-experiment_id}
       - PKG_BUCKET_ONLY=${PKG_BUCKET_ONLY:-false}

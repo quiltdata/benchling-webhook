@@ -2,6 +2,7 @@
 !eslint.config.js
 *.d.ts
 node_modules
+dist/
 .jest-cache
 .tmp
 
@@ -13,6 +14,11 @@ cdk-outputs.json
 # Environment files
 .env*
 !.env.example
+env.inferred
+
+# NPM credentials
+.npmrc
+.npmrc.backup
 
 # Deployment outputs
 .env.deploy

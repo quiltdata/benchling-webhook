@@ -10,7 +10,7 @@ Responsibilities:
 
 Requires:
 - QUILT_DATABASE environment variable with Athena database name
-- S3_BUCKET_NAME environment variable for the registry (bucket)
+- QUILT_USER_BUCKET environment variable for the registry (bucket)
 - AWS credentials configured for Athena access
 """
 

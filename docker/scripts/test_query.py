@@ -94,7 +94,7 @@ Examples:
 
 Environment Variables:
   QUILT_DATABASE      - Athena database name (required)
-  S3_BUCKET_NAME      - S3 bucket name for registry (required)
+  QUILT_USER_BUCKET   - S3 bucket name for registry (required)
   QUILT_CATALOG       - Quilt catalog URL (required)
   BENCHLING_TEST_ENTRY - Default entry_id value for testing
   AWS_REGION          - AWS region (default: us-east-1)
@@ -117,7 +117,7 @@ Environment Variables:
     parser.add_argument(
         "--bucket",
         type=str,
-        help="S3 bucket name (overrides S3_BUCKET_NAME env var)",
+        help="S3 bucket name (overrides QUILT_USER_BUCKET env var)",
     )
 
     parser.add_argument(
@@ -148,12 +148,12 @@ Environment Variables:
 
     # Load configuration from environment variables
     try:
-        bucket = args.bucket or os.getenv("S3_BUCKET_NAME")
+        bucket = args.bucket or os.getenv("QUILT_USER_BUCKET")
         catalog_url = args.catalog or os.getenv("QUILT_CATALOG")
         database = args.database or os.getenv("QUILT_DATABASE")
 
         if not bucket:
-            logger.error("No bucket specified and S3_BUCKET_NAME not in environment")
+            logger.error("No bucket specified and QUILT_USER_BUCKET not in environment")
             sys.exit(1)
 
         if not catalog_url:
