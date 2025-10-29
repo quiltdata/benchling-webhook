@@ -20,32 +20,11 @@ if [ -f CHANGELOG.md ]; then
   CHANGELOG_NOTES=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$d' | sed '1d')
 fi
 
-# Generate release notes
-cat << EOFNOTES
-## Quick Start
+# Generate release notes - insert README content
+cat README.md
 
-# 1. Configure
-cp env.template .env
-# Edit .env with AWS account, Benchling credentials, S3/SQS settings
-
-# 2. Install app-manifest.yaml as a Benchling app
-
-# 3. Deploy
-
-```
-set -a; source .env; set +a
-npx cdk bootstrap aws://\$CDK_DEFAULT_ACCOUNT/\$CDK_DEFAULT_REGION
-npm run check
-```
-
-# 4. Set Benchling webhook URL in the app overview page
-
-# 5. Insert a canvas into a notebook entry and click "Create"
-
-# 6. Set `experiment_id` in a package's metadata to link it to a notebook'
-
-
-\`\`\`
+# Add Docker image information
+cat << EOFDOCKER
 
 ## Docker Image
 
@@ -60,7 +39,7 @@ Pull and run:
 docker pull ${IMAGE_URI}
 \`\`\`
 
-EOFNOTES
+EOFDOCKER
 
 # Add changelog notes if available
 if [ -n "$CHANGELOG_NOTES" ]; then
