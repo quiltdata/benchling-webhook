@@ -199,6 +199,13 @@ jobs:
 
       - name: Publish to NPM
         run: |
+          echo "=== NPM Configuration Debug ==="
+          echo "Registry: $(npm config get registry)"
+          echo "Checking authentication..."
+          npm whoami || echo "npm whoami failed"
+          cat $NPM_CONFIG_USERCONFIG || echo "No .npmrc found"
+          echo "==============================="
+
           if [ "${{ needs.docker.outputs.is_prerelease }}" == "true" ]; then
             echo "Publishing pre-release to npm with 'dev' tag"
             npm publish --provenance --access public --tag dev
