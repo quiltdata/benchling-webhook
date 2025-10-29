@@ -127,8 +127,8 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
 
-          # Check if this is a prerelease (contains -dev, -alpha, -beta, -rc)
-          if [[ "$VERSION" =~ -dev\. ]] || [[ "$VERSION" =~ -(alpha|beta|rc) ]]; then
+          # Check if this is a prerelease (contains timestamp, -dev, -alpha, -beta, -rc)
+          if [[ "$VERSION" =~ -[0-9]{8}T[0-9]{6}Z$ ]] || [[ "$VERSION" =~ -(dev|alpha|beta|rc) ]]; then
             echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
             echo "This is a prerelease: $TAG"
           else
@@ -167,9 +167,8 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
-          # OIDC authentication is automatically configured when registry-url is set
-          # No NODE_AUTH_TOKEN needed - npm will use OIDC tokens via GitHub's id-token
+          # No registry-url needed for OIDC publishing
+          # npm publish --provenance uses OIDC directly without tokens
 
       - name: Install Node.js dependencies
         run: npm ci
@@ -180,8 +179,9 @@ jobs:
           VERSION="${{ needs.docker.outputs.version }}"
           IMAGE_URI="${{ needs.docker.outputs.image_uri }}"
           IS_PRERELEASE="${{ needs.docker.outputs.is_prerelease }}"
+          PACKAGE_NAME=$(jq -r '.name' package.json)
 
-          ./bin/release-notes.sh "$VERSION" "$IMAGE_URI" "$IS_PRERELEASE" > /tmp/release_notes.md
+          ./bin/release-notes.sh "$VERSION" "$IMAGE_URI" "$IS_PRERELEASE" "$PACKAGE_NAME" > /tmp/release_notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -196,21 +196,32 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish to NPM
-        if: needs.docker.outputs.is_prerelease == 'false'
-        run: npm publish --provenance --access public
-        continue-on-error: true
-
-      - name: Publish to GitHub Packages
+      - name: Update package.json version for pre-releases
+        if: needs.docker.outputs.is_prerelease == 'true'
         run: |
-          # Update package.json to point to GitHub Packages registry
-          jq '.publishConfig = {"registry": "https://npm.pkg.github.com"}' package.json > package.json.tmp
+          VERSION="${{ needs.docker.outputs.version }}"
+          echo "Temporarily updating package.json version to $VERSION for pre-release publish"
+          jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
           mv package.json.tmp package.json
+          echo "Updated version: $(jq -r .version package.json)"
 
-          # Publish to GitHub Packages
-          npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish to NPM
+        run: |
+          echo "=== NPM Configuration Debug ==="
+          echo "Registry: $(npm config get registry)"
+          echo "Package version: $(jq -r .version package.json)"
+          echo "Checking authentication..."
+          npm whoami || echo "npm whoami failed"
+          cat $NPM_CONFIG_USERCONFIG || echo "No .npmrc found"
+          echo "==============================="
+
+          if [ "${{ needs.docker.outputs.is_prerelease }}" == "true" ]; then
+            echo "Publishing pre-release to npm with 'dev' tag"
+            npm publish --provenance --access public --tag dev
+          else
+            echo "Publishing production release to npm with 'latest' tag"
+            npm publish --provenance --access public --tag latest
+          fi
         continue-on-error: true
 
       - name: Summary
@@ -225,6 +236,4 @@ jobs:
           echo "${{ needs.docker.outputs.image_uri }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Package:**" >> $GITHUB_STEP_SUMMARY
-          echo "- NPM: https://www.npmjs.com/package/quilt-benchling-webhook" >> $GITHUB_STEP_SUMMARY
-          echo "- GitHub: https://github.com/quiltdata/benchling-webhook/pkgs/npm/quilt-benchling-webhook" >> $GITHUB_STEP_SUMMARY
+          echo "**NPM Package:** https://www.npmjs.com/package/@quiltdata/benchling-webhook" >> $GITHUB_STEP_SUMMARY
