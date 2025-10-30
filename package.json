@@ -16,7 +16,7 @@
   "scripts": {
     "clean": "rm -rf cdk.out */{*.js,*.d.ts}",
     "test": "NODE_ENV=test TMPDIR=./.tmp node --max-old-space-size=4096 ./node_modules/.bin/jest",
-    "cdk": "npm run test && npx cdk deploy --require-approval never",
+    "cdk": "npm run test && npm run cli -- --yes",
     "lint": "eslint . --ext .ts --fix",
     "build": "tsc",
     "prebuild": "rm -rf dist",
