@@ -3,6 +3,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2025-10-29
+
+### Added
+
+- **Benchling app manifest generation** - New `manifest` command to generate Benchling app manifests
+  - Run `npx @quiltdata/benchling-webhook manifest` to create `app-manifest.yaml`
+  - Automatically configures OAuth scopes and webhook subscriptions
+  - Integrated into deployment workflow for streamlined setup
+- **Auto-detect catalog from quilt3 config** - CLI now automatically detects your Quilt catalog from `quilt3 config` when not explicitly provided
+  - Eliminates need to manually specify catalog in most cases
+  - Falls back to quilt3 configuration if `--catalog` flag or `QUILT_CATALOG` environment variable not set
+
+### Changed
+
+- **Streamlined setup process** - Simplified deployment workflow with better integration of Benchling setup
+  - Consolidated documentation for clearer onboarding
+  - Enhanced `deploy` command with manifest generation support
+- Updated dependency `chalk` to v5 (#146)
+- Updated dependency `boxen` to v8 (#145)
+- Updated dependency `boto3` to v1.40.62 (#147)
+- Updated dependency `@aws-sdk/client-s3` to v3.920.0 (#148)
+- Updated dependency `aws-cdk-lib` to v2.221.1 (#139)
+
+### Fixed
+
+- Improved deployment reliability with better error handling
+
 ## [0.5.0] - 2025-10-29
 
 ### Added

@@ -2,51 +2,60 @@
 
 Connects Benchling lab notebook entries to Quilt data packages via webhooks.
 
-## Quick Install
+## Prerequisites
 
-**Prerequisites:** AWS account, Node.js 18+, Docker, existing Quilt deployment
+- `npx` from Node.js 18+ ([download](https://nodejs.org))
+- [AWS credentials](https://docs.aws.amazon.com/cli/v1/userguide/cli-configure-files.html) configured
+- Existing [Quilt deployment](https://www.quilt.bio/install)
+
+## Setup
+
+### 1. Create Benchling App
 
 ```bash
-# 1. Clone and install
+npx @quiltdata/benchling-webhook manifest
+```
+
+Follow the displayed instructions to [upload the manifest](https://docs.benchling.com/docs/getting-started-benchling-apps#creating-an-app-from-a-manifest) to Benchling and get your App Definition ID.
+
+### 2. Deploy to AWS
+
+```bash
+npx @quiltdata/benchling-webhook
+```
+
+The interactive wizard will auto-detect or request configuration information, deploy to AWS, and test the webhook automatically.
+
+### 3. Install in Benchling
+
+After deployment, you'll receive a webhook URL. Set it in your Benchling app settings and [install the app](https://docs.benchling.com/docs/getting-started-benchling-apps#installing-your-app) in your tenant.
+
+## Usage
+
+In Benchling: Create entry → Insert Canvas → "Quilt Integration" → Create/Update package
+
+For all available commands, run:
+
+```bash
+npx @quiltdata/benchling-webhook --help
+```
+
+## Development
+
+For local development and contributing:
+
+```bash
 git clone https://github.com/quiltdata/benchling-webhook.git
 cd benchling-webhook
 npm install
 
-# 2. Configure minimal .env
-cp env.template .env
-# Edit .env to set:
-# - QUILT_CATALOG=quilt-catalog.yourcompany.com
-# - QUILT_USER_BUCKET=your-data-bucket
-# - Benchling credentials (5 values)
-# Everything else is auto-inferred at deploy time!
+# Test CLI locally (note the -- separator for passing args)
+npm run cli -- --help
+npm run cli -- deploy
 
-# 3. Deploy
-source .env
-npx cdk bootstrap aws://$CDK_DEFAULT_ACCOUNT/$CDK_DEFAULT_REGION  # first time only
-npm run deploy
-
-# 4. Configure Benchling app
-# - Create app from app-manifest.yaml
-# - Set webhook URL from .env.deploy
-# - Install and activate
-
-# 5. Verify
-source .env.deploy
-curl $WEBHOOK_ENDPOINT/health
+npm test    # Run tests
+npm run build    # Build package
 ```
-
-## Usage
-
-1. Create entry in Benchling
-2. Insert Canvas → "Quilt Integration"
-3. Click "Create" to make package
-4. Add files and click "Update package"
-
-## Documentation
-
-- [AGENTS.md](AGENTS.md) - Complete deployment guide, architecture, configuration
-- [docker/README.md](docker/README.md) - Development workflows
-- [doc/RELEASE.md](doc/RELEASE.md) - Release process
 
 ## License
 
