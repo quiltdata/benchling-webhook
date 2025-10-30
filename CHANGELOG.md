@@ -3,6 +3,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.3] - 2025-10-30
+
+### Changed
+
+- **⚠️ BREAKING: Replaced QUEUE_URL with QUEUE_ARN throughout codebase**
+  - Environment variable renamed from `QUEUE_URL` to `QUEUE_ARN`
+  - CloudFormation parameter renamed from `QueueUrl` to `QueueArn`
+  - All configurations must now provide the SQS queue ARN instead of URL
+  - Eliminates error-prone URL-to-ARN conversion logic in `fargate-service.ts`
+  - Python code now converts ARN to URL internally for boto3 compatibility
+
+### Fixed
+
+- Test environment isolation - Added `CDK_DEFAULT_ACCOUNT` cleanup to test hooks
+- Updated all test files to use ARN format instead of URL format
+
 ## [0.5.2] - 2025-10-29
 
 ### Added
