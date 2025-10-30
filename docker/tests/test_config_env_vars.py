@@ -51,7 +51,7 @@ def test_environment_variable_names_are_documented():
     )
 
 
-def test_sqs_queue_url_not_queue_url():
+def test_queue_url_not_queue_url():
     """
     Critical test: Ensure we use QUEUE_URL, not QUEUE_URL.
 
