@@ -14,10 +14,29 @@ All notable changes to this project will be documented in this file.
   - `EnableWebhookVerification` - Toggle webhook signature verification
   - `PackageKey` - Metadata key for linking Benchling entries to Quilt packages
   - Update any parameter through CloudFormation console or CLI without full redeployment
+- **Integrated Python tests into npm test workflow** - Python integration tests now run automatically
+  - Added `test:ts` and `test:python` commands for separate test suites
+  - Main `npm test` command now runs both TypeScript and Python tests sequentially
+  - New validation test ensures ECS secrets configuration matches required credentials
+
+### Changed
+
+- **Streamlined configuration and CLI output** - Improved clarity and reliability
+  - Database inference now exclusively uses `UserAthenaDatabaseName` from Quilt stack
+  - Unified queue configuration to use `QUEUE_URL` consistently
+  - Deploy command displays all stack parameters being used for transparency
+  - User bucket (`QUILT_USER_BUCKET`) must now be explicitly provided (no longer inferred)
+  - Removed confusing analytics/service bucket inference logic
 
 ### Fixed
 
-- Container health checks failing during deployment due to environment variable mismatch
+- **Critical deployment failures** - Multiple issues preventing successful deployments
+  - Added missing `BENCHLING_APP_DEFINITION_ID` to ECS task definition secrets
+  - Fixed `SQS_QUEUE_URL` environment variable name mismatch (was incorrectly `QUEUE_URL`)
+  - Made all core Benchling and Quilt configuration unconditionally required to fail fast
+  - Container health checks now pass reliably during deployment
+  - ECS tasks no longer fail at startup due to missing environment variables
+  - CloudFormation stacks no longer get stuck in UPDATE_IN_PROGRESS state
 
 ## [0.5.1] - 2025-10-29
 
