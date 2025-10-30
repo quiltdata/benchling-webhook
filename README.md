@@ -2,30 +2,42 @@
 
 Connects Benchling lab notebook entries to Quilt data packages via webhooks.
 
-## Installation
+## Prerequisites
 
-**Prerequisites:**
+- `npx` from Node.js 18+ ([download](https://nodejs.org))
+- [AWS credentials](https://docs.aws.amazon.com/cli/v1/userguide/cli-configure-files.html) configured
+- Existing [Quilt deployment](https://www.quilt.bio/install)
 
-- Node.js 18+ ([download here](https://nodejs.org))
-- AWS credentials configured (verifies account access automatically)
-- Existing Quilt deployment
+## Setup
 
-Run this command in your terminal:
+### 1. Create Benchling App
+
+```bash
+npx @quiltdata/benchling-webhook manifest
+```
+
+Follow the displayed instructions to [upload the manifest](https://docs.benchling.com/docs/getting-started-benchling-apps#creating-an-app-from-a-manifest) to Benchling and get your App Definition ID.
+
+### 2. Deploy to AWS
 
 ```bash
 npx @quiltdata/benchling-webhook
 ```
 
-The interactive wizard will guide you through setup, deployment, and testing.
+The interactive wizard will auto-detect or request configuration information, deploy to AWS, and test the webhook automatically.
+
+### 3. Install in Benchling
+
+After deployment, you'll receive a webhook URL. Set it in your Benchling app settings and [install the app](https://docs.benchling.com/docs/getting-started-benchling-apps#installing-your-app) in your tenant.
 
 ## Usage
 
 In Benchling: Create entry → Insert Canvas → "Quilt Integration" → Create/Update package
 
-## Advanced
+For all available commands, run:
 
 ```bash
-npx @quiltdata/benchling-webhook --help    # See all options
+npx @quiltdata/benchling-webhook --help
 ```
 
 ## Development
@@ -44,12 +56,6 @@ npm run cli -- deploy
 npm test    # Run tests
 npm run build    # Build package
 ```
-
-## Documentation
-
-- [AGENTS.md](AGENTS.md) - Complete deployment guide, architecture, configuration
-- [docker/README.md](docker/README.md) - Development workflows
-- [doc/RELEASE.md](doc/RELEASE.md) - Release process
 
 ## License
 

@@ -5,6 +5,7 @@ import { deployCommand } from "./commands/deploy";
 import { initCommand } from "./commands/init";
 import { validateCommand } from "./commands/validate";
 import { testCommand } from "./commands/test";
+import { manifestCommand } from "./commands/manifest";
 
 // Load package.json for version
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -83,6 +84,20 @@ program
     .action(async (options) => {
         try {
             await testCommand(options);
+        } catch (error) {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        }
+    });
+
+// Manifest command
+program
+    .command("manifest")
+    .description("Generate Benchling app manifest file")
+    .option("--output <path>", "Output file path", "app-manifest.yaml")
+    .action(async (options) => {
+        try {
+            await manifestCommand(options);
         } catch (error) {
             console.error(chalk.red((error as Error).message));
             process.exit(1);

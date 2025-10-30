@@ -212,7 +212,11 @@ export function validateConfig(config: Partial<Config>): ValidationResult {
             field: "benchlingAppDefinitionId",
             message: "Benchling app definition ID",
             canInfer: false,
-            helpText: "Required when webhook verification is enabled (ENABLE_WEBHOOK_VERIFICATION=true). Set ENABLE_WEBHOOK_VERIFICATION=false to skip this.",
+            helpText: "Create a Benchling app first:\n" +
+                "    1. Run: npx @quiltdata/benchling-webhook manifest\n" +
+                "    2. Upload the manifest to Benchling\n" +
+                "    3. Copy the App Definition ID from the app overview\n" +
+                "    Or set ENABLE_WEBHOOK_VERIFICATION=false to skip (NOT recommended for production)",
         });
     }
 
