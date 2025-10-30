@@ -17,7 +17,7 @@ class TestFlaskApp:
         config.benchling_client_secret = "test-secret"
         config.s3_bucket_name = "test-bucket"
         config.s3_prefix = "benchling"
-        config.sqs_queue_url = "https://sqs.us-west-2.amazonaws.com/123456789012/test"
+        config.queue_url = "https://sqs.us-west-2.amazonaws.com/123456789012/test"
         config.quilt_catalog = "test.quiltdata.com"
         config.benchling_app_definition_id = ""
         config.enable_webhook_verification = False  # Disable verification for tests

@@ -7,7 +7,7 @@ import { loadConfigSync, type ConfigOptions } from "../../lib/utils/config";
 const pkg = require("../../package.json");
 
 export async function manifestCommand(options: ConfigOptions & { output?: string }): Promise<void> {
-    const config = loadConfigSync(options);
+    loadConfigSync(options);
     const outputPath = options.output || "app-manifest.yaml";
 
     const manifest = `manifestVersion: 1

@@ -1,6 +1,8 @@
 import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
+import * as fs from "fs";
+import * as path from "path";
 
 describe("BenchlingWebhookStack", () => {
     let template: Template;
@@ -11,7 +13,7 @@ describe("BenchlingWebhookStack", () => {
             bucketName: "test-bucket",
             environment: "test",
             prefix: "test-prefix",
-            queueName: "test-queue",
+            queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
             benchlingClientId: "test-client-id",
             benchlingClientSecret: "test-client-secret",
             benchlingTenant: "test-tenant",
@@ -115,7 +117,7 @@ describe("BenchlingWebhookStack", () => {
                 bucketName: "test-bucket",
                 environment: "test",
                 prefix: "invalid/prefix",
-                queueName: "test-queue",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 benchlingClientId: "test-client-id",
                 benchlingClientSecret: "test-client-secret",
                 benchlingTenant: "test-tenant",
@@ -212,6 +214,66 @@ describe("BenchlingWebhookStack", () => {
                 },
                 TargetValue: 80,
             },
+        });
+    });
+
+    test("environment variables match Flask config expectations", () => {
+        // Read the Python config file to extract expected environment variable names
+        const configPath = path.join(__dirname, "../docker/src/config.py");
+        const configContent = fs.readFileSync(configPath, "utf-8");
+
+        // Extract environment variable names from config.py using regex
+        // Pattern: os.getenv("VAR_NAME", ...)
+        const envVarPattern = /os\.getenv\("([^"]+)"/g;
+        const expectedEnvVars = new Set<string>();
+        let match;
+        while ((match = envVarPattern.exec(configContent)) !== null) {
+            expectedEnvVars.add(match[1]);
+        }
+
+        // Get the container definition from the synthesized template
+        const taskDefs = template.findResources("AWS::ECS::TaskDefinition");
+        const taskDefKeys = Object.keys(taskDefs);
+        expect(taskDefKeys.length).toBeGreaterThan(0);
+
+        const taskDef = taskDefs[taskDefKeys[0]];
+        const containerDef = taskDef.Properties.ContainerDefinitions[0];
+        const environment = containerDef.Environment || [];
+        const secrets = containerDef.Secrets || [];
+
+        // Build a set of environment variable names from the CDK stack
+        const actualEnvVars = new Set<string>();
+        environment.forEach((env: any) => {
+            actualEnvVars.add(env.Name);
+        });
+        secrets.forEach((secret: any) => {
+            actualEnvVars.add(secret.Name);
+        });
+
+        // Critical environment variables that must match between CDK and Flask
+        const criticalMappings: Record<string, string> = {
+            QUEUE_URL: "queue_url",
+            QUILT_USER_BUCKET: "s3_bucket_name",
+            PKG_PREFIX: "s3_prefix",
+            PKG_KEY: "package_key",
+            QUILT_CATALOG: "quilt_catalog",
+            QUILT_DATABASE: "quilt_database",
+            BENCHLING_TENANT: "benchling_tenant",
+            BENCHLING_CLIENT_ID: "benchling_client_id",
+            BENCHLING_CLIENT_SECRET: "benchling_client_secret",
+            LOG_LEVEL: "log_level",
+            AWS_REGION: "aws_region",
+            ENABLE_WEBHOOK_VERIFICATION: "enable_webhook_verification",
+        };
+
+        // Verify all critical environment variables are present in CDK stack
+        Object.keys(criticalMappings).forEach((envVar) => {
+            expect(actualEnvVars.has(envVar)).toBe(true);
+        });
+
+        // Verify the Flask config expects these exact variable names
+        Object.keys(criticalMappings).forEach((envVar) => {
+            expect(expectedEnvVars.has(envVar)).toBe(true);
         });
     });
 });

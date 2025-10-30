@@ -14,7 +14,7 @@ export interface Config {
   benchlingTenant: string;
   benchlingClientId: string;
   benchlingClientSecret: string;
-  benchlingAppDefinitionId?: string;
+  benchlingAppDefinitionId: string;
 
   // AWS
   cdkAccount: string;
@@ -22,8 +22,7 @@ export interface Config {
   awsProfile?: string;
 
   // SQS
-  queueName: string;
-  sqsQueueUrl: string;
+  queueUrl: string;
 
   // Optional
   pkgPrefix?: string;
@@ -142,8 +141,7 @@ export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
         awsProfile: options.profile || envVars.AWS_PROFILE,
 
         // SQS
-        queueName: envVars.QUEUE_NAME,
-        sqsQueueUrl: envVars.SQS_QUEUE_URL,
+        queueUrl: envVars.QUEUE_URL,
 
         // Optional
         pkgPrefix: envVars.PKG_PREFIX || "benchling",
@@ -172,8 +170,7 @@ export function mergeInferredConfig(
     return {
         cdkAccount: config.cdkAccount || inferredVars.CDK_DEFAULT_ACCOUNT,
         cdkRegion: config.cdkRegion || inferredVars.CDK_DEFAULT_REGION,
-        queueName: config.queueName || inferredVars.QUEUE_NAME,
-        sqsQueueUrl: config.sqsQueueUrl || inferredVars.SQS_QUEUE_URL,
+        queueUrl: config.queueUrl || inferredVars.QUEUE_URL,
         quiltDatabase: config.quiltDatabase || inferredVars.QUILT_DATABASE,
         ...config, // User values always take precedence
     };
@@ -186,13 +183,17 @@ export function validateConfig(config: Partial<Config>): ValidationResult {
     const errors: ValidationError[] = [];
     const warnings: string[] = [];
 
-    // Required user-provided values
+    // Required user-provided values (CANNOT be inferred)
     const requiredUserFields: Array<[keyof Config, string, string]> = [
         ["quiltCatalog", "Quilt catalog URL", "Your Quilt catalog domain (e.g., quilt-catalog.company.com)"],
-        ["quiltUserBucket", "S3 bucket for data", "The S3 bucket where you want to store Benchling exports"],
+        ["quiltUserBucket", "S3 bucket for data", "The S3 bucket where you want to store Benchling exports (CANNOT be inferred - must be explicitly provided)"],
         ["benchlingTenant", "Benchling tenant", "Your Benchling tenant name (use XXX if you login to XXX.benchling.com)"],
         ["benchlingClientId", "Benchling OAuth client ID", "OAuth client ID from your Benchling app"],
         ["benchlingClientSecret", "Benchling OAuth client secret", "OAuth client secret from your Benchling app"],
+        ["benchlingAppDefinitionId", "Benchling app definition ID", "App definition ID is always required. Create a Benchling app:\n" +
+            "    1. Run: npx @quiltdata/benchling-webhook manifest\n" +
+            "    2. Upload the manifest to Benchling\n" +
+            "    3. Copy the App Definition ID from the app overview"],
     ];
 
     for (const [field, message, helpText] of requiredUserFields) {
@@ -206,26 +207,11 @@ export function validateConfig(config: Partial<Config>): ValidationResult {
         }
     }
 
-    // Conditional requirement for app definition ID
-    if (config.enableWebhookVerification !== "false" && !config.benchlingAppDefinitionId) {
-        errors.push({
-            field: "benchlingAppDefinitionId",
-            message: "Benchling app definition ID",
-            canInfer: false,
-            helpText: "Create a Benchling app first:\n" +
-                "    1. Run: npx @quiltdata/benchling-webhook manifest\n" +
-                "    2. Upload the manifest to Benchling\n" +
-                "    3. Copy the App Definition ID from the app overview\n" +
-                "    Or set ENABLE_WEBHOOK_VERIFICATION=false to skip (NOT recommended for production)",
-        });
-    }
-
     // Required inferred values
     const requiredInferredFields: Array<[keyof Config, string]> = [
         ["cdkAccount", "AWS account ID"],
         ["cdkRegion", "AWS region"],
-        ["queueName", "SQS queue name"],
-        ["sqsQueueUrl", "SQS queue URL"],
+        ["queueUrl", "SQS queue URL"],
         ["quiltDatabase", "Quilt database name"],
     ];
 

@@ -690,7 +690,7 @@ For questions about the data, refer to the original Benchling entry.
 
         try:
             response = self.sqs_client.send_message(
-                QueueUrl=self.config.sqs_queue_url, MessageBody=json.dumps(message_body)
+                QueueUrl=self.config.queue_url, MessageBody=json.dumps(message_body)
             )
 
             message_id = response.get("MessageId")
