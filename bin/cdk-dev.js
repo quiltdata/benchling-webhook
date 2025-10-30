@@ -225,8 +225,8 @@ async function main() {
   console.log('');
   console.log(`Step 4: Waiting for CI to build Docker image...`);
 
-  // Get the commit SHA for the tag
-  const commitSha = run(`git rev-parse ${devTag}`, { silent: true }).trim();
+  // Get the commit SHA for the tag (use ^{commit} to dereference annotated tags)
+  const commitSha = run(`git rev-parse ${devTag}^{commit}`, { silent: true }).trim();
 
   await waitForWorkflow(commitSha);
 
