@@ -125,7 +125,7 @@ export function createStack(config: Config): DeploymentResult {
             region: config.cdkRegion,
         },
         bucketName: config.quiltUserBucket,
-        queueName: config.queueName,
+        queueUrl: config.queueUrl,
         environment: "production",
         prefix: config.pkgPrefix || "benchling",
         benchlingClientId: config.benchlingClientId,
@@ -201,8 +201,7 @@ async function legacyGetConfig(): Promise<Record<string, string | undefined>> {
     const requiredInferredVars = [
         "CDK_DEFAULT_ACCOUNT",
         "CDK_DEFAULT_REGION",
-        "QUEUE_NAME",
-        "SQS_QUEUE_URL",
+        "QUEUE_URL",
         "QUILT_DATABASE",
     ];
 
@@ -283,7 +282,7 @@ async function legacyMain(): Promise<void> {
             region: config.CDK_DEFAULT_REGION,
         },
         bucketName: config.QUILT_USER_BUCKET!, // User's data bucket
-        queueName: config.QUEUE_NAME!,
+        queueUrl: config.QUEUE_URL!,
         environment: "production",
         prefix: config.PKG_PREFIX || "benchling",
         benchlingClientId: config.BENCHLING_CLIENT_ID!,

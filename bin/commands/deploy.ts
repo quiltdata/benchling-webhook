@@ -111,11 +111,30 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
     console.log();
     console.log(chalk.bold("Deployment Plan"));
     console.log(chalk.gray("─".repeat(80)));
-    console.log(`  ${chalk.bold("Stack:")}    BenchlingWebhookStack`);
-    console.log(`  ${chalk.bold("Account:")}  ${config.cdkAccount}`);
-    console.log(`  ${chalk.bold("Region:")}   ${config.cdkRegion}`);
-    console.log(`  ${chalk.bold("Catalog:")}  ${config.quiltCatalog}`);
-    console.log(`  ${chalk.bold("Bucket:")}   ${config.quiltUserBucket}`);
+    console.log(`  ${chalk.bold("Stack:")}                      BenchlingWebhookStack`);
+    console.log(`  ${chalk.bold("Account:")}                    ${config.cdkAccount}`);
+    console.log(`  ${chalk.bold("Region:")}                     ${config.cdkRegion}`);
+    console.log();
+    console.log(chalk.bold("  Stack Parameters:"));
+    console.log(`    ${chalk.bold("Quilt Catalog:")}            ${config.quiltCatalog}`);
+    console.log(`    ${chalk.bold("Quilt Database:")}           ${config.quiltDatabase}`);
+    console.log(`    ${chalk.bold("Quilt User Bucket:")}        ${config.quiltUserBucket}`);
+    console.log(`    ${chalk.bold("Benchling Tenant:")}         ${config.benchlingTenant}`);
+    console.log(`    ${chalk.bold("Benchling Client ID:")}      ${config.benchlingClientId}`);
+    console.log(`    ${chalk.bold("Benchling Client Secret:")}  ${config.benchlingClientSecret ? "***" + config.benchlingClientSecret.slice(-4) : "(not set)"}`);
+    if (config.benchlingAppDefinitionId) {
+        console.log(`    ${chalk.bold("Benchling App ID:")}        ${config.benchlingAppDefinitionId}`);
+    }
+    console.log(`    ${chalk.bold("Queue URL:")}                ${config.queueUrl}`);
+    console.log(`    ${chalk.bold("Package Prefix:")}           ${config.pkgPrefix || "benchling"}`);
+    console.log(`    ${chalk.bold("Package Key:")}              ${config.pkgKey || "experiment_id"}`);
+    console.log(`    ${chalk.bold("Log Level:")}                ${config.logLevel || "INFO"}`);
+    if (config.webhookAllowList) {
+        console.log(`    ${chalk.bold("Webhook Allow List:")}      ${config.webhookAllowList}`);
+    }
+    console.log(`    ${chalk.bold("Webhook Verification:")}    ${config.enableWebhookVerification ?? "true"}`);
+    console.log(`    ${chalk.bold("Create ECR Repository:")}   ${config.createEcrRepository || "false"}`);
+    console.log(`    ${chalk.bold("ECR Repository Name:")}     ${config.ecrRepositoryName || "quiltdata/benchling"}`);
     console.log(chalk.gray("─".repeat(80)));
     console.log();
 

@@ -71,16 +71,6 @@ export async function fetchJson(url: string): Promise<unknown> {
 }
 
 /**
- * Extract bucket name from S3 ARN or bucket name string
- */
-export function extractBucketName(bucketString: string): string {
-    if (bucketString.startsWith("arn:aws:s3:::")) {
-        return bucketString.replace("arn:aws:s3:::", "").split("/")[0];
-    }
-    return bucketString.split("/")[0];
-}
-
-/**
  * Try to find CloudFormation stack by searching for resource
  */
 export function findStackByResource(region: string, resourceId: string): string | null {
@@ -93,21 +83,6 @@ export function findStackByResource(region: string, resourceId: string): string 
         return stackName && stackName !== "None" ? stackName : null;
     } catch {
         return null;
-    }
-}
-
-/**
- * Search for stacks by name pattern
- */
-export function searchStacksByPattern(region: string, pattern: string): string[] {
-    try {
-        const result = execSync(
-            `aws cloudformation list-stacks --region ${region} --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE --query "StackSummaries[?contains(StackName, '${pattern}')].StackName" --output json`,
-            { encoding: "utf-8" },
-        );
-        return JSON.parse(result) as string[];
-    } catch {
-        return [];
     }
 }
 
@@ -160,84 +135,23 @@ export function extractApiGatewayId(endpoint: string): string | null {
     return match ? match[1] : null;
 }
 
-/**
- * Extract stack name prefix from bucket names
- */
-export function inferStackPrefix(analyticsBucket?: string, serviceBucket?: string): string {
-    const patterns = [analyticsBucket, serviceBucket]
-        .filter(Boolean)
-        .map((bucket) => {
-            const parts = (bucket as string).split("-");
-            if (parts.length >= 3) {
-                return parts.slice(0, 2).join("-");
-            }
-            return parts[0];
-        });
-
-    return patterns[0] || "quilt";
-}
 
 /**
- * Find CloudFormation stack using multiple search strategies
+ * Find CloudFormation stack using API Gateway ID
  */
 export function findStack(
     region: string,
     apiGatewayId: string | null,
-    analyticsBucket: string,
-    serviceBucket: string,
-    stackPrefix: string,
     verbose = true,
 ): string | null {
     let stackName: string | null = null;
 
-    // Method 1: Search by API Gateway ID
+    // Search by API Gateway ID
     if (apiGatewayId) {
         if (verbose) console.log(`Searching by API Gateway ID: ${apiGatewayId}...`);
         stackName = findStackByResource(region, apiGatewayId);
         if (stackName && verbose) {
             console.log(`✓ Found stack by API Gateway: ${stackName}`);
-        }
-    }
-
-    // Method 2: Search by Analytics Bucket
-    if (!stackName && analyticsBucket) {
-        if (verbose) console.log(`Searching by Analytics Bucket: ${analyticsBucket}...`);
-        stackName = findStackByResource(region, analyticsBucket);
-        if (stackName && verbose) {
-            console.log(`✓ Found stack by Analytics Bucket: ${stackName}`);
-        }
-    }
-
-    // Method 3: Search by Service Bucket
-    if (!stackName && serviceBucket) {
-        if (verbose) console.log(`Searching by Service Bucket: ${serviceBucket}...`);
-        stackName = findStackByResource(region, serviceBucket);
-        if (stackName && verbose) {
-            console.log(`✓ Found stack by Service Bucket: ${stackName}`);
-        }
-    }
-
-    // Method 4: Search by name pattern
-    if (!stackName && stackPrefix) {
-        if (verbose) console.log(`Searching by stack name pattern: *${stackPrefix}*...`);
-        const stacks = searchStacksByPattern(region, stackPrefix);
-        if (stacks.length > 0) {
-            if (verbose) {
-                console.log(`✓ Found ${stacks.length} potential stack(s):`);
-                stacks.forEach((name, i) => console.log(`  ${i + 1}. ${name}`));
-            }
-
-            if (stacks.length === 1) {
-                stackName = stacks[0];
-                if (verbose) console.log(`  Using: ${stackName}`);
-            } else {
-                if (verbose) {
-                    console.log("");
-                    console.log("⚠️  Multiple stacks found. Using first match: " + stacks[0]);
-                    console.log("   If this is incorrect, manually verify the stack name.");
-                }
-                stackName = stacks[0];
-            }
         }
     }
 
@@ -273,25 +187,9 @@ export function buildInferredConfig(
         vars.QUILT_CATALOG = catalog;
     }
 
-    // Try to infer bucket and database from stack or config
-    const serviceBucket = extractBucketName(config.serviceBucket);
-
-    // Find data bucket from stack outputs or use service bucket as fallback
-    const bucketOutput = stackDetails.outputs.find(
-        (o) => o.OutputKey === "Bucket" || o.OutputKey === "DataBucket",
-    );
-    const dataBucket = bucketOutput?.OutputValue || serviceBucket;
-
-    if (dataBucket) {
-        vars.QUILT_USER_BUCKET = `${dataBucket} # Verify this is YOUR data bucket`;
-    }
-
     // Try to find database name from stack
     const databaseOutput = stackDetails.outputs.find(
-        (o) =>
-            o.OutputKey === "Database" ||
-            o.OutputKey === "AthenaDatabase" ||
-            o.OutputKey === "UserAthenaDatabase",
+        (o) => o.OutputKey === "UserAthenaDatabaseName",
     );
     if (databaseOutput) {
         vars.QUILT_DATABASE = databaseOutput.OutputValue;
@@ -301,34 +199,12 @@ export function buildInferredConfig(
         vars.QUILT_DATABASE = `${dbGuess} # VERIFY THIS - inferred from catalog name`;
     }
 
-    // SQS Queue
-    const queueOutput = stackDetails.outputs.find(
-        (o) => o.OutputKey === "PackagerQueue" || o.OutputKey.includes("Queue"),
+    // SQS Queue URL - this is what the application actually uses
+    const queueUrlOutput = stackDetails.outputs.find(
+        (o) => o.OutputKey === "PackagerQueueUrl",
     );
-    if (queueOutput) {
-        const queueValue = queueOutput.OutputValue;
-
-        // Parse queue name from ARN or URL
-        let queueName: string;
-        if (queueValue.startsWith("arn:aws:sqs:")) {
-            // ARN format: arn:aws:sqs:region:account:queue-name
-            queueName = queueValue.split(":").pop() as string;
-        } else if (queueValue.includes("sqs.")) {
-            // URL format: https://sqs.region.amazonaws.com/account/queue-name
-            queueName = queueValue.split("/").pop() as string;
-        } else {
-            // Assume it's just the queue name
-            queueName = queueValue;
-        }
-
-        vars.QUEUE_NAME = queueName;
-
-        // Build SQS URL
-        if (accountId && region && queueName) {
-            vars.SQS_QUEUE_URL = `https://sqs.${region}.amazonaws.com/${accountId}/${queueName}`;
-        }
-    } else if (stackName) {
-        vars.QUEUE_NAME = `${stackName}-PackagerQueue-XXXXX # VERIFY THIS - not found in outputs`;
+    if (queueUrlOutput) {
+        vars.QUEUE_URL = queueUrlOutput.OutputValue;
     }
 
     // Additional useful info
@@ -384,13 +260,10 @@ export async function inferStackConfig(
     if (verbose) {
         console.log("✓ Successfully fetched config.json");
         console.log("");
-        console.log("Configuration Summary:");
+        console.log("Catalog Configuration:");
         console.log("=".repeat(80));
         console.log(`Region:           ${config.region}`);
-        console.log(`API Gateway:      ${config.apiGatewayEndpoint}`);
-        console.log(`Analytics Bucket: ${config.analyticsBucket}`);
-        console.log(`Service Bucket:   ${config.serviceBucket}`);
-        console.log(`Stack Version:    ${config.stackVersion}`);
+        console.log(`Stack Version:    ${config.stackVersion || "unknown"}`);
         console.log("=".repeat(80));
         console.log("");
     }
@@ -398,15 +271,11 @@ export async function inferStackConfig(
     // Extract identifiable resources
     const region = config.region;
     const apiGatewayId = extractApiGatewayId(config.apiGatewayEndpoint);
-    const analyticsBucket = extractBucketName(config.analyticsBucket);
-    const serviceBucket = extractBucketName(config.serviceBucket);
-    const stackPrefix = inferStackPrefix(analyticsBucket, serviceBucket);
 
     if (verbose) {
         console.log("Searching for CloudFormation stack...");
         console.log(`  Region: ${region}`);
         console.log(`  API Gateway ID: ${apiGatewayId || "not found"}`);
-        console.log(`  Inferred stack prefix: ${stackPrefix}`);
         console.log("");
     }
 
@@ -414,9 +283,6 @@ export async function inferStackConfig(
     const stackName = findStack(
         region,
         apiGatewayId,
-        analyticsBucket,
-        serviceBucket,
-        stackPrefix,
         verbose,
     );
 
@@ -461,6 +327,29 @@ export async function inferStackConfig(
         accountId,
         catalogUrl.replace(/\/config\.json$/, ""),
     );
+
+    // Display inferred values
+    if (verbose) {
+        console.log("Inferred Stack Parameters:");
+        console.log("=".repeat(80));
+        if (inferredVars.QUILT_CATALOG) {
+            console.log(`Catalog:          ${inferredVars.QUILT_CATALOG}`);
+        }
+        if (inferredVars.QUILT_DATABASE) {
+            console.log(`Database:         ${inferredVars.QUILT_DATABASE}`);
+        }
+        if (inferredVars.QUEUE_URL) {
+            console.log(`Queue URL:        ${inferredVars.QUEUE_URL}`);
+        }
+        if (inferredVars.CDK_DEFAULT_ACCOUNT) {
+            console.log(`AWS Account:      ${inferredVars.CDK_DEFAULT_ACCOUNT}`);
+        }
+        if (inferredVars.CDK_DEFAULT_REGION) {
+            console.log(`AWS Region:       ${inferredVars.CDK_DEFAULT_REGION}`);
+        }
+        console.log("=".repeat(80));
+        console.log("");
+    }
 
     return {
         config,
