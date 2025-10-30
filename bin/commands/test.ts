@@ -15,7 +15,7 @@ export async function testCommand(options: ConfigOptions & { url?: string }): Pr
 
             // Try to find the stack
             const command = new DescribeStacksCommand({
-                StackName: "BenchlingWebhookStack"
+                StackName: "BenchlingWebhookStack",
             });
             const response = await cloudformation.send(command);
 
@@ -58,7 +58,7 @@ export async function testCommand(options: ConfigOptions & { url?: string }): Pr
         const healthUrl = `${webhookUrl}/health`;
         const result = execSync(`curl -s -w "\\n%{http_code}" "${healthUrl}"`, {
             encoding: "utf-8",
-            timeout: 10000
+            timeout: 10000,
         });
 
         const lines = result.trim().split("\n");

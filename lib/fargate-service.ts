@@ -12,10 +12,11 @@ import { Construct } from "constructs";
 export interface FargateServiceProps {
     readonly vpc: ec2.IVpc;
     readonly bucket: s3.IBucket;
-    readonly queueName: string;
+    readonly queueUrl: string;
     readonly region: string;
     readonly account: string;
     readonly prefix: string;
+    readonly pkgKey: string;
     readonly benchlingClientId: string;
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
@@ -25,6 +26,7 @@ export interface FargateServiceProps {
     readonly ecrRepository: ecr.IRepository;
     readonly imageTag?: string;
     readonly logLevel?: string;
+    readonly enableWebhookVerification?: string;
 }
 
 export class FargateService extends Construct {
@@ -80,7 +82,9 @@ export class FargateService extends Construct {
         props.bucket.grantReadWrite(taskRole);
 
         // Grant SQS access to task role
-        const queueArn = `arn:aws:sqs:${props.region}:${props.account}:${props.queueName}`;
+        // Extract queue name from URL: https://sqs.region.amazonaws.com/account/queue-name
+        const queueName = props.queueUrl.split("/").pop() as string;
+        const queueArn = `arn:aws:sqs:${props.region}:${props.account}:${queueName}`;
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
@@ -177,8 +181,9 @@ export class FargateService extends Construct {
             }),
             environment: {
                 QUILT_USER_BUCKET: props.bucket.bucketName,
-                SQS_QUEUE_URL: `https://sqs.${props.region}.amazonaws.com/${props.account}/${props.queueName}`,
+                QUEUE_URL: props.queueUrl,
                 PKG_PREFIX: props.prefix,
+                PKG_KEY: props.pkgKey,
                 BENCHLING_TENANT: props.benchlingTenant,
                 QUILT_CATALOG: props.quiltCatalog,
                 QUILT_DATABASE: props.quiltDatabase,
@@ -187,7 +192,7 @@ export class FargateService extends Construct {
                 AWS_DEFAULT_REGION: props.region,
                 FLASK_ENV: "production",
                 LOG_LEVEL: props.logLevel || "INFO",
-                ENABLE_WEBHOOK_VERIFICATION: "false",
+                ENABLE_WEBHOOK_VERIFICATION: props.enableWebhookVerification || "true",
             },
             secrets: {
                 BENCHLING_CLIENT_ID: ecs.Secret.fromSecretsManager(
@@ -197,6 +202,10 @@ export class FargateService extends Construct {
                 BENCHLING_CLIENT_SECRET: ecs.Secret.fromSecretsManager(
                     benchlingSecret,
                     "client_secret",
+                ),
+                BENCHLING_APP_DEFINITION_ID: ecs.Secret.fromSecretsManager(
+                    benchlingSecret,
+                    "app_definition_id",
                 ),
             },
             healthCheck: {

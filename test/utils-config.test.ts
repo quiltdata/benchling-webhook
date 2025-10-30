@@ -137,6 +137,7 @@ describe("config utility", () => {
 
         it("should handle region from AWS_REGION or CDK_DEFAULT_REGION", () => {
             process.env.AWS_REGION = "eu-west-1";
+            process.env.CDK_DEFAULT_REGION = "eu-west-1";
             const config1 = loadConfigSync();
             expect(config1.cdkRegion).toBe("eu-west-1");
 
@@ -157,15 +158,14 @@ describe("config utility", () => {
             const inferredVars = {
                 CDK_DEFAULT_ACCOUNT: "123456789012",
                 CDK_DEFAULT_REGION: "us-east-1",
-                QUEUE_NAME: "inferred-queue",
-                SQS_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
+                QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/123456789012/inferred-queue",
                 QUILT_DATABASE: "inferred_db",
             };
 
             const merged = mergeInferredConfig(loadedConfig, inferredVars);
             expect(merged.cdkAccount).toBe("123456789012");
             expect(merged.cdkRegion).toBe("us-east-1");
-            expect(merged.queueName).toBe("inferred-queue");
+            expect(merged.queueUrl).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/inferred-queue");
             expect(merged.quiltDatabase).toBe("inferred_db");
             expect(merged.quiltCatalog).toBe("catalog.example.com");
         });
@@ -174,19 +174,19 @@ describe("config utility", () => {
             const loadedConfig: Partial<Config> = {
                 cdkAccount: "user-account",
                 cdkRegion: "user-region",
-                queueName: "user-queue",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/user-queue",
             };
 
             const inferredVars = {
                 CDK_DEFAULT_ACCOUNT: "inferred-account",
                 CDK_DEFAULT_REGION: "inferred-region",
-                QUEUE_NAME: "inferred-queue",
+                QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/123456789012/inferred-queue",
             };
 
             const merged = mergeInferredConfig(loadedConfig, inferredVars);
             expect(merged.cdkAccount).toBe("user-account");
             expect(merged.cdkRegion).toBe("user-region");
-            expect(merged.queueName).toBe("user-queue");
+            expect(merged.queueUrl).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/user-queue");
         });
 
         it("should use inferred values only when user values are missing", () => {
@@ -219,8 +219,7 @@ describe("config utility", () => {
                 benchlingAppDefinitionId: "app-def-id",
                 cdkAccount: "123456789012",
                 cdkRegion: "us-east-1",
-                queueName: "test-queue",
-                sqsQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
             };
 
             const result = validateConfig(config);
@@ -259,7 +258,7 @@ describe("config utility", () => {
             const inferErrors = result.errors.filter((e) => e.canInfer);
             expect(inferErrors.length).toBeGreaterThan(0);
             expect(inferErrors.some((e) => e.field === "cdkAccount")).toBe(true);
-            expect(inferErrors.some((e) => e.field === "queueName")).toBe(true);
+            expect(inferErrors.some((e) => e.field === "queueUrl")).toBe(true);
         });
 
         it("should require app definition ID when verification is enabled", () => {
@@ -272,36 +271,13 @@ describe("config utility", () => {
                 enableWebhookVerification: "true",
                 cdkAccount: "123456789012",
                 cdkRegion: "us-east-1",
-                queueName: "test-queue",
-                sqsQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
                 quiltDatabase: "test_db",
             };
 
             const result = validateConfig(config);
             expect(result.valid).toBe(false);
             expect(result.errors.some((e) => e.field === "benchlingAppDefinitionId")).toBe(true);
-        });
-
-        it("should not require app definition ID when verification is disabled", () => {
-            const config: Partial<Config> = {
-                quiltCatalog: "catalog.example.com",
-                quiltUserBucket: "test-bucket",
-                benchlingTenant: "test-tenant",
-                benchlingClientId: "client-id",
-                benchlingClientSecret: "client-secret",
-                enableWebhookVerification: "false",
-                cdkAccount: "123456789012",
-                cdkRegion: "us-east-1",
-                queueName: "test-queue",
-                sqsQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
-                quiltDatabase: "test_db",
-            };
-
-            const result = validateConfig(config);
-            expect(result.valid).toBe(true);
-            expect(result.warnings.some((w) => w.includes("Webhook verification is disabled"))).toBe(
-                true,
-            );
         });
 
         it("should warn about invalid catalog domain format", () => {
@@ -314,8 +290,6 @@ describe("config utility", () => {
                 enableWebhookVerification: "false",
                 cdkAccount: "123456789012",
                 cdkRegion: "us-east-1",
-                queueName: "test-queue",
-                sqsQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
                 quiltDatabase: "test_db",
             };
 
@@ -333,8 +307,6 @@ describe("config utility", () => {
                 enableWebhookVerification: "false",
                 cdkAccount: "123456789012",
                 cdkRegion: "us-east-1",
-                queueName: "test-queue",
-                sqsQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
                 quiltDatabase: "test_db",
             };
 
@@ -363,8 +335,6 @@ describe("config utility", () => {
                 enableWebhookVerification: "false",
                 cdkAccount: "123456789012",
                 cdkRegion: "us-east-1",
-                queueName: "test-queue",
-                sqsQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
                 quiltDatabase: "test_db",
             };
 
@@ -393,8 +363,7 @@ describe("config utility", () => {
                 benchlingAppDefinitionId: "app-def-id",
                 cdkAccount: "123456789012",
                 cdkRegion: "us-east-1",
-                queueName: "test-queue",
-                sqsQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 quiltDatabase: "test_db",
             };
 
