@@ -181,7 +181,7 @@ export class FargateService extends Construct {
             }),
             environment: {
                 QUILT_USER_BUCKET: props.bucket.bucketName,
-                QUEUE_URL: props.queueUrl,
+                SQS_QUEUE_URL: props.queueUrl,
                 PKG_PREFIX: props.prefix,
                 PKG_KEY: props.pkgKey,
                 BENCHLING_TENANT: props.benchlingTenant,
