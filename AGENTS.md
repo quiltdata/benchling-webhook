@@ -99,7 +99,7 @@ Edit `.env` with your configuration:
 | `CDK_DEFAULT_ACCOUNT` | From AWS STS (your current account) |
 | `CDK_DEFAULT_REGION` | From catalog config.json |
 | `QUEUE_NAME` | From Quilt stack outputs |
-| `SQS_QUEUE_URL` | From Quilt stack outputs |
+| `QUEUE_ARN` | From Quilt stack outputs |
 | `QUILT_DATABASE` | From Quilt stack outputs |
 
 **Optional Variables** (have sensible defaults):
