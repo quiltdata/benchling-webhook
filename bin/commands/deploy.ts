@@ -216,9 +216,8 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
           `Region: ${chalk.cyan(config.cdkRegion)}\n` +
           (webhookUrl ? `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` : "\n") +
           `${chalk.bold("Next steps:")}\n` +
-          "  1. In Benchling, verify your app's webhook URL is set to:\n" +
-          `     ${chalk.cyan(webhookUrl || "<WEBHOOK_URL>")}\n` +
-          "     (This should already be configured via BENCHLING_APP_DEFINITION_ID)\n\n" +
+          "  1. Set the webhook URL in your Benchling app settings:\n" +
+          `     ${chalk.cyan(webhookUrl || "<WEBHOOK_URL>")}\n\n` +
           "  2. Test the integration by creating a Quilt package in Benchling\n\n" +
           `${chalk.dim("For more info: https://github.com/quiltdata/benchling-webhook#readme")}`,
                 { padding: 1, borderColor: "green", borderStyle: "round" },
