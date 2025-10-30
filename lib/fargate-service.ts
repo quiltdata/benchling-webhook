@@ -203,6 +203,10 @@ export class FargateService extends Construct {
                     benchlingSecret,
                     "client_secret",
                 ),
+                BENCHLING_APP_DEFINITION_ID: ecs.Secret.fromSecretsManager(
+                    benchlingSecret,
+                    "app_definition_id",
+                ),
             },
             healthCheck: {
                 command: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"],
