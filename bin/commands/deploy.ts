@@ -150,7 +150,7 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
         // We need to synthesize to cdk.out and then deploy
         result.app.synth();
 
-        const cdkCommand = `npx cdk deploy --require-approval ${options.requireApproval || "never"} --app cdk.out`;
+        const cdkCommand = `npx cdk deploy --require-approval ${options.requireApproval || "never"}`;
 
         execSync(cdkCommand, {
             stdio: "inherit",
@@ -163,17 +163,62 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
 
         spinner.succeed("Stack deployed successfully");
 
-        // 9. Success message
+        // 9. Get stack outputs
+        spinner.start("Retrieving stack outputs...");
+        let webhookUrl = "";
+        try {
+            const { CloudFormationClient, DescribeStacksCommand } = require("@aws-sdk/client-cloudformation");
+            const cloudformation = new CloudFormationClient({
+                region: config.cdkRegion
+            });
+
+            const command = new DescribeStacksCommand({
+                StackName: "BenchlingWebhookStack"
+            });
+            const response = await cloudformation.send(command);
+
+            if (response.Stacks && response.Stacks.length > 0) {
+                const stack = response.Stacks[0];
+                const output = stack.Outputs?.find((o: { OutputKey?: string }) => o.OutputKey === "WebhookEndpoint");
+                webhookUrl = output?.OutputValue || "";
+            }
+            spinner.succeed("Stack outputs retrieved");
+        } catch (err) {
+            spinner.warn("Could not retrieve stack outputs");
+        }
+
+        // 10. Test the webhook endpoint
+        if (webhookUrl) {
+            console.log();
+            spinner.start("Testing webhook endpoint...");
+            try {
+                const testCmd = `curl -s -w "\\n%{http_code}" "${webhookUrl}/health"`;
+                const testResult = execSync(testCmd, { encoding: "utf-8", timeout: 10000 });
+                const lines = testResult.trim().split("\n");
+                const statusCode = lines[lines.length - 1];
+
+                if (statusCode === "200") {
+                    spinner.succeed("Webhook health check passed");
+                } else {
+                    spinner.warn(`Webhook returned HTTP ${statusCode}`);
+                }
+            } catch (err) {
+                spinner.warn("Could not test webhook endpoint");
+            }
+        }
+
+        // 11. Success message
         console.log();
         console.log(
             boxen(
                 `${chalk.green.bold("✓ Deployment completed successfully!")}\n\n` +
           `Stack:  ${chalk.cyan(result.stackName)}\n` +
-          `Region: ${chalk.cyan(config.cdkRegion)}\n\n` +
+          `Region: ${chalk.cyan(config.cdkRegion)}\n` +
+          (webhookUrl ? `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` : "\n") +
           `${chalk.bold("Next steps:")}\n` +
-          "  1. Configure your Benchling app\n" +
-          "  2. Set the webhook URL from AWS console\n" +
-          "  3. Test the integration\n\n" +
+          "  1. Set the webhook URL in your Benchling app settings:\n" +
+          `     ${chalk.cyan(webhookUrl || "<WEBHOOK_URL>")}\n\n` +
+          "  2. Test the integration by creating a Quilt package in Benchling\n\n" +
           `${chalk.dim("For more info: https://github.com/quiltdata/benchling-webhook#readme")}`,
                 { padding: 1, borderColor: "green", borderStyle: "round" },
             ),
