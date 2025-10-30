@@ -9,11 +9,13 @@ All notable changes to this project will be documented in this file.
 
 - **Development deployment workflow** - New `npm run cdk:dev` command for testing changes before production (#141)
   - Creates timestamped dev git tags (e.g., `v0.5.3-20251030T123456Z`)
-  - Builds and pushes Docker image to ECR with dev tag
-  - Deploys CDK stack using specific image tag instead of `latest`
+  - Pushes tag to GitHub, triggering CI to build Docker image for x86_64 (AWS-compatible)
+  - Waits for CI/CD pipeline to complete (monitors GitHub Actions API)
+  - Deploys CDK stack using CI-built image tag instead of `latest`
   - Added `--image-tag` CLI option to deploy command for manual control
   - Added `IMAGE_TAG` environment variable support in configuration
   - New documentation: `DEV_DEPLOYMENT.md` with complete usage guide
+  - **IMPORTANT**: Uses CI-built images, NOT local builds (ARM builds would fail in AWS)
 
 ### Fixed
 

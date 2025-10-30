@@ -6,10 +6,13 @@ This document describes how to deploy a development version of the Benchling web
 
 The `cdk:dev` workflow allows you to:
 1. Create a timestamped development git tag (e.g., `v0.5.3-20251030T123456Z`)
-2. Build and push a Docker image with that tag to ECR
-3. Deploy a CDK stack that uses that specific image instead of `latest`
+2. Push the tag to GitHub, triggering CI to build a Docker image for x86_64 (AWS-compatible)
+3. Wait for the CI/CD pipeline to complete
+4. Deploy a CDK stack that uses that specific CI-built image instead of `latest`
 
 This is useful for testing changes before making a production release.
+
+**IMPORTANT**: This workflow uses CI-built images (x86_64), NOT local builds. Local ARM builds from Mac would fail in AWS which runs on x86_64 architecture.
 
 ## Quick Start
 
@@ -20,9 +23,11 @@ npm run cdk:dev
 This single command will:
 - ✅ Check for uncommitted changes (must have clean working directory)
 - ✅ Create a dev git tag with timestamp
-- ✅ Push the tag to origin
-- ✅ Build and push Docker image to ECR with the dev tag
-- ✅ Deploy CDK stack using the dev image tag
+- ✅ Push the tag to GitHub origin (triggers CI/CD)
+- ✅ Wait for CI to build and push Docker image (x86_64) to ECR
+- ✅ Deploy CDK stack using the CI-built image tag
+
+**Typical runtime**: 5-10 minutes (most time is waiting for CI to build the image)
 
 ## Manual Usage
 
@@ -34,27 +39,33 @@ If you need more control, you can run the steps manually:
 npm run release:dev
 ```
 
-This creates a tag like `v0.5.3-20251030T123456Z` and pushes it to GitHub.
+This creates a tag like `v0.5.3-20251030T123456Z` and pushes it to GitHub, which triggers CI.
 
-### 2. Build and push Docker image with specific tag
+### 2. Wait for CI to build Docker image
 
-```bash
-cd docker
-make push-local VERSION=v0.5.3-20251030T123456Z
-cd ..
-```
+Monitor the CI workflow at: https://github.com/quiltdata/benchling-webhook/actions
+
+The CI workflow will:
+- Run tests
+- Build Docker image for linux/amd64 (x86_64)
+- Push to ECR with version tag
+- Create GitHub release
 
 ### 3. Deploy with specific image tag
 
+Once CI completes, deploy with:
+
 ```bash
-npx @quiltdata/benchling-webhook deploy --image-tag v0.5.3-20251030T123456Z --yes
+npx @quiltdata/benchling-webhook deploy --image-tag 0.5.3-20251030T123456Z --yes
 ```
 
 Or using the CLI shorthand:
 
 ```bash
-npm run cli -- --image-tag v0.5.3-20251030T123456Z --yes
+npm run cli -- --image-tag 0.5.3-20251030T123456Z --yes
 ```
+
+**Note**: Use the version without the 'v' prefix (e.g., `0.5.3-...` not `v0.5.3-...`)
 
 ## Image Tag Configuration
 
@@ -98,11 +109,11 @@ The dev workflow creates timestamped git tags to ensure uniqueness:
 
 ### Docker Images
 
-Images are pushed to ECR with multiple tags:
-- Version tag: `quiltdata/benchling-arm64:v0.5.3-20251030T123456Z`
-- Latest tag: `quiltdata/benchling-arm64:latest`
+CI builds and pushes images to ECR with multiple tags:
+- Version tag: `quiltdata/benchling:0.5.3-20251030T123456Z`
+- Latest tag: `quiltdata/benchling:latest`
 
-The architecture suffix (`-arm64` or `-amd64`) is automatically added based on your system.
+**Architecture**: CI always builds for `linux/amd64` (x86_64) which is what AWS Fargate uses. Local ARM builds are NOT used.
 
 ### CDK Deployment
 
@@ -118,8 +129,16 @@ The CDK stack uses the specified image tag when creating the ECS Fargate service
          │
          ├─ 1. Create dev tag (v0.5.3-{timestamp})
          ├─ 2. Push tag to GitHub
-         ├─ 3. Build & push Docker image with tag
-         └─ 4. Deploy CDK with --image-tag
+         │
+         ├─ 3. GitHub Actions CI (linux/amd64)
+         │   ├─ Run tests
+         │   ├─ Build Docker image
+         │   ├─ Push to ECR
+         │   └─ Create GitHub release
+         │
+         ├─ 4. Wait for CI to complete (polls GitHub API)
+         │
+         └─ 5. Deploy CDK with --image-tag
                 │
                 ├─ benchling-webhook-stack.ts
                 ├─ fargate-service.ts
@@ -145,19 +164,37 @@ Dev tags include timestamps and should be unique. If you see this error, wait a 
 
 ### Error: "Docker image not found"
 
-Make sure the image was successfully pushed to ECR:
+The CI workflow must complete successfully before you can deploy. Check:
+
+1. **CI Workflow Status**: https://github.com/quiltdata/benchling-webhook/actions
+2. **ECR Repository**:
+   ```bash
+   aws ecr list-images --repository-name quiltdata/benchling --region us-east-1
+   ```
+3. **Image Tag**: Verify the image exists with your version tag
+
+If CI failed, fix the issue, create a new dev tag, and try again.
+
+### Error: "Timeout waiting for CI workflow"
+
+The `cdk:dev` script waits up to 15 minutes for CI to complete. If it times out:
+
+1. Check the CI workflow manually: https://github.com/quiltdata/benchling-webhook/actions
+2. Once CI completes, deploy manually:
+   ```bash
+   npm run cli -- --image-tag 0.5.3-20251030T123456Z --yes
+   ```
+
+### Setting GITHUB_TOKEN for rate limiting
+
+If you hit GitHub API rate limits, set a GitHub token:
 
 ```bash
-cd docker
-make push-local VERSION=v0.5.3-20251030T123456Z
+export GITHUB_TOKEN=ghp_your_token_here
+npm run cdk:dev
 ```
 
-Check ECR repositories:
-
-```bash
-aws ecr describe-repositories --region us-east-1
-aws ecr list-images --repository-name quiltdata/benchling-arm64 --region us-east-1
-```
+This increases the rate limit from 60 to 5000 requests per hour.
 
 ## Production Deployment
 
