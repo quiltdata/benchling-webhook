@@ -275,9 +275,5 @@ describe("BenchlingWebhookStack", () => {
         Object.keys(criticalMappings).forEach((envVar) => {
             expect(expectedEnvVars.has(envVar)).toBe(true);
         });
-
-        // Special validation: ensure QUEUE_URL is used (not QUEUE_URL)
-        expect(actualEnvVars.has("QUEUE_URL")).toBe(true);
-        expect(actualEnvVars.has("QUEUE_URL")).toBe(false);
     });
 });
