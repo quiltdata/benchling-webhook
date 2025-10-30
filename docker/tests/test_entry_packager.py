@@ -585,6 +585,49 @@ class TestEntryPackager:
         with pytest.raises(BenchlingAPIError):
             orchestrator.execute_workflow(payload)
 
+    def test_create_metadata_files_dict_format(self, orchestrator):
+        """Test that files metadata is a dictionary with filename as key."""
+        uploaded_files = [
+            {"filename": "file1.txt", "s3_key": "benchling/etr_123/file1.txt", "size": 100},
+            {"filename": "file2.csv", "s3_key": "benchling/etr_123/file2.csv", "size": 200},
+            {"filename": "data.json", "s3_key": "benchling/etr_123/data.json", "size": 300},
+        ]
+
+        entry_data = {
+            "id": "etr_123",
+            "display_id": "EXP-001",
+            "name": "Test Entry",
+            "web_url": "https://demo.benchling.com/entry/etr_123",
+            "creator": {"name": "John Doe", "handle": "jdoe", "id": "user_123"},
+            "authors": [{"name": "Jane Smith", "handle": "jsmith", "id": "user_456"}],
+            "created_at": "2025-10-01T10:00:00Z",
+            "modified_at": "2025-10-02T10:00:00Z",
+        }
+
+        result = orchestrator._create_metadata_files(
+            package_name="benchling/etr_123",
+            entry_id="etr_123",
+            timestamp="2025-10-02T10:00:00Z",
+            base_url="https://demo.benchling.com",
+            webhook_data={},
+            uploaded_files=uploaded_files,
+            download_url="https://example.com/export.zip",
+            entry_data=entry_data,
+        )
+
+        # Verify entry.json has files as dictionary
+        entry_json = result["entry.json"]
+        assert isinstance(entry_json["files"], dict)
+        assert "file1.txt" in entry_json["files"]
+        assert "file2.csv" in entry_json["files"]
+        assert "data.json" in entry_json["files"]
+
+        # Verify dictionary values contain file metadata
+        assert entry_json["files"]["file1.txt"]["s3_key"] == "benchling/etr_123/file1.txt"
+        assert entry_json["files"]["file1.txt"]["size"] == 100
+        assert entry_json["files"]["file2.csv"]["size"] == 200
+        assert entry_json["files"]["data.json"]["size"] == 300
+
     # Episode 9: Async execution tests
     def test_execute_workflow_async(self, orchestrator, mock_benchling):
         """Test async workflow execution returns immediately."""

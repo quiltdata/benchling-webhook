@@ -570,6 +570,9 @@ class EntryPackager:
         created_at_str = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
         modified_at_str = modified_at.isoformat() if hasattr(modified_at, "isoformat") else str(modified_at)
 
+        # Convert files list to dictionary with filename as key
+        files_dict = {file_info["filename"]: file_info for file_info in uploaded_files}
+
         entry_json = {
             "package_name": package_name,
             "entry_id": entry_id,
@@ -583,7 +586,7 @@ class EntryPackager:
             "export_timestamp": timestamp,
             "benchling_base_url": base_url,
             "webhook_data": webhook_data,
-            "files": uploaded_files,
+            "files": files_dict,
         }
 
         # input.json - Processing metadata
@@ -702,9 +705,7 @@ For questions about the data, refer to the original Benchling entry.
                 # Fallback: if it's already a URL (shouldn't happen but for safety)
                 queue_url = self.config.queue_arn
 
-            response = self.sqs_client.send_message(
-                QueueUrl=queue_url, MessageBody=json.dumps(message_body)
-            )
+            response = self.sqs_client.send_message(QueueUrl=queue_url, MessageBody=json.dumps(message_body))
 
             message_id = response.get("MessageId")
 

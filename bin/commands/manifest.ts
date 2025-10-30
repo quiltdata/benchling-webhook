@@ -17,7 +17,7 @@ info:
   version: ${pkg.version}
 features:
   - name: Quilt Package
-    id: quilt_entry
+    id: quilt-entry
     type: CANVAS
 subscriptions:
   deliveryMethod: WEBHOOK
