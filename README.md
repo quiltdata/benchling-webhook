@@ -4,35 +4,40 @@ Connects Benchling lab notebook entries to Quilt data packages via webhooks.
 
 ## Quick Install
 
-**Prerequisites:** AWS account, Node.js 18+, Docker, existing Quilt deployment
+**Prerequisites:** AWS account, existing Quilt deployment
 
 ```bash
-# 1. Clone and install
-git clone https://github.com/quiltdata/benchling-webhook.git
-cd benchling-webhook
-npm install
+# 1. Interactive setup (recommended)
+npx @quiltdata/benchling-webhook init
 
-# 2. Configure minimal .env
-cp env.template .env
-# Edit .env to set:
-# - QUILT_CATALOG=quilt-catalog.yourcompany.com
-# - QUILT_USER_BUCKET=your-data-bucket
-# - Benchling credentials (5 values)
-# Everything else is auto-inferred at deploy time!
+# 2. Deploy
+npx @quiltdata/benchling-webhook deploy
+
+# 3. Test the webhook
+npx @quiltdata/benchling-webhook test
+```
+
+## Alternative: Manual Configuration
+
+If you prefer to configure via `.env` file:
+
+```bash
+# 1. Create .env file
+cat > .env << EOF
+QUILT_CATALOG=quilt-catalog.yourcompany.com
+QUILT_USER_BUCKET=your-data-bucket
+BENCHLING_TENANT=your-tenant
+BENCHLING_APP_CLIENT_ID=your-client-id
+BENCHLING_APP_CLIENT_SECRET=your-client-secret
+BENCHLING_WEBHOOK_SECRET=your-webhook-secret
+BENCHLING_WEBHOOK_ID=your-webhook-id
+EOF
+
+# 2. Bootstrap CDK (first time only)
+npx @quiltdata/benchling-webhook deploy --bootstrap-check
 
 # 3. Deploy
-source .env
-npx cdk bootstrap aws://$CDK_DEFAULT_ACCOUNT/$CDK_DEFAULT_REGION  # first time only
-npm run deploy
-
-# 4. Configure Benchling app
-# - Create app from app-manifest.yaml
-# - Set webhook URL from .env.deploy
-# - Install and activate
-
-# 5. Verify
-source .env.deploy
-curl $WEBHOOK_ENDPOINT/health
+npx @quiltdata/benchling-webhook deploy --yes
 ```
 
 ## Usage
@@ -41,6 +46,45 @@ curl $WEBHOOK_ENDPOINT/health
 2. Insert Canvas → "Quilt Integration"
 3. Click "Create" to make package
 4. Add files and click "Update package"
+
+## CLI Commands
+
+```bash
+# Show help
+npx @quiltdata/benchling-webhook --help
+
+# Interactive configuration
+npx @quiltdata/benchling-webhook init
+
+# Validate configuration without deploying
+npx @quiltdata/benchling-webhook validate
+
+# Deploy with options
+npx @quiltdata/benchling-webhook deploy --yes
+npx @quiltdata/benchling-webhook deploy --catalog your-catalog.com --bucket your-bucket
+
+# Test the deployed webhook
+npx @quiltdata/benchling-webhook test
+npx @quiltdata/benchling-webhook test --url https://your-webhook-url.com
+```
+
+## Development
+
+For local development and contributing:
+
+```bash
+# Clone and install
+git clone https://github.com/quiltdata/benchling-webhook.git
+cd benchling-webhook
+npm install
+
+# Test CLI locally
+npm run cli -- --help
+npm run cli deploy
+
+# Run tests
+npm test
+```
 
 ## Documentation
 

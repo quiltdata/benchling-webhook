@@ -167,10 +167,21 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
         spinner.start("Retrieving stack outputs...");
         let webhookUrl = "";
         try {
-            const outputCmd = `npx cdk outputs --app cdk.out BenchlingWebhookStack`;
-            const outputResult = execSync(outputCmd, { encoding: "utf-8" });
-            const match = outputResult.match(/WebhookEndpoint\s*=\s*(\S+)/);
-            webhookUrl = match ? match[1] : "";
+            const { CloudFormationClient, DescribeStacksCommand } = require("@aws-sdk/client-cloudformation");
+            const cloudformation = new CloudFormationClient({
+                region: config.cdkRegion
+            });
+
+            const command = new DescribeStacksCommand({
+                StackName: "BenchlingWebhookStack"
+            });
+            const response = await cloudformation.send(command);
+
+            if (response.Stacks && response.Stacks.length > 0) {
+                const stack = response.Stacks[0];
+                const output = stack.Outputs?.find((o: { OutputKey?: string }) => o.OutputKey === "WebhookEndpoint");
+                webhookUrl = output?.OutputValue || "";
+            }
             spinner.succeed("Stack outputs retrieved");
         } catch (err) {
             spinner.warn("Could not retrieve stack outputs");
@@ -186,9 +197,10 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
           (webhookUrl ? `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` : "\n") +
           `${chalk.bold("Next steps:")}\n` +
           "  1. Test the webhook endpoint:\n" +
-          `     ${chalk.cyan(`curl ${webhookUrl || "<WEBHOOK_URL>"}/health`)}\n\n` +
-          "  2. In Benchling, update your app's webhook URL to:\n" +
-          `     ${chalk.cyan(webhookUrl || "<WEBHOOK_URL>")}\n\n` +
+          `     ${chalk.cyan("npx @quiltdata/benchling-webhook test")}\n\n` +
+          "  2. In Benchling, verify your app's webhook URL is set to:\n" +
+          `     ${chalk.cyan(webhookUrl || "<WEBHOOK_URL>")}\n` +
+          "     (This should already be configured via BENCHLING_APP_DEFINITION_ID)\n\n" +
           `${chalk.dim("View all outputs: npx cdk outputs --app cdk.out")}\n` +
           `${chalk.dim("For more info: https://github.com/quiltdata/benchling-webhook#readme")}`,
                 { padding: 1, borderColor: "green", borderStyle: "round" },
