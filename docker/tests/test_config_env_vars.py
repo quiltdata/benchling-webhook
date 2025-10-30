@@ -51,7 +51,6 @@ def test_environment_variable_names_are_documented():
     )
 
 
-
 def test_cdk_environment_variables_match_config():
     """
     Test that the CDK stack's Fargate service provides all required env vars.
@@ -101,12 +100,8 @@ def test_cdk_environment_variables_match_config():
     )
 
     # Specifically verify QUEUE_URL is used (not QUEUE_URL)
-    assert 'QUEUE_URL' in fargate_content, (
-        "fargate-service.ts must set QUEUE_URL environment variable"
-    )
+    assert "QUEUE_URL" in fargate_content, "fargate-service.ts must set QUEUE_URL environment variable"
 
     # Check that QUEUE_URL is not used instead
-    if 'QUEUE_URL' in fargate_content and 'QUEUE_URL' not in fargate_content:
-        raise AssertionError(
-            "fargate-service.ts uses QUEUE_URL but should use QUEUE_URL"
-        )
+    if "QUEUE_URL" in fargate_content and "QUEUE_URL" not in fargate_content:
+        raise AssertionError("fargate-service.ts uses QUEUE_URL but should use QUEUE_URL")
