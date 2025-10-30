@@ -50,7 +50,7 @@ class BehaviorTest:
             # Create minimal test config (S3/SQS not used here)
             test_config = Config(
                 s3_bucket_name="test-bucket",
-                sqs_queue_url="https://sqs.us-east-2.amazonaws.com/test/queue",
+                queue_url="https://sqs.us-east-2.amazonaws.com/test/queue",
                 aws_region="us-east-2",
             )
             packager = EntryPackager(self.benchling, config=test_config)

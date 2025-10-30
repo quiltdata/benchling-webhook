@@ -256,7 +256,7 @@ class TestEntryPackager:
         config = Mock()
         config.s3_bucket_name = "test-bucket"
         config.s3_prefix = "benchling"
-        config.sqs_queue_url = "https://sqs.us-west-2.amazonaws.com/123/test"
+        config.queue_url = "https://sqs.us-west-2.amazonaws.com/123/test"
         config.quilt_catalog = "test.quiltdata.com"
         config.aws_region = "us-west-2"
         return config

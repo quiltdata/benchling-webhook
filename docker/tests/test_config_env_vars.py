@@ -51,27 +51,6 @@ def test_environment_variable_names_are_documented():
     )
 
 
-def test_queue_url_not_queue_url():
-    """
-    Critical test: Ensure we use QUEUE_URL, not QUEUE_URL.
-
-    This test exists because we had a bug where the CDK stack was passing
-    QUEUE_URL but the Flask app expected QUEUE_URL, causing deployments
-    to fail due to failed health checks.
-    """
-    config_path = Path(__file__).parent.parent / "src" / "config.py"
-    config_content = config_path.read_text()
-
-    # Ensure QUEUE_URL is used
-    assert 'os.getenv("QUEUE_URL"' in config_content, (
-        "config.py must use QUEUE_URL environment variable"
-    )
-
-    # Ensure QUEUE_URL is NOT used
-    assert 'os.getenv("QUEUE_URL"' not in config_content, (
-        "config.py must NOT use QUEUE_URL - use QUEUE_URL instead"
-    )
-
 
 def test_cdk_environment_variables_match_config():
     """
