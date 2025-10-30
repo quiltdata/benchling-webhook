@@ -12,7 +12,6 @@ services:
       - QUILT_USER_BUCKET=${QUILT_USER_BUCKET}
       - PKG_PREFIX=${PKG_PREFIX:-benchling}
       - PKG_KEY=${PKG_KEY:-experiment_id}
-      - PKG_BUCKET_ONLY=${PKG_BUCKET_ONLY:-false}
       - QUILT_CATALOG=${QUILT_CATALOG:-stable.quilttest.com}
       - QUILT_DATABASE=${QUILT_DATABASE}
       - SQS_QUEUE_URL=${SQS_QUEUE_URL}
@@ -51,7 +50,6 @@ services:
       - QUILT_USER_BUCKET=${QUILT_USER_BUCKET}
       - PKG_PREFIX=${PKG_PREFIX:-benchling}
       - PKG_KEY=${PKG_KEY:-experiment_id}
-      - PKG_BUCKET_ONLY=${PKG_BUCKET_ONLY:-false}
       - QUILT_CATALOG=${QUILT_CATALOG:-stable.quilttest.com}
       - QUILT_DATABASE=${QUILT_DATABASE}
       - SQS_QUEUE_URL=${SQS_QUEUE_URL}

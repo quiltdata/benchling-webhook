@@ -167,13 +167,14 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
         spinner.start("Retrieving stack outputs...");
         let webhookUrl = "";
         try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { CloudFormationClient, DescribeStacksCommand } = require("@aws-sdk/client-cloudformation");
             const cloudformation = new CloudFormationClient({
-                region: config.cdkRegion
+                region: config.cdkRegion,
             });
 
             const command = new DescribeStacksCommand({
-                StackName: "BenchlingWebhookStack"
+                StackName: "BenchlingWebhookStack",
             });
             const response = await cloudformation.send(command);
 
@@ -183,7 +184,7 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
                 webhookUrl = output?.OutputValue || "";
             }
             spinner.succeed("Stack outputs retrieved");
-        } catch (err) {
+        } catch {
             spinner.warn("Could not retrieve stack outputs");
         }
 
@@ -202,7 +203,7 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
                 } else {
                     spinner.warn(`Webhook returned HTTP ${statusCode}`);
                 }
-            } catch (err) {
+            } catch {
                 spinner.warn("Could not test webhook endpoint");
             }
         }

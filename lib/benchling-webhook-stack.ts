@@ -70,10 +70,42 @@ export class BenchlingWebhookStack extends cdk.Stack {
             default: props.prefix,
         });
 
+        const pkgKeyParam = new cdk.CfnParameter(this, "PackageKey", {
+            type: "String",
+            description: "Metadata key used to link Benchling entries to Quilt packages",
+            default: "experiment_id",
+        });
+
         const queueNameParam = new cdk.CfnParameter(this, "QueueName", {
             type: "String",
             description: "SQS queue name for package notifications",
             default: props.queueName,
+        });
+
+        const quiltDatabaseParam = new cdk.CfnParameter(this, "QuiltDatabase", {
+            type: "String",
+            description: "Quilt database name (Glue Data Catalog database)",
+            default: props.quiltDatabase,
+        });
+
+        const benchlingTenantParam = new cdk.CfnParameter(this, "BenchlingTenant", {
+            type: "String",
+            description: "Benchling tenant name (e.g., 'company' for company.benchling.com)",
+            default: props.benchlingTenant,
+        });
+
+        const logLevelParam = new cdk.CfnParameter(this, "LogLevel", {
+            type: "String",
+            description: "Application log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+            default: props.logLevel || "INFO",
+            allowedValues: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        });
+
+        const enableWebhookVerificationParam = new cdk.CfnParameter(this, "EnableWebhookVerification", {
+            type: "String",
+            description: "Enable webhook signature verification (true/false)",
+            default: "true",
+            allowedValues: ["true", "false"],
         });
 
         // Use parameter values (which have props as defaults)
@@ -82,7 +114,12 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const quiltCatalogValue = quiltCatalogParam.valueAsString;
         const bucketNameValue = bucketNameParam.valueAsString;
         const prefixValue = prefixParam.valueAsString;
+        const pkgKeyValue = pkgKeyParam.valueAsString;
         const queueNameValue = queueNameParam.valueAsString;
+        const quiltDatabaseValue = quiltDatabaseParam.valueAsString;
+        const benchlingTenantValue = benchlingTenantParam.valueAsString;
+        const logLevelValue = logLevelParam.valueAsString;
+        const enableWebhookVerificationValue = enableWebhookVerificationParam.valueAsString;
 
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", bucketNameValue);
 
@@ -116,15 +153,17 @@ export class BenchlingWebhookStack extends cdk.Stack {
             region: this.region,
             account: this.account,
             prefix: prefixValue,
+            pkgKey: pkgKeyValue,
             benchlingClientId: props.benchlingClientId,
             benchlingClientSecret: props.benchlingClientSecret,
-            benchlingTenant: props.benchlingTenant,
+            benchlingTenant: benchlingTenantValue,
             quiltCatalog: quiltCatalogValue,
-            quiltDatabase: props.quiltDatabase,
+            quiltDatabase: quiltDatabaseValue,
             webhookAllowList: webhookAllowListValue,
             ecrRepository: ecrRepo,
             imageTag: "latest",
-            logLevel: props.logLevel,
+            logLevel: logLevelValue,
+            enableWebhookVerification: enableWebhookVerificationValue,
         });
 
         // Create API Gateway that routes to the ALB
