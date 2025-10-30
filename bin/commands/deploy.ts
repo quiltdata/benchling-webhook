@@ -187,7 +187,27 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
             spinner.warn("Could not retrieve stack outputs");
         }
 
-        // 10. Success message
+        // 10. Test the webhook endpoint
+        if (webhookUrl) {
+            console.log();
+            spinner.start("Testing webhook endpoint...");
+            try {
+                const testCmd = `curl -s -w "\\n%{http_code}" "${webhookUrl}/health"`;
+                const testResult = execSync(testCmd, { encoding: "utf-8", timeout: 10000 });
+                const lines = testResult.trim().split("\n");
+                const statusCode = lines[lines.length - 1];
+
+                if (statusCode === "200") {
+                    spinner.succeed("Webhook health check passed");
+                } else {
+                    spinner.warn(`Webhook returned HTTP ${statusCode}`);
+                }
+            } catch (err) {
+                spinner.warn("Could not test webhook endpoint");
+            }
+        }
+
+        // 11. Success message
         console.log();
         console.log(
             boxen(
@@ -196,12 +216,10 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
           `Region: ${chalk.cyan(config.cdkRegion)}\n` +
           (webhookUrl ? `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` : "\n") +
           `${chalk.bold("Next steps:")}\n` +
-          "  1. Test the webhook endpoint:\n" +
-          `     ${chalk.cyan("npx @quiltdata/benchling-webhook test")}\n\n` +
-          "  2. In Benchling, verify your app's webhook URL is set to:\n" +
+          "  1. In Benchling, verify your app's webhook URL is set to:\n" +
           `     ${chalk.cyan(webhookUrl || "<WEBHOOK_URL>")}\n` +
           "     (This should already be configured via BENCHLING_APP_DEFINITION_ID)\n\n" +
-          `${chalk.dim("View all outputs: npx cdk outputs --app cdk.out")}\n` +
+          "  2. Test the integration by creating a Quilt package in Benchling\n\n" +
           `${chalk.dim("For more info: https://github.com/quiltdata/benchling-webhook#readme")}`,
                 { padding: 1, borderColor: "green", borderStyle: "round" },
             ),
