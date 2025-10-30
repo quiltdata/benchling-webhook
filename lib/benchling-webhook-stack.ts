@@ -12,7 +12,7 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly bucketName: string;
     readonly environment: string;
     readonly prefix: string;
-    readonly queueUrl: string;
+    readonly queueArn: string;
     readonly benchlingClientId: string;
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
@@ -76,10 +76,10 @@ export class BenchlingWebhookStack extends cdk.Stack {
             default: "experiment_id",
         });
 
-        const queueUrlParam = new cdk.CfnParameter(this, "QueueUrl", {
+        const queueArnParam = new cdk.CfnParameter(this, "QueueArn", {
             type: "String",
-            description: "SQS queue URL for package notifications",
-            default: props.queueUrl,
+            description: "SQS queue ARN for package notifications",
+            default: props.queueArn,
         });
 
         const quiltDatabaseParam = new cdk.CfnParameter(this, "QuiltDatabase", {
@@ -115,7 +115,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const bucketNameValue = bucketNameParam.valueAsString;
         const prefixValue = prefixParam.valueAsString;
         const pkgKeyValue = pkgKeyParam.valueAsString;
-        const queueUrlValue = queueUrlParam.valueAsString;
+        const queueArnValue = queueArnParam.valueAsString;
         const quiltDatabaseValue = quiltDatabaseParam.valueAsString;
         const benchlingTenantValue = benchlingTenantParam.valueAsString;
         const logLevelValue = logLevelParam.valueAsString;
@@ -149,7 +149,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         this.fargateService = new FargateService(this, "FargateService", {
             vpc,
             bucket: this.bucket,
-            queueUrl: queueUrlValue,
+            queueArn: queueArnValue,
             region: this.region,
             account: this.account,
             prefix: prefixValue,

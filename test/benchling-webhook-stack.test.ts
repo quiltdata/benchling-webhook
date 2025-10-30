@@ -13,7 +13,7 @@ describe("BenchlingWebhookStack", () => {
             bucketName: "test-bucket",
             environment: "test",
             prefix: "test-prefix",
-            queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
             benchlingClientId: "test-client-id",
             benchlingClientSecret: "test-client-secret",
             benchlingTenant: "test-tenant",
@@ -117,7 +117,7 @@ describe("BenchlingWebhookStack", () => {
                 bucketName: "test-bucket",
                 environment: "test",
                 prefix: "invalid/prefix",
-                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+                queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
                 benchlingClientId: "test-client-id",
                 benchlingClientSecret: "test-client-secret",
                 benchlingTenant: "test-tenant",
@@ -252,7 +252,7 @@ describe("BenchlingWebhookStack", () => {
 
         // Critical environment variables that must match between CDK and Flask
         const criticalMappings: Record<string, string> = {
-            QUEUE_URL: "queue_url",
+            QUEUE_ARN: "queue_arn",
             QUILT_USER_BUCKET: "s3_bucket_name",
             PKG_PREFIX: "s3_prefix",
             PKG_KEY: "package_key",

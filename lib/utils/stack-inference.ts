@@ -199,12 +199,12 @@ export function buildInferredConfig(
         vars.QUILT_DATABASE = `${dbGuess} # VERIFY THIS - inferred from catalog name`;
     }
 
-    // SQS Queue URL - this is what the application actually uses
-    const queueUrlOutput = stackDetails.outputs.find(
-        (o) => o.OutputKey === "PackagerQueueUrl",
+    // SQS Queue ARN - this is what the application actually uses
+    const queueArnOutput = stackDetails.outputs.find(
+        (o) => o.OutputKey === "PackagerQueueArn",
     );
-    if (queueUrlOutput) {
-        vars.QUEUE_URL = queueUrlOutput.OutputValue;
+    if (queueArnOutput) {
+        vars.QUEUE_ARN = queueArnOutput.OutputValue;
     }
 
     // Additional useful info
@@ -338,8 +338,8 @@ export async function inferStackConfig(
         if (inferredVars.QUILT_DATABASE) {
             console.log(`Database:         ${inferredVars.QUILT_DATABASE}`);
         }
-        if (inferredVars.QUEUE_URL) {
-            console.log(`Queue URL:        ${inferredVars.QUEUE_URL}`);
+        if (inferredVars.QUEUE_ARN) {
+            console.log(`Queue ARN:        ${inferredVars.QUEUE_ARN}`);
         }
         if (inferredVars.CDK_DEFAULT_ACCOUNT) {
             console.log(`AWS Account:      ${inferredVars.CDK_DEFAULT_ACCOUNT}`);

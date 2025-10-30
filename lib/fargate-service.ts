@@ -12,7 +12,7 @@ import { Construct } from "constructs";
 export interface FargateServiceProps {
     readonly vpc: ec2.IVpc;
     readonly bucket: s3.IBucket;
-    readonly queueUrl: string;
+    readonly queueArn: string;
     readonly region: string;
     readonly account: string;
     readonly prefix: string;
@@ -81,10 +81,7 @@ export class FargateService extends Construct {
         // Grant S3 bucket access to task role
         props.bucket.grantReadWrite(taskRole);
 
-        // Grant SQS access to task role
-        // Extract queue name from URL: https://sqs.region.amazonaws.com/account/queue-name
-        const queueName = props.queueUrl.split("/").pop() as string;
-        const queueArn = `arn:aws:sqs:${props.region}:${props.account}:${queueName}`;
+        // Grant SQS access to task role using the actual ARN
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
@@ -92,7 +89,7 @@ export class FargateService extends Construct {
                     "sqs:GetQueueUrl",
                     "sqs:GetQueueAttributes",
                 ],
-                resources: [queueArn],
+                resources: [props.queueArn],
             }),
         );
 
@@ -181,7 +178,7 @@ export class FargateService extends Construct {
             }),
             environment: {
                 QUILT_USER_BUCKET: props.bucket.bucketName,
-                QUEUE_URL: props.queueUrl,
+                QUEUE_ARN: props.queueArn,
                 PKG_PREFIX: props.prefix,
                 PKG_KEY: props.pkgKey,
                 BENCHLING_TENANT: props.benchlingTenant,

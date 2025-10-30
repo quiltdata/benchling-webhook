@@ -86,7 +86,6 @@ export async function validateCommand(options: ConfigOptions & { verbose?: boole
             "cdkAccount",
             "cdkRegion",
             "queueName",
-            "sqsQueueUrl",
             "quiltDatabase",
         ];
 

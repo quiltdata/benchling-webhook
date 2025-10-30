@@ -22,7 +22,7 @@ export interface Config {
   awsProfile?: string;
 
   // SQS
-  queueUrl: string;
+  queueArn: string;
 
   // Optional
   pkgPrefix?: string;
@@ -141,7 +141,7 @@ export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
         awsProfile: options.profile || envVars.AWS_PROFILE,
 
         // SQS
-        queueUrl: envVars.QUEUE_URL,
+        queueArn: envVars.QUEUE_ARN,
 
         // Optional
         pkgPrefix: envVars.PKG_PREFIX || "benchling",
@@ -170,7 +170,7 @@ export function mergeInferredConfig(
     return {
         cdkAccount: config.cdkAccount || inferredVars.CDK_DEFAULT_ACCOUNT,
         cdkRegion: config.cdkRegion || inferredVars.CDK_DEFAULT_REGION,
-        queueUrl: config.queueUrl || inferredVars.QUEUE_URL,
+        queueArn: config.queueArn || inferredVars.QUEUE_ARN,
         quiltDatabase: config.quiltDatabase || inferredVars.QUILT_DATABASE,
         ...config, // User values always take precedence
     };
@@ -211,7 +211,7 @@ export function validateConfig(config: Partial<Config>): ValidationResult {
     const requiredInferredFields: Array<[keyof Config, string]> = [
         ["cdkAccount", "AWS account ID"],
         ["cdkRegion", "AWS region"],
-        ["queueUrl", "SQS queue URL"],
+        ["queueArn", "SQS queue ARN"],
         ["quiltDatabase", "Quilt database name"],
     ];
 

@@ -179,7 +179,7 @@ The `env.template` file in the project root is organized into three sections:
 
 - `QUILT_USER_BUCKET` - S3 bucket for package storage
 - `QUILT_CATALOG` - Quilt catalog URL
-- `SQS_QUEUE_URL` - SQS queue for Quilt packaging
+- `QUEUE_ARN` - SQS queue for Quilt packaging
 - `BENCHLING_TENANT` - Your Benchling tenant ID
 - `BENCHLING_CLIENT_ID` - Benchling OAuth client ID
 - `BENCHLING_CLIENT_SECRET` - Benchling OAuth client secret

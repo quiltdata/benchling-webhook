@@ -2,7 +2,7 @@
 
 This test file specifically validates that the environment variable names
 used in config.py match what the CDK stack provides, preventing issues
-like the QUEUE_URL vs QUEUE_URL bug.
+like the QUEUE_URL vs QUEUE_ARN bug.
 """
 
 import re
@@ -33,7 +33,7 @@ def test_environment_variable_names_are_documented():
         "PKG_KEY",
         "QUILT_CATALOG",
         "QUILT_DATABASE",
-        "QUEUE_URL",  # NOT QUEUE_URL!
+        "QUEUE_ARN",  # SQS Queue ARN (not URL!)
         "BENCHLING_TENANT",
         "BENCHLING_CLIENT_ID",
         "BENCHLING_CLIENT_SECRET",
@@ -72,7 +72,7 @@ def test_cdk_environment_variables_match_config():
 
     # Critical environment variables that must be set by CDK
     critical_vars = [
-        "QUEUE_URL",  # NOT QUEUE_URL!
+        "QUEUE_ARN",  # SQS Queue ARN (not URL!)
         "QUILT_USER_BUCKET",
         "PKG_PREFIX",
         "PKG_KEY",
@@ -99,9 +99,9 @@ def test_cdk_environment_variables_match_config():
         f"These variables are required by the Flask config but not set in fargate-service.ts"
     )
 
-    # Specifically verify QUEUE_URL is used (not QUEUE_URL)
-    assert "QUEUE_URL" in fargate_content, "fargate-service.ts must set QUEUE_URL environment variable"
+    # Specifically verify QUEUE_ARN is used (not QUEUE_URL)
+    assert "QUEUE_ARN" in fargate_content, "fargate-service.ts must set QUEUE_ARN environment variable"
 
-    # Check that QUEUE_URL is not used instead
-    if "QUEUE_URL" in fargate_content and "QUEUE_URL" not in fargate_content:
-        raise AssertionError("fargate-service.ts uses QUEUE_URL but should use QUEUE_URL")
+    # Check that QUEUE_URL is not used instead (we want ARN, not URL)
+    if "QUEUE_URL" in fargate_content and "QUEUE_ARN" not in fargate_content:
+        raise AssertionError("fargate-service.ts uses QUEUE_URL but should use QUEUE_ARN")
