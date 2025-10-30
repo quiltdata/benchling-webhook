@@ -137,6 +137,7 @@ describe("config utility", () => {
 
         it("should handle region from AWS_REGION or CDK_DEFAULT_REGION", () => {
             process.env.AWS_REGION = "eu-west-1";
+            process.env.CDK_DEFAULT_REGION = "eu-west-1";
             const config1 = loadConfigSync();
             expect(config1.cdkRegion).toBe("eu-west-1");
 
