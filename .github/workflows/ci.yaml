@@ -60,7 +60,7 @@ jobs:
         run: uv run pytest -v -m "not local"
 
       - name: Run Node.js tests
-        run: npm test
+        run: npm run test-ci
 
       - name: Build package
         run: npm run build
