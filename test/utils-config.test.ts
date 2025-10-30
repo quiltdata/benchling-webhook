@@ -160,14 +160,14 @@ describe("config utility", () => {
             const inferredVars = {
                 CDK_DEFAULT_ACCOUNT: "123456789012",
                 CDK_DEFAULT_REGION: "us-east-1",
-                QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/123456789012/inferred-queue",
+                QUEUE_ARN: "arn:aws:sqs:us-east-1:123456789012:inferred-queue",
                 QUILT_DATABASE: "inferred_db",
             };
 
             const merged = mergeInferredConfig(loadedConfig, inferredVars);
             expect(merged.cdkAccount).toBe("123456789012");
             expect(merged.cdkRegion).toBe("us-east-1");
-            expect(merged.queueUrl).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/inferred-queue");
+            expect(merged.queueArn).toBe("arn:aws:sqs:us-east-1:123456789012:inferred-queue");
             expect(merged.quiltDatabase).toBe("inferred_db");
             expect(merged.quiltCatalog).toBe("catalog.example.com");
         });
@@ -176,19 +176,19 @@ describe("config utility", () => {
             const loadedConfig: Partial<Config> = {
                 cdkAccount: "user-account",
                 cdkRegion: "user-region",
-                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/user-queue",
+                queueArn: "arn:aws:sqs:us-east-1:123456789012:user-queue",
             };
 
             const inferredVars = {
                 CDK_DEFAULT_ACCOUNT: "inferred-account",
                 CDK_DEFAULT_REGION: "inferred-region",
-                QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/123456789012/inferred-queue",
+                QUEUE_ARN: "arn:aws:sqs:us-east-1:123456789012:inferred-queue",
             };
 
             const merged = mergeInferredConfig(loadedConfig, inferredVars);
             expect(merged.cdkAccount).toBe("user-account");
             expect(merged.cdkRegion).toBe("user-region");
-            expect(merged.queueUrl).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/user-queue");
+            expect(merged.queueArn).toBe("arn:aws:sqs:us-east-1:123456789012:user-queue");
         });
 
         it("should use inferred values only when user values are missing", () => {
@@ -221,7 +221,7 @@ describe("config utility", () => {
                 benchlingAppDefinitionId: "app-def-id",
                 cdkAccount: "123456789012",
                 cdkRegion: "us-east-1",
-                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+                queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
             };
 
             const result = validateConfig(config);
@@ -260,7 +260,7 @@ describe("config utility", () => {
             const inferErrors = result.errors.filter((e) => e.canInfer);
             expect(inferErrors.length).toBeGreaterThan(0);
             expect(inferErrors.some((e) => e.field === "cdkAccount")).toBe(true);
-            expect(inferErrors.some((e) => e.field === "queueUrl")).toBe(true);
+            expect(inferErrors.some((e) => e.field === "queueArn")).toBe(true);
         });
 
         it("should require app definition ID when verification is enabled", () => {
@@ -273,7 +273,7 @@ describe("config utility", () => {
                 enableWebhookVerification: "true",
                 cdkAccount: "123456789012",
                 cdkRegion: "us-east-1",
-                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
+                queueArn: "arn:aws:sqs:us-east-1:123456789012:queue",
                 quiltDatabase: "test_db",
             };
 
@@ -365,7 +365,7 @@ describe("config utility", () => {
                 benchlingAppDefinitionId: "app-def-id",
                 cdkAccount: "123456789012",
                 cdkRegion: "us-east-1",
-                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+                queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
                 quiltDatabase: "test_db",
             };
 
