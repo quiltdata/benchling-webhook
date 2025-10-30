@@ -252,7 +252,7 @@ describe("BenchlingWebhookStack", () => {
 
         // Critical environment variables that must match between CDK and Flask
         const criticalMappings: Record<string, string> = {
-            SQS_QUEUE_URL: "sqs_queue_url",
+            QUEUE_URL: "sqs_queue_url",
             QUILT_USER_BUCKET: "s3_bucket_name",
             PKG_PREFIX: "s3_prefix",
             PKG_KEY: "package_key",
@@ -276,8 +276,8 @@ describe("BenchlingWebhookStack", () => {
             expect(expectedEnvVars.has(envVar)).toBe(true);
         });
 
-        // Special validation: ensure SQS_QUEUE_URL is used (not QUEUE_URL)
-        expect(actualEnvVars.has("SQS_QUEUE_URL")).toBe(true);
+        // Special validation: ensure QUEUE_URL is used (not QUEUE_URL)
+        expect(actualEnvVars.has("QUEUE_URL")).toBe(true);
         expect(actualEnvVars.has("QUEUE_URL")).toBe(false);
     });
 });
