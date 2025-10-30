@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "benchling-quilt-integration"
-version = "0.5.2"
+version = "0.5.3"
 description = "Benchling-Quilt Integration Webhook Service"
 license = {text = "MIT"}
 authors = [

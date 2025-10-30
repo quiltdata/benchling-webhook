@@ -1,6 +1,6 @@
 {
   "name": "@quiltdata/benchling-webhook",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "AWS CDK deployment for Benchling webhook processing using Fargate - Deploy directly with npx",
   "main": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
@@ -15,8 +15,9 @@
   },
   "scripts": {
     "clean": "rm -rf cdk.out */{*.js,*.d.ts}",
-    "test": "npm run test:ts && npm run test:python",
-    "test-ci": "npm run test:ts",
+    "test": "npm run typecheck && npm run test:ts && npm run test:python",
+    "test-ci": "npm run typecheck && npm run test:ts",
+    "typecheck": "tsc --noEmit",
     "test:ts": "NODE_ENV=test TMPDIR=./.tmp node --max-old-space-size=4096 ./node_modules/.bin/jest",
     "test:python": "make -C docker test-unit",
     "cdk": "npm run test && npm run cli -- --yes",
