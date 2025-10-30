@@ -10,7 +10,9 @@
  * 4. Deploys CDK stack using the CI-built image tag
  *
  * Usage:
- *   npm run cdk:dev
+ *   npm run cdk:dev                    # Full workflow
+ *   npm run cdk:dev -- --continue      # Skip tag creation, wait for CI and deploy
+ *   npm run cdk:dev -- --tag <tag>     # Use specific existing tag
  *
  * IMPORTANT: This uses CI-built images (x86_64), NOT local builds.
  * Local ARM builds would fail in AWS which runs on x86_64.
@@ -140,45 +142,84 @@ async function main() {
   console.log('Local ARM builds are NOT used as they would fail in AWS.');
   console.log('');
 
-  // 1. Check for uncommitted changes
-  console.log('Step 1: Checking for uncommitted changes...');
-  try {
-    execSync('git diff-index --quiet HEAD --', { stdio: 'ignore' });
-  } catch (e) {
-    console.error('❌ You have uncommitted changes');
-    console.error('   Commit or stash your changes before creating a dev deployment');
-    process.exit(1);
+  // Parse command line arguments
+  const args = process.argv.slice(2);
+  const continueMode = args.includes('--continue');
+  const tagIndex = args.indexOf('--tag');
+  const specificTag = tagIndex !== -1 ? args[tagIndex + 1] : null;
+
+  let devTag;
+  let version;
+
+  if (specificTag) {
+    // Use specific tag provided by user
+    devTag = specificTag;
+    version = specificTag.replace(/^v/, '').split('-')[0]; // Extract version from tag
+    console.log(`Using specified tag: ${devTag}`);
+    console.log(`Extracted version: ${version}`);
+  } else if (continueMode) {
+    // Continue mode - find most recent dev tag
+    console.log('Continue mode: Finding most recent dev tag...');
+    try {
+      const tags = run('git tag --sort=-creatordate', { silent: true }).trim().split('\n');
+      const recentDevTag = tags.find(t => t.match(/^v[\d.]+-.+Z$/));
+
+      if (!recentDevTag) {
+        console.error('❌ No dev tags found');
+        console.error('   Run without --continue to create a new dev tag first');
+        process.exit(1);
+      }
+
+      devTag = recentDevTag;
+      version = devTag.replace(/^v/, '').split('-')[0];
+      console.log(`✅ Found recent dev tag: ${devTag}`);
+      console.log(`   Version: ${version}`);
+    } catch (e) {
+      console.error('❌ Failed to find recent dev tag');
+      process.exit(1);
+    }
+  } else {
+    // Normal mode - create new tag
+    // 1. Check for uncommitted changes
+    console.log('Step 1: Checking for uncommitted changes...');
+    try {
+      execSync('git diff-index --quiet HEAD --', { stdio: 'ignore' });
+    } catch (e) {
+      console.error('❌ You have uncommitted changes');
+      console.error('   Commit or stash your changes before creating a dev deployment');
+      process.exit(1);
+    }
+    console.log('✅ Working directory is clean');
+
+    // 2. Generate dev tag name
+    version = pkg.version;
+    const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+    devTag = `v${version}-${timestamp}`;
+
+    console.log('');
+    console.log(`Step 2: Creating dev tag: ${devTag}`);
+
+    // Check if tag already exists
+    try {
+      execSync(`git rev-parse ${devTag}`, { stdio: 'ignore' });
+      console.error(`❌ Tag ${devTag} already exists`);
+      process.exit(1);
+    } catch (e) {
+      // Tag doesn't exist, continue
+    }
+
+    // Create tag
+    const message = `Development release ${devTag}\n\nThis is a pre-release for testing purposes.`;
+    run(`git tag -a ${devTag} -m "${message}"`);
+    console.log(`✅ Created git tag ${devTag}`);
+
+    // 3. Push tag to origin (triggers CI)
+    console.log('');
+    console.log(`Step 3: Pushing tag to origin (this triggers CI/CD)...`);
+    run(`git push origin ${devTag}`);
+    console.log(`✅ Pushed tag ${devTag} to origin`);
+    console.log('   CI will now build Docker image for x86_64 (AWS-compatible)');
   }
-  console.log('✅ Working directory is clean');
-
-  // 2. Generate dev tag name
-  const version = pkg.version;
-  const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
-  const devTag = `v${version}-${timestamp}`;
-
-  console.log('');
-  console.log(`Step 2: Creating dev tag: ${devTag}`);
-
-  // Check if tag already exists
-  try {
-    execSync(`git rev-parse ${devTag}`, { stdio: 'ignore' });
-    console.error(`❌ Tag ${devTag} already exists`);
-    process.exit(1);
-  } catch (e) {
-    // Tag doesn't exist, continue
-  }
-
-  // Create tag
-  const message = `Development release ${devTag}\n\nThis is a pre-release for testing purposes.`;
-  run(`git tag -a ${devTag} -m "${message}"`);
-  console.log(`✅ Created git tag ${devTag}`);
-
-  // 3. Push tag to origin (triggers CI)
-  console.log('');
-  console.log(`Step 3: Pushing tag to origin (this triggers CI/CD)...`);
-  run(`git push origin ${devTag}`);
-  console.log(`✅ Pushed tag ${devTag} to origin`);
-  console.log('   CI will now build Docker image for x86_64 (AWS-compatible)');
 
   // 4. Wait for CI to complete
   console.log('');
@@ -201,8 +242,6 @@ async function main() {
   console.log(`Dev tag: ${devTag}`);
   console.log(`Image tag: ${version} (built by CI for x86_64)`);
   console.log('');
-  console.log(`Monitor workflow: https://github.com/${owner}/${repo}/actions`);
-  console.log(`View release: https://github.com/${owner}/${repo}/releases/tag/${devTag}`);
 }
 
 main().catch(error => {
