@@ -252,7 +252,7 @@ describe("BenchlingWebhookStack", () => {
 
         // Critical environment variables that must match between CDK and Flask
         const criticalMappings: Record<string, string> = {
-            QUEUE_URL: "sqs_queue_url",
+            QUEUE_URL: "queue_url",
             QUILT_USER_BUCKET: "s3_bucket_name",
             PKG_PREFIX: "s3_prefix",
             PKG_KEY: "package_key",

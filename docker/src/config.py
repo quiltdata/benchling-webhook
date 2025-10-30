@@ -12,7 +12,7 @@ class Config:
     package_key: str = os.getenv("PKG_KEY", "experiment_id")
     quilt_catalog: str = os.getenv("QUILT_CATALOG", "stable.quilttest.com")
     quilt_database: str = os.getenv("QUILT_DATABASE", "")
-    sqs_queue_url: str = os.getenv("QUEUE_URL", "")
+    queue_url: str = os.getenv("QUEUE_URL", "")
     benchling_tenant: str = os.getenv("BENCHLING_TENANT", "")
     benchling_client_id: str = os.getenv("BENCHLING_CLIENT_ID", "")
     benchling_client_secret: str = os.getenv("BENCHLING_CLIENT_SECRET", "")
@@ -25,7 +25,7 @@ class Config:
             # AWS & Quilt
             "aws_region",
             "s3_bucket_name",
-            "sqs_queue_url",
+            "queue_url",
             "quilt_catalog",
             # Benchling
             "benchling_tenant",
