@@ -22,6 +22,7 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly createEcrRepository?: boolean;
     readonly ecrRepositoryName?: string;
     readonly logLevel?: string;
+    readonly imageTag?: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
@@ -161,7 +162,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             quiltDatabase: quiltDatabaseValue,
             webhookAllowList: webhookAllowListValue,
             ecrRepository: ecrRepo,
-            imageTag: "latest",
+            imageTag: props.imageTag || "latest",
             logLevel: logLevelValue,
             enableWebhookVerification: enableWebhookVerificationValue,
         });
