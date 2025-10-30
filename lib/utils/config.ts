@@ -2,6 +2,7 @@ import { config as dotenvConfig } from "dotenv";
 import { expand as dotenvExpand } from "dotenv-expand";
 import { existsSync } from "fs";
 import { resolve } from "path";
+import { execSync } from "child_process";
 
 export interface Config {
   // Quilt
@@ -60,6 +61,26 @@ export interface ValidationError {
 }
 
 /**
+ * Get catalog URL from quilt3 config if available
+ */
+export function getQuilt3Catalog(): string | undefined {
+    try {
+        const result = execSync("quilt3 config", { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] });
+        const catalog = result.trim();
+        // quilt3 config returns the full URL (e.g., https://nightly.quilttest.com)
+        // We want just the domain
+        if (catalog) {
+            const url = new URL(catalog);
+            return url.hostname;
+        }
+    } catch {
+        // quilt3 not installed or not configured
+        return undefined;
+    }
+    return undefined;
+}
+
+/**
  * Load .env file and expand variables
  */
 export function loadDotenv(filePath: string): Record<string, string> {
@@ -88,7 +109,8 @@ export function loadDotenv(filePath: string): Record<string, string> {
  * 1. CLI options (highest)
  * 2. Environment variables
  * 3. .env file
- * 4. Inferred values (will be added separately)
+ * 4. quilt3 config (for catalog only)
+ * 5. Inferred values (will be added separately)
  */
 export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
     // 1. Load .env file
@@ -98,10 +120,13 @@ export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
     // 2. Merge with process.env
     const envVars = { ...dotenvVars, ...process.env };
 
-    // 3. Build config with CLI options taking priority
+    // 3. Try to get catalog from quilt3 config as fallback
+    const quilt3Catalog = getQuilt3Catalog();
+
+    // 4. Build config with CLI options taking priority
     const config: Partial<Config> = {
     // Quilt
-        quiltCatalog: options.catalog || envVars.QUILT_CATALOG,
+        quiltCatalog: options.catalog || envVars.QUILT_CATALOG || quilt3Catalog,
         quiltUserBucket: options.bucket || envVars.QUILT_USER_BUCKET,
         quiltDatabase: envVars.QUILT_DATABASE,
 
