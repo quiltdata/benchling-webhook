@@ -109,6 +109,12 @@ export class BenchlingWebhookStack extends cdk.Stack {
             allowedValues: ["true", "false"],
         });
 
+        const imageTagParam = new cdk.CfnParameter(this, "ImageTag", {
+            type: "String",
+            description: "Docker image tag to deploy (e.g., latest, 0.5.3, 0.5.3-20251030T123456Z)",
+            default: props.imageTag || "latest",
+        });
+
         // Use parameter values (which have props as defaults)
         // This allows runtime updates via CloudFormation
         const webhookAllowListValue = webhookAllowListParam.valueAsString;
@@ -121,6 +127,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const benchlingTenantValue = benchlingTenantParam.valueAsString;
         const logLevelValue = logLevelParam.valueAsString;
         const enableWebhookVerificationValue = enableWebhookVerificationParam.valueAsString;
+        const imageTagValue = imageTagParam.valueAsString;
 
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", bucketNameValue);
 
@@ -162,7 +169,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             quiltDatabase: quiltDatabaseValue,
             webhookAllowList: webhookAllowListValue,
             ecrRepository: ecrRepo,
-            imageTag: props.imageTag || "latest",
+            imageTag: imageTagValue,
             logLevel: logLevelValue,
             enableWebhookVerification: enableWebhookVerificationValue,
         });
