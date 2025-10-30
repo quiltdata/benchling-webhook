@@ -19,7 +19,6 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
 
 // Read package.json for version
 const packagePath = path.join(__dirname, '..', 'package.json');
@@ -47,84 +46,72 @@ function run(command, options = {}) {
   }
 }
 
-function getGitHubRepo() {
-  const remote = run('git remote get-url origin', { silent: true }).trim();
-  // Parse github.com:org/repo or https://github.com/org/repo
-  const match = remote.match(/github\.com[:/]([^/]+)\/(.+?)(\.git)?$/);
-  if (!match) {
-    throw new Error('Could not parse GitHub repository from git remote');
-  }
-  return { owner: match[1], repo: match[2] };
-}
-
-async function waitForWorkflow(tag, owner, repo, timeoutMinutes = 15) {
+async function waitForWorkflow(commitSha, timeoutMinutes = 15) {
   console.log('');
   console.log(`Waiting for CI workflow to complete (timeout: ${timeoutMinutes} minutes)...`);
-  console.log(`Monitor at: https://github.com/${owner}/${repo}/actions`);
   console.log('');
+
+  // Check if gh CLI is available
+  try {
+    execSync('gh --version', { stdio: 'ignore' });
+  } catch (e) {
+    console.error('❌ GitHub CLI (gh) is not installed or not in PATH');
+    console.error('   Install from: https://cli.github.com/');
+    console.error('\n   Alternatively, monitor the workflow manually and deploy when complete:');
+    console.error('   1. Watch: https://github.com/quiltdata/benchling-webhook/actions');
+    console.error('   2. Deploy: npm run cli -- --image-tag <version> --yes');
+    process.exit(1);
+  }
 
   const startTime = Date.now();
   const timeoutMs = timeoutMinutes * 60 * 1000;
   let attempt = 0;
-
-  // GitHub API requires user agent
-  const headers = {
-    'User-Agent': 'benchling-webhook-cli',
-    'Accept': 'application/vnd.github+json'
-  };
-
-  // Add GitHub token if available (increases rate limit)
-  const githubToken = process.env.GITHUB_TOKEN;
-  if (githubToken) {
-    headers['Authorization'] = `Bearer ${githubToken}`;
-  }
+  let workflowUrl = null;
 
   while (Date.now() - startTime < timeoutMs) {
     attempt++;
 
     try {
-      // Get workflow runs for the tag
-      const url = `https://api.github.com/repos/${owner}/${repo}/actions/runs?event=push&head_sha=${tag}`;
-
-      const response = await new Promise((resolve, reject) => {
-        https.get(url, { headers }, (res) => {
-          let data = '';
-          res.on('data', chunk => data += chunk);
-          res.on('end', () => {
-            if (res.statusCode === 200) {
-              resolve(JSON.parse(data));
-            } else {
-              reject(new Error(`GitHub API returned ${res.statusCode}: ${data}`));
-            }
-          });
-        }).on('error', reject);
+      // Use gh to list recent workflow runs for this commit
+      const result = run(`gh run list --commit ${commitSha} --json status,conclusion,url,databaseId --limit 5`, {
+        silent: true,
+        allowFailure: true
       });
 
-      if (response.workflow_runs && response.workflow_runs.length > 0) {
-        const run = response.workflow_runs[0]; // Most recent run
-        const status = run.status;
-        const conclusion = run.conclusion;
+      if (!result) {
+        process.stdout.write(`\r  Attempt ${attempt}: Waiting for workflow to start (commit ${commitSha.substring(0, 7)})...`);
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        continue;
+      }
 
-        process.stdout.write(`\r  Attempt ${attempt}: Status=${status}, Conclusion=${conclusion || 'pending'}...`);
+      const runs = JSON.parse(result);
+
+      if (runs && runs.length > 0) {
+        const workflowRun = runs[0]; // Most recent run for this commit
+        const status = workflowRun.status;
+        const conclusion = workflowRun.conclusion;
+        workflowUrl = workflowRun.url;
+
+        process.stdout.write(`\r  Attempt ${attempt}: Status=${status}, Conclusion=${conclusion || 'pending'}... ${workflowUrl}`);
 
         if (status === 'completed') {
           console.log('\n');
           if (conclusion === 'success') {
             console.log(`✅ CI workflow completed successfully!`);
-            console.log(`   Run: ${run.html_url}`);
+            console.log(`   Run: ${workflowUrl}`);
             return true;
           } else {
             console.error(`\n❌ CI workflow failed with conclusion: ${conclusion}`);
-            console.error(`   Run: ${run.html_url}`);
+            console.error(`   Run: ${workflowUrl}`);
             console.error('   Please check the workflow logs and fix any issues.');
             process.exit(1);
           }
         }
       } else {
-        process.stdout.write(`\r  Attempt ${attempt}: Waiting for workflow to start...`);
+        process.stdout.write(`\r  Attempt ${attempt}: Waiting for workflow to start (commit ${commitSha.substring(0, 7)})...`);
       }
     } catch (error) {
-      // API errors are non-fatal, just retry
+      // Errors are non-fatal, just retry
       if (attempt % 10 === 0) {
         console.log(`\n  Warning: ${error.message}`);
       }
@@ -136,9 +123,13 @@ async function waitForWorkflow(tag, owner, repo, timeoutMinutes = 15) {
 
   console.error('\n\n❌ Timeout waiting for CI workflow to complete');
   console.error(`   Waited ${timeoutMinutes} minutes`);
-  console.error(`   Check status at: https://github.com/${owner}/${repo}/actions`);
+  if (workflowUrl) {
+    console.error(`   Check status at: ${workflowUrl}`);
+  } else {
+    console.error(`   Check status at: https://github.com/quiltdata/benchling-webhook/actions`);
+  }
   console.error('\n   Once the workflow completes, you can deploy manually with:');
-  console.error(`   npm run cli -- --image-tag ${tag} --yes`);
+  console.error(`   npm run cli -- --image-tag <version> --yes`);
   process.exit(1);
 }
 
@@ -189,9 +180,6 @@ async function main() {
   console.log(`✅ Pushed tag ${devTag} to origin`);
   console.log('   CI will now build Docker image for x86_64 (AWS-compatible)');
 
-  // Get GitHub repo info for API calls
-  const { owner, repo } = getGitHubRepo();
-
   // 4. Wait for CI to complete
   console.log('');
   console.log(`Step 4: Waiting for CI to build Docker image...`);
@@ -199,7 +187,7 @@ async function main() {
   // Get the commit SHA for the tag
   const commitSha = run(`git rev-parse ${devTag}`, { silent: true }).trim();
 
-  await waitForWorkflow(commitSha, owner, repo);
+  await waitForWorkflow(commitSha);
 
   // 5. Deploy CDK stack with CI-built image tag
   console.log('');
