@@ -7,21 +7,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **CloudFormation parameters for runtime configuration** - All key configuration values now exposed as stack parameters
+- **Runtime configuration via CloudFormation parameters** - Update stack settings without redeployment
   - `QuiltDatabase` - Glue Data Catalog database name
   - `BenchlingTenant` - Benchling tenant identifier
-  - `LogLevel` - Application log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
-  - `EnableWebhookVerification` - Toggle webhook signature verification (defaults to true)
-  - `PackageKey` - Metadata key for linking Benchling entries to Quilt packages (defaults to experiment_id)
-  - All parameters support runtime updates via CloudFormation without redeployment
-
-### Changed
-
-- Removed unused `PKG_BUCKET_ONLY` environment variable from docker-compose.yml
+  - `LogLevel` - Application log level with validation (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+  - `EnableWebhookVerification` - Toggle webhook signature verification
+  - `PackageKey` - Metadata key for linking Benchling entries to Quilt packages
+  - Update any parameter through CloudFormation console or CLI without full redeployment
 
 ### Fixed
 
-- Linter compliance in deploy and manifest commands
+- Container health checks failing during deployment due to environment variable mismatch
 
 ## [0.5.1] - 2025-10-29
 
