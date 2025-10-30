@@ -16,6 +16,7 @@ export interface FargateServiceProps {
     readonly region: string;
     readonly account: string;
     readonly prefix: string;
+    readonly pkgKey: string;
     readonly benchlingClientId: string;
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
@@ -25,6 +26,7 @@ export interface FargateServiceProps {
     readonly ecrRepository: ecr.IRepository;
     readonly imageTag?: string;
     readonly logLevel?: string;
+    readonly enableWebhookVerification?: string;
 }
 
 export class FargateService extends Construct {
@@ -179,6 +181,7 @@ export class FargateService extends Construct {
                 QUILT_USER_BUCKET: props.bucket.bucketName,
                 SQS_QUEUE_URL: `https://sqs.${props.region}.amazonaws.com/${props.account}/${props.queueName}`,
                 PKG_PREFIX: props.prefix,
+                PKG_KEY: props.pkgKey,
                 BENCHLING_TENANT: props.benchlingTenant,
                 QUILT_CATALOG: props.quiltCatalog,
                 QUILT_DATABASE: props.quiltDatabase,
@@ -187,7 +190,7 @@ export class FargateService extends Construct {
                 AWS_DEFAULT_REGION: props.region,
                 FLASK_ENV: "production",
                 LOG_LEVEL: props.logLevel || "INFO",
-                ENABLE_WEBHOOK_VERIFICATION: "false",
+                ENABLE_WEBHOOK_VERIFICATION: props.enableWebhookVerification || "true",
             },
             secrets: {
                 BENCHLING_CLIENT_ID: ecs.Secret.fromSecretsManager(
