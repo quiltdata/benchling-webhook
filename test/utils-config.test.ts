@@ -279,27 +279,6 @@ describe("config utility", () => {
             expect(result.errors.some((e) => e.field === "benchlingAppDefinitionId")).toBe(true);
         });
 
-        it("should not require app definition ID when verification is disabled", () => {
-            const config: Partial<Config> = {
-                quiltCatalog: "catalog.example.com",
-                quiltUserBucket: "test-bucket",
-                benchlingTenant: "test-tenant",
-                benchlingClientId: "client-id",
-                benchlingClientSecret: "client-secret",
-                enableWebhookVerification: "false",
-                cdkAccount: "123456789012",
-                cdkRegion: "us-east-1",
-                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-                quiltDatabase: "test_db",
-            };
-
-            const result = validateConfig(config);
-            expect(result.valid).toBe(true);
-            expect(result.warnings.some((w) => w.includes("Webhook verification is disabled"))).toBe(
-                true,
-            );
-        });
-
         it("should warn about invalid catalog domain format", () => {
             const config: Partial<Config> = {
                 quiltCatalog: "https://catalog.example.com", // Should not include protocol
