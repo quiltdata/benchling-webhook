@@ -152,7 +152,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
             if (inferredVars.QUEUE_NAME) {
                 envLines.push("# SQS Configuration (inferred)");
                 envLines.push(`QUEUE_NAME=${inferredVars.QUEUE_NAME}`);
-                envLines.push(`SQS_QUEUE_URL=${inferredVars.SQS_QUEUE_URL}`);
+                envLines.push(`QUEUE_URL=${inferredVars.QUEUE_URL}`);
                 envLines.push("");
             }
 

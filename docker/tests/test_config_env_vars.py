@@ -2,7 +2,7 @@
 
 This test file specifically validates that the environment variable names
 used in config.py match what the CDK stack provides, preventing issues
-like the QUEUE_URL vs SQS_QUEUE_URL bug.
+like the QUEUE_URL vs QUEUE_URL bug.
 """
 
 import re
@@ -33,7 +33,7 @@ def test_environment_variable_names_are_documented():
         "PKG_KEY",
         "QUILT_CATALOG",
         "QUILT_DATABASE",
-        "SQS_QUEUE_URL",  # NOT QUEUE_URL!
+        "QUEUE_URL",  # NOT QUEUE_URL!
         "BENCHLING_TENANT",
         "BENCHLING_CLIENT_ID",
         "BENCHLING_CLIENT_SECRET",
@@ -53,23 +53,23 @@ def test_environment_variable_names_are_documented():
 
 def test_sqs_queue_url_not_queue_url():
     """
-    Critical test: Ensure we use SQS_QUEUE_URL, not QUEUE_URL.
+    Critical test: Ensure we use QUEUE_URL, not QUEUE_URL.
 
     This test exists because we had a bug where the CDK stack was passing
-    QUEUE_URL but the Flask app expected SQS_QUEUE_URL, causing deployments
+    QUEUE_URL but the Flask app expected QUEUE_URL, causing deployments
     to fail due to failed health checks.
     """
     config_path = Path(__file__).parent.parent / "src" / "config.py"
     config_content = config_path.read_text()
 
-    # Ensure SQS_QUEUE_URL is used
-    assert 'os.getenv("SQS_QUEUE_URL"' in config_content, (
-        "config.py must use SQS_QUEUE_URL environment variable"
+    # Ensure QUEUE_URL is used
+    assert 'os.getenv("QUEUE_URL"' in config_content, (
+        "config.py must use QUEUE_URL environment variable"
     )
 
     # Ensure QUEUE_URL is NOT used
     assert 'os.getenv("QUEUE_URL"' not in config_content, (
-        "config.py must NOT use QUEUE_URL - use SQS_QUEUE_URL instead"
+        "config.py must NOT use QUEUE_URL - use QUEUE_URL instead"
     )
 
 
@@ -94,7 +94,7 @@ def test_cdk_environment_variables_match_config():
 
     # Critical environment variables that must be set by CDK
     critical_vars = [
-        "SQS_QUEUE_URL",  # NOT QUEUE_URL!
+        "QUEUE_URL",  # NOT QUEUE_URL!
         "QUILT_USER_BUCKET",
         "PKG_PREFIX",
         "PKG_KEY",
@@ -121,13 +121,13 @@ def test_cdk_environment_variables_match_config():
         f"These variables are required by the Flask config but not set in fargate-service.ts"
     )
 
-    # Specifically verify SQS_QUEUE_URL is used (not QUEUE_URL)
-    assert 'SQS_QUEUE_URL' in fargate_content, (
-        "fargate-service.ts must set SQS_QUEUE_URL environment variable"
+    # Specifically verify QUEUE_URL is used (not QUEUE_URL)
+    assert 'QUEUE_URL' in fargate_content, (
+        "fargate-service.ts must set QUEUE_URL environment variable"
     )
 
     # Check that QUEUE_URL is not used instead
-    if 'QUEUE_URL' in fargate_content and 'SQS_QUEUE_URL' not in fargate_content:
+    if 'QUEUE_URL' in fargate_content and 'QUEUE_URL' not in fargate_content:
         raise AssertionError(
-            "fargate-service.ts uses QUEUE_URL but should use SQS_QUEUE_URL"
+            "fargate-service.ts uses QUEUE_URL but should use QUEUE_URL"
         )
