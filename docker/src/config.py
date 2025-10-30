@@ -20,23 +20,23 @@ class Config:
     enable_webhook_verification: bool = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "true").lower() == "true"
 
     def __post_init__(self):
-        # Required fields for Python orchestration
+        # Required fields - these are always needed
         required_fields = [
+            # AWS & Quilt
             "aws_region",
             "s3_bucket_name",
             "sqs_queue_url",
+            "quilt_catalog",
+            # Benchling
+            "benchling_tenant",
+            "benchling_client_id",
+            "benchling_client_secret",
+            "benchling_app_definition_id",
         ]
 
         missing = [field for field in required_fields if not getattr(self, field)]
         if missing:
             raise ValueError(f"Missing required configuration: {', '.join(missing)}")
-
-        # Require app_definition_id when webhook verification is enabled
-        if self.enable_webhook_verification and not self.benchling_app_definition_id:
-            raise ValueError(
-                "BENCHLING_APP_DEFINITION_ID is required when ENABLE_WEBHOOK_VERIFICATION=true. "
-                "Either provide the app definition ID or set ENABLE_WEBHOOK_VERIFICATION=false for local development."
-            )
 
 
 def get_config() -> Config:

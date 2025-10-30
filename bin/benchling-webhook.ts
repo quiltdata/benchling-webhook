@@ -225,17 +225,23 @@ async function legacyGetConfig(): Promise<Record<string, string | undefined>> {
         process.exit(1);
     }
 
-    // Validate conditional requirements
-    if (
-        config.ENABLE_WEBHOOK_VERIFICATION !== "false" &&
-    !config.BENCHLING_APP_DEFINITION_ID
-    ) {
+    // Validate required Benchling fields
+    const requiredBenchlingFields = [
+        "BENCHLING_TENANT",
+        "BENCHLING_CLIENT_ID",
+        "BENCHLING_CLIENT_SECRET",
+        "BENCHLING_APP_DEFINITION_ID",
+    ] as const;
+
+    const missingBenchling = requiredBenchlingFields.filter(
+        (field) => !config[field],
+    );
+
+    if (missingBenchling.length > 0) {
         console.error(
-            "Error: BENCHLING_APP_DEFINITION_ID is required when webhook verification is enabled.",
+            "Error: The following required Benchling configuration is missing:",
         );
-        console.error(
-            "Either set BENCHLING_APP_DEFINITION_ID or set ENABLE_WEBHOOK_VERIFICATION=false",
-        );
+        missingBenchling.forEach((field) => console.error(`  - ${field}`));
         process.exit(1);
     }
 
