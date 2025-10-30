@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Development deployment workflow** - New `npm run cdk:dev` command for testing changes before production (#141)
+  - Creates timestamped dev git tags (e.g., `v0.5.3-20251030T123456Z`)
+  - Builds and pushes Docker image to ECR with dev tag
+  - Deploys CDK stack using specific image tag instead of `latest`
+  - Added `--image-tag` CLI option to deploy command for manual control
+  - Added `IMAGE_TAG` environment variable support in configuration
+  - New documentation: `DEV_DEPLOYMENT.md` with complete usage guide
+
 ### Fixed
 
 - **Complete QUEUE_URL to QUEUE_ARN migration** - Fixed remaining references after v0.5.3

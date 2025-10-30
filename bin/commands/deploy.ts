@@ -135,6 +135,7 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
     console.log(`    ${chalk.bold("Webhook Verification:")}    ${config.enableWebhookVerification ?? "true"}`);
     console.log(`    ${chalk.bold("Create ECR Repository:")}   ${config.createEcrRepository || "false"}`);
     console.log(`    ${chalk.bold("ECR Repository Name:")}     ${config.ecrRepositoryName || "quiltdata/benchling"}`);
+    console.log(`    ${chalk.bold("Docker Image Tag:")}        ${config.imageTag || "latest"}`);
     console.log(chalk.gray("─".repeat(80)));
     console.log();
 

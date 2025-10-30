@@ -137,6 +137,7 @@ export function createStack(config: Config): DeploymentResult {
         logLevel: config.logLevel || "INFO",
         createEcrRepository: config.createEcrRepository === "true",
         ecrRepositoryName: config.ecrRepositoryName || "quiltdata/benchling",
+        imageTag: config.imageTag || "latest",
     });
 
     return {
