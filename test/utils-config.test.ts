@@ -21,6 +21,7 @@ describe("config utility", () => {
         delete process.env.PKG_PREFIX;
         delete process.env.AWS_REGION;
         delete process.env.CDK_DEFAULT_REGION;
+        delete process.env.CDK_DEFAULT_ACCOUNT;
         delete process.env.ENABLE_WEBHOOK_VERIFICATION;
         delete process.env.ECR_REPOSITORY_NAME;
         delete process.env.LOG_LEVEL;
@@ -39,6 +40,7 @@ describe("config utility", () => {
         delete process.env.PKG_PREFIX;
         delete process.env.AWS_REGION;
         delete process.env.CDK_DEFAULT_REGION;
+        delete process.env.CDK_DEFAULT_ACCOUNT;
         delete process.env.ENABLE_WEBHOOK_VERIFICATION;
         delete process.env.ECR_REPOSITORY_NAME;
         delete process.env.LOG_LEVEL;
