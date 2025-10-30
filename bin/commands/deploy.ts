@@ -125,7 +125,7 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
     if (config.benchlingAppDefinitionId) {
         console.log(`    ${chalk.bold("Benchling App ID:")}        ${config.benchlingAppDefinitionId}`);
     }
-    console.log(`    ${chalk.bold("Queue URL:")}                ${config.queueUrl}`);
+    console.log(`    ${chalk.bold("Queue ARN:")}                ${config.queueArn}`);
     console.log(`    ${chalk.bold("Package Prefix:")}           ${config.pkgPrefix || "benchling"}`);
     console.log(`    ${chalk.bold("Package Key:")}              ${config.pkgKey || "experiment_id"}`);
     console.log(`    ${chalk.bold("Log Level:")}                ${config.logLevel || "INFO"}`);
