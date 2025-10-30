@@ -14,7 +14,7 @@ export interface Config {
   benchlingTenant: string;
   benchlingClientId: string;
   benchlingClientSecret: string;
-  benchlingAppDefinitionId?: string;
+  benchlingAppDefinitionId: string;
 
   // AWS
   cdkAccount: string;
@@ -190,6 +190,10 @@ export function validateConfig(config: Partial<Config>): ValidationResult {
         ["benchlingTenant", "Benchling tenant", "Your Benchling tenant name (use XXX if you login to XXX.benchling.com)"],
         ["benchlingClientId", "Benchling OAuth client ID", "OAuth client ID from your Benchling app"],
         ["benchlingClientSecret", "Benchling OAuth client secret", "OAuth client secret from your Benchling app"],
+        ["benchlingAppDefinitionId", "Benchling app definition ID", "App definition ID is always required. Create a Benchling app:\n" +
+            "    1. Run: npx @quiltdata/benchling-webhook manifest\n" +
+            "    2. Upload the manifest to Benchling\n" +
+            "    3. Copy the App Definition ID from the app overview"],
     ];
 
     for (const [field, message, helpText] of requiredUserFields) {
@@ -201,20 +205,6 @@ export function validateConfig(config: Partial<Config>): ValidationResult {
                 helpText,
             });
         }
-    }
-
-    // Conditional requirement for app definition ID
-    if (config.enableWebhookVerification !== "false" && !config.benchlingAppDefinitionId) {
-        errors.push({
-            field: "benchlingAppDefinitionId",
-            message: "Benchling app definition ID",
-            canInfer: false,
-            helpText: "Create a Benchling app first:\n" +
-                "    1. Run: npx @quiltdata/benchling-webhook manifest\n" +
-                "    2. Upload the manifest to Benchling\n" +
-                "    3. Copy the App Definition ID from the app overview\n" +
-                "    Or set ENABLE_WEBHOOK_VERIFICATION=false to skip (NOT recommended for production)",
-        });
     }
 
     // Required inferred values
