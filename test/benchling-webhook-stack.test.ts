@@ -346,4 +346,62 @@ describe("BenchlingWebhookStack", () => {
 
         expect(foundSecretPermission).toBe(true);
     });
+
+    // ===================================================================
+    // Phase 3 Episode 5: Container Environment Tests (RED)
+    // ===================================================================
+
+    test("container receives BENCHLING_SECRETS when new parameter provided", () => {
+        // Create a new stack with benchlingSecrets provided
+        const app = new cdk.App();
+        const stackWithSecrets = new BenchlingWebhookStack(app, "TestStackWithSecrets", {
+            bucketName: "test-bucket",
+            environment: "test",
+            prefix: "test-prefix",
+            queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+            benchlingClientId: "",  // Empty to simulate new param usage
+            benchlingClientSecret: "",
+            benchlingTenant: "",
+            benchlingSecrets: JSON.stringify({
+                client_id: "test-id",
+                client_secret: "test-secret",
+                tenant: "test-tenant",
+            }),
+            quiltDatabase: "test-database",
+            env: {
+                account: "123456789012",
+                region: "us-east-1",
+            },
+        });
+
+        const templateWithSecrets = Template.fromStack(stackWithSecrets);
+        const taskDefs = templateWithSecrets.findResources("AWS::ECS::TaskDefinition");
+        const taskDefKeys = Object.keys(taskDefs);
+        const taskDef = taskDefs[taskDefKeys[0]];
+        const containerDef = taskDef.Properties.ContainerDefinitions[0];
+        const environment = containerDef.Environment || [];
+
+        const benchlingSecretsEnv = environment.find((e: any) => e.Name === "BENCHLING_SECRETS");
+        expect(benchlingSecretsEnv).toBeDefined();
+    });
+
+    test("container receives individual vars when old parameters provided", () => {
+        // This is the existing test stack setup (backward compatibility)
+        const taskDefs = template.findResources("AWS::ECS::TaskDefinition");
+        const taskDefKeys = Object.keys(taskDefs);
+        const taskDef = taskDefs[taskDefKeys[0]];
+        const containerDef = taskDef.Properties.ContainerDefinitions[0];
+        const environment = containerDef.Environment || [];
+        const secrets = containerDef.Secrets || [];
+
+        // Should have BENCHLING_TENANT as environment variable
+        const tenantEnv = environment.find((e: any) => e.Name === "BENCHLING_TENANT");
+        expect(tenantEnv).toBeDefined();
+
+        // Should have CLIENT_ID and CLIENT_SECRET as secrets
+        const clientIdSecret = secrets.find((s: any) => s.Name === "BENCHLING_CLIENT_ID");
+        const clientSecretSecret = secrets.find((s: any) => s.Name === "BENCHLING_CLIENT_SECRET");
+        expect(clientIdSecret).toBeDefined();
+        expect(clientSecretSecret).toBeDefined();
+    });
 });
