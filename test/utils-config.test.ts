@@ -375,4 +375,41 @@ describe("config utility", () => {
             expect(formatted.trim()).toBe("");
         });
     });
+
+    describe("benchlingSecrets field", () => {
+        beforeEach(() => {
+            delete process.env.BENCHLING_SECRETS;
+        });
+
+        afterEach(() => {
+            delete process.env.BENCHLING_SECRETS;
+        });
+
+        it("loads benchlingSecrets from environment variable", () => {
+            process.env.BENCHLING_SECRETS =
+                "arn:aws:secretsmanager:us-east-1:123456789012:secret:name";
+            const config = loadConfigSync({});
+            expect(config.benchlingSecrets).toBe(process.env.BENCHLING_SECRETS);
+        });
+
+        it("CLI option overrides environment variable", () => {
+            process.env.BENCHLING_SECRETS = "env-value";
+            const config = loadConfigSync({ benchlingSecrets: "cli-value" });
+            expect(config.benchlingSecrets).toBe("cli-value");
+        });
+
+        it("returns undefined when not provided", () => {
+            const config = loadConfigSync({});
+            expect(config.benchlingSecrets).toBeUndefined();
+        });
+
+        it("existing config fields still work", () => {
+            const config = loadConfigSync({
+                catalog: "test.quiltdata.com",
+                tenant: "test-tenant",
+            });
+            expect(config.quiltCatalog).toBe("test.quiltdata.com");
+            expect(config.benchlingTenant).toBe("test-tenant");
+        });
+    });
 });
