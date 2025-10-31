@@ -51,6 +51,82 @@ def test_environment_variable_names_are_documented():
     )
 
 
+# Episode 6: Config integration with secrets resolver
+import json
+import pytest
+from src.config import get_config
+from src.secrets_resolver import SecretsResolutionError
+
+
+class TestConfigWithSecretsResolver:
+    """Test Config integration with secrets resolver."""
+
+    @pytest.fixture
+    def minimal_env_vars(self, monkeypatch):
+        """Set minimal required env vars (non-Benchling)."""
+        monkeypatch.setenv("AWS_REGION", "us-east-2")
+        monkeypatch.setenv("QUILT_USER_BUCKET", "test-bucket")
+        monkeypatch.setenv("QUEUE_ARN", "arn:aws:sqs:us-east-2:123456789012:test-queue")
+        monkeypatch.setenv("QUILT_CATALOG", "test.quiltdata.com")
+        monkeypatch.setenv("BENCHLING_APP_DEFINITION_ID", "app-123")
+
+    def test_config_with_benchling_secrets_json(self, monkeypatch, minimal_env_vars):
+        """Test Config initialization with BENCHLING_SECRETS JSON."""
+        json_str = json.dumps({
+            "tenant": "json-tenant",
+            "clientId": "json-id",
+            "clientSecret": "json-secret"
+        })
+        monkeypatch.setenv("BENCHLING_SECRETS", json_str)
+
+        config = get_config()
+
+        assert config.benchling_tenant == "json-tenant"
+        assert config.benchling_client_id == "json-id"
+        assert config.benchling_client_secret == "json-secret"
+
+    def test_config_with_individual_env_vars(self, monkeypatch, minimal_env_vars):
+        """Test Config with individual Benchling env vars (backward compatible)."""
+        monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
+        monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
+        monkeypatch.setenv("BENCHLING_CLIENT_SECRET", "env-secret")
+
+        config = get_config()
+
+        assert config.benchling_tenant == "env-tenant"
+        assert config.benchling_client_id == "env-id"
+        assert config.benchling_client_secret == "env-secret"
+
+    def test_config_fails_without_secrets(self, monkeypatch, minimal_env_vars):
+        """Test Config fails when no Benchling secrets provided."""
+        # Remove all Benchling env vars
+        monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
+        monkeypatch.delenv("BENCHLING_TENANT", raising=False)
+        monkeypatch.delenv("BENCHLING_CLIENT_ID", raising=False)
+        monkeypatch.delenv("BENCHLING_CLIENT_SECRET", raising=False)
+
+        with pytest.raises(ValueError, match="Failed to resolve Benchling secrets"):
+            get_config()
+
+    def test_config_priority_benchling_secrets_over_individual(self, monkeypatch, minimal_env_vars):
+        """Test BENCHLING_SECRETS takes priority over individual vars."""
+        # Set both
+        json_str = json.dumps({
+            "tenant": "json-tenant",
+            "clientId": "json-id",
+            "clientSecret": "json-secret"
+        })
+        monkeypatch.setenv("BENCHLING_SECRETS", json_str)
+        monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
+        monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
+        monkeypatch.setenv("BENCHLING_CLIENT_SECRET", "env-secret")
+
+        config = get_config()
+
+        # Should use BENCHLING_SECRETS (JSON)
+        assert config.benchling_tenant == "json-tenant"
+
+
 def test_cdk_environment_variables_match_config():
     """
     Test that the CDK stack's Fargate service provides all required env vars.
