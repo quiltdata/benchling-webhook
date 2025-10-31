@@ -8,6 +8,7 @@ import {
     mergeInferredConfig,
     validateConfig,
     formatValidationErrors,
+    maskArn,
     type Config,
     type ConfigOptions,
 } from "../../lib/utils/config";

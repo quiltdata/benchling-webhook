@@ -168,6 +168,37 @@ export function processBenchlingSecretsInput(input: string): string {
 }
 
 /**
+ * Mask sensitive parts of ARN for display
+ *
+ * Shows region and partial secret name, masks account ID for security.
+ * Account ID is masked as ****XXXX where XXXX are the last 4 digits.
+ *
+ * @param arn - AWS Secrets Manager ARN to mask
+ * @returns Masked ARN string or original input if not valid ARN format
+ *
+ * @example
+ * maskArn("arn:aws:secretsmanager:us-east-1:123456789012:secret:name")
+ * // Returns: "arn:aws:secretsmanager:us-east-1:****9012:secret:name"
+ *
+ * @example
+ * maskArn("not-an-arn")
+ * // Returns: "not-an-arn"
+ */
+export function maskArn(arn: string): string {
+    // Pattern: arn:aws:secretsmanager:region:account:secret:name
+    const match = arn.match(/^(arn:aws:secretsmanager:[^:]+:)(\d{12})(:.+)$/);
+
+    if (match) {
+        const [, prefix, account, suffix] = match;
+        const maskedAccount = "****" + account.slice(-4);
+        return prefix + maskedAccount + suffix;
+    }
+
+    // Return as-is if pattern doesn't match
+    return arn;
+}
+
+/**
  * Load configuration from multiple sources with priority:
  * 1. CLI options (highest)
  * 2. Environment variables
