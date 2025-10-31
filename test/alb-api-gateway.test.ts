@@ -248,22 +248,12 @@ describe("AlbApiGateway", () => {
 
             const template = Template.fromStack(stack);
 
-            // Should handle token using Fn::Split
-            template.hasResourceProperties("AWS::ApiGateway::RestApi", {
-                Policy: Match.objectLike({
-                    Statement: Match.arrayWith([
-                        Match.objectLike({
-                            Condition: {
-                                IpAddress: {
-                                    "aws:SourceIp": Match.objectLike({
-                                        "Fn::Split": Match.anyValue(),
-                                    }),
-                                },
-                            },
-                        }),
-                    ]),
-                }),
-            });
+            // CloudFormation parameters cannot be used for IP filtering
+            // API Gateway doesn't support conditional policies at runtime
+            // So Policy should be undefined when using parameters
+            const resources = template.findResources("AWS::ApiGateway::RestApi");
+            const restApi = Object.values(resources)[0];
+            expect(restApi.Properties.Policy).toBeUndefined();
         });
     });
 

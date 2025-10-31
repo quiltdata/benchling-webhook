@@ -135,6 +135,7 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
     console.log(`    ${chalk.bold("Webhook Verification:")}    ${config.enableWebhookVerification ?? "true"}`);
     console.log(`    ${chalk.bold("Create ECR Repository:")}   ${config.createEcrRepository || "false"}`);
     console.log(`    ${chalk.bold("ECR Repository Name:")}     ${config.ecrRepositoryName || "quiltdata/benchling"}`);
+    console.log(`    ${chalk.bold("Docker Image Tag:")}        ${config.imageTag || "latest"}`);
     console.log(chalk.gray("─".repeat(80)));
     console.log();
 
@@ -169,7 +170,23 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
         // We need to synthesize to cdk.out and then deploy
         result.app.synth();
 
-        const cdkCommand = `npx cdk deploy --require-approval ${options.requireApproval || "never"}`;
+        // Build CloudFormation parameters to pass explicitly
+        const parameters = [
+            `ImageTag=${config.imageTag || "latest"}`,
+            `BucketName=${config.quiltUserBucket}`,
+            `PackagePrefix=${config.pkgPrefix || "benchling"}`,
+            `PackageKey=${config.pkgKey || "experiment_id"}`,
+            `QueueArn=${config.queueArn}`,
+            `QuiltDatabase=${config.quiltDatabase}`,
+            `BenchlingTenant=${config.benchlingTenant}`,
+            `LogLevel=${config.logLevel || "INFO"}`,
+            `EnableWebhookVerification=${config.enableWebhookVerification ?? "true"}`,
+            `QuiltCatalog=${config.quiltCatalog || "open.quiltdata.com"}`,
+            `WebhookAllowList=${config.webhookAllowList || ""}`,
+        ];
+
+        const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
+        const cdkCommand = `npx cdk deploy --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
 
         execSync(cdkCommand, {
             stdio: "inherit",

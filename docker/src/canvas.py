@@ -98,10 +98,13 @@ class CanvasManager:
     def package(self) -> Package:
         """Get Package instance for this entry."""
         if self._package is None:
+            # Ensure display_id is set on payload for package naming
+            if not self.payload.display_id:
+                self.payload.set_display_id(self.entry.display_id)
             self._package = Package(
                 catalog_base_url=self.config.quilt_catalog,
                 bucket=self.config.s3_bucket_name,
-                package_name=self.payload.package_name(self.config.s3_prefix),
+                package_name=self.payload.package_name(self.config.s3_prefix, use_display_id=True),
             )
         return self._package
 

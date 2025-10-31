@@ -25,6 +25,7 @@ export interface FargateServiceProps {
     readonly webhookAllowList: string;
     readonly ecrRepository: ecr.IRepository;
     readonly imageTag?: string;
+    readonly stackVersion?: string;
     readonly logLevel?: string;
     readonly enableWebhookVerification?: string;
 }
@@ -190,6 +191,7 @@ export class FargateService extends Construct {
                 FLASK_ENV: "production",
                 LOG_LEVEL: props.logLevel || "INFO",
                 ENABLE_WEBHOOK_VERIFICATION: props.enableWebhookVerification || "true",
+                BENCHLING_WEBHOOK_VERSION: props.stackVersion || props.imageTag || "latest",
             },
             secrets: {
                 BENCHLING_CLIENT_ID: ecs.Secret.fromSecretsManager(

@@ -28,20 +28,27 @@ export class AlbApiGateway {
         this.createCloudWatchRole(scope);
 
         // Parse IP allowlist for resource policy
-        let allowedIps: string[] = [];
-        if (props.webhookAllowList && props.webhookAllowList.trim() !== "") {
+        let allowedIps: string[] | undefined = undefined;
+        if (props.webhookAllowList) {
             if (cdk.Token.isUnresolved(props.webhookAllowList)) {
+                // For CDK tokens (parameters), we can't evaluate at synth time
+                // Split and let CloudFormation handle it
                 allowedIps = cdk.Fn.split(",", props.webhookAllowList) as unknown as string[];
-            } else {
-                allowedIps = props.webhookAllowList
+            } else if (props.webhookAllowList.trim() !== "") {
+                // For concrete values, parse and filter
+                const parsed = props.webhookAllowList
                     .split(",")
                     .map(ip => ip.trim())
                     .filter(ip => ip.length > 0);
+                if (parsed.length > 0) {
+                    allowedIps = parsed;
+                }
             }
         }
 
         // Create resource policy for IP filtering at the edge
-        const policyDocument = this.createResourcePolicy(allowedIps);
+        // Only create policy if we have IPs and they're not from an empty parameter
+        const policyDocument = this.createResourcePolicy(allowedIps, props.webhookAllowList);
 
         this.api = new apigateway.RestApi(scope, "BenchlingWebhookAPI", {
             restApiName: "BenchlingWebhookAPI",
@@ -79,11 +86,26 @@ export class AlbApiGateway {
         });
     }
 
-    private createResourcePolicy(allowedIps: string[] | string): iam.PolicyDocument | undefined {
+    private createResourcePolicy(
+        allowedIps: string[] | undefined,
+        rawParameter: string | undefined
+    ): iam.PolicyDocument | undefined {
+        // Don't create policy if no IPs provided
+        if (!allowedIps) {
+            return undefined;
+        }
+
+        // Don't create policy for empty arrays
         if (Array.isArray(allowedIps) && allowedIps.length === 0) {
             return undefined;
         }
-        if (!allowedIps) {
+
+        // For CDK tokens (CloudFormation parameters), we can't evaluate at synth time
+        // Don't create policy for parameters since we can't conditionally apply them
+        // API Gateway doesn't support conditional policies, so we skip the policy entirely
+        // when using parameters. This means WebhookAllowList parameter won't work for
+        // runtime IP filtering - IPs must be set at deployment time.
+        if (rawParameter && cdk.Token.isUnresolved(rawParameter)) {
             return undefined;
         }
 

@@ -4,9 +4,39 @@ This module provides reusable markdown formatting functions to reduce
 code duplication across canvas views.
 """
 
+import re
 from typing import Any, Dict, List
 
 from .packages import Package
+
+# URL pattern for detecting URLs in text
+URL_PATTERN = re.compile(
+    r"(?<![\[\(])"  # Negative lookbehind: not preceded by [ or (
+    r"(https?://[^\s\)>\]]+)"  # Match http:// or https:// followed by non-whitespace chars
+    r"(?![\]\)])"  # Negative lookahead: not followed by ] or )
+)
+
+
+def linkify_urls(text: str) -> str:
+    """Convert plain URLs in text to markdown links.
+
+    Args:
+        text: Text that may contain URLs
+
+    Returns:
+        Text with URLs converted to markdown link format [url](url)
+
+    Example:
+        >>> linkify_urls("Check https://example.com for more")
+        'Check [https://example.com](https://example.com) for more'
+    """
+
+    # Avoid linkifying URLs that are already in markdown links or inside brackets
+    def replace_url(match: re.Match) -> str:
+        url = match.group(1)
+        return f"[{url}]({url})"
+
+    return URL_PATTERN.sub(replace_url, text)
 
 
 def format_package_header(package_name: str, display_id: str, catalog_url: str, sync_url: str, upload_url: str) -> str:
@@ -22,9 +52,9 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
     Returns:
         Formatted markdown string
     """
-    return f"""## {package_name}
+    return f"""## {display_id}
 
-* {display_id}: [{package_name}]({catalog_url}) [[🔄 sync]]({sync_url}) [[⬆️ upload]]({upload_url})
+* Package: [{package_name}]({catalog_url}) [[🔄 sync]]({sync_url}) [[⬆️ upload]]({upload_url})
 """
 
 
@@ -224,23 +254,24 @@ def dict_to_markdown_list(data: Dict[str, Any], indent_level: int = 0) -> str:
             md += f"{indent}- **{key}**:\n"
             md += dict_to_markdown_list(value, indent_level + 1)
         elif isinstance(value, list):
-            # List: show key and list items
+            # List: show key and list items with indices
             md += f"{indent}- **{key}**:\n"
-            for item in value:
+            for idx, item in enumerate(value, start=1):
                 if isinstance(item, dict):
-                    # List of dicts: recurse for each
-                    md += dict_to_markdown_list(item, indent_level + 1)
+                    # List of dicts: add index and recurse for each
+                    md += f"{indent}  {idx}.\n"
+                    md += dict_to_markdown_list(item, indent_level + 2)
                 else:
-                    # Simple list item
-                    md += f"{indent}  - {item}\n"
+                    # Simple list item with index
+                    md += f"{indent}  {idx}. {item}\n"
         elif value is None:
             md += f"{indent}- **{key}**: *null*\n"
         elif isinstance(value, bool):
             md += f"{indent}- **{key}**: {str(value).lower()}\n"
         elif isinstance(value, str):
-            # Escape markdown special characters in string values
-            safe_value = value.replace("[", "\\[").replace("]", "\\]")
-            md += f"{indent}- **{key}**: {safe_value}\n"
+            # Linkify URLs in string values
+            linkified_value = linkify_urls(value)
+            md += f"{indent}- **{key}**: {linkified_value}\n"
         else:
             md += f"{indent}- **{key}**: {value}\n"
 

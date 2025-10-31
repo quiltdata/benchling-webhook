@@ -146,7 +146,7 @@ class TestCanvasBrowser:
         # Check the buttons within the section
         buttons = section.children
         assert len(buttons) == 2
-        assert buttons[0].text == "Browse Files"
+        assert buttons[0].text == "Browse Package"
         assert buttons[0].id.startswith("browse-files-")
         assert buttons[1].text == "Update Package"
 
