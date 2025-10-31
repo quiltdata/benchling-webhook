@@ -19,6 +19,10 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **WebhookAllowList parameter handling** - Fixed deployment failures when IP allowlist is empty
+  - API Gateway resource policy now correctly handles empty `WebhookAllowList` parameter
+  - No longer attempts to create invalid IP conditions with empty strings
+  - Deployments with empty allowlist now succeed (allows all IPs as documented)
 - **Complete QUEUE_URL to QUEUE_ARN migration** - Fixed remaining references after v0.5.3
   - Fixed `docker/tests/test_app.py` - corrected `queue_url` attribute to `queue_arn`
   - Fixed `docker/scripts/run_local.py` - updated environment variable to use `QUEUE_ARN`
