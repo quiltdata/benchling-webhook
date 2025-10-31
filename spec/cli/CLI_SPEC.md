@@ -52,7 +52,7 @@ benchling-webhook/
 │       └── env-loader.ts         # NEW: .env file handling
 ├── package.json                  # UPDATED: Add CLI dependencies
 ├── README.md                     # UPDATED: Add npx usage
-└── .scratch/cli/
+└── spec/cli/
     ├── CLI_SPEC.md               # This document
     ├── REFACTORING_GUIDE.md      # Implementation steps
     └── EXAMPLES.md               # Usage examples
