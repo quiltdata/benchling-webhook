@@ -20,6 +20,7 @@ export interface FargateServiceProps {
     readonly benchlingClientId: string;
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
+    readonly benchlingSecrets?: string; // NEW: consolidated secrets parameter
     readonly quiltCatalog: string;
     readonly quiltDatabase: string;
     readonly webhookAllowList: string;
@@ -144,15 +145,31 @@ export class FargateService extends Construct {
             }),
         );
 
+        // Determine which parameter mode to use
+        const useNewParam = props.benchlingSecrets && props.benchlingSecrets.trim() !== "";
+
+        // Create Secrets Manager secret with proper parameter handling
+        let secretValue: string;
+
+        if (useNewParam) {
+            // New approach: Use consolidated secrets JSON
+            secretValue = props.benchlingSecrets!;
+        } else {
+            // Old approach: Build JSON from individual parameters
+            secretValue = JSON.stringify({
+                client_id: props.benchlingClientId,
+                client_secret: props.benchlingClientSecret,
+                tenant: props.benchlingTenant,
+            });
+        }
+
         // Create or reference Secrets Manager secret for Benchling credentials
-        // In production, this should be created separately and referenced
+        // Note: We still use unsafePlainText() because CloudFormation parameters are strings.
+        // The actual secret values are protected by noEcho in the parameters.
         const benchlingSecret = new secretsmanager.Secret(this, "BenchlingCredentials", {
             secretName: "benchling-webhook/credentials",
             description: "Benchling API credentials for webhook processor",
-            secretObjectValue: {
-                client_id: cdk.SecretValue.unsafePlainText(props.benchlingClientId),
-                client_secret: cdk.SecretValue.unsafePlainText(props.benchlingClientSecret),
-            },
+            secretStringValue: cdk.SecretValue.unsafePlainText(secretValue),
         });
 
         // Grant read access to secrets

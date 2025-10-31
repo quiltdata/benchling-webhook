@@ -152,8 +152,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const logLevelValue = logLevelParam.valueAsString;
         const enableWebhookVerificationValue = enableWebhookVerificationParam.valueAsString;
         const imageTagValue = imageTagParam.valueAsString;
-        // Phase 3: New secret parameters (will be used in Episode 4)
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        // Phase 3: New secret parameters
         const benchlingSecretsValue = benchlingSecretsParam.valueAsString;
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const benchlingClientIdValue = benchlingClientIdParam.valueAsString;
@@ -201,6 +200,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             benchlingClientId: props.benchlingClientId,
             benchlingClientSecret: props.benchlingClientSecret,
             benchlingTenant: benchlingTenantValue,
+            benchlingSecrets: benchlingSecretsValue, // NEW: consolidated secrets parameter
             quiltCatalog: quiltCatalogValue,
             quiltDatabase: quiltDatabaseValue,
             webhookAllowList: webhookAllowListValue,
