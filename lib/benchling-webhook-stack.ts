@@ -154,6 +154,11 @@ export class BenchlingWebhookStack extends cdk.Stack {
         }
 
         // Create the Fargate service
+        // Use imageTag for stackVersion if it looks like a timestamped dev version
+        // (e.g., "0.5.3-20251031T000139Z"), otherwise use package.json version
+        const isDevVersion = imageTagValue.match(/^\d+\.\d+\.\d+-\d{8}T\d{6}Z$/);
+        const stackVersion = isDevVersion ? imageTagValue : packageJson.version;
+
         this.fargateService = new FargateService(this, "FargateService", {
             vpc,
             bucket: this.bucket,
@@ -170,7 +175,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             webhookAllowList: webhookAllowListValue,
             ecrRepository: ecrRepo,
             imageTag: imageTagValue,
-            stackVersion: packageJson.version,
+            stackVersion: stackVersion,
             logLevel: logLevelValue,
             enableWebhookVerification: enableWebhookVerificationValue,
         });
