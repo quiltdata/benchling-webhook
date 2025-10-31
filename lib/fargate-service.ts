@@ -146,7 +146,10 @@ export class FargateService extends Construct {
         );
 
         // Determine which parameter mode to use
-        const useNewParam = props.benchlingSecrets && props.benchlingSecrets.trim() !== "";
+        // Check if the benchlingSecrets prop is provided and non-empty
+        const useNewParam = props.benchlingSecrets !== undefined &&
+                           props.benchlingSecrets !== null &&
+                           props.benchlingSecrets.trim() !== "";
 
         // Create Secrets Manager secret with proper parameter handling
         let secretValue: string;
@@ -184,33 +187,38 @@ export class FargateService extends Construct {
             family: "benchling-webhook-task",
         });
 
-        // Add container to task definition
-        const container = taskDefinition.addContainer("BenchlingWebhookContainer", {
-            image: ecs.ContainerImage.fromEcrRepository(
-                props.ecrRepository,
-                props.imageTag || "latest",
-            ),
-            logging: ecs.LogDriver.awsLogs({
-                streamPrefix: "benchling-webhook",
-                logGroup: this.logGroup,
-            }),
-            environment: {
-                QUILT_USER_BUCKET: props.bucket.bucketName,
-                QUEUE_ARN: props.queueArn,
-                PKG_PREFIX: props.prefix,
-                PKG_KEY: props.pkgKey,
-                BENCHLING_TENANT: props.benchlingTenant,
-                QUILT_CATALOG: props.quiltCatalog,
-                QUILT_DATABASE: props.quiltDatabase,
-                WEBHOOK_ALLOW_LIST: props.webhookAllowList,
-                AWS_REGION: props.region,
-                AWS_DEFAULT_REGION: props.region,
-                FLASK_ENV: "production",
-                LOG_LEVEL: props.logLevel || "INFO",
-                ENABLE_WEBHOOK_VERIFICATION: props.enableWebhookVerification || "true",
-                BENCHLING_WEBHOOK_VERSION: props.stackVersion || props.imageTag || "latest",
-            },
-            secrets: {
+        // Build environment variables based on parameter mode
+        const environmentVars: { [key: string]: string } = {
+            QUILT_USER_BUCKET: props.bucket.bucketName,
+            QUEUE_ARN: props.queueArn,
+            PKG_PREFIX: props.prefix,
+            PKG_KEY: props.pkgKey,
+            QUILT_CATALOG: props.quiltCatalog,
+            QUILT_DATABASE: props.quiltDatabase,
+            WEBHOOK_ALLOW_LIST: props.webhookAllowList,
+            AWS_REGION: props.region,
+            AWS_DEFAULT_REGION: props.region,
+            FLASK_ENV: "production",
+            LOG_LEVEL: props.logLevel || "INFO",
+            ENABLE_WEBHOOK_VERIFICATION: props.enableWebhookVerification || "true",
+            BENCHLING_WEBHOOK_VERSION: props.stackVersion || props.imageTag || "latest",
+        };
+
+        // Add Benchling configuration based on parameter mode
+        if (useNewParam) {
+            // New mode: Single consolidated secrets parameter
+            environmentVars.BENCHLING_SECRETS = props.benchlingSecrets!;
+        } else {
+            // Old mode: Individual tenant parameter
+            environmentVars.BENCHLING_TENANT = props.benchlingTenant;
+        }
+
+        // Build secrets configuration (only for old mode)
+        let secretsConfig: { [key: string]: ecs.Secret } | undefined = undefined;
+
+        if (!useNewParam) {
+            // Old mode: Individual secrets from Secrets Manager
+            secretsConfig = {
                 BENCHLING_CLIENT_ID: ecs.Secret.fromSecretsManager(
                     benchlingSecret,
                     "client_id",
@@ -223,7 +231,21 @@ export class FargateService extends Construct {
                     benchlingSecret,
                     "app_definition_id",
                 ),
-            },
+            };
+        }
+
+        // Add container with configured environment
+        const container = taskDefinition.addContainer("BenchlingWebhookContainer", {
+            image: ecs.ContainerImage.fromEcrRepository(
+                props.ecrRepository,
+                props.imageTag || "latest",
+            ),
+            logging: ecs.LogDriver.awsLogs({
+                streamPrefix: "benchling-webhook",
+                logGroup: this.logGroup,
+            }),
+            environment: environmentVars,
+            secrets: secretsConfig,
             healthCheck: {
                 command: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"],
                 interval: cdk.Duration.seconds(30),
