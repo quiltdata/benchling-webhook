@@ -232,7 +232,7 @@ export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
 
         // Unified secrets (priority: CLI > env > .env)
         // Process file input syntax (@file.json) if present
-        benchlingSecrets: (() => {
+        benchlingSecrets: ((): string | undefined => {
             const rawSecrets = options.benchlingSecrets || envVars.BENCHLING_SECRETS;
             return rawSecrets ? processBenchlingSecretsInput(rawSecrets) : undefined;
         })(),
