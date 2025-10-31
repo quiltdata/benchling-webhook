@@ -71,6 +71,7 @@ class TestConfigWithSecretsResolver:
         monkeypatch.setenv("QUILT_CATALOG", "test.quiltdata.com")
         monkeypatch.setenv("BENCHLING_APP_DEFINITION_ID", "app-123")
 
+    @pytest.mark.local
     def test_config_with_benchling_secrets_json(self, monkeypatch, minimal_env_vars):
         """Test Config initialization with BENCHLING_SECRETS JSON."""
         json_str = json.dumps({"tenant": "json-tenant", "clientId": "json-id", "clientSecret": "json-secret"})
@@ -82,6 +83,7 @@ class TestConfigWithSecretsResolver:
         assert config.benchling_client_id == "json-id"
         assert config.benchling_client_secret == "json-secret"
 
+    @pytest.mark.local
     def test_config_with_individual_env_vars(self, monkeypatch, minimal_env_vars):
         """Test Config with individual Benchling env vars (backward compatible)."""
         monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
@@ -105,6 +107,7 @@ class TestConfigWithSecretsResolver:
         with pytest.raises(ValueError, match="Failed to resolve Benchling secrets"):
             get_config()
 
+    @pytest.mark.local
     def test_config_priority_benchling_secrets_over_individual(self, monkeypatch, minimal_env_vars):
         """Test BENCHLING_SECRETS takes priority over individual vars."""
         # Set both
