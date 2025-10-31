@@ -269,3 +269,131 @@ export function validateSecretData(data: unknown): ValidationResult {
         warnings,
     };
 }
+
+/**
+ * Custom error class for secrets validation failures
+ */
+export class SecretsValidationError extends Error {
+    public readonly errors: ValidationError[];
+    public readonly warnings: string[];
+
+    constructor(message: string, errors: ValidationError[], warnings: string[]) {
+        super(message);
+        this.name = "SecretsValidationError";
+        this.errors = errors;
+        this.warnings = warnings;
+
+        // Maintain proper stack trace (only available on V8)
+        if (Error.captureStackTrace) {
+            Error.captureStackTrace(this, SecretsValidationError);
+        }
+    }
+
+    /**
+     * Format errors for CLI display
+     */
+    public formatForCLI(): string {
+        const lines: string[] = [this.message, ""];
+
+        if (this.errors.length > 0) {
+            lines.push("Errors:");
+            for (const error of this.errors) {
+                lines.push(`  × ${error.field}: ${error.message}`);
+                if (error.suggestion) {
+                    lines.push(`    → ${error.suggestion}`);
+                }
+            }
+            lines.push("");
+        }
+
+        if (this.warnings.length > 0) {
+            lines.push("Warnings:");
+            for (const warning of this.warnings) {
+                lines.push(`  ⚠ ${warning}`);
+            }
+            lines.push("");
+        }
+
+        return lines.join("\n");
+    }
+}
+
+/**
+ * Parse and validate BENCHLING_SECRETS input
+ *
+ * This is the main entry point for secret validation. It detects the format
+ * (ARN or JSON), performs appropriate validation, and returns a structured
+ * configuration object.
+ *
+ * @param input - The BENCHLING_SECRETS input string
+ * @returns Parsed and validated configuration
+ * @throws SecretsValidationError if validation fails
+ *
+ * @example
+ * // Parse ARN
+ * const config = parseAndValidateSecrets("arn:aws:secretsmanager:...")
+ * console.log(config.format) // "arn"
+ *
+ * @example
+ * // Parse JSON
+ * const config = parseAndValidateSecrets('{"client_id":"...","client_secret":"...","tenant":"..."}')
+ * console.log(config.format) // "json"
+ */
+export function parseAndValidateSecrets(input: string): BenchlingSecretsConfig {
+    // Detect format
+    const format = detectSecretsFormat(input);
+
+    if (format === "arn") {
+        // Validate ARN
+        const validation = validateSecretArn(input);
+
+        if (!validation.valid) {
+            throw new SecretsValidationError(
+                "Invalid secret ARN",
+                validation.errors,
+                validation.warnings,
+            );
+        }
+
+        return {
+            format: "arn",
+            arn: input.trim(),
+            original: input,
+        };
+    } else {
+        // Parse JSON
+        let data: unknown;
+        try {
+            data = JSON.parse(input);
+        } catch (error) {
+            throw new SecretsValidationError(
+                "Invalid JSON in secret data",
+                [
+                    {
+                        field: "json",
+                        message: `JSON parse error: ${(error as Error).message}`,
+                        suggestion: "Ensure the secret data is valid JSON",
+                    },
+                ],
+                [],
+            );
+        }
+
+        // Validate structure
+        const validation = validateSecretData(data);
+
+        if (!validation.valid) {
+            throw new SecretsValidationError(
+                "Invalid secret data structure",
+                validation.errors,
+                validation.warnings,
+            );
+        }
+
+        return {
+            format: "json",
+            data: data as BenchlingSecretData,
+            original: input,
+        };
+    }
+}
