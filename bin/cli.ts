@@ -25,10 +25,11 @@ program
     .description("Deploy the CDK stack to AWS")
     .option("--catalog <url>", "Quilt catalog URL")
     .option("--bucket <name>", "S3 bucket for data")
-    .option("--tenant <name>", "Benchling tenant")
-    .option("--client-id <id>", "Benchling OAuth client ID")
-    .option("--client-secret <secret>", "Benchling OAuth client secret")
-    .option("--app-id <id>", "Benchling app definition ID")
+    .option("--benchling-secrets <value>", "Benchling secrets configuration (ARN, JSON, or @file)")
+    .option("--tenant <name>", "Benchling tenant (deprecated, use --benchling-secrets)")
+    .option("--client-id <id>", "Benchling OAuth client ID (deprecated, use --benchling-secrets)")
+    .option("--client-secret <secret>", "Benchling OAuth client secret (deprecated, use --benchling-secrets)")
+    .option("--app-id <id>", "Benchling app definition ID (deprecated, use --benchling-secrets)")
     .option("--env-file <path>", "Path to .env file", ".env")
     .option("--no-bootstrap-check", "Skip CDK bootstrap verification")
     .option("--require-approval <level>", "CDK approval level", "never")
@@ -36,6 +37,23 @@ program
     .option("--region <region>", "AWS region to deploy to")
     .option("--image-tag <tag>", "Docker image tag to deploy (default: latest)")
     .option("--yes", "Skip confirmation prompts")
+    .addHelpText("after", `
+Examples:
+  Using AWS Secrets Manager ARN:
+    $ npx @quiltdata/benchling-webhook deploy --benchling-secrets "arn:aws:secretsmanager:us-east-1:123456789012:secret:benchling-credentials"
+
+  Using inline JSON:
+    $ npx @quiltdata/benchling-webhook deploy --benchling-secrets '{"client_id":"xxx","client_secret":"yyy","tenant":"company"}'
+
+  Using JSON file:
+    $ npx @quiltdata/benchling-webhook deploy --benchling-secrets @secrets.json
+
+  Using environment variable:
+    $ export BENCHLING_SECRETS='{"client_id":"xxx","client_secret":"yyy","tenant":"company"}'
+    $ npx @quiltdata/benchling-webhook deploy
+
+For more information: https://github.com/quiltdata/benchling-webhook#secrets-configuration
+`)
     .action(async (options) => {
         try {
             await deployCommand(options);
