@@ -1,4 +1,4 @@
-import { BenchlingSecretData, BenchlingSecretsConfig, BenchlingSecretsInput, detectSecretsFormat, validateSecretArn, validateSecretData } from "../lib/utils/secrets";
+import { BenchlingSecretData, BenchlingSecretsConfig, BenchlingSecretsInput, detectSecretsFormat, validateSecretArn, validateSecretData, parseAndValidateSecrets, SecretsValidationError } from "../lib/utils/secrets";
 
 describe("secrets module", () => {
   describe("type definitions", () => {
@@ -267,6 +267,103 @@ describe("secrets module", () => {
     it("rejects array data", () => {
       const result = validateSecretData([1, 2, 3]);
       expect(result.valid).toBe(false);
+    });
+  });
+
+  describe("SecretsValidationError", () => {
+    it("formats errors for CLI", () => {
+      const errors = [
+        { field: "client_id", message: "Missing required field", suggestion: "Add client_id" },
+      ];
+      const warnings = ["Unknown field 'extra'"];
+      const error = new SecretsValidationError("Validation failed", errors, warnings);
+
+      const formatted = error.formatForCLI();
+      expect(formatted).toContain("Validation failed");
+      expect(formatted).toContain("client_id");
+      expect(formatted).toContain("Add client_id");
+      expect(formatted).toContain("Unknown field");
+    });
+
+    it("includes errors in output", () => {
+      const errors = [
+        { field: "test", message: "Test error" },
+      ];
+      const error = new SecretsValidationError("Error", errors, []);
+      const formatted = error.formatForCLI();
+      expect(formatted).toContain("Errors:");
+      expect(formatted).toContain("test");
+      expect(formatted).toContain("Test error");
+    });
+
+    it("includes warnings in output", () => {
+      const warnings = ["Warning message"];
+      const error = new SecretsValidationError("Error", [], warnings);
+      const formatted = error.formatForCLI();
+      expect(formatted).toContain("Warnings:");
+      expect(formatted).toContain("Warning message");
+    });
+
+    it("handles empty errors/warnings", () => {
+      const error = new SecretsValidationError("Error", [], []);
+      const formatted = error.formatForCLI();
+      expect(formatted).toContain("Error");
+      expect(formatted).not.toContain("Errors:");
+      expect(formatted).not.toContain("Warnings:");
+    });
+  });
+
+  describe("parseAndValidateSecrets", () => {
+    it("parses and validates ARN", () => {
+      const input = "arn:aws:secretsmanager:us-east-1:123456789012:secret:name";
+      const config = parseAndValidateSecrets(input);
+      expect(config.format).toBe("arn");
+      expect(config.arn).toBe(input);
+      expect(config.data).toBeUndefined();
+    });
+
+    it("parses and validates JSON", () => {
+      const input = '{"client_id":"abc","client_secret":"secret","tenant":"company"}';
+      const config = parseAndValidateSecrets(input);
+      expect(config.format).toBe("json");
+      expect(config.data).toEqual({
+        client_id: "abc",
+        client_secret: "secret",
+        tenant: "company",
+      });
+      expect(config.arn).toBeUndefined();
+    });
+
+    it("preserves original input", () => {
+      const input = "arn:aws:secretsmanager:us-east-1:123456789012:secret:name";
+      const config = parseAndValidateSecrets(input);
+      expect(config.original).toBe(input);
+    });
+
+    it("throws SecretsValidationError for invalid ARN", () => {
+      const input = "arn:aws:s3:::bucket";
+      expect(() => parseAndValidateSecrets(input)).toThrow(SecretsValidationError);
+    });
+
+    it("throws SecretsValidationError for invalid JSON syntax", () => {
+      const input = '{"invalid json';
+      expect(() => parseAndValidateSecrets(input)).toThrow(SecretsValidationError);
+    });
+
+    it("throws SecretsValidationError for invalid JSON structure", () => {
+      const input = '{"client_id":"abc"}'; // missing required fields
+      expect(() => parseAndValidateSecrets(input)).toThrow(SecretsValidationError);
+    });
+
+    it("includes validation errors in thrown error", () => {
+      const input = '{"client_id":"abc"}';
+      try {
+        parseAndValidateSecrets(input);
+        fail("Should have thrown");
+      } catch (error) {
+        expect(error).toBeInstanceOf(SecretsValidationError);
+        expect((error as SecretsValidationError).errors.length).toBeGreaterThan(0);
+      }
     });
   });
 });
