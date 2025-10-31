@@ -273,3 +273,100 @@ class TestSecretsManagerFetch:
 
         with pytest.raises(SecretsResolutionError, match="Invalid JSON"):
             fetch_from_secrets_manager(arn, "us-east-2")
+
+
+class TestResolutionOrchestrator:
+    """Test suite for main secret resolution orchestrator."""
+
+    def test_resolve_from_arn(self, mocker, monkeypatch):
+        """Test resolution from BENCHLING_SECRETS ARN."""
+        arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:benchling-AbCdEf"
+        monkeypatch.setenv("BENCHLING_SECRETS", arn)
+
+        # Mock Secrets Manager fetch
+        mock_secrets = BenchlingSecrets("test-tenant", "test-id", "test-secret")
+        mocker.patch('src.secrets_resolver.fetch_from_secrets_manager', return_value=mock_secrets)
+
+        from src.secrets_resolver import resolve_benchling_secrets
+        secrets = resolve_benchling_secrets("us-east-2")
+
+        assert secrets.tenant == "test-tenant"
+        assert secrets.client_id == "test-id"
+        assert secrets.client_secret == "test-secret"
+
+    def test_resolve_from_json(self, monkeypatch):
+        """Test resolution from BENCHLING_SECRETS JSON."""
+        json_str = json.dumps({
+            "tenant": "json-tenant",
+            "clientId": "json-id",
+            "clientSecret": "json-secret"
+        })
+        monkeypatch.setenv("BENCHLING_SECRETS", json_str)
+
+        from src.secrets_resolver import resolve_benchling_secrets
+        secrets = resolve_benchling_secrets("us-east-2")
+
+        assert secrets.tenant == "json-tenant"
+        assert secrets.client_id == "json-id"
+        assert secrets.client_secret == "json-secret"
+
+    def test_resolve_from_individual_env_vars(self, monkeypatch):
+        """Test fallback to individual environment variables."""
+        # No BENCHLING_SECRETS
+        monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
+
+        # Set individual vars
+        monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
+        monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
+        monkeypatch.setenv("BENCHLING_CLIENT_SECRET", "env-secret")
+
+        from src.secrets_resolver import resolve_benchling_secrets
+        secrets = resolve_benchling_secrets("us-east-2")
+
+        assert secrets.tenant == "env-tenant"
+        assert secrets.client_id == "env-id"
+        assert secrets.client_secret == "env-secret"
+
+    def test_resolve_priority_benchling_secrets_over_individual(self, mocker, monkeypatch):
+        """Test BENCHLING_SECRETS takes priority over individual vars."""
+        # Set both
+        json_str = json.dumps({
+            "tenant": "json-tenant",
+            "clientId": "json-id",
+            "clientSecret": "json-secret"
+        })
+        monkeypatch.setenv("BENCHLING_SECRETS", json_str)
+        monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
+        monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
+        monkeypatch.setenv("BENCHLING_CLIENT_SECRET", "env-secret")
+
+        from src.secrets_resolver import resolve_benchling_secrets
+        secrets = resolve_benchling_secrets("us-east-2")
+
+        # Should use BENCHLING_SECRETS (JSON), not individual vars
+        assert secrets.tenant == "json-tenant"
+        assert secrets.client_id == "json-id"
+        assert secrets.client_secret == "json-secret"
+
+    def test_resolve_no_secrets_configured(self, monkeypatch):
+        """Test resolution fails when no secrets configured."""
+        # Remove all env vars
+        monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
+        monkeypatch.delenv("BENCHLING_TENANT", raising=False)
+        monkeypatch.delenv("BENCHLING_CLIENT_ID", raising=False)
+        monkeypatch.delenv("BENCHLING_CLIENT_SECRET", raising=False)
+
+        from src.secrets_resolver import resolve_benchling_secrets
+        with pytest.raises(SecretsResolutionError, match="No Benchling secrets found"):
+            resolve_benchling_secrets("us-east-2")
+
+    def test_resolve_partial_individual_vars(self, monkeypatch):
+        """Test resolution fails when individual vars are incomplete."""
+        monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
+        monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
+        monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
+        # Missing BENCHLING_CLIENT_SECRET
+
+        from src.secrets_resolver import resolve_benchling_secrets
+        with pytest.raises(SecretsResolutionError, match="No Benchling secrets found"):
+            resolve_benchling_secrets("us-east-2")
