@@ -1,0 +1,80 @@
+"""Secret resolution for Benchling credentials.
+
+This module provides runtime resolution of Benchling secrets from multiple sources
+with hierarchical fallback:
+
+1. AWS Secrets Manager (via ARN in BENCHLING_SECRETS env var)
+2. JSON environment variable (BENCHLING_SECRETS with JSON content)
+3. Individual environment variables (legacy: BENCHLING_TENANT, etc.)
+
+Usage:
+    from src.secrets_resolver import resolve_benchling_secrets
+
+    secrets = resolve_benchling_secrets(aws_region="us-east-2")
+    print(f"Tenant: {secrets.tenant}")
+
+Environment Variables:
+    BENCHLING_SECRETS: ARN or JSON string with Benchling credentials
+    BENCHLING_TENANT: (Legacy) Benchling tenant name
+    BENCHLING_CLIENT_ID: (Legacy) OAuth client ID
+    BENCHLING_CLIENT_SECRET: (Legacy) OAuth client secret
+
+Raises:
+    SecretsResolutionError: When secrets cannot be resolved or are invalid
+
+Security:
+    - Never logs secret values
+    - Validates all required fields
+    - Provides clear error messages without exposing secrets
+"""
+
+import json
+import os
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
+
+import structlog
+
+logger = structlog.get_logger(__name__)
+
+
+class SecretsResolutionError(Exception):
+    """Raised when secrets cannot be resolved or are invalid."""
+
+    pass
+
+
+class SecretFormat(Enum):
+    """Format of BENCHLING_SECRETS environment variable."""
+
+    ARN = "arn"
+    JSON = "json"
+
+
+@dataclass
+class BenchlingSecrets:
+    """Benchling credentials resolved from Secrets Manager or environment.
+
+    Attributes:
+        tenant: Benchling tenant name (e.g., 'mycompany')
+        client_id: OAuth client ID for Benchling API authentication
+        client_secret: OAuth client secret for Benchling API authentication
+    """
+
+    tenant: str
+    client_id: str
+    client_secret: str
+
+    def validate(self) -> None:
+        """Validate that all required fields are present and non-empty.
+
+        Raises:
+            SecretsResolutionError: If any required field is missing or empty
+        """
+        if not self.tenant:
+            raise SecretsResolutionError("tenant is required")
+        if not self.client_id:
+            raise SecretsResolutionError("client_id is required")
+        if not self.client_secret:
+            raise SecretsResolutionError("client_secret is required")
