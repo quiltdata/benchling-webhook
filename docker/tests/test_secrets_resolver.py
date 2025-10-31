@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.secrets_resolver import BenchlingSecrets, SecretFormat, SecretsResolutionError
+from src.secrets_resolver import BenchlingSecrets, SecretFormat, SecretsResolutionError, detect_secret_format
 
 
 def test_benchling_secrets_dataclass_creation():
@@ -50,3 +50,42 @@ def test_secret_format_enum_exists():
     """Test SecretFormat enum has expected values."""
     assert SecretFormat.ARN
     assert SecretFormat.JSON
+
+
+class TestFormatDetection:
+    """Test suite for secret format detection."""
+
+    def test_detect_arn_format(self):
+        """Test ARN format is correctly detected."""
+        arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:benchling-AbCdEf"
+        result = detect_secret_format(arn)
+        assert result == SecretFormat.ARN
+
+    def test_detect_json_format(self):
+        """Test JSON format is correctly detected."""
+        json_str = '{"tenant": "test", "clientId": "id", "clientSecret": "secret"}'
+        result = detect_secret_format(json_str)
+        assert result == SecretFormat.JSON
+
+    def test_detect_json_format_with_whitespace(self):
+        """Test JSON format with leading whitespace."""
+        json_str = '  \n  {"tenant": "test", "clientId": "id", "clientSecret": "secret"}'
+        result = detect_secret_format(json_str)
+        assert result == SecretFormat.JSON
+
+    def test_detect_invalid_format(self):
+        """Test invalid format raises error."""
+        invalid = "not-an-arn-or-json"
+        with pytest.raises(SecretsResolutionError, match="Invalid BENCHLING_SECRETS format"):
+            detect_secret_format(invalid)
+
+    def test_detect_empty_string(self):
+        """Test empty string raises error."""
+        with pytest.raises(SecretsResolutionError, match="Invalid BENCHLING_SECRETS format"):
+            detect_secret_format("")
+
+    def test_detect_partial_arn(self):
+        """Test partial ARN (wrong service) raises error."""
+        invalid_arn = "arn:aws:s3:::my-bucket"
+        with pytest.raises(SecretsResolutionError, match="Invalid BENCHLING_SECRETS format"):
+            detect_secret_format(invalid_arn)

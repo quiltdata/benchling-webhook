@@ -78,3 +78,34 @@ class BenchlingSecrets:
             raise SecretsResolutionError("client_id is required")
         if not self.client_secret:
             raise SecretsResolutionError("client_secret is required")
+
+
+def detect_secret_format(value: str) -> SecretFormat:
+    """Detect if value is an ARN or JSON string.
+
+    Args:
+        value: String value from BENCHLING_SECRETS env var
+
+    Returns:
+        SecretFormat.ARN or SecretFormat.JSON
+
+    Raises:
+        SecretsResolutionError: If format is invalid or cannot be determined
+    """
+    if not value or not value.strip():
+        raise SecretsResolutionError("Invalid BENCHLING_SECRETS format: empty value")
+
+    # Check for ARN format
+    if value.startswith("arn:aws:secretsmanager:"):
+        return SecretFormat.ARN
+
+    # Check for JSON format
+    if value.strip().startswith("{"):
+        return SecretFormat.JSON
+
+    # Neither format recognized
+    raise SecretsResolutionError(
+        f"Invalid BENCHLING_SECRETS format. Must be ARN starting with "
+        f"'arn:aws:secretsmanager:' or JSON starting with '{{'. "
+        f"Got: {value[:50]}..."
+    )
