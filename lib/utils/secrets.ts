@@ -3,6 +3,57 @@
  *
  * This module provides types, validation, and utilities for managing
  * Benchling API credentials in AWS Secrets Manager.
+ *
+ * ## Supported Formats
+ *
+ * ### ARN Format
+ * Provide the ARN of an existing AWS Secrets Manager secret:
+ * ```
+ * arn:aws:secretsmanager:us-east-1:123456789012:secret:benchling-webhook/credentials
+ * ```
+ *
+ * ### JSON Format
+ * Provide credentials as a JSON object:
+ * ```json
+ * {
+ *   "client_id": "your-client-id",
+ *   "client_secret": "your-client-secret",
+ *   "tenant": "your-tenant",
+ *   "app_definition_id": "optional-app-id",
+ *   "api_url": "https://optional-api-url.com"
+ * }
+ * ```
+ *
+ * ## Usage
+ *
+ * ```typescript
+ * import { parseAndValidateSecrets } from './secrets';
+ *
+ * // Parse and validate ARN
+ * const arnConfig = parseAndValidateSecrets(
+ *   'arn:aws:secretsmanager:us-east-1:123456789012:secret:name'
+ * );
+ * console.log(arnConfig.format); // "arn"
+ * console.log(arnConfig.arn); // the validated ARN
+ *
+ * // Parse and validate JSON
+ * const jsonConfig = parseAndValidateSecrets(
+ *   '{"client_id":"abc","client_secret":"secret","tenant":"company"}'
+ * );
+ * console.log(jsonConfig.format); // "json"
+ * console.log(jsonConfig.data); // the validated secret data
+ *
+ * // Handle validation errors
+ * try {
+ *   parseAndValidateSecrets('invalid');
+ * } catch (error) {
+ *   if (error instanceof SecretsValidationError) {
+ *     console.error(error.formatForCLI());
+ *   }
+ * }
+ * ```
+ *
+ * @module secrets
  */
 
 /**
