@@ -218,16 +218,26 @@ describe("BenchlingWebhookStack", () => {
     });
 
     test("environment variables match Flask config expectations", () => {
-        // Read the Python config file to extract expected environment variable names
+        // Read the Python config files to extract expected environment variable names
         const configPath = path.join(__dirname, "../docker/src/config.py");
+        const secretsResolverPath = path.join(__dirname, "../docker/src/secrets_resolver.py");
         const configContent = fs.readFileSync(configPath, "utf-8");
+        const secretsResolverContent = fs.readFileSync(secretsResolverPath, "utf-8");
 
-        // Extract environment variable names from config.py using regex
+        // Extract environment variable names from both files using regex
         // Pattern: os.getenv("VAR_NAME", ...)
         const envVarPattern = /os\.getenv\("([^"]+)"/g;
         const expectedEnvVars = new Set<string>();
         let match;
+
+        // Extract from config.py
         while ((match = envVarPattern.exec(configContent)) !== null) {
+            expectedEnvVars.add(match[1]);
+        }
+
+        // Extract from secrets_resolver.py
+        envVarPattern.lastIndex = 0; // Reset regex
+        while ((match = envVarPattern.exec(secretsResolverContent)) !== null) {
             expectedEnvVars.add(match[1]);
         }
 
