@@ -276,4 +276,39 @@ describe("BenchlingWebhookStack", () => {
             expect(expectedEnvVars.has(envVar)).toBe(true);
         });
     });
+
+    // ===================================================================
+    // Phase 3 Episode 1: CloudFormation Parameter Tests (RED)
+    // ===================================================================
+
+    test("creates BenchlingSecrets CloudFormation parameter", () => {
+        const parameters = template.toJSON().Parameters;
+        expect(parameters).toHaveProperty("BenchlingSecrets");
+
+        const param = parameters.BenchlingSecrets;
+        expect(param.Type).toBe("String");
+        expect(param.NoEcho).toBe(true);
+        expect(param.Description).toContain("Benchling secrets");
+    });
+
+    test("marks old Benchling parameters as deprecated", () => {
+        const parameters = template.toJSON().Parameters;
+
+        // Check that old parameters exist for backward compatibility
+        expect(parameters).toHaveProperty("BenchlingClientId");
+        expect(parameters).toHaveProperty("BenchlingClientSecret");
+        expect(parameters).toHaveProperty("BenchlingTenant");
+
+        // Check that they're marked as deprecated
+        expect(parameters.BenchlingClientId.Description).toContain("[DEPRECATED]");
+        expect(parameters.BenchlingClientSecret.Description).toContain("[DEPRECATED]");
+        expect(parameters.BenchlingTenant.Description).toContain("[DEPRECATED]");
+    });
+
+    test("old secret parameters have NoEcho enabled", () => {
+        const parameters = template.toJSON().Parameters;
+
+        expect(parameters.BenchlingClientId.NoEcho).toBe(true);
+        expect(parameters.BenchlingClientSecret.NoEcho).toBe(true);
+    });
 });
