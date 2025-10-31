@@ -404,4 +404,108 @@ describe("BenchlingWebhookStack", () => {
         expect(clientIdSecret).toBeDefined();
         expect(clientSecretSecret).toBeDefined();
     });
+
+    // ===================================================================
+    // Phase 3 Episode 7: Backward Compatibility Tests (RED)
+    // ===================================================================
+
+    test("stack works with old parameters (backward compatibility)", () => {
+        const app = new cdk.App();
+        const legacyStack = new BenchlingWebhookStack(app, "LegacyStack", {
+            bucketName: "test-bucket",
+            environment: "test",
+            prefix: "test-prefix",
+            queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+            benchlingClientId: "legacy-client-id",
+            benchlingClientSecret: "legacy-client-secret",
+            benchlingTenant: "legacy-tenant",
+            quiltDatabase: "test-database",
+            env: {
+                account: "123456789012",
+                region: "us-east-1",
+            },
+        });
+
+        const legacyTemplate = Template.fromStack(legacyStack);
+
+        // Verify stack creates successfully
+        legacyTemplate.resourceCountIs("AWS::ECS::Service", 1);
+        legacyTemplate.resourceCountIs("AWS::SecretsManager::Secret", 1);
+
+        // Verify container uses old environment variable pattern
+        const taskDefs = legacyTemplate.findResources("AWS::ECS::TaskDefinition");
+        const taskDef = taskDefs[Object.keys(taskDefs)[0]];
+        const containerDef = taskDef.Properties.ContainerDefinitions[0];
+        const environment = containerDef.Environment || [];
+
+        const tenantEnv = environment.find((e: any) => e.Name === "BENCHLING_TENANT");
+        expect(tenantEnv).toBeDefined();
+        expect(tenantEnv.Value).toBeDefined();
+    });
+
+    test("new parameter takes precedence when both provided", () => {
+        const app = new cdk.App();
+        const mixedStack = new BenchlingWebhookStack(app, "MixedStack", {
+            bucketName: "test-bucket",
+            environment: "test",
+            prefix: "test-prefix",
+            queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+            benchlingClientId: "old-client-id",
+            benchlingClientSecret: "old-client-secret",
+            benchlingTenant: "old-tenant",
+            benchlingSecrets: JSON.stringify({
+                client_id: "new-client-id",
+                client_secret: "new-client-secret",
+                tenant: "new-tenant",
+            }),
+            quiltDatabase: "test-database",
+            env: {
+                account: "123456789012",
+                region: "us-east-1",
+            },
+        });
+
+        const mixedTemplate = Template.fromStack(mixedStack);
+        const taskDefs = mixedTemplate.findResources("AWS::ECS::TaskDefinition");
+        const taskDef = taskDefs[Object.keys(taskDefs)[0]];
+        const containerDef = taskDef.Properties.ContainerDefinitions[0];
+        const environment = containerDef.Environment || [];
+
+        // Should use new parameter (BENCHLING_SECRETS)
+        const secretsEnv = environment.find((e: any) => e.Name === "BENCHLING_SECRETS");
+        expect(secretsEnv).toBeDefined();
+
+        // Should NOT have old individual vars
+        const tenantEnv = environment.find((e: any) => e.Name === "BENCHLING_TENANT");
+        expect(tenantEnv).toBeUndefined();
+    });
+
+    test("empty new parameter falls back to old parameters", () => {
+        const app = new cdk.App();
+        const fallbackStack = new BenchlingWebhookStack(app, "FallbackStack", {
+            bucketName: "test-bucket",
+            environment: "test",
+            prefix: "test-prefix",
+            queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+            benchlingClientId: "fallback-client-id",
+            benchlingClientSecret: "fallback-client-secret",
+            benchlingTenant: "fallback-tenant",
+            benchlingSecrets: "",  // Empty string
+            quiltDatabase: "test-database",
+            env: {
+                account: "123456789012",
+                region: "us-east-1",
+            },
+        });
+
+        const fallbackTemplate = Template.fromStack(fallbackStack);
+        const taskDefs = fallbackTemplate.findResources("AWS::ECS::TaskDefinition");
+        const taskDef = taskDefs[Object.keys(taskDefs)[0]];
+        const containerDef = taskDef.Properties.ContainerDefinitions[0];
+        const environment = containerDef.Environment || [];
+
+        // Should fall back to old parameter pattern
+        const tenantEnv = environment.find((e: any) => e.Name === "BENCHLING_TENANT");
+        expect(tenantEnv).toBeDefined();
+    });
 });
