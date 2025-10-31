@@ -3,23 +3,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.5.4] - 2025-10-30
+
+### Added
+
+- **Development deployment workflow** - New `npm run cdk:dev` command for testing changes before production
+  - Deploys using CI-built images with timestamped tags
+  - Added `--image-tag` CLI option and `IMAGE_TAG` environment variable for version control
+- **Package naming improvements** - Packages now use DisplayID (e.g., `PRT001`) instead of EntryID for better organization
+- **Upload URL improvements** - Package links now include `?action=revisePackage` to direct users to revision workflow
 
 ### Fixed
 
-- **Complete QUEUE_URL to QUEUE_ARN migration** - Fixed remaining references after v0.5.3
-  - Fixed `docker/tests/test_app.py` - corrected `queue_url` attribute to `queue_arn`
-  - Fixed `docker/scripts/run_local.py` - updated environment variable to use `QUEUE_ARN`
-  - Fixed `docker/scripts/test_benchling.py` - updated parameter from `queue_url` to `queue_arn`
-  - Fixed `docker/docker-compose.yml` - updated environment variable in both services
-  - Removed dead code from `bin/commands/validate.ts` - eliminated non-existent `sqsQueueUrl` validation
-
-### Changed
-
-- **Documentation updates** - All user-facing docs now reference QUEUE_ARN
-  - Updated `AGENTS.md` - corrected variables table to show `QUEUE_ARN`
-  - Updated `docker/README.md` - replaced `SQS_QUEUE_URL` with `QUEUE_ARN`
-  - Updated `docker/src/README.md` - replaced `SQS_QUEUE_URL` with `QUEUE_ARN`
+- **WebhookAllowList parameter handling** - Fixed deployment failures when IP allowlist is empty
+- **QUEUE_ARN migration** - Completed transition from QUEUE_URL to QUEUE_ARN throughout the codebase
 
 ## [0.5.3] - 2025-10-30
 
