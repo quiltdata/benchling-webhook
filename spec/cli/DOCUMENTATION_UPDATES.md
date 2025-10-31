@@ -582,7 +582,7 @@ None - all existing workflows remain functional.
 # CLI Guide
 
 [Full CLI documentation with all commands, options, and examples]
-[See .scratch/cli/EXAMPLES.md for content]
+[See spec/cli/EXAMPLES.md for content]
 ```
 
 #### 6.2 Create MIGRATION_GUIDE.md
@@ -806,7 +806,7 @@ benchling-webhook/
 │   └── ARCHITECTURE.md                # Existing architecture docs
 ├── docker/
 │   └── README.md                      # Docker guide (updated with note)
-└── .scratch/cli/
+└── spec/cli/
     ├── CLI_SPEC.md                    # Implementation spec
     ├── REFACTORING_GUIDE.md           # Refactoring steps
     ├── EXAMPLES.md                    # Usage examples
@@ -914,7 +914,7 @@ Existing deployments are fully compatible. You can continue using the repository
 ## Links
 
 - [CLI Guide](docs/CLI_GUIDE.md)
-- [Examples](.scratch/cli/EXAMPLES.md)
+- [Examples](spec/cli/EXAMPLES.md)
 - [Changelog](CHANGELOG.md)
 ```
 
