@@ -72,7 +72,7 @@
 
 #### 📝 Requirements Instructions (for Agent)
 
-Using the GitHub issue from Step 0, create requirements document following I RASP DECO methodology:
+Reading from the GitHub issue from Step 0 via the 'gh' command, create requirements document following I RASP DECO methodology:
 
 - Reference the GitHub issue number and problem statement
 - Expand the issue description into detailed user stories: 'As a role, I want functionality so that benefit'
