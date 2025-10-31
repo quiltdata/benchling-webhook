@@ -153,7 +153,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const logLevelValue = logLevelParam.valueAsString;
         const enableWebhookVerificationValue = enableWebhookVerificationParam.valueAsString;
         const imageTagValue = imageTagParam.valueAsString;
-        // Phase 3: New secret parameters
+        // Phase 3: New secret parameters (not used directly - mode determined by props)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const benchlingSecretsValue = benchlingSecretsParam.valueAsString;
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const benchlingClientIdValue = benchlingClientIdParam.valueAsString;
@@ -201,7 +202,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
             benchlingClientId: props.benchlingClientId,
             benchlingClientSecret: props.benchlingClientSecret,
             benchlingTenant: benchlingTenantValue,
-            benchlingSecrets: benchlingSecretsValue, // NEW: consolidated secrets parameter
+            // Use props.benchlingSecrets (original value) to determine mode
+            // The CloudFormation parameter value (benchlingSecretsValue) is a token that can't be evaluated at synth time
+            benchlingSecrets: props.benchlingSecrets,
             quiltCatalog: quiltCatalogValue,
             quiltDatabase: quiltDatabaseValue,
             webhookAllowList: webhookAllowListValue,
