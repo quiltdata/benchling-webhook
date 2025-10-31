@@ -15,6 +15,7 @@ This document defines atomic, testable change units for implementing Phase 1. Ea
 ### Episode Structure
 
 Each episode follows this format:
+
 - **ID**: Unique identifier (e.g., E1.1)
 - **Title**: Concise description of the change
 - **User Story**: Links to specific US-1 through US-7
@@ -48,6 +49,7 @@ Each episode follows this format:
 **Description**: Create comprehensive tests for Display ID prominence in Canvas headers and README files. These tests will initially fail (Red phase) and guide implementation.
 
 **TDD Cycle**:
+
 1. **RED**: Write failing tests
    - Test `format_package_header()` expects Display ID as H2 heading
    - Test package name appears with "**Package**:" label
@@ -61,6 +63,7 @@ Each episode follows this format:
 3. **REFACTOR**: Not applicable (test-only episode)
 
 **Files to Create/Modify**:
+
 - `docker/tests/test_canvas_formatting.py` (create if missing)
   - `test_format_package_header_display_id_prominent()`
   - `test_format_package_header_has_package_label()`
@@ -71,6 +74,7 @@ Each episode follows this format:
   - `test_readme_includes_package_context()`
 
 **Success Criteria**:
+
 - [ ] 6 new tests added
 - [ ] All tests fail with current implementation
 - [ ] Tests clearly define expected behavior
@@ -78,6 +82,7 @@ Each episode follows this format:
 - [ ] Test coverage report shows new test lines
 
 **Commit Message**:
+
 ```
 test(us-1): add Display ID prominence tests
 
@@ -105,6 +110,7 @@ Addresses #141 (US-1)
 **Description**: Modify `format_package_header()` to elevate Display ID as primary identifier and restructure action links.
 
 **TDD Cycle**:
+
 1. **RED**: Tests from E1.1 fail
 
 2. **GREEN**: Implement minimal changes to pass tests
@@ -121,10 +127,12 @@ Addresses #141 (US-1)
    - Validate docstring example matches output
 
 **Files to Modify**:
+
 - `docker/src/canvas_formatting.py`
   - Function: `format_package_header()` (lines 12-28)
 
 **Implementation Details**:
+
 ```python
 def format_package_header(package_name: str, display_id: str, catalog_url: str, sync_url: str, upload_url: str) -> str:
     """Format primary package header with action links.
@@ -155,6 +163,7 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
 ```
 
 **Success Criteria**:
+
 - [ ] All E1.1 Canvas header tests pass
 - [ ] Display ID is H2 heading
 - [ ] Package name has clear label
@@ -163,6 +172,7 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
 - [ ] No regressions in existing Canvas tests
 
 **Commit Message**:
+
 ```
 feat(us-1): elevate Display ID in Canvas headers
 
@@ -187,6 +197,7 @@ All tests passing. Addresses #141 (US-1)
 **Description**: Modify README generation in `_create_metadata_files()` to use Display ID as primary title.
 
 **TDD Cycle**:
+
 1. **RED**: Tests from E1.1 fail for README
 
 2. **GREEN**: Implement README title changes
@@ -203,10 +214,12 @@ All tests passing. Addresses #141 (US-1)
    - Validate output examples
 
 **Files to Modify**:
+
 - `docker/src/entry_packager.py`
   - Function: `_create_metadata_files()` (lines 602-614)
 
 **Implementation Details**:
+
 ```python
 # Build title hierarchy: Display ID > Name > Package
 # Display ID is most prominent, entry name if available, package name for context
@@ -225,6 +238,7 @@ This package contains data exported from Benchling entry `{display_id}`.
 ```
 
 **Success Criteria**:
+
 - [ ] All E1.1 README tests pass
 - [ ] Title uses Display ID prominently
 - [ ] Entry name incorporated when available
@@ -233,6 +247,7 @@ This package contains data exported from Benchling entry `{display_id}`.
 - [ ] No regressions in README generation
 
 **Commit Message**:
+
 ```
 feat(us-1): use Display ID in README titles
 
@@ -259,6 +274,7 @@ All tests passing. Addresses #141 (US-1)
 **Description**: Create tests for URL linkification in README files. All URLs should be proper Markdown links with descriptive text.
 
 **TDD Cycle**:
+
 1. **RED**: Write failing tests
    - Test Benchling web URL is linkified
    - Test catalog URL is linkified
@@ -271,6 +287,7 @@ All tests passing. Addresses #141 (US-1)
 3. **REFACTOR**: Not applicable (test-only episode)
 
 **Files to Create/Modify**:
+
 - `docker/tests/test_entry_packager.py`
   - `test_readme_web_url_is_linkified()`
   - `test_readme_catalog_url_is_linkified()`
@@ -278,6 +295,7 @@ All tests passing. Addresses #141 (US-1)
   - `test_readme_links_have_descriptive_text()`
 
 **Success Criteria**:
+
 - [ ] 4 new tests added
 - [ ] All tests fail with current implementation
 - [ ] Tests verify Markdown link format
@@ -285,6 +303,7 @@ All tests passing. Addresses #141 (US-1)
 - [ ] Tests check for absence of bare URLs
 
 **Commit Message**:
+
 ```
 test(us-4): add URL linkification tests
 
@@ -311,6 +330,7 @@ Addresses #141 (US-4)
 **Description**: Convert plain text URLs in README to proper Markdown links with descriptive text.
 
 **TDD Cycle**:
+
 1. **RED**: Tests from E2.1 fail
 
 2. **GREEN**: Implement URL linkification
@@ -326,10 +346,12 @@ Addresses #141 (US-4)
    - Validate link format
 
 **Files to Modify**:
+
 - `docker/src/entry_packager.py`
   - Function: `_create_metadata_files()` (lines 614, 637+)
 
 **Implementation Details**:
+
 ```python
 # Convert Benchling URL to link
 if web_url:
@@ -343,6 +365,7 @@ readme_content += f"\n[Browse package in Quilt catalog]({catalog_url})\n"
 ```
 
 **Success Criteria**:
+
 - [ ] All E2.1 tests pass
 - [ ] Web URLs are Markdown links
 - [ ] Catalog URLs are Markdown links
@@ -351,6 +374,7 @@ readme_content += f"\n[Browse package in Quilt catalog]({catalog_url})\n"
 - [ ] Links are clickable in rendered Markdown
 
 **Commit Message**:
+
 ```
 feat(us-4): linkify URLs in README files
 
@@ -375,6 +399,7 @@ All tests passing. Addresses #141 (US-4)
 **Description**: Create tests for updated button label "Browse Package" instead of "Browse Files".
 
 **TDD Cycle**:
+
 1. **RED**: Write failing tests
    - Test button text is "Browse Package"
    - Test button ID remains unchanged (backward compatibility)
@@ -385,17 +410,20 @@ All tests passing. Addresses #141 (US-4)
 3. **REFACTOR**: Not applicable (test-only episode)
 
 **Files to Modify**:
+
 - `docker/tests/test_canvas_blocks.py`
   - `test_main_navigation_buttons_browse_package_label()`
   - Update existing test assertions
 
 **Success Criteria**:
+
 - [ ] 1 new test added
 - [ ] Test fails with current "Browse Files" label
 - [ ] Test verifies button ID unchanged
 - [ ] Test follows existing test patterns
 
 **Commit Message**:
+
 ```
 test(us-3): add Browse Package button label test
 
@@ -420,6 +448,7 @@ Addresses #141 (US-3)
 **Description**: Update button text from "Browse Files" to "Browse Package" while preserving button ID.
 
 **TDD Cycle**:
+
 1. **RED**: Tests from E2.3 fail
 
 2. **GREEN**: Update button label
@@ -433,10 +462,12 @@ Addresses #141 (US-3)
    - Ensure consistent terminology
 
 **Files to Modify**:
+
 - `docker/src/canvas_blocks.py`
   - Function: `create_main_navigation_buttons()` (lines 92-114)
 
 **Implementation Details**:
+
 ```python
 def create_main_navigation_buttons(entry_id: str) -> List:
     """Create main view navigation buttons (Browse Package, Update Package).
@@ -464,6 +495,7 @@ def create_main_navigation_buttons(entry_id: str) -> List:
 ```
 
 **Success Criteria**:
+
 - [ ] All E2.3 tests pass
 - [ ] Button text is "Browse Package"
 - [ ] Button ID unchanged
@@ -471,6 +503,7 @@ def create_main_navigation_buttons(entry_id: str) -> List:
 - [ ] No regressions in button functionality
 
 **Commit Message**:
+
 ```
 feat(us-3): update navigation button label to "Browse Package"
 
@@ -494,6 +527,7 @@ All tests passing. Addresses #141 (US-3)
 **Description**: Investigate and verify current upload URL format works correctly. Create tests to validate URL structure.
 
 **TDD Cycle**:
+
 1. **RED**: Write URL validation tests
    - Test URL contains correct action parameter
    - Test URL structure matches catalog conventions
@@ -508,12 +542,14 @@ All tests passing. Addresses #141 (US-3)
    - Document any catalog-specific requirements
 
 **Files to Create/Modify**:
+
 - `docker/tests/test_packages.py`
   - `test_upload_url_format()`
   - `test_upload_url_has_action_parameter()`
   - `test_upload_url_structure()`
 
 **Manual Verification**:
+
 - [ ] Generate upload URL in Canvas
 - [ ] Click URL in test Benchling environment
 - [ ] Verify it opens package revision interface
@@ -521,6 +557,7 @@ All tests passing. Addresses #141 (US-3)
 - [ ] Document actual vs expected behavior
 
 **Success Criteria**:
+
 - [ ] 3 validation tests added
 - [ ] Manual testing completed
 - [ ] URL behavior documented
@@ -529,6 +566,7 @@ All tests passing. Addresses #141 (US-3)
 - [ ] If broken: issue documented for E2.6
 
 **Commit Message** (if URLs work):
+
 ```
 test(us-2): verify package revision URL format
 
@@ -541,6 +579,7 @@ Current implementation is correct. Addresses #141 (US-2)
 ```
 
 **Commit Message** (if URLs need fix):
+
 ```
 test(us-2): identify package revision URL issue
 
@@ -565,6 +604,7 @@ Tests intentionally fail. Addresses #141 (US-2)
 **Description**: Fix upload URL generation if E2.5 testing reveals issues.
 
 **TDD Cycle**:
+
 1. **RED**: Tests from E2.5 fail
 
 2. **GREEN**: Fix URL generation
@@ -578,10 +618,12 @@ Tests intentionally fail. Addresses #141 (US-2)
    - Add validation for URL components
 
 **Files to Modify**:
+
 - `docker/src/packages.py`
   - Property: `upload_url` (lines 114-123)
 
 **Implementation Details** (example if action parameter wrong):
+
 ```python
 @property
 def upload_url(self) -> str:
@@ -598,6 +640,7 @@ def upload_url(self) -> str:
 ```
 
 **Success Criteria**:
+
 - [ ] All E2.5 tests pass
 - [ ] Upload URLs work in manual testing
 - [ ] URL structure matches catalog requirements
@@ -605,6 +648,7 @@ def upload_url(self) -> str:
 - [ ] No regressions in URL generation
 
 **Commit Message**:
+
 ```
 fix(us-2): correct package revision URL action parameter
 
@@ -630,6 +674,7 @@ All tests passing. Addresses #141 (US-2)
 **Description**: Create tests verifying file metadata includes explicit index field for position tracking.
 
 **TDD Cycle**:
+
 1. **RED**: Write failing tests
    - Test uploaded files include index field
    - Test indices are zero-based and sequential
@@ -642,6 +687,7 @@ All tests passing. Addresses #141 (US-2)
 3. **REFACTOR**: Not applicable (test-only episode)
 
 **Files to Create/Modify**:
+
 - `docker/tests/test_entry_packager.py`
   - `test_uploaded_files_include_indices()`
   - `test_file_indices_are_sequential()`
@@ -649,6 +695,7 @@ All tests passing. Addresses #141 (US-2)
   - `test_metadata_files_include_indices()`
 
 **Success Criteria**:
+
 - [ ] 4 new tests added
 - [ ] All tests fail with current implementation
 - [ ] Tests verify index field presence
@@ -656,6 +703,7 @@ All tests passing. Addresses #141 (US-2)
 - [ ] Tests cover both data and metadata files
 
 **Commit Message**:
+
 ```
 test(us-5): add file index tests
 
@@ -682,6 +730,7 @@ Addresses #141 (US-5)
 **Description**: Add explicit zero-based index field to all file metadata entries.
 
 **TDD Cycle**:
+
 1. **RED**: Tests from E3.1 fail
 
 2. **GREEN**: Add index field
@@ -696,11 +745,13 @@ Addresses #141 (US-5)
    - Validate index values
 
 **Files to Modify**:
+
 - `docker/src/entry_packager.py`
   - Function: `_process_export()` (lines 471-477)
   - Function: `_create_metadata_files()` (lines 504-510)
 
 **Implementation Details**:
+
 ```python
 # In _process_export() for data files
 uploaded_files.append(
@@ -724,6 +775,7 @@ uploaded_files.append(
 ```
 
 **Success Criteria**:
+
 - [ ] All E3.1 tests pass
 - [ ] All file entries include index field
 - [ ] Indices are zero-based (start at 0)
@@ -732,6 +784,7 @@ uploaded_files.append(
 - [ ] No regressions in file processing
 
 **Commit Message**:
+
 ```
 feat(us-5): add explicit indices to file arrays
 
@@ -756,6 +809,7 @@ All tests passing. Addresses #141 (US-5)
 **Description**: Create comprehensive tests for dictionary-based file metadata structure with version identifier.
 
 **TDD Cycle**:
+
 1. **RED**: Write failing tests
    - Test entry.json includes metadata_version field
    - Test files is dictionary not array
@@ -770,6 +824,7 @@ All tests passing. Addresses #141 (US-5)
 3. **REFACTOR**: Not applicable (test-only episode)
 
 **Files to Create/Modify**:
+
 - `docker/tests/test_entry_packager.py`
   - `test_entry_json_has_metadata_version()`
   - `test_entry_json_files_as_dictionary()`
@@ -779,6 +834,7 @@ All tests passing. Addresses #141 (US-5)
   - `test_files_dictionary_preserves_order()`
 
 **Success Criteria**:
+
 - [ ] 6 new tests added
 - [ ] All tests fail with current array structure
 - [ ] Tests verify version identifier
@@ -787,6 +843,7 @@ All tests passing. Addresses #141 (US-5)
 - [ ] Tests cover edge cases (empty files, many files)
 
 **Commit Message**:
+
 ```
 test(us-6): add dictionary metadata tests
 
@@ -814,6 +871,7 @@ Addresses #141 (US-6)
 **Description**: Convert files array to dictionary structure with filename keys. Add metadata version identifier.
 
 **TDD Cycle**:
+
 1. **RED**: Tests from E3.3 fail
 
 2. **GREEN**: Implement dictionary conversion
@@ -829,10 +887,12 @@ Addresses #141 (US-6)
    - Document breaking change in code
 
 **Files to Modify**:
+
 - `docker/src/entry_packager.py`
   - Function: `_create_metadata_files()` (lines 586-520)
 
 **Implementation Details**:
+
 ```python
 # Convert files array to dictionary with filename as key
 files_dict = {}
@@ -863,6 +923,7 @@ entry_json = {
 ```
 
 **Success Criteria**:
+
 - [ ] All E3.3 tests pass
 - [ ] metadata_version is "2.0"
 - [ ] files is dictionary not array
@@ -873,6 +934,7 @@ entry_json = {
 - [ ] No regressions in metadata generation
 
 **Commit Message**:
+
 ```
 feat(us-6): convert file metadata to dictionary structure
 
@@ -902,6 +964,7 @@ All tests passing. Addresses #141 (US-6)
 **Description**: Create tests for hyphenated feature ID format in CLI manifest generation.
 
 **TDD Cycle**:
+
 1. **RED**: Write failing tests
    - Test manifest uses hyphenated feature ID
    - Test manifest does not use underscores
@@ -913,12 +976,14 @@ All tests passing. Addresses #141 (US-6)
 3. **REFACTOR**: Not applicable (test-only episode)
 
 **Files to Create**:
+
 - `test/manifest.test.ts` (create new test file)
   - `test generates manifest with hyphenated feature ID`
   - `test feature ID does not contain underscores`
   - `test feature ID conforms to DNS naming conventions`
 
 **Success Criteria**:
+
 - [ ] 3 new tests added
 - [ ] All tests fail with current underscore format
 - [ ] Tests verify hyphenated format
@@ -926,6 +991,7 @@ All tests passing. Addresses #141 (US-6)
 - [ ] Tests use proper TypeScript/Jest patterns
 
 **Commit Message**:
+
 ```
 test(us-7): add CLI identifier format tests
 
@@ -951,6 +1017,7 @@ Addresses #141 (US-7)
 **Description**: Update manifest command to use hyphenated feature ID format aligned with DNS conventions.
 
 **TDD Cycle**:
+
 1. **RED**: Tests from E4.1 fail
 
 2. **GREEN**: Update feature ID
@@ -964,10 +1031,12 @@ Addresses #141 (US-7)
    - Check for other identifiers needing update
 
 **Files to Modify**:
+
 - `bin/commands/manifest.ts`
   - Manifest template string (line 36)
 
 **Implementation Details**:
+
 ```typescript
 const manifest = `manifestVersion: 1
 info:
@@ -989,6 +1058,7 @@ subscriptions:
 ```
 
 **Success Criteria**:
+
 - [ ] All E4.1 tests pass
 - [ ] Feature ID uses hyphens
 - [ ] No underscores in identifiers
@@ -997,12 +1067,14 @@ subscriptions:
 - [ ] No regressions in manifest generation
 
 **Manual Verification**:
+
 - [ ] Generate manifest with CLI command
 - [ ] Verify manifest validates with Benchling API
 - [ ] Test with existing installation (if available)
 - [ ] Document any migration requirements
 
 **Commit Message**:
+
 ```
 feat(us-7): use hyphenated format for CLI identifiers
 
@@ -1031,9 +1103,11 @@ All tests passing. Addresses #141 (US-7)
 Not applicable (documentation episode)
 
 **Files to Modify**:
+
 - `CHANGELOG.md`
 
 **Content Requirements**:
+
 - [ ] Version bump to 1.0.0 documented
 - [ ] Breaking changes clearly marked
 - [ ] Migration guide for dictionary metadata
@@ -1042,6 +1116,7 @@ Not applicable (documentation episode)
 - [ ] Release date and issue reference
 
 **Success Criteria**:
+
 - [ ] CHANGELOG.md updated
 - [ ] Breaking changes section clear
 - [ ] Migration examples provided
@@ -1050,6 +1125,7 @@ Not applicable (documentation episode)
 - [ ] Follows Keep a Changelog format
 
 **Commit Message**:
+
 ```
 docs: add v1.0.0 CHANGELOG with breaking changes
 
@@ -1084,6 +1160,7 @@ Addresses #141
 Not applicable (validation episode)
 
 **Tasks**:
+
 - [ ] Run pytest with coverage report
 - [ ] Verify >= 85% overall coverage
 - [ ] Verify >= 90% coverage for modified modules
@@ -1092,12 +1169,14 @@ Not applicable (validation episode)
 - [ ] Add tests for any uncovered code paths
 
 **Commands**:
+
 ```bash
 cd docker
 pytest --cov=src --cov-report=term-missing --cov-report=html
 ```
 
 **Success Criteria**:
+
 - [ ] All tests pass (0 failures)
 - [ ] Overall coverage >= 85%
 - [ ] Modified modules coverage >= 90%
@@ -1105,6 +1184,7 @@ pytest --cov=src --cov-report=term-missing --cov-report=html
 - [ ] Coverage report generated
 
 **Commit Message** (if additional tests needed):
+
 ```
 test: add coverage for uncovered code paths
 
@@ -1128,6 +1208,7 @@ All tests passing.
 **Description**: Create and run end-to-end integration test validating complete workflow with all UX improvements.
 
 **TDD Cycle**:
+
 1. **RED**: Create integration test (may initially fail)
 
 2. **GREEN**: Fix any integration issues
@@ -1135,10 +1216,12 @@ All tests passing.
 3. **REFACTOR**: Optimize integration test
 
 **Files to Create**:
+
 - `docker/tests/test_integration_ux.py`
   - `test_complete_package_creation_with_ux_improvements()`
 
 **Test Coverage**:
+
 - [ ] Entry export triggered
 - [ ] Display ID captured and used
 - [ ] Files include indices
@@ -1151,6 +1234,7 @@ All tests passing.
 - [ ] All URLs functional
 
 **Success Criteria**:
+
 - [ ] Integration test implemented
 - [ ] Test covers full workflow
 - [ ] All components integrate correctly
@@ -1158,6 +1242,7 @@ All tests passing.
 - [ ] Test passes locally
 
 **Commit Message**:
+
 ```
 test: add end-to-end integration test for UX improvements
 
@@ -1188,6 +1273,7 @@ All tests passing. Addresses #141
 Not applicable (quality episode)
 
 **Tasks**:
+
 - [ ] Run mypy type checker
 - [ ] Run ruff linter
 - [ ] Fix any type errors
@@ -1196,6 +1282,7 @@ Not applicable (quality episode)
 - [ ] Ensure all docstrings present
 
 **Commands**:
+
 ```bash
 cd docker
 mypy src/
@@ -1204,6 +1291,7 @@ ruff format src/
 ```
 
 **Success Criteria**:
+
 - [ ] No mypy type errors
 - [ ] No ruff linting errors
 - [ ] Code formatted consistently
@@ -1211,6 +1299,7 @@ ruff format src/
 - [ ] All functions have docstrings
 
 **Commit Message** (if fixes needed):
+
 ```
 style: fix type hints and linting errors
 
@@ -1240,6 +1329,7 @@ Not applicable (manual validation episode)
 **Manual Tests**:
 
 **US-1: Display ID Prominence**
+
 - [ ] Generate new package
 - [ ] Verify Canvas shows Display ID as heading
 - [ ] Verify package name has label
@@ -1247,29 +1337,34 @@ Not applicable (manual validation episode)
 - [ ] Verify README title uses Display ID
 
 **US-2: Package Revision URLs**
+
 - [ ] Click "Add files" link in Canvas
 - [ ] Verify it opens revision interface
 - [ ] Test in multiple catalog environments
 - [ ] Document any issues
 
 **US-3: Navigation Button**
+
 - [ ] View Canvas in Benchling
 - [ ] Verify button says "Browse Package"
 - [ ] Click button and verify it works
 
 **US-4: Clickable URLs**
+
 - [ ] View README in catalog
 - [ ] Verify URLs are clickable links
 - [ ] Click Benchling URL and verify navigation
 - [ ] Click catalog URL and verify navigation
 
 **US-5: File Indices**
+
 - [ ] Download entry.json
 - [ ] Verify files have index field
 - [ ] Verify indices are sequential
 - [ ] Verify indices match positions
 
 **US-6: Dictionary Metadata**
+
 - [ ] Download entry.json
 - [ ] Verify metadata_version is "2.0"
 - [ ] Verify files is dictionary
@@ -1277,12 +1372,14 @@ Not applicable (manual validation episode)
 - [ ] Verify order preserved
 
 **US-7: CLI Identifiers**
+
 - [ ] Generate manifest with CLI
 - [ ] Verify feature ID is "quilt-integration"
 - [ ] Validate manifest with Benchling
 - [ ] Document compatibility
 
 **Success Criteria**:
+
 - [ ] All manual tests completed
 - [ ] All manual tests pass
 - [ ] Issues documented
@@ -1290,6 +1387,7 @@ Not applicable (manual validation episode)
 - [ ] Validation report created
 
 **Commit Message**:
+
 ```
 docs: add manual validation report for UX improvements
 
@@ -1350,11 +1448,13 @@ Integration & Quality
 - **Documentation Episodes**: 1
 
 **Complexity Breakdown**:
+
 - Simple (S): 8 episodes
 - Medium (M): 10 episodes
 - Large (L): 3 episodes
 
 **Estimated Timeline**:
+
 - Simple episodes: ~1-2 hours each
 - Medium episodes: ~2-4 hours each
 - Large episodes: ~4-8 hours each
@@ -1408,6 +1508,7 @@ Each episode follows Test-Driven Development:
 ### Episode Pairing
 
 Test and implementation episodes are paired:
+
 - E1.1 (RED) → E1.2, E1.3 (GREEN + REFACTOR)
 - E2.1 (RED) → E2.2 (GREEN + REFACTOR)
 - E2.3 (RED) → E2.4 (GREEN + REFACTOR)
@@ -1419,9 +1520,10 @@ Test and implementation episodes are paired:
 
 ## 6. Success Criteria Rollup
 
-### All Episodes Complete When:
+### All Episodes Complete When
 
 **Code Quality**:
+
 - [ ] All tests pass (pytest + integration tests)
 - [ ] Test coverage >= 85% overall
 - [ ] Test coverage >= 90% for modified modules
@@ -1430,6 +1532,7 @@ Test and implementation episodes are paired:
 - [ ] All functions have type hints and docstrings
 
 **Feature Completeness**:
+
 - [ ] US-1: Display ID prominent in Canvas and README
 - [ ] US-2: Upload URLs verified and functional
 - [ ] US-3: Navigation buttons use "Browse Package" label
@@ -1439,12 +1542,14 @@ Test and implementation episodes are paired:
 - [ ] US-7: CLI uses hyphenated identifiers
 
 **Documentation**:
+
 - [ ] CHANGELOG updated with breaking changes
 - [ ] Migration guide provided for dictionary format
 - [ ] All docstrings updated
 - [ ] Manual validation report completed
 
 **Quality Assurance**:
+
 - [ ] Integration test validates full workflow
 - [ ] Manual testing completed successfully
 - [ ] No regressions in existing functionality
@@ -1457,12 +1562,14 @@ Test and implementation episodes are paired:
 ### High-Risk Episodes
 
 **E3.4: Dictionary Metadata Implementation**
+
 - **Risk**: Breaking change impacts unknown consumers
 - **Mitigation**: Version identifier enables format detection
 - **Rollback**: Can revert commit if critical issues found
 - **Monitoring**: Watch for parsing errors in logs
 
 **E4.2: CLI Identifier Implementation**
+
 - **Risk**: Feature ID change may break existing installations
 - **Mitigation**: Manual verification before commit
 - **Rollback**: Can revert if Benchling rejects new manifest
@@ -1471,6 +1578,7 @@ Test and implementation episodes are paired:
 ### Medium-Risk Episodes
 
 **E2.6: URL Fix (Conditional)**
+
 - **Risk**: URL format may vary by catalog environment
 - **Mitigation**: E2.5 investigation validates across environments
 - **Testing**: Manual validation required

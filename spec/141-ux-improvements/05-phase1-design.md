@@ -12,6 +12,7 @@
 This design document specifies the technical implementation for all seven user stories identified in issue #141. Following the recommendation from the phases document (04-phases.md), all improvements will be implemented in a single phase to ensure cohesive integration and streamlined testing.
 
 The implementation focuses on:
+
 1. Elevating Display IDs as primary user-facing identifiers
 2. Fixing package revision URLs
 3. Updating navigation button labels
@@ -27,17 +28,20 @@ This document provides specific implementation details, including files to modif
 ### 2.1 Architectural Alignment
 
 **Separation of Concerns**: Maintain existing architectural boundaries between:
+
 - Presentation layer (Canvas UI, markdown formatting)
 - Business logic layer (Entry packaging, metadata generation)
 - Data layer (S3 storage, JSON structures)
 - Integration layer (Benchling API, Quilt catalog)
 
 **Progressive Enhancement**: All changes enhance existing functionality without removing capabilities:
+
 - Display ID prominence maintains Entry ID availability
 - Dictionary file metadata preserves ordering via Python 3.7+ guarantees
 - Indexed arrays are additive (backward compatible)
 
 **Graceful Degradation**: Handle missing data appropriately:
+
 - Fallback to Entry ID when Display ID unavailable
 - Log all identifier resolution operations
 - Validate URL components before generation
@@ -57,6 +61,7 @@ This document provides specific implementation details, including files to modif
 #### 3.1.1 Strategic Decision
 
 **Package Naming Strategy**: CONSERVATIVE APPROACH
+
 - **Decision**: Maintain Entry ID in package names (S3 keys) for backward compatibility
 - **Rationale**:
   - Preserves existing package references
@@ -71,6 +76,7 @@ This document provides specific implementation details, including files to modif
 Function: `format_package_header()`
 
 **Current Implementation** (lines 12-28):
+
 ```python
 def format_package_header(package_name: str, display_id: str, catalog_url: str, sync_url: str, upload_url: str) -> str:
     return f"""## {package_name}
@@ -80,6 +86,7 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
 ```
 
 **New Implementation**:
+
 ```python
 def format_package_header(package_name: str, display_id: str, catalog_url: str, sync_url: str, upload_url: str) -> str:
     """Format primary package header with action links.
@@ -110,6 +117,7 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
 ```
 
 **Rationale**:
+
 - Display ID becomes the primary heading (H2)
 - Package name moves to secondary position with clear label
 - Actions consolidated into single line with descriptive link text
@@ -122,6 +130,7 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
 Function: `_create_metadata_files()`
 
 **Current Implementation** (lines 602-614):
+
 ```python
 # Build title with name if available
 title = f"# Benchling Entry Package: {package_name}"
@@ -139,6 +148,7 @@ if web_url:
 ```
 
 **New Implementation**:
+
 ```python
 # Build title hierarchy: Display ID > Name > Package
 # Display ID is most prominent, entry name if available, package name for context
@@ -160,6 +170,7 @@ if web_url:
 ```
 
 **Rationale**:
+
 - Display ID leads the title
 - Entry name incorporated as subtitle when available
 - Package name provided for technical context
@@ -170,6 +181,7 @@ if web_url:
 #### 3.1.3 Data Structure Changes
 
 **No changes to data structures** - Display ID already captured in `entry.json`:
+
 ```json
 {
   "display_id": "EXP00001234",
@@ -179,6 +191,7 @@ if web_url:
 ```
 
 Both identifiers remain available for different purposes:
+
 - `display_id`: User-facing presentation
 - `entry_id`: Technical operations and S3 keys
 - `package_name`: Full package path
@@ -190,6 +203,7 @@ Both identifiers remain available for different purposes:
 #### 3.2.1 Analysis
 
 **Current Implementation** (packages.py, line 123):
+
 ```python
 @property
 def upload_url(self) -> str:
@@ -205,11 +219,13 @@ def upload_url(self) -> str:
 ```
 
 **Investigation Required**: The current implementation appears correct based on:
+
 1. Docstring example shows standard Quilt catalog URL pattern
 2. URL structure follows established conventions: `{catalog_url}?action=revisePackage`
 3. No obvious errors in the code
 
 **Design Decision**:
+
 - **VERIFY FIRST**: Test current URLs against Quilt catalog (stable, nightly, production)
 - **If working**: No code changes needed, close user story
 - **If broken**: Document the correct format and implement fix
@@ -217,17 +233,20 @@ def upload_url(self) -> str:
 #### 3.2.2 Validation Strategy
 
 **Manual Testing Checklist**:
+
 1. Generate upload URL via Canvas "Add files" action
 2. Click the link in a test Benchling Canvas
 3. Verify it opens the package revision interface in Quilt catalog
 4. Test across environments: stable, nightly, production (if available)
 
 **If URLs are incorrect**, the fix location is:
+
 - File: `/Users/ernest/GitHub/benchling-webhook/docker/src/packages.py`
 - Property: `upload_url`
 - Lines: 114-123
 
 **Potential Fix Pattern** (if needed):
+
 ```python
 @property
 def upload_url(self) -> str:
@@ -256,6 +275,7 @@ def upload_url(self) -> str:
 Function: `create_main_navigation_buttons()`
 
 **Current Implementation** (lines 92-114):
+
 ```python
 def create_main_navigation_buttons(entry_id: str) -> List:
     """Create main view navigation buttons (Browse Files, Update Package).
@@ -283,6 +303,7 @@ def create_main_navigation_buttons(entry_id: str) -> List:
 ```
 
 **New Implementation**:
+
 ```python
 def create_main_navigation_buttons(entry_id: str) -> List:
     """Create main view navigation buttons (Browse Package, Update Package).
@@ -310,6 +331,7 @@ def create_main_navigation_buttons(entry_id: str) -> List:
 ```
 
 **Rationale**:
+
 - Button text changed to "Browse Package" for clarity
 - Button ID preserved (`browse-files-*`) to maintain existing routing logic
 - Docstring updated to reflect new terminology
@@ -320,16 +342,19 @@ def create_main_navigation_buttons(entry_id: str) -> List:
 **File: `/Users/ernest/GitHub/benchling-webhook/docker/tests/test_canvas_browser.py`**
 
 Current assertion (approximate line 149):
+
 ```python
 assert buttons[0].text == "Browse Files"
 ```
 
 Update to:
+
 ```python
 assert buttons[0].text == "Browse Package"
 ```
 
 **Additional Search**: Use grep to find all test assertions referencing "Browse Files":
+
 ```bash
 grep -r "Browse Files" docker/tests/
 ```
@@ -347,12 +372,14 @@ Update all test assertions to expect "Browse Package".
 Function: `_create_metadata_files()` - README generation
 
 **Current Implementation** (line 614):
+
 ```python
 if web_url:
     readme_content += f"\n**View in Benchling**: {web_url}\n"
 ```
 
 **New Implementation**:
+
 ```python
 if web_url:
     readme_content += f"\n[View entry in Benchling]({web_url})\n"
@@ -361,6 +388,7 @@ if web_url:
 **Additional URLs to Linkify** (lines 616-637):
 
 **Current**:
+
 ```python
 readme_content += f"""
 
@@ -370,6 +398,7 @@ readme_content += f"""
 ```
 
 **Enhanced with catalog link**:
+
 ```python
 readme_content += f"""
 
@@ -385,6 +414,7 @@ readme_content += f"""
 #### 3.4.2 Function Signature Update
 
 **Current Signature** (line 533):
+
 ```python
 def _create_metadata_files(
     self,
@@ -400,6 +430,7 @@ def _create_metadata_files(
 ```
 
 **No change needed** - we can derive catalog URL from config:
+
 ```python
 catalog_base_url = self.config.catalog_base_url
 bucket = self.config.s3_bucket_name
@@ -407,6 +438,7 @@ catalog_url = f"https://{catalog_base_url}/b/{bucket}/packages/{package_name}"
 ```
 
 Then use in README:
+
 ```python
 readme_content += f"\n[Browse package in Quilt catalog]({catalog_url})\n"
 ```
@@ -422,6 +454,7 @@ readme_content += f"\n[Browse package in Quilt catalog]({catalog_url})\n"
 Function: `_process_export()`
 
 **Current Implementation** (lines 471-477):
+
 ```python
 uploaded_files.append(
     {
@@ -433,6 +466,7 @@ uploaded_files.append(
 ```
 
 **New Implementation**:
+
 ```python
 uploaded_files.append(
     {
@@ -445,6 +479,7 @@ uploaded_files.append(
 ```
 
 **Rationale**:
+
 - `index` field added as first key for visibility
 - Value is current array length (zero-based, sequential)
 - Additive change - does not break existing parsers
@@ -453,6 +488,7 @@ uploaded_files.append(
 #### 3.5.2 Metadata Files Addition
 
 Also add indices when creating metadata file entries (lines 504-510):
+
 ```python
 uploaded_files.append(
     {
@@ -502,6 +538,7 @@ uploaded_files.append(
 Function: `_create_metadata_files()`
 
 **Current Implementation** (line 586):
+
 ```python
 entry_json = {
     "package_name": package_name,
@@ -521,6 +558,7 @@ entry_json = {
 ```
 
 **New Implementation**:
+
 ```python
 # Convert files array to dictionary with filename as key
 files_dict = {}
@@ -553,6 +591,7 @@ entry_json = {
 #### 3.6.3 Data Structure Transformation
 
 **Before (Version 1.0)**:
+
 ```json
 {
   "files": [
@@ -567,6 +606,7 @@ entry_json = {
 ```
 
 **After (Version 2.0)**:
+
 ```json
 {
   "metadata_version": "2.0",
@@ -585,10 +625,12 @@ entry_json = {
 #### 3.6.4 Migration Considerations
 
 **Breaking Change Impact**:
+
 - Code expecting `files` as an array will fail
 - Iteration pattern changes from `for file in entry_json["files"]` to `for filename, metadata in entry_json["files"].items()`
 
 **Mitigation**:
+
 1. **Version Identifier**: `metadata_version` field enables format detection
 2. **Documentation**: Clear migration guide in CHANGELOG and documentation
 3. **Internal Updates**: Update all internal code that parses `entry.json`
@@ -604,6 +646,7 @@ entry_json = {
 **File: `/Users/ernest/GitHub/benchling-webhook/bin/commands/manifest.ts`**
 
 **Current Implementation** (lines 13-29):
+
 ```typescript
 const manifest = `manifestVersion: 1
 info:
@@ -625,6 +668,7 @@ subscriptions:
 ```
 
 **New Implementation**:
+
 ```typescript
 const manifest = `manifestVersion: 1
 info:
@@ -646,6 +690,7 @@ subscriptions:
 ```
 
 **Rationale**:
+
 - Hyphens align with DNS conventions
 - Consistent with Quilt catalog URL patterns
 - More standard for identifiers in modern systems
@@ -655,11 +700,13 @@ subscriptions:
 **Potential Impact**: Changing feature ID may affect existing Benchling app installations
 
 **Investigation Required**:
+
 1. Test manifest validation with Benchling API
 2. Verify existing installations continue to work
 3. Document any required migration steps
 
 **Fallback Plan**: If feature ID change breaks existing installations, we may need to:
+
 - Keep existing ID for backward compatibility
 - Document naming convention for new installations
 - Create migration guide for updating apps
@@ -1064,12 +1111,14 @@ for file_info in entry_json["files"]:
 ```
 
 **After (version 2.0)**:
+
 ```python
 for filename, file_metadata in entry_json["files"].items():
     s3_key = file_metadata["s3_key"]
 ```
 
 **Detecting Format Version**:
+
 ```python
 metadata_version = entry_json.get("metadata_version", "1.0")
 if metadata_version == "2.0":
@@ -1079,6 +1128,7 @@ else:
     # Legacy array format
     files_array = entry_json["files"]
 ```
+
 ```
 
 ### 6.3 Documentation Updates
