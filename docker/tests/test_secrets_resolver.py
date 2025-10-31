@@ -164,3 +164,112 @@ class TestJSONParsing:
 
         # Should succeed, extra field ignored
         assert secrets.tenant == "test-tenant"
+
+
+class TestSecretsManagerFetch:
+    """Test suite for AWS Secrets Manager fetching."""
+
+    @pytest.fixture
+    def valid_secrets_json(self):
+        """Valid secrets JSON for testing."""
+        return json.dumps({
+            "tenant": "test-tenant",
+            "clientId": "test-client-id",
+            "clientSecret": "test-client-secret"
+        })
+
+    @pytest.fixture
+    def mock_secrets_manager_success(self, mocker, valid_secrets_json):
+        """Mock successful Secrets Manager fetch."""
+        from unittest.mock import Mock
+        mock_client = Mock()
+        mock_client.get_secret_value.return_value = {
+            'SecretString': valid_secrets_json
+        }
+        mocker.patch('boto3.client', return_value=mock_client)
+        return mock_client
+
+    def test_fetch_from_secrets_manager_success(self, mock_secrets_manager_success, valid_secrets_json):
+        """Test successful secret fetch from Secrets Manager."""
+        from src.secrets_resolver import fetch_from_secrets_manager
+
+        arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:benchling-AbCdEf"
+
+        secrets = fetch_from_secrets_manager(arn, "us-east-2")
+
+        assert secrets.tenant == "test-tenant"
+        assert secrets.client_id == "test-client-id"
+        assert secrets.client_secret == "test-client-secret"
+
+        # Verify boto3 client was called correctly
+        mock_secrets_manager_success.get_secret_value.assert_called_once_with(SecretId=arn)
+
+    def test_fetch_resource_not_found(self, mocker):
+        """Test fetch fails gracefully when secret doesn't exist."""
+        from unittest.mock import Mock
+        from botocore.exceptions import ClientError
+
+        mock_client = Mock()
+        mock_client.get_secret_value.side_effect = ClientError(
+            {'Error': {'Code': 'ResourceNotFoundException', 'Message': 'Secret not found'}},
+            'GetSecretValue'
+        )
+        mocker.patch('boto3.client', return_value=mock_client)
+
+        from src.secrets_resolver import fetch_from_secrets_manager
+        arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:nonexistent-AbCdEf"
+
+        with pytest.raises(SecretsResolutionError, match="Secret not found"):
+            fetch_from_secrets_manager(arn, "us-east-2")
+
+    def test_fetch_access_denied(self, mocker):
+        """Test fetch fails gracefully when IAM permissions insufficient."""
+        from unittest.mock import Mock
+        from botocore.exceptions import ClientError
+
+        mock_client = Mock()
+        mock_client.get_secret_value.side_effect = ClientError(
+            {'Error': {'Code': 'AccessDeniedException', 'Message': 'Access denied'}},
+            'GetSecretValue'
+        )
+        mocker.patch('boto3.client', return_value=mock_client)
+
+        from src.secrets_resolver import fetch_from_secrets_manager
+        arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:benchling-AbCdEf"
+
+        with pytest.raises(SecretsResolutionError, match="Access denied.*IAM permissions"):
+            fetch_from_secrets_manager(arn, "us-east-2")
+
+    def test_fetch_generic_aws_error(self, mocker):
+        """Test fetch handles generic AWS errors."""
+        from unittest.mock import Mock
+        from botocore.exceptions import ClientError
+
+        mock_client = Mock()
+        mock_client.get_secret_value.side_effect = ClientError(
+            {'Error': {'Code': 'InternalServiceError', 'Message': 'AWS service error'}},
+            'GetSecretValue'
+        )
+        mocker.patch('boto3.client', return_value=mock_client)
+
+        from src.secrets_resolver import fetch_from_secrets_manager
+        arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:benchling-AbCdEf"
+
+        with pytest.raises(SecretsResolutionError, match="Failed to fetch secret"):
+            fetch_from_secrets_manager(arn, "us-east-2")
+
+    def test_fetch_invalid_json_in_secret(self, mocker):
+        """Test fetch fails when secret contains invalid JSON."""
+        from unittest.mock import Mock
+
+        mock_client = Mock()
+        mock_client.get_secret_value.return_value = {
+            'SecretString': 'not valid json'
+        }
+        mocker.patch('boto3.client', return_value=mock_client)
+
+        from src.secrets_resolver import fetch_from_secrets_manager
+        arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:benchling-AbCdEf"
+
+        with pytest.raises(SecretsResolutionError, match="Invalid JSON"):
+            fetch_from_secrets_manager(arn, "us-east-2")
