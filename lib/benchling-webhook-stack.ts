@@ -89,9 +89,10 @@ export class BenchlingWebhookStack extends cdk.Stack {
             default: props.quiltDatabase,
         });
 
+        // DEPRECATED: Benchling tenant parameter (kept for backward compatibility)
         const benchlingTenantParam = new cdk.CfnParameter(this, "BenchlingTenant", {
             type: "String",
-            description: "Benchling tenant name (e.g., 'company' for company.benchling.com)",
+            description: "[DEPRECATED] Use BenchlingSecrets parameter instead. Benchling tenant name (e.g., 'company' for company.benchling.com)",
             default: props.benchlingTenant,
         });
 
@@ -115,6 +116,29 @@ export class BenchlingWebhookStack extends cdk.Stack {
             default: props.imageTag || "latest",
         });
 
+        // Benchling Secrets - consolidated secret parameter (Phase 3)
+        const benchlingSecretsParam = new cdk.CfnParameter(this, "BenchlingSecrets", {
+            type: "String",
+            description: "JSON string containing Benchling secrets (client_id, client_secret, tenant, app_definition_id)",
+            default: "",
+            noEcho: true,
+        });
+
+        // DEPRECATED: Individual secret parameters (kept for backward compatibility)
+        const benchlingClientIdParam = new cdk.CfnParameter(this, "BenchlingClientId", {
+            type: "String",
+            description: "[DEPRECATED] Use BenchlingSecrets parameter instead. Benchling OAuth client ID.",
+            default: "",
+            noEcho: true,
+        });
+
+        const benchlingClientSecretParam = new cdk.CfnParameter(this, "BenchlingClientSecret", {
+            type: "String",
+            description: "[DEPRECATED] Use BenchlingSecrets parameter instead. Benchling OAuth client secret.",
+            default: "",
+            noEcho: true,
+        });
+
         // Use parameter values (which have props as defaults)
         // This allows runtime updates via CloudFormation
         const webhookAllowListValue = webhookAllowListParam.valueAsString;
@@ -128,6 +152,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const logLevelValue = logLevelParam.valueAsString;
         const enableWebhookVerificationValue = enableWebhookVerificationParam.valueAsString;
         const imageTagValue = imageTagParam.valueAsString;
+        // Phase 3: New secret parameters (will be used in Episode 4)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const benchlingSecretsValue = benchlingSecretsParam.valueAsString;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const benchlingClientIdValue = benchlingClientIdParam.valueAsString;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const benchlingClientSecretValue = benchlingClientSecretParam.valueAsString;
 
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", bucketNameValue);
 
