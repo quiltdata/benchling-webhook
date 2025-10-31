@@ -18,7 +18,7 @@
     "test": "npm run typecheck && npm run test:ts && npm run test:python",
     "test-ci": "npm run typecheck && npm run test:ts",
     "typecheck": "tsc --noEmit",
-    "test:ts": "NODE_ENV=test TMPDIR=./.tmp node --max-old-space-size=4096 ./node_modules/.bin/jest",
+    "test:ts": "NODE_ENV=test node --max-old-space-size=4096 ./node_modules/.bin/jest",
     "test:python": "make -C docker test-unit",
     "cdk": "npm run test && npm run cli -- --yes",
     "cdk:dev": "node bin/cdk-dev.js",
