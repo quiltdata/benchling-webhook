@@ -93,3 +93,67 @@ export function detectSecretsFormat(input: string): "arn" | "json" {
     // Default to JSON and let validation catch errors
     return "json";
 }
+
+/**
+ * Validate AWS Secrets Manager ARN format
+ *
+ * @param arn - The ARN string to validate
+ * @returns Validation result with errors and warnings
+ *
+ * @example
+ * validateSecretArn("arn:aws:secretsmanager:us-east-1:123456789012:secret:name")
+ * // returns { valid: true, errors: [], warnings: [] }
+ */
+export function validateSecretArn(arn: string): ValidationResult {
+    const errors: ValidationError[] = [];
+    const warnings: string[] = [];
+
+    // Check ARN format using regex
+    // Pattern: arn:aws:secretsmanager:region:account:secret:name
+    const arnPattern = /^arn:aws:secretsmanager:([a-z0-9-]+):(\d{12}):secret:(.+)$/;
+    const match = arn.match(arnPattern);
+
+    if (!match) {
+        errors.push({
+            field: "arn",
+            message: "Invalid AWS Secrets Manager ARN format",
+            suggestion: "Expected format: arn:aws:secretsmanager:region:account:secret:name",
+        });
+        return { valid: false, errors, warnings };
+    }
+
+    const [, region, accountId, secretName] = match;
+
+    // Validate region (basic check - not empty)
+    if (!region || region.length === 0) {
+        errors.push({
+            field: "region",
+            message: "ARN missing AWS region",
+            suggestion: "Ensure ARN includes a valid AWS region (e.g., us-east-1)",
+        });
+    }
+
+    // Validate account ID (must be exactly 12 digits)
+    if (accountId.length !== 12) {
+        errors.push({
+            field: "account",
+            message: "Invalid AWS account ID in ARN",
+            suggestion: "Account ID must be exactly 12 digits",
+        });
+    }
+
+    // Validate secret name (not empty)
+    if (!secretName || secretName.length === 0) {
+        errors.push({
+            field: "secret",
+            message: "ARN missing secret name",
+            suggestion: "Ensure ARN includes the secret name",
+        });
+    }
+
+    return {
+        valid: errors.length === 0,
+        errors,
+        warnings,
+    };
+}
