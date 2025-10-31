@@ -457,7 +457,7 @@ class TestEntryPackager:
 
         # Verify result structure
         assert result["statusCode"] == 200
-        assert result["package_name"] == "benchling/etr_123"
+        assert result["package_name"] == "benchling/EXP0001"  # Now uses display_id
         assert result["total_files"] > 0
         assert "files_uploaded" in result
 
@@ -466,8 +466,21 @@ class TestEntryPackager:
         # Should have uploaded: test_file.txt, data.csv, entry.json, entry_data.json, input.json, README.md
         assert mock_s3_client.put_object.call_count >= 6
 
-    def test_process_export_lambda_error(self, orchestrator):
+    def test_process_export_lambda_error(self, orchestrator, mock_benchling):
         """Test inline processing error handling."""
+        # Mock entry data for the initial fetch
+        mock_entry = Mock()
+        mock_entry.to_dict.return_value = {
+            "id": "etr_123",
+            "display_id": "EXP0001",
+            "name": "Test Entry",
+            "web_url": "https://demo.benchling.com/entry/etr_123",
+            "created_at": "2025-10-01T10:00:00Z",
+            "modified_at": "2025-10-02T10:00:00Z",
+            "fields": [],
+        }
+        mock_benchling.entries.get_entry_by_id.return_value = mock_entry
+
         # Mock requests.get to raise an error (simulating download failure)
         mock_response = Mock()
         mock_response.raise_for_status.side_effect = Exception("Download failed")
@@ -508,7 +521,7 @@ class TestEntryPackager:
 
         with patch.object(orchestrator.sqs_client, "send_message", return_value=mock_response):
             result = orchestrator._send_to_sqs(
-                package_name="benchling/etr_123",
+                package_name="benchling/EXP0001",  # Now uses display_id
                 timestamp="2025-10-02T10:00:00Z",
             )
 
@@ -521,7 +534,11 @@ class TestEntryPackager:
         """Test complete workflow execution."""
         # Mock SDK calls
         mock_entry = Mock()
-        mock_entry.to_dict.return_value = {"id": "etr_123", "fields": []}
+        mock_entry.to_dict.return_value = {
+            "id": "etr_123",
+            "display_id": "EXP0001",
+            "fields": [],
+        }
         mock_benchling.entries.get_entry_by_id.return_value = mock_entry
 
         mock_export_result = Mock()
@@ -539,7 +556,7 @@ class TestEntryPackager:
         # Mock _process_export (inline processing)
         mock_process_result = {
             "statusCode": 200,
-            "package_name": "benchling/etr_123",
+            "package_name": "benchling/EXP0001",  # Now uses display_id
             "files_uploaded": [],
             "total_files": 5,
         }
@@ -564,7 +581,7 @@ class TestEntryPackager:
 
             # Verify result structure
             assert result["status"] == "SUCCESS"
-            assert result["packageName"] == "benchling/etr_123"
+            assert result["packageName"] == "benchling/EXP0001"  # Now uses display_id
 
     def test_execute_workflow_failure_marks_failed(self, orchestrator, mock_benchling):
         """Test failed execution raises exception."""
@@ -588,9 +605,9 @@ class TestEntryPackager:
     def test_create_metadata_files_dict_format(self, orchestrator):
         """Test that files metadata is a dictionary with filename as key."""
         uploaded_files = [
-            {"filename": "file1.txt", "s3_key": "benchling/etr_123/file1.txt", "size": 100},
-            {"filename": "file2.csv", "s3_key": "benchling/etr_123/file2.csv", "size": 200},
-            {"filename": "data.json", "s3_key": "benchling/etr_123/data.json", "size": 300},
+            {"filename": "file1.txt", "s3_key": "benchling/EXP-001/file1.txt", "size": 100},
+            {"filename": "file2.csv", "s3_key": "benchling/EXP-001/file2.csv", "size": 200},
+            {"filename": "data.json", "s3_key": "benchling/EXP-001/data.json", "size": 300},
         ]
 
         entry_data = {
@@ -605,7 +622,7 @@ class TestEntryPackager:
         }
 
         result = orchestrator._create_metadata_files(
-            package_name="benchling/etr_123",
+            package_name="benchling/EXP-001",  # Now uses display_id
             entry_id="etr_123",
             timestamp="2025-10-02T10:00:00Z",
             base_url="https://demo.benchling.com",
@@ -623,7 +640,7 @@ class TestEntryPackager:
         assert "data.json" in entry_json["files"]
 
         # Verify dictionary values contain file metadata
-        assert entry_json["files"]["file1.txt"]["s3_key"] == "benchling/etr_123/file1.txt"
+        assert entry_json["files"]["file1.txt"]["s3_key"] == "benchling/EXP-001/file1.txt"  # Now uses display_id
         assert entry_json["files"]["file1.txt"]["size"] == 100
         assert entry_json["files"]["file2.csv"]["size"] == 200
         assert entry_json["files"]["data.json"]["size"] == 300
@@ -633,7 +650,11 @@ class TestEntryPackager:
         """Test async workflow execution returns immediately."""
         # Mock SDK calls
         mock_entry = Mock()
-        mock_entry.to_dict.return_value = {"id": "etr_123", "fields": []}
+        mock_entry.to_dict.return_value = {
+            "id": "etr_123",
+            "display_id": "EXP0001",
+            "fields": [],
+        }
         mock_benchling.entries.get_entry_by_id.return_value = mock_entry
 
         mock_export_result = Mock()
@@ -651,7 +672,7 @@ class TestEntryPackager:
         # Mock _process_export (inline processing)
         mock_process_result = {
             "statusCode": 200,
-            "package_name": "benchling/etr_123",
+            "package_name": "benchling/EXP0001",  # Now uses display_id
             "files_uploaded": [],
             "total_files": 5,
         }
