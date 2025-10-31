@@ -21,9 +21,20 @@ jest.mock("boxen", () => ({
     default: (str: string) => str,
 }));
 
-// Mock loadConfigSync to avoid config loading issues
+// Mock loadConfigSync to return config based on env vars and options
 jest.mock("../lib/utils/config", () => ({
-    loadConfigSync: jest.fn(() => ({})),
+    loadConfigSync: jest.fn((options = {}) => {
+        const config: Record<string, string> = {};
+
+        // Load catalog from CLI option or env var
+        if (options.catalog) {
+            config.quiltCatalog = options.catalog;
+        } else if (process.env.QUILT_CATALOG) {
+            config.quiltCatalog = process.env.QUILT_CATALOG;
+        }
+
+        return config;
+    }),
 }));
 
 // Suppress console output during tests and mock process.exit
@@ -65,7 +76,7 @@ describe("manifest command", () => {
             const content = readFileSync(testOutputPath, "utf-8");
             expect(content).toContain("manifestVersion: 1");
             expect(content).toContain("info:");
-            expect(content).toContain("name: Quilt Integration");
+            expect(content).toContain("name:");
             expect(content).toContain("features:");
             expect(content).toContain("subscriptions:");
         });
@@ -338,6 +349,74 @@ describe("manifest command", () => {
             const content = readFileSync(testOutputPath, "utf-8");
 
             expect(content).toContain("description: Package Benchling notebook entries as Quilt data packages");
+        });
+    });
+
+    describe("info.name from QUILT_CATALOG", () => {
+        const originalEnv = process.env.QUILT_CATALOG;
+
+        afterEach(() => {
+            // Restore original env
+            if (originalEnv) {
+                process.env.QUILT_CATALOG = originalEnv;
+            } else {
+                delete process.env.QUILT_CATALOG;
+            }
+        });
+
+        it("should use QUILT_CATALOG with hyphens for info.name when catalog is set", async () => {
+            process.env.QUILT_CATALOG = "nightly.quilttest.com";
+
+            await manifestCommand({ output: testOutputPath });
+
+            const content = readFileSync(testOutputPath, "utf-8");
+            expect(content).toContain("name: nightly-quilttest-com");
+        });
+
+        it("should replace dots with hyphens in catalog domain", async () => {
+            process.env.QUILT_CATALOG = "my.catalog.example.com";
+
+            await manifestCommand({ output: testOutputPath });
+
+            const content = readFileSync(testOutputPath, "utf-8");
+            expect(content).toContain("name: my-catalog-example-com");
+        });
+
+        it("should use CLI option catalog over env variable", async () => {
+            process.env.QUILT_CATALOG = "env.catalog.com";
+
+            await manifestCommand({ output: testOutputPath, catalog: "cli.catalog.com" });
+
+            const content = readFileSync(testOutputPath, "utf-8");
+            expect(content).toContain("name: cli-catalog-com");
+        });
+
+        it("should fall back to default name when no catalog is configured", async () => {
+            delete process.env.QUILT_CATALOG;
+
+            await manifestCommand({ output: testOutputPath });
+
+            const content = readFileSync(testOutputPath, "utf-8");
+            expect(content).toContain("name: Quilt Integration");
+        });
+
+        it("should handle simple domains without multiple dots", async () => {
+            process.env.QUILT_CATALOG = "localhost";
+
+            await manifestCommand({ output: testOutputPath });
+
+            const content = readFileSync(testOutputPath, "utf-8");
+            expect(content).toContain("name: localhost");
+        });
+
+        it("should handle domains with port numbers", async () => {
+            process.env.QUILT_CATALOG = "catalog.local:8080";
+
+            await manifestCommand({ output: testOutputPath });
+
+            const content = readFileSync(testOutputPath, "utf-8");
+            // Port should be included and colons replaced with hyphens
+            expect(content).toContain("name: catalog-local-8080");
         });
     });
 

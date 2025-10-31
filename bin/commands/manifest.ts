@@ -7,12 +7,19 @@ import { loadConfigSync, type ConfigOptions } from "../../lib/utils/config";
 const pkg = require("../../package.json");
 
 export async function manifestCommand(options: ConfigOptions & { output?: string }): Promise<void> {
-    loadConfigSync(options);
+    const config = loadConfigSync(options);
     const outputPath = options.output || "app-manifest.yaml";
+
+    // Generate app name from catalog URL if available
+    let appName = "Quilt Integration";
+    if (config.quiltCatalog) {
+        // Replace dots and colons with hyphens to create a valid identifier
+        appName = config.quiltCatalog.replace(/[.:]/g, "-");
+    }
 
     const manifest = `manifestVersion: 1
 info:
-  name: Quilt Integration
+  name: ${appName}
   description: Package Benchling notebook entries as Quilt data packages
   version: ${pkg.version}
 features:
