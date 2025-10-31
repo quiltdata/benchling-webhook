@@ -13,6 +13,10 @@ import {
     type ConfigOptions,
 } from "../../lib/utils/config";
 import {
+    parseAndValidateSecrets,
+    SecretsValidationError,
+} from "../../lib/utils/secrets";
+import {
     checkCdkBootstrap,
     inferConfiguration,
     createStack,
@@ -48,8 +52,64 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
         spinner.succeed("Configuration loaded");
     }
 
+    // 2a. Validate benchling-secrets if provided (Episode 7)
+    if (config.benchlingSecrets) {
+        spinner.text = "Validating Benchling secrets...";
+
+        try {
+            const secretsConfig = parseAndValidateSecrets(config.benchlingSecrets);
+
+            // Episode 10: Display secret source and format
+            if (secretsConfig.format === "arn") {
+                spinner.info(`Using Benchling secrets from ARN: ${maskArn(secretsConfig.arn!)}`);
+            } else {
+                spinner.info("Using Benchling secrets from JSON configuration");
+            }
+
+            // Episode 8: Check for deprecated parameter usage
+            const hasOldParams = !!(
+                config.benchlingTenant ||
+                config.benchlingClientId ||
+                config.benchlingClientSecret
+            );
+
+            if (hasOldParams) {
+                spinner.warn("Both --benchling-secrets and individual secret parameters provided");
+                console.log(chalk.yellow("\n  ⚠ DEPRECATION WARNING:"));
+                console.log(chalk.yellow("  Individual secret parameters (--tenant, --client-id, --client-secret) are deprecated."));
+                console.log(chalk.yellow("  The --benchling-secrets parameter will take precedence.\n"));
+                console.log(chalk.dim("  Migration guide: https://github.com/quiltdata/benchling-webhook#secrets-configuration\n"));
+
+                // Clear old parameters to avoid confusion
+                config.benchlingTenant = undefined as unknown as string;
+                config.benchlingClientId = undefined as unknown as string;
+                config.benchlingClientSecret = undefined as unknown as string;
+                config.benchlingAppDefinitionId = undefined as unknown as string;
+            }
+
+            spinner.start("Validating configuration...");
+        } catch (error) {
+            spinner.fail("Secret validation failed");
+            console.log();
+
+            if (error instanceof SecretsValidationError) {
+                console.error(chalk.red.bold("❌ Benchling Secrets Error\n"));
+                console.error(error.formatForCLI());
+                console.log(chalk.yellow("Secrets format:"));
+                console.log("  ARN:  arn:aws:secretsmanager:region:account:secret:name");
+                console.log("  JSON: {\"client_id\":\"...\",\"client_secret\":\"...\",\"tenant\":\"...\"}");
+                console.log("  File: @secrets.json\n");
+            } else {
+                console.error(chalk.red((error as Error).message));
+            }
+
+            process.exit(1);
+        }
+    } else {
+        spinner.start("Validating configuration...");
+    }
+
     // 3. Validate configuration
-    spinner.start("Validating configuration...");
     const validation = validateConfig(config);
 
     if (!validation.valid) {
@@ -120,11 +180,35 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
     console.log(`    ${chalk.bold("Quilt Catalog:")}            ${config.quiltCatalog}`);
     console.log(`    ${chalk.bold("Quilt Database:")}           ${config.quiltDatabase}`);
     console.log(`    ${chalk.bold("Quilt User Bucket:")}        ${config.quiltUserBucket}`);
-    console.log(`    ${chalk.bold("Benchling Tenant:")}         ${config.benchlingTenant}`);
-    console.log(`    ${chalk.bold("Benchling Client ID:")}      ${config.benchlingClientId}`);
-    console.log(`    ${chalk.bold("Benchling Client Secret:")}  ${config.benchlingClientSecret ? "***" + config.benchlingClientSecret.slice(-4) : "(not set)"}`);
-    if (config.benchlingAppDefinitionId) {
-        console.log(`    ${chalk.bold("Benchling App ID:")}        ${config.benchlingAppDefinitionId}`);
+
+    // Episode 9: Display Benchling configuration based on new or old parameters
+    if (config.benchlingSecrets) {
+        try {
+            const secretsConfig = parseAndValidateSecrets(config.benchlingSecrets);
+
+            if (secretsConfig.format === "arn") {
+                console.log(`    ${chalk.bold("Benchling Secrets:")}        ARN (${maskArn(secretsConfig.arn!)})`);
+            } else {
+                // Display from parsed JSON
+                console.log(`    ${chalk.bold("Benchling Tenant:")}         ${secretsConfig.data!.tenant}`);
+                console.log(`    ${chalk.bold("Benchling Client ID:")}      ${secretsConfig.data!.client_id}`);
+                console.log(`    ${chalk.bold("Benchling Client Secret:")}  ***${secretsConfig.data!.client_secret.slice(-4)}`);
+                if (secretsConfig.data!.app_definition_id) {
+                    console.log(`    ${chalk.bold("Benchling App ID:")}        ${secretsConfig.data!.app_definition_id}`);
+                }
+            }
+        } catch {
+            // Validation already passed, so this shouldn't happen, but fall back to old display
+            console.log(`    ${chalk.bold("Benchling Secrets:")}        (configured)`);
+        }
+    } else {
+        // Fallback to individual parameters (deprecated path)
+        console.log(`    ${chalk.bold("Benchling Tenant:")}         ${config.benchlingTenant}`);
+        console.log(`    ${chalk.bold("Benchling Client ID:")}      ${config.benchlingClientId}`);
+        console.log(`    ${chalk.bold("Benchling Client Secret:")}  ${config.benchlingClientSecret ? "***" + config.benchlingClientSecret.slice(-4) : "(not set)"}`);
+        if (config.benchlingAppDefinitionId) {
+            console.log(`    ${chalk.bold("Benchling App ID:")}        ${config.benchlingAppDefinitionId}`);
+        }
     }
     console.log(`    ${chalk.bold("Queue ARN:")}                ${config.queueArn}`);
     console.log(`    ${chalk.bold("Package Prefix:")}           ${config.pkgPrefix || "benchling"}`);
