@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1761913725557" clover="3.2.0">
-  <project timestamp="1761913725557" name="All files">
+<coverage generated="1761937179272" clover="3.2.0">
+  <project timestamp="1761937179272" name="All files">
     <metrics statements="90" coveredstatements="85" conditionals="57" coveredconditionals="51" methods="6" coveredmethods="6" elements="153" coveredelements="142" complexity="0" loc="90" ncloc="90" packages="1" files="1" classes="1"/>
     <file name="secrets.ts" path="/Users/ernest/GitHub/benchling-webhook/lib/utils/secrets.ts">
       <metrics statements="90" coveredstatements="85" conditionals="57" coveredconditionals="51" methods="6" coveredmethods="6"/>
