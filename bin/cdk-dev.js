@@ -234,13 +234,15 @@ async function main() {
   console.log('');
   console.log(`Step 5: Deploying CDK stack with CI-built image...`);
   process.chdir(path.join(__dirname, '..'));
-  run(`npm run cli -- --image-tag ${version} --yes`);
+  // Use the full version with timestamp (without 'v' prefix)
+  const imageTag = devTag.replace(/^v/, '');
+  run(`npm run cli -- --image-tag ${imageTag} --yes`);
 
   console.log('');
   console.log('✅ Development deployment complete!');
   console.log('');
   console.log(`Dev tag: ${devTag}`);
-  console.log(`Image tag: ${version} (built by CI for x86_64)`);
+  console.log(`Image tag: ${imageTag} (built by CI for x86_64)`);
   console.log('');
 }
 
