@@ -109,3 +109,33 @@ def detect_secret_format(value: str) -> SecretFormat:
         f"'arn:aws:secretsmanager:' or JSON starting with '{{'. "
         f"Got: {value[:50]}..."
     )
+
+
+def parse_secrets_json(json_str: str) -> BenchlingSecrets:
+    """Parse JSON string into BenchlingSecrets.
+
+    Args:
+        json_str: JSON string with Benchling credentials
+
+    Returns:
+        BenchlingSecrets with validated data
+
+    Raises:
+        SecretsResolutionError: If JSON is invalid or missing required fields
+    """
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        raise SecretsResolutionError(f"Invalid JSON in BENCHLING_SECRETS: {str(e)}")
+
+    # Map from JSON camelCase to Python snake_case
+    secrets = BenchlingSecrets(
+        tenant=data.get("tenant", ""),
+        client_id=data.get("clientId", ""),
+        client_secret=data.get("clientSecret", ""),
+    )
+
+    # Validate all required fields are present and non-empty
+    secrets.validate()
+
+    return secrets

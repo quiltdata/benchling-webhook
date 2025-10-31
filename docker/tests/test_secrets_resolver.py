@@ -1,8 +1,16 @@
 """Test suite for secrets_resolver module."""
 
+import json
+
 import pytest
 
-from src.secrets_resolver import BenchlingSecrets, SecretFormat, SecretsResolutionError, detect_secret_format
+from src.secrets_resolver import (
+    BenchlingSecrets,
+    SecretFormat,
+    SecretsResolutionError,
+    detect_secret_format,
+    parse_secrets_json,
+)
 
 
 def test_benchling_secrets_dataclass_creation():
@@ -89,3 +97,70 @@ class TestFormatDetection:
         invalid_arn = "arn:aws:s3:::my-bucket"
         with pytest.raises(SecretsResolutionError, match="Invalid BENCHLING_SECRETS format"):
             detect_secret_format(invalid_arn)
+
+
+class TestJSONParsing:
+    """Test suite for JSON secret parsing."""
+
+    def test_parse_valid_json(self):
+        """Test parsing valid JSON with all required fields."""
+        json_str = json.dumps(
+            {"tenant": "test-tenant", "clientId": "test-client-id", "clientSecret": "test-client-secret"}
+        )
+
+        secrets = parse_secrets_json(json_str)
+
+        assert secrets.tenant == "test-tenant"
+        assert secrets.client_id == "test-client-id"
+        assert secrets.client_secret == "test-client-secret"
+
+    def test_parse_json_missing_tenant(self):
+        """Test parsing fails when tenant is missing."""
+        json_str = json.dumps({"clientId": "test-client-id", "clientSecret": "test-client-secret"})
+
+        with pytest.raises(SecretsResolutionError, match="tenant is required"):
+            parse_secrets_json(json_str)
+
+    def test_parse_json_missing_client_id(self):
+        """Test parsing fails when clientId is missing."""
+        json_str = json.dumps({"tenant": "test-tenant", "clientSecret": "test-client-secret"})
+
+        with pytest.raises(SecretsResolutionError, match="client_id is required"):
+            parse_secrets_json(json_str)
+
+    def test_parse_json_missing_client_secret(self):
+        """Test parsing fails when clientSecret is missing."""
+        json_str = json.dumps({"tenant": "test-tenant", "clientId": "test-client-id"})
+
+        with pytest.raises(SecretsResolutionError, match="client_secret is required"):
+            parse_secrets_json(json_str)
+
+    def test_parse_json_empty_fields(self):
+        """Test parsing fails when fields are empty strings."""
+        json_str = json.dumps({"tenant": "", "clientId": "test-client-id", "clientSecret": "test-client-secret"})
+
+        with pytest.raises(SecretsResolutionError, match="tenant is required"):
+            parse_secrets_json(json_str)
+
+    def test_parse_invalid_json(self):
+        """Test parsing fails with invalid JSON syntax."""
+        invalid_json = '{"tenant": "test", invalid}'
+
+        with pytest.raises(SecretsResolutionError, match="Invalid JSON"):
+            parse_secrets_json(invalid_json)
+
+    def test_parse_json_extra_fields_ignored(self):
+        """Test extra fields are ignored gracefully."""
+        json_str = json.dumps(
+            {
+                "tenant": "test-tenant",
+                "clientId": "test-client-id",
+                "clientSecret": "test-client-secret",
+                "extraField": "ignored",
+            }
+        )
+
+        secrets = parse_secrets_json(json_str)
+
+        # Should succeed, extra field ignored
+        assert secrets.tenant == "test-tenant"
