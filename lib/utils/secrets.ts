@@ -157,3 +157,115 @@ export function validateSecretArn(arn: string): ValidationResult {
         warnings,
     };
 }
+
+/**
+ * Validate secret data structure and field values
+ *
+ * @param data - The secret data object to validate
+ * @returns Validation result with errors and warnings
+ *
+ * @example
+ * validateSecretData({ client_id: "abc", client_secret: "secret", tenant: "company" })
+ * // returns { valid: true, errors: [], warnings: [] }
+ */
+export function validateSecretData(data: unknown): ValidationResult {
+    const errors: ValidationError[] = [];
+    const warnings: string[] = [];
+
+    // Check if data is an object
+    if (typeof data !== "object" || data === null || Array.isArray(data)) {
+        errors.push({
+            field: "data",
+            message: "Secret data must be a JSON object",
+            suggestion:
+                "Expected format: {\"client_id\": \"...\", \"client_secret\": \"...\", \"tenant\": \"...\"}",
+        });
+        return { valid: false, errors, warnings };
+    }
+
+    const secretData = data as Record<string, unknown>;
+
+    // Required fields
+    const requiredFields: Array<keyof BenchlingSecretData> = [
+        "client_id",
+        "client_secret",
+        "tenant",
+    ];
+
+    for (const field of requiredFields) {
+        if (!(field in secretData)) {
+            errors.push({
+                field,
+                message: `Missing required field: ${field}`,
+                suggestion: `Add "${field}" to your secret configuration`,
+            });
+        } else if (typeof secretData[field] !== "string") {
+            errors.push({
+                field,
+                message: `Field ${field} must be a string`,
+                suggestion: `Change ${field} value to a string`,
+            });
+        } else if ((secretData[field] as string).trim() === "") {
+            errors.push({
+                field,
+                message: `Field ${field} cannot be empty`,
+                suggestion: `Provide a non-empty value for ${field}`,
+            });
+        }
+    }
+
+    // Optional fields type checking
+    const optionalFields: Array<keyof BenchlingSecretData> = [
+        "app_definition_id",
+        "api_url",
+    ];
+
+    for (const field of optionalFields) {
+        if (field in secretData && typeof secretData[field] !== "string") {
+            errors.push({
+                field,
+                message: `Field ${field} must be a string`,
+                suggestion: `Change ${field} value to a string or remove it`,
+            });
+        }
+    }
+
+    // Validate tenant format (alphanumeric and hyphens)
+    if (secretData.tenant && typeof secretData.tenant === "string") {
+        const tenantPattern = /^[a-z0-9-]+$/i;
+        if (!tenantPattern.test(secretData.tenant)) {
+            errors.push({
+                field: "tenant",
+                message: "Invalid tenant format",
+                suggestion: "Tenant must contain only letters, numbers, and hyphens",
+            });
+        }
+    }
+
+    // Validate api_url if provided
+    if (secretData.api_url && typeof secretData.api_url === "string") {
+        try {
+            new URL(secretData.api_url);
+        } catch {
+            errors.push({
+                field: "api_url",
+                message: "Invalid URL format for api_url",
+                suggestion: "Provide a valid URL (e.g., https://company.benchling.com)",
+            });
+        }
+    }
+
+    // Check for unknown fields (warning only)
+    const knownFields = new Set([...requiredFields, ...optionalFields]);
+    for (const field in secretData) {
+        if (!knownFields.has(field as keyof BenchlingSecretData)) {
+            warnings.push(`Unknown field "${field}" will be ignored`);
+        }
+    }
+
+    return {
+        valid: errors.length === 0,
+        errors,
+        warnings,
+    };
+}
