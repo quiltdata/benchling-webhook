@@ -245,3 +245,98 @@ class TestFlaskApp:
 
             assert isinstance(markdown_block, MarkdownUiBlockUpdate)
             assert "test.txt" in markdown_block.value
+
+    def test_health_secrets_endpoint_with_json(self, monkeypatch):
+        """Test /health/secrets reports JSON secret source."""
+        json_str = json.dumps({
+            "tenant": "test-tenant",
+            "clientId": "test-id",
+            "clientSecret": "test-secret"
+        })
+        monkeypatch.setenv("BENCHLING_SECRETS", json_str)
+        # Set other required env vars
+        monkeypatch.setenv("AWS_REGION", "us-east-2")
+        monkeypatch.setenv("QUILT_USER_BUCKET", "test-bucket")
+        monkeypatch.setenv("QUEUE_ARN", "arn:aws:sqs:us-east-2:123456789012:test-queue")
+        monkeypatch.setenv("QUILT_CATALOG", "test.quiltdata.com")
+        monkeypatch.setenv("BENCHLING_APP_DEFINITION_ID", "app-123")
+
+        # Create fresh app with new env vars
+        with (
+            patch("src.app.Benchling"),
+            patch("src.app.EntryPackager"),
+        ):
+            app = create_app()
+            app.config["TESTING"] = True
+            client = app.test_client()
+
+            response = client.get("/health/secrets")
+            assert response.status_code == 200
+
+            data = json.loads(response.data)
+            assert data["status"] == "healthy"
+            assert data["source"] == "environment_json"
+            assert data["secrets_valid"] is True
+            assert data["tenant_configured"] is True
+
+    def test_health_secrets_endpoint_with_arn(self, mocker, monkeypatch):
+        """Test /health/secrets reports Secrets Manager source."""
+        from src.secrets_resolver import BenchlingSecrets
+
+        arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:benchling-AbCdEf"
+        monkeypatch.setenv("BENCHLING_SECRETS", arn)
+        # Set other required env vars
+        monkeypatch.setenv("AWS_REGION", "us-east-2")
+        monkeypatch.setenv("QUILT_USER_BUCKET", "test-bucket")
+        monkeypatch.setenv("QUEUE_ARN", "arn:aws:sqs:us-east-2:123456789012:test-queue")
+        monkeypatch.setenv("QUILT_CATALOG", "test.quiltdata.com")
+        monkeypatch.setenv("BENCHLING_APP_DEFINITION_ID", "app-123")
+
+        # Mock Secrets Manager
+        mock_secrets = BenchlingSecrets("test-tenant", "test-id", "test-secret")
+        mocker.patch("src.secrets_resolver.fetch_from_secrets_manager", return_value=mock_secrets)
+
+        # Create fresh app
+        with (
+            patch("src.app.Benchling"),
+            patch("src.app.EntryPackager"),
+        ):
+            app = create_app()
+            app.config["TESTING"] = True
+            client = app.test_client()
+
+            response = client.get("/health/secrets")
+            assert response.status_code == 200
+
+            data = json.loads(response.data)
+            assert data["status"] == "healthy"
+            assert data["source"] == "secrets_manager"
+
+    def test_health_secrets_endpoint_with_individual_vars(self, monkeypatch):
+        """Test /health/secrets reports individual env var source."""
+        monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
+        monkeypatch.setenv("BENCHLING_TENANT", "test-tenant")
+        monkeypatch.setenv("BENCHLING_CLIENT_ID", "test-id")
+        monkeypatch.setenv("BENCHLING_CLIENT_SECRET", "test-secret")
+        # Set other required env vars
+        monkeypatch.setenv("AWS_REGION", "us-east-2")
+        monkeypatch.setenv("QUILT_USER_BUCKET", "test-bucket")
+        monkeypatch.setenv("QUEUE_ARN", "arn:aws:sqs:us-east-2:123456789012:test-queue")
+        monkeypatch.setenv("QUILT_CATALOG", "test.quiltdata.com")
+        monkeypatch.setenv("BENCHLING_APP_DEFINITION_ID", "app-123")
+
+        # Create fresh app
+        with (
+            patch("src.app.Benchling"),
+            patch("src.app.EntryPackager"),
+        ):
+            app = create_app()
+            app.config["TESTING"] = True
+            client = app.test_client()
+
+            response = client.get("/health/secrets")
+            assert response.status_code == 200
+
+            data = json.loads(response.data)
+            assert data["status"] == "healthy"
+            assert data["source"] == "environment_vars"
