@@ -20,7 +20,12 @@ export interface FargateServiceProps {
     readonly benchlingClientId: string;
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
-    readonly benchlingSecrets?: string; // NEW: consolidated secrets parameter
+    /**
+     * Consolidated Benchling secrets as JSON string.
+     * When provided and non-empty, the container will receive BENCHLING_SECRETS environment variable.
+     * Otherwise, individual environment variables (BENCHLING_TENANT) and secrets (BENCHLING_CLIENT_ID, BENCHLING_CLIENT_SECRET) are used.
+     */
+    readonly benchlingSecrets?: string;
     readonly quiltCatalog: string;
     readonly quiltDatabase: string;
     readonly webhookAllowList: string;

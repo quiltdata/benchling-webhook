@@ -16,7 +16,13 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly benchlingClientId: string;
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
-    readonly benchlingSecrets?: string; // NEW: consolidated secrets JSON string
+    /**
+     * Consolidated Benchling secrets as JSON string.
+     * When provided, this takes precedence over individual secret parameters.
+     * Expected format: {"client_id": "...", "client_secret": "...", "tenant": "...", "app_definition_id": "..."}
+     * If not provided or empty, individual parameters (benchlingClientId, benchlingClientSecret, benchlingTenant) are used.
+     */
+    readonly benchlingSecrets?: string;
     readonly quiltCatalog?: string;
     readonly quiltDatabase: string;
     readonly webhookAllowList?: string;
