@@ -98,7 +98,7 @@ class TestCanvasManager:
     def test_package_name(self, canvas_manager, mock_payload, mock_config):
         """Test package_name calls payload.package_name with correct prefix."""
         package_name = canvas_manager.package_name
-        mock_payload.package_name.assert_called_once_with(mock_config.s3_prefix)
+        mock_payload.package_name.assert_called_once_with(mock_config.s3_prefix, use_display_id=True)
         assert package_name == "benchling/test-entry"
 
     def test_markdown_content_includes_sync_uri(self, canvas_manager):

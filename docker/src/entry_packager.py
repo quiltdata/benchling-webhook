@@ -434,9 +434,18 @@ class EntryPackager:
             Exception: If processing fails after retries
         """
         entry_id = payload.entry_id
-        package_name = payload.package_name(self.config.s3_prefix)
 
-        self.logger.info("Processing export inline", entry_id=entry_id, package_name=package_name)
+        # Fetch entry data first to get display_id
+        entry_data = self._fetch_entry_data(entry_id)
+        display_id = entry_data.get("display_id", entry_id)
+
+        # Set display_id on payload for package naming
+        payload.set_display_id(display_id)
+        package_name = payload.package_name(self.config.s3_prefix, use_display_id=True)
+
+        self.logger.info(
+            "Processing export inline", entry_id=entry_id, display_id=display_id, package_name=package_name
+        )
 
         try:
             # Download the ZIP file
@@ -476,10 +485,7 @@ class EntryPackager:
                             }
                         )
 
-                # Fetch entry data for metadata
-                entry_data = self._fetch_entry_data(entry_id)
-
-                # Create metadata files
+                # Create metadata files (entry_data already fetched above)
                 metadata_files = self._create_metadata_files(
                     package_name=package_name,
                     entry_id=entry_id,
@@ -602,10 +608,11 @@ class EntryPackager:
         }
 
         # README.md - Human-readable documentation
-        # Build title with name if available
-        title = f"# Benchling Entry Package: {package_name}"
+        # Build title with DisplayID first, followed by name
         if name:
-            title = f"# {name} ({display_id})"
+            title = f"# {display_id} - {name}"
+        else:
+            title = f"# {display_id}"
 
         readme_content = f"""{title}
 
@@ -744,11 +751,14 @@ For questions about the data, refer to the original Benchling entry.
         )
 
         try:
-            # Step 1: Fetch entry data
+            # Step 1: Fetch entry data and set display_id
             entry_data = self._fetch_entry_data(entry_id)
+            display_id = entry_data.get("display_id", entry_id)
+            payload.set_display_id(display_id)
             self.logger.debug(
                 "Entry data fetched",
                 entry_id=entry_data.get("id"),
+                display_id=display_id,
                 entry_name=entry_data.get("name"),
             )
 
@@ -775,7 +785,7 @@ For questions about the data, refer to the original Benchling entry.
                 payload,
                 download_url,
             )
-            package_name = payload.package_name(self.config.s3_prefix)
+            package_name = payload.package_name(self.config.s3_prefix, use_display_id=True)
             self.logger.debug(
                 "Export processed",
                 entry_id=entry_id,
@@ -831,14 +841,16 @@ For questions about the data, refer to the original Benchling entry.
             Task identifier (entry_id) for reference
         """
         entry_id = payload.entry_id
-        package_name = payload.package_name(self.config.s3_prefix)
+        # Note: display_id will be fetched and set during workflow execution
+        # Use entry_id for initial logging, display_id-based package name will be used later
+        package_name_preview = payload.package_name(self.config.s3_prefix, use_display_id=False)
 
         self.logger.info(
             "Package entries workflow scheduled",
             entry_id=entry_id,
             event_id=payload.event_id,
             event_type=payload.event_type,
-            package_name=package_name,
+            package_name_preview=package_name_preview,
         )
 
         # Execute workflow in background thread
@@ -847,7 +859,6 @@ For questions about the data, refer to the original Benchling entry.
                 self.logger.info(
                     "Background workflow execution started",
                     entry_id=entry_id,
-                    package_name=package_name,
                     event_type=payload.event_type,
                 )
 
@@ -857,7 +868,7 @@ For questions about the data, refer to the original Benchling entry.
                 self.logger.info(
                     "Background workflow execution completed successfully",
                     entry_id=entry_id,
-                    package_name=package_name,
+                    package_name=result.get("packageName"),
                     result_status=result.get("status"),
                 )
 
@@ -868,7 +879,6 @@ For questions about the data, refer to the original Benchling entry.
                 self.logger.error(
                     "Background workflow execution failed",
                     entry_id=entry_id,
-                    package_name=package_name,
                     error=error_message,
                     error_type=error_cause,
                     exc_info=True,
