@@ -16,6 +16,18 @@ All notable changes to this project will be documented in this file.
   - Added `IMAGE_TAG` environment variable support in configuration
   - New documentation: `DEV_DEPLOYMENT.md` with complete usage guide
   - **IMPORTANT**: Uses CI-built images, NOT local builds (ARM builds would fail in AWS)
+- **Package naming improvements** - Packages now use DisplayID for better organization (#141)
+  - Package directories named with DisplayID (e.g., `PRT001`) instead of EntryID (e.g., `bfi_abc123`)
+  - README titles use "DisplayID - Name" format for better readability
+  - Comprehensive test suite validates DisplayID usage throughout
+- **Upload URL improvements** - Enhanced package revision workflow (#141)
+  - Upload URLs now include `?action=revisePackage` query parameter
+  - Directs users to revision workflow when clicking package upload links
+  - Added 19 comprehensive tests for URL format validation
+- **CLI manifest tests** - Added comprehensive test coverage for Benchling app manifest (#141)
+  - 23 new tests verify "quilt-entry" identifier in manifest output
+  - Tests validate DNS naming conventions, manifest structure, and webhook subscriptions
+  - Ensures proper YAML format and completeness
 
 ### Fixed
 
@@ -32,6 +44,10 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **File metadata structure** - Simplified file metadata by removing redundant filename field (#141)
+  - Filename no longer duplicated in metadata (already stored as dictionary key)
+  - Cleaner JSON structure with reduced payload size
+  - Follows DRY (Don't Repeat Yourself) principle
 - **Documentation updates** - All user-facing docs now reference QUEUE_ARN
   - Updated `AGENTS.md` - corrected variables table to show `QUEUE_ARN`
   - Updated `docker/README.md` - replaced `SQS_QUEUE_URL` with `QUEUE_ARN`
