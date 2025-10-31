@@ -24,6 +24,8 @@ def test_environment_variable_names_are_documented():
     actual_env_vars = set(re.findall(env_var_pattern, config_content))
 
     # Expected environment variable names (must match CDK stack)
+    # NOTE: BENCHLING_TENANT, BENCHLING_CLIENT_ID, BENCHLING_CLIENT_SECRET are now
+    # resolved through secrets_resolver.py, not directly via os.getenv()
     expected_env_vars = {
         "FLASK_ENV",
         "LOG_LEVEL",
@@ -34,9 +36,6 @@ def test_environment_variable_names_are_documented():
         "QUILT_CATALOG",
         "QUILT_DATABASE",
         "QUEUE_ARN",  # SQS Queue ARN (not URL!)
-        "BENCHLING_TENANT",
-        "BENCHLING_CLIENT_ID",
-        "BENCHLING_CLIENT_SECRET",
         "BENCHLING_APP_DEFINITION_ID",
         "ENABLE_WEBHOOK_VERIFICATION",
     }
@@ -53,7 +52,9 @@ def test_environment_variable_names_are_documented():
 
 # Episode 6: Config integration with secrets resolver
 import json
+
 import pytest
+
 from src.config import get_config
 from src.secrets_resolver import SecretsResolutionError
 
@@ -72,11 +73,7 @@ class TestConfigWithSecretsResolver:
 
     def test_config_with_benchling_secrets_json(self, monkeypatch, minimal_env_vars):
         """Test Config initialization with BENCHLING_SECRETS JSON."""
-        json_str = json.dumps({
-            "tenant": "json-tenant",
-            "clientId": "json-id",
-            "clientSecret": "json-secret"
-        })
+        json_str = json.dumps({"tenant": "json-tenant", "clientId": "json-id", "clientSecret": "json-secret"})
         monkeypatch.setenv("BENCHLING_SECRETS", json_str)
 
         config = get_config()
@@ -111,11 +108,7 @@ class TestConfigWithSecretsResolver:
     def test_config_priority_benchling_secrets_over_individual(self, monkeypatch, minimal_env_vars):
         """Test BENCHLING_SECRETS takes priority over individual vars."""
         # Set both
-        json_str = json.dumps({
-            "tenant": "json-tenant",
-            "clientId": "json-id",
-            "clientSecret": "json-secret"
-        })
+        json_str = json.dumps({"tenant": "json-tenant", "clientId": "json-id", "clientSecret": "json-secret"})
         monkeypatch.setenv("BENCHLING_SECRETS", json_str)
         monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
         monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
