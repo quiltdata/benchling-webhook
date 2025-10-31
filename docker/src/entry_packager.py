@@ -577,7 +577,11 @@ class EntryPackager:
         modified_at_str = modified_at.isoformat() if hasattr(modified_at, "isoformat") else str(modified_at)
 
         # Convert files list to dictionary with filename as key
-        files_dict = {file_info["filename"]: file_info for file_info in uploaded_files}
+        # Exclude redundant filename from value since it's already the key
+        files_dict = {
+            file_info["filename"]: {k: v for k, v in file_info.items() if k != "filename"}
+            for file_info in uploaded_files
+        }
 
         entry_json = {
             "package_name": package_name,

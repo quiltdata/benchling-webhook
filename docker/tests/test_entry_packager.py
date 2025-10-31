@@ -639,11 +639,16 @@ class TestEntryPackager:
         assert "file2.csv" in entry_json["files"]
         assert "data.json" in entry_json["files"]
 
-        # Verify dictionary values contain file metadata
+        # Verify dictionary values contain file metadata (without redundant filename)
         assert entry_json["files"]["file1.txt"]["s3_key"] == "benchling/EXP-001/file1.txt"  # Now uses display_id
         assert entry_json["files"]["file1.txt"]["size"] == 100
         assert entry_json["files"]["file2.csv"]["size"] == 200
         assert entry_json["files"]["data.json"]["size"] == 300
+
+        # Verify filename is NOT redundantly stored in the metadata (it's already the key)
+        assert "filename" not in entry_json["files"]["file1.txt"]
+        assert "filename" not in entry_json["files"]["file2.csv"]
+        assert "filename" not in entry_json["files"]["data.json"]
 
     # Episode 9: Async execution tests
     def test_execute_workflow_async(self, orchestrator, mock_benchling):
