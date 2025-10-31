@@ -172,21 +172,18 @@ class TestSecretsManagerFetch:
     @pytest.fixture
     def valid_secrets_json(self):
         """Valid secrets JSON for testing."""
-        return json.dumps({
-            "tenant": "test-tenant",
-            "clientId": "test-client-id",
-            "clientSecret": "test-client-secret"
-        })
+        return json.dumps(
+            {"tenant": "test-tenant", "clientId": "test-client-id", "clientSecret": "test-client-secret"}
+        )
 
     @pytest.fixture
     def mock_secrets_manager_success(self, mocker, valid_secrets_json):
         """Mock successful Secrets Manager fetch."""
         from unittest.mock import Mock
+
         mock_client = Mock()
-        mock_client.get_secret_value.return_value = {
-            'SecretString': valid_secrets_json
-        }
-        mocker.patch('boto3.client', return_value=mock_client)
+        mock_client.get_secret_value.return_value = {"SecretString": valid_secrets_json}
+        mocker.patch("boto3.client", return_value=mock_client)
         return mock_client
 
     def test_fetch_from_secrets_manager_success(self, mock_secrets_manager_success, valid_secrets_json):
@@ -207,16 +204,17 @@ class TestSecretsManagerFetch:
     def test_fetch_resource_not_found(self, mocker):
         """Test fetch fails gracefully when secret doesn't exist."""
         from unittest.mock import Mock
+
         from botocore.exceptions import ClientError
 
         mock_client = Mock()
         mock_client.get_secret_value.side_effect = ClientError(
-            {'Error': {'Code': 'ResourceNotFoundException', 'Message': 'Secret not found'}},
-            'GetSecretValue'
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "Secret not found"}}, "GetSecretValue"
         )
-        mocker.patch('boto3.client', return_value=mock_client)
+        mocker.patch("boto3.client", return_value=mock_client)
 
         from src.secrets_resolver import fetch_from_secrets_manager
+
         arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:nonexistent-AbCdEf"
 
         with pytest.raises(SecretsResolutionError, match="Secret not found"):
@@ -225,16 +223,17 @@ class TestSecretsManagerFetch:
     def test_fetch_access_denied(self, mocker):
         """Test fetch fails gracefully when IAM permissions insufficient."""
         from unittest.mock import Mock
+
         from botocore.exceptions import ClientError
 
         mock_client = Mock()
         mock_client.get_secret_value.side_effect = ClientError(
-            {'Error': {'Code': 'AccessDeniedException', 'Message': 'Access denied'}},
-            'GetSecretValue'
+            {"Error": {"Code": "AccessDeniedException", "Message": "Access denied"}}, "GetSecretValue"
         )
-        mocker.patch('boto3.client', return_value=mock_client)
+        mocker.patch("boto3.client", return_value=mock_client)
 
         from src.secrets_resolver import fetch_from_secrets_manager
+
         arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:benchling-AbCdEf"
 
         with pytest.raises(SecretsResolutionError, match="Access denied.*IAM permissions"):
@@ -243,16 +242,17 @@ class TestSecretsManagerFetch:
     def test_fetch_generic_aws_error(self, mocker):
         """Test fetch handles generic AWS errors."""
         from unittest.mock import Mock
+
         from botocore.exceptions import ClientError
 
         mock_client = Mock()
         mock_client.get_secret_value.side_effect = ClientError(
-            {'Error': {'Code': 'InternalServiceError', 'Message': 'AWS service error'}},
-            'GetSecretValue'
+            {"Error": {"Code": "InternalServiceError", "Message": "AWS service error"}}, "GetSecretValue"
         )
-        mocker.patch('boto3.client', return_value=mock_client)
+        mocker.patch("boto3.client", return_value=mock_client)
 
         from src.secrets_resolver import fetch_from_secrets_manager
+
         arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:benchling-AbCdEf"
 
         with pytest.raises(SecretsResolutionError, match="Failed to fetch secret"):
@@ -263,12 +263,11 @@ class TestSecretsManagerFetch:
         from unittest.mock import Mock
 
         mock_client = Mock()
-        mock_client.get_secret_value.return_value = {
-            'SecretString': 'not valid json'
-        }
-        mocker.patch('boto3.client', return_value=mock_client)
+        mock_client.get_secret_value.return_value = {"SecretString": "not valid json"}
+        mocker.patch("boto3.client", return_value=mock_client)
 
         from src.secrets_resolver import fetch_from_secrets_manager
+
         arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:benchling-AbCdEf"
 
         with pytest.raises(SecretsResolutionError, match="Invalid JSON"):
@@ -285,9 +284,10 @@ class TestResolutionOrchestrator:
 
         # Mock Secrets Manager fetch
         mock_secrets = BenchlingSecrets("test-tenant", "test-id", "test-secret")
-        mocker.patch('src.secrets_resolver.fetch_from_secrets_manager', return_value=mock_secrets)
+        mocker.patch("src.secrets_resolver.fetch_from_secrets_manager", return_value=mock_secrets)
 
         from src.secrets_resolver import resolve_benchling_secrets
+
         secrets = resolve_benchling_secrets("us-east-2")
 
         assert secrets.tenant == "test-tenant"
@@ -296,14 +296,11 @@ class TestResolutionOrchestrator:
 
     def test_resolve_from_json(self, monkeypatch):
         """Test resolution from BENCHLING_SECRETS JSON."""
-        json_str = json.dumps({
-            "tenant": "json-tenant",
-            "clientId": "json-id",
-            "clientSecret": "json-secret"
-        })
+        json_str = json.dumps({"tenant": "json-tenant", "clientId": "json-id", "clientSecret": "json-secret"})
         monkeypatch.setenv("BENCHLING_SECRETS", json_str)
 
         from src.secrets_resolver import resolve_benchling_secrets
+
         secrets = resolve_benchling_secrets("us-east-2")
 
         assert secrets.tenant == "json-tenant"
@@ -321,6 +318,7 @@ class TestResolutionOrchestrator:
         monkeypatch.setenv("BENCHLING_CLIENT_SECRET", "env-secret")
 
         from src.secrets_resolver import resolve_benchling_secrets
+
         secrets = resolve_benchling_secrets("us-east-2")
 
         assert secrets.tenant == "env-tenant"
@@ -330,17 +328,14 @@ class TestResolutionOrchestrator:
     def test_resolve_priority_benchling_secrets_over_individual(self, mocker, monkeypatch):
         """Test BENCHLING_SECRETS takes priority over individual vars."""
         # Set both
-        json_str = json.dumps({
-            "tenant": "json-tenant",
-            "clientId": "json-id",
-            "clientSecret": "json-secret"
-        })
+        json_str = json.dumps({"tenant": "json-tenant", "clientId": "json-id", "clientSecret": "json-secret"})
         monkeypatch.setenv("BENCHLING_SECRETS", json_str)
         monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
         monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
         monkeypatch.setenv("BENCHLING_CLIENT_SECRET", "env-secret")
 
         from src.secrets_resolver import resolve_benchling_secrets
+
         secrets = resolve_benchling_secrets("us-east-2")
 
         # Should use BENCHLING_SECRETS (JSON), not individual vars
@@ -357,6 +352,7 @@ class TestResolutionOrchestrator:
         monkeypatch.delenv("BENCHLING_CLIENT_SECRET", raising=False)
 
         from src.secrets_resolver import resolve_benchling_secrets
+
         with pytest.raises(SecretsResolutionError, match="No Benchling secrets found"):
             resolve_benchling_secrets("us-east-2")
 
@@ -365,8 +361,9 @@ class TestResolutionOrchestrator:
         monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
         monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
         monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
-        # Missing BENCHLING_CLIENT_SECRET
+        monkeypatch.delenv("BENCHLING_CLIENT_SECRET", raising=False)  # Missing BENCHLING_CLIENT_SECRET
 
         from src.secrets_resolver import resolve_benchling_secrets
+
         with pytest.raises(SecretsResolutionError, match="No Benchling secrets found"):
             resolve_benchling_secrets("us-east-2")

@@ -185,3 +185,54 @@ def fetch_from_secrets_manager(arn: str, aws_region: str) -> BenchlingSecrets:
         raise
     except Exception as e:
         raise SecretsResolutionError(f"Unexpected error fetching secret from Secrets Manager: {str(e)}")
+
+
+def resolve_benchling_secrets(aws_region: str) -> BenchlingSecrets:
+    """Resolve Benchling secrets from environment with hierarchical fallback.
+
+    Resolution order:
+    1. BENCHLING_SECRETS (ARN) -> Fetch from Secrets Manager
+    2. BENCHLING_SECRETS (JSON) -> Parse directly
+    3. Individual env vars -> Legacy fallback
+    4. None -> Fail with error
+
+    Args:
+        aws_region: AWS region for Secrets Manager client
+
+    Returns:
+        BenchlingSecrets with resolved credentials
+
+    Raises:
+        SecretsResolutionError: If secrets cannot be resolved
+    """
+    benchling_secrets_env = os.getenv("BENCHLING_SECRETS")
+
+    # Priority 1: BENCHLING_SECRETS env var
+    if benchling_secrets_env:
+        secret_format = detect_secret_format(benchling_secrets_env)
+
+        if secret_format == SecretFormat.ARN:
+            logger.info("Resolving Benchling secrets from Secrets Manager")
+            return fetch_from_secrets_manager(benchling_secrets_env, aws_region)
+        else:  # JSON
+            logger.info("Resolving Benchling secrets from JSON environment variable")
+            return parse_secrets_json(benchling_secrets_env)
+
+    # Priority 2: Individual environment variables (backward compatibility)
+    tenant = os.getenv("BENCHLING_TENANT", "")
+    client_id = os.getenv("BENCHLING_CLIENT_ID", "")
+    client_secret = os.getenv("BENCHLING_CLIENT_SECRET", "")
+
+    if tenant and client_id and client_secret:
+        logger.info("Resolving Benchling secrets from individual environment variables")
+        secrets = BenchlingSecrets(tenant=tenant, client_id=client_id, client_secret=client_secret)
+        secrets.validate()
+        return secrets
+
+    # Priority 3: None found - fail with clear error
+    raise SecretsResolutionError(
+        "No Benchling secrets found. Configure one of:\n"
+        "1. BENCHLING_SECRETS (ARN to Secrets Manager)\n"
+        "2. BENCHLING_SECRETS (JSON with tenant, clientId, clientSecret)\n"
+        "3. Individual vars: BENCHLING_TENANT, BENCHLING_CLIENT_ID, BENCHLING_CLIENT_SECRET"
+    )
