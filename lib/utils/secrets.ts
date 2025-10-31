@@ -65,3 +65,31 @@ export interface ValidationError {
   message: string;
   suggestion?: string;
 }
+
+/**
+ * Detect whether input is an ARN or JSON string
+ *
+ * @param input - The BENCHLING_SECRETS input value
+ * @returns "arn" if input looks like an ARN, "json" otherwise
+ *
+ * @example
+ * detectSecretsFormat("arn:aws:secretsmanager:...") // returns "arn"
+ * detectSecretsFormat('{"client_id":"..."}') // returns "json"
+ */
+export function detectSecretsFormat(input: string): "arn" | "json" {
+    // Trim whitespace
+    const trimmed = input.trim();
+
+    // Check if starts with ARN prefix
+    if (trimmed.startsWith("arn:aws:secretsmanager:")) {
+        return "arn";
+    }
+
+    // Check if starts with { (JSON object)
+    if (trimmed.startsWith("{")) {
+        return "json";
+    }
+
+    // Default to JSON and let validation catch errors
+    return "json";
+}
