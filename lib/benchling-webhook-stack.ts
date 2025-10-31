@@ -170,6 +170,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             webhookAllowList: webhookAllowListValue,
             ecrRepository: ecrRepo,
             imageTag: imageTagValue,
+            stackVersion: packageJson.version,
             logLevel: logLevelValue,
             enableWebhookVerification: enableWebhookVerificationValue,
         });

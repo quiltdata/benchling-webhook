@@ -53,7 +53,7 @@ The CI workflow will:
 
 ### 3. Deploy with specific image tag
 
-Once CI completes, deploy with:
+Once CI completes, deploy with the full timestamped version:
 
 ```bash
 npx @quiltdata/benchling-webhook deploy --image-tag 0.5.3-20251030T123456Z --yes
@@ -64,6 +64,8 @@ Or using the CLI shorthand:
 ```bash
 npm run cli -- --image-tag 0.5.3-20251030T123456Z --yes
 ```
+
+**IMPORTANT**: You must use the **full timestamped version** (e.g., `0.5.3-20251030T123456Z`) to deploy the specific CI-built image. Using just the base version (e.g., `0.5.3`) will deploy `latest` instead of your dev image.
 
 **Note**: Use the version without the 'v' prefix (e.g., `0.5.3-...` not `v0.5.3-...`)
 
@@ -80,7 +82,7 @@ The image tag can be specified in multiple ways (in order of precedence):
 ### Deploy using a specific dev version
 
 ```bash
-npm run cli -- --image-tag v0.5.3-20251030T123456Z --yes
+npm run cli -- --image-tag 0.5.3-20251030T123456Z --yes
 ```
 
 ### Deploy using latest
@@ -94,7 +96,7 @@ npm run cli -- --image-tag latest --yes
 ### Set image tag in .env file
 
 ```bash
-echo "IMAGE_TAG=v0.5.3-20251030T123456Z" >> .env
+echo "IMAGE_TAG=0.5.3-20251030T123456Z" >> .env
 npm run cli -- --yes
 ```
 
@@ -117,8 +119,12 @@ CI builds and pushes images to ECR with multiple tags:
 
 ### CDK Deployment
 
-The CDK stack uses the specified image tag when creating the ECS Fargate service. The image tag is passed through:
-1. CLI option → Config → Stack props → Fargate service
+The CDK stack uses the specified image tag when creating the ECS Fargate service. The deployment flow:
+1. CLI option → Config → Stack props → CloudFormation parameter
+2. CloudFormation `ImageTag` parameter → Fargate container image
+3. Stack version → Container environment variable `BENCHLING_WEBHOOK_VERSION`
+
+The `ImageTag` CloudFormation parameter allows runtime updates without redeploying the entire stack - you can update just the container image by changing this parameter.
 
 ## Architecture
 
@@ -184,6 +190,36 @@ The `cdk:dev` script waits up to 15 minutes for CI to complete. If it times out:
    ```bash
    npm run cli -- --image-tag 0.5.3-20251030T123456Z --yes
    ```
+
+### Deployment succeeds but uses wrong Docker image
+
+If the deployment completes successfully but the CloudFormation output shows `DockerImageUri: .../:latest` instead of your dev tag:
+
+**Cause**: The `--image-tag` parameter is missing the timestamp portion. The script needs the full version string.
+
+**Solution**: Ensure you're passing the complete timestamped version:
+```bash
+# ❌ Wrong - missing timestamp
+npm run cli -- --image-tag 0.5.3 --yes
+
+# ✅ Correct - full timestamped version
+npm run cli -- --image-tag 0.5.3-20251030T123456Z --yes
+```
+
+**Verification**: After deployment, check the deployed image:
+```bash
+# Check CloudFormation parameter
+aws cloudformation describe-stacks --stack-name BenchlingWebhookStack \
+  --query 'Stacks[0].Parameters[?ParameterKey==`ImageTag`].ParameterValue' \
+  --output text
+
+# Check ECS task definition
+aws ecs describe-task-definition --task-definition benchling-webhook-task \
+  --query 'taskDefinition.containerDefinitions[0].image' \
+  --output text
+```
+
+The image should show your full timestamped tag, not `latest`.
 
 ### Setting GITHUB_TOKEN for rate limiting
 
