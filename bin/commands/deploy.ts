@@ -263,12 +263,22 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
             `PackageKey=${config.pkgKey || "experiment_id"}`,
             `QueueArn=${config.queueArn}`,
             `QuiltDatabase=${config.quiltDatabase}`,
-            `BenchlingTenant=${config.benchlingTenant}`,
             `LogLevel=${config.logLevel || "INFO"}`,
             `EnableWebhookVerification=${config.enableWebhookVerification ?? "true"}`,
             `QuiltCatalog=${config.quiltCatalog || "open.quiltdata.com"}`,
             `WebhookAllowList=${config.webhookAllowList || ""}`,
         ];
+
+        // Add Benchling secrets parameter based on configuration
+        if (config.benchlingSecrets) {
+            // New parameter: consolidated secrets
+            parameters.push(`BenchlingSecrets=${config.benchlingSecrets}`);
+        } else {
+            // Old parameters: individual values (deprecated but supported)
+            parameters.push(`BenchlingTenant=${config.benchlingTenant || ""}`);
+            parameters.push(`BenchlingClientId=${config.benchlingClientId || ""}`);
+            parameters.push(`BenchlingClientSecret=${config.benchlingClientSecret || ""}`);
+        }
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
         const cdkCommand = `npx cdk deploy --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
