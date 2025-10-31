@@ -22,6 +22,7 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly createEcrRepository?: boolean;
     readonly ecrRepositoryName?: string;
     readonly logLevel?: string;
+    readonly imageTag?: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
@@ -108,6 +109,12 @@ export class BenchlingWebhookStack extends cdk.Stack {
             allowedValues: ["true", "false"],
         });
 
+        const imageTagParam = new cdk.CfnParameter(this, "ImageTag", {
+            type: "String",
+            description: "Docker image tag to deploy (e.g., latest, 0.5.3, 0.5.3-20251030T123456Z)",
+            default: props.imageTag || "latest",
+        });
+
         // Use parameter values (which have props as defaults)
         // This allows runtime updates via CloudFormation
         const webhookAllowListValue = webhookAllowListParam.valueAsString;
@@ -120,6 +127,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const benchlingTenantValue = benchlingTenantParam.valueAsString;
         const logLevelValue = logLevelParam.valueAsString;
         const enableWebhookVerificationValue = enableWebhookVerificationParam.valueAsString;
+        const imageTagValue = imageTagParam.valueAsString;
 
         this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", bucketNameValue);
 
@@ -146,6 +154,11 @@ export class BenchlingWebhookStack extends cdk.Stack {
         }
 
         // Create the Fargate service
+        // Use imageTag for stackVersion if it looks like a timestamped dev version
+        // (e.g., "0.5.3-20251031T000139Z"), otherwise use package.json version
+        const isDevVersion = imageTagValue.match(/^\d+\.\d+\.\d+-\d{8}T\d{6}Z$/);
+        const stackVersion = isDevVersion ? imageTagValue : packageJson.version;
+
         this.fargateService = new FargateService(this, "FargateService", {
             vpc,
             bucket: this.bucket,
@@ -161,7 +174,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
             quiltDatabase: quiltDatabaseValue,
             webhookAllowList: webhookAllowListValue,
             ecrRepository: ecrRepo,
-            imageTag: "latest",
+            imageTag: imageTagValue,
+            stackVersion: stackVersion,
             logLevel: logLevelValue,
             enableWebhookVerification: enableWebhookVerificationValue,
         });

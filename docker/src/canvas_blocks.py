@@ -90,7 +90,7 @@ def create_section(section_id: str, buttons: List[ButtonUiBlock]) -> SectionUiBl
 
 
 def create_main_navigation_buttons(entry_id: str) -> List:
-    """Create main view navigation buttons (Browse Files, Update Package).
+    """Create main view navigation buttons (Browse Package, Update Package).
 
     Args:
         entry_id: Entry identifier for button IDs
@@ -101,7 +101,7 @@ def create_main_navigation_buttons(entry_id: str) -> List:
     buttons = [
         create_button(
             button_id=f"browse-files-{entry_id}-p0-s15",
-            text="Browse Files",
+            text="Browse Package",
             enabled=True,
         ),
         create_button(

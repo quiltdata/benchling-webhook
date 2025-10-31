@@ -32,6 +32,7 @@ export interface Config {
   enableWebhookVerification?: string;
   createEcrRepository?: string;
   ecrRepositoryName?: string;
+  imageTag?: string;
 }
 
 export interface ConfigOptions {
@@ -44,6 +45,7 @@ export interface ConfigOptions {
   appId?: string;
   profile?: string;
   region?: string;
+  imageTag?: string;
 }
 
 export interface ValidationResult {
@@ -151,6 +153,7 @@ export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
         enableWebhookVerification: envVars.ENABLE_WEBHOOK_VERIFICATION ?? "true",
         createEcrRepository: envVars.CREATE_ECR_REPOSITORY,
         ecrRepositoryName: envVars.ECR_REPOSITORY_NAME || "quiltdata/benchling",
+        imageTag: options.imageTag || envVars.IMAGE_TAG || "latest",
     };
 
     // Remove undefined values

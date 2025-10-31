@@ -173,9 +173,11 @@ aws logs tail /ecs/benchling-webhook --follow
 
 **Deployment:**
 - `npm run deploy` - Test + deploy (outputs to `.env.deploy`)
+- `npm run cdk:dev` - Dev deployment with timestamped image tag (see [DEV_DEPLOYMENT.md](DEV_DEPLOYMENT.md))
 - `npm run docker-push` - Build and push Docker images
 - `npm run docker-check` - Validate Docker images
 - `npm run release` - Create production release
+- `npm run release:dev` - Create dev release tag with timestamp
 
 **Python App:**
 - See [docker/README.md](docker/README.md) or run `make help` in docker/ directory

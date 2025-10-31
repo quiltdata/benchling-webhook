@@ -7,11 +7,12 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Package naming improvements** - Packages now use DisplayID (e.g., `PRT001`) instead of EntryID for better organization
+- **Upload URL improvements** - Package links now include `?action=revisePackage` to direct users to revision workflow
+- **Stack-specific manifests** - The cli `manifest` generates app-manifests using the name of the catalog.
 - **Development deployment workflow** - New `npm run cdk:dev` command for testing changes before production
   - Deploys using CI-built images with timestamped tags
   - Added `--image-tag` CLI option and `IMAGE_TAG` environment variable for version control
-- **Package naming improvements** - Packages now use DisplayID (e.g., `PRT001`) instead of EntryID for better organization
-- **Upload URL improvements** - Package links now include `?action=revisePackage` to direct users to revision workflow
 
 ### Fixed
 

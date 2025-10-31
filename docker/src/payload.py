@@ -23,6 +23,7 @@ class Payload:
         self,
         payload: Dict[str, Any],
         benchling: Optional["Benchling"] = None,
+        display_id: Optional[str] = None,
     ):
         """
         Initialize payload parser with raw payload dict.
@@ -30,12 +31,14 @@ class Payload:
         Args:
             payload: Raw webhook payload dict
             benchling: Optional Benchling client for fallback entry_id lookup
+            display_id: Optional display_id for package naming (e.g., "PRT001")
         """
         logger.debug("Initializing Payload", payload_keys=list(payload.keys()))
         self._payload = payload
         self._message = self._payload.get("message", {})
         self._benchling = benchling
         self._cached_entry_id: Optional[str] = None
+        self._display_id: Optional[str] = display_id
 
         logger.info(
             "Payload initialized",
@@ -275,14 +278,37 @@ class Payload:
         """
         return self._payload
 
-    def package_name(self, s3_prefix: str) -> str:
+    @property
+    def display_id(self) -> Optional[str]:
+        """
+        Get the display_id if set.
+
+        Returns:
+            Display ID if available, None otherwise
+        """
+        return self._display_id
+
+    def set_display_id(self, display_id: str) -> None:
+        """
+        Set the display_id for package naming.
+
+        Args:
+            display_id: Entry display ID (e.g., "PRT001")
+        """
+        self._display_id = display_id
+        logger.info("Display ID set for package naming", display_id=display_id)
+
+    def package_name(self, s3_prefix: str, use_display_id: bool = False) -> str:
         """
         Generate package name for the entry.
 
         Args:
             s3_prefix: S3 prefix for package (e.g., "benchling")
+            use_display_id: If True and display_id is set, use display_id instead of entry_id
 
         Returns:
-            Package name in format: {s3_prefix}/{entry_id}
+            Package name in format: {s3_prefix}/{display_id} or {s3_prefix}/{entry_id}
         """
+        if use_display_id and self._display_id:
+            return f"{s3_prefix}/{self._display_id}"
         return f"{s3_prefix}/{self.entry_id}"
