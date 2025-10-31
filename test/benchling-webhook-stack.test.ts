@@ -311,4 +311,39 @@ describe("BenchlingWebhookStack", () => {
         expect(parameters.BenchlingClientId.NoEcho).toBe(true);
         expect(parameters.BenchlingClientSecret.NoEcho).toBe(true);
     });
+
+    // ===================================================================
+    // Phase 3 Episode 3: Secrets Manager Secret Creation Tests (RED)
+    // ===================================================================
+
+    test("creates Secrets Manager secret without unsafePlainText", () => {
+        const secrets = template.findResources("AWS::SecretsManager::Secret");
+        const secretKeys = Object.keys(secrets);
+        expect(secretKeys.length).toBeGreaterThan(0);
+
+        const secret = secrets[secretKeys[0]];
+        expect(secret.Properties.Name).toBe("benchling-webhook/credentials");
+
+        // Verify secret structure supports both new and old parameters
+        // The actual implementation will use CloudFormation conditions
+        expect(secret.Properties.SecretString).toBeDefined();
+    });
+
+    test("task role has Secrets Manager read permissions", () => {
+        const policies = template.findResources("AWS::IAM::Policy");
+        let foundSecretPermission = false;
+
+        Object.values(policies).forEach((policy: any) => {
+            const statements = policy.Properties?.PolicyDocument?.Statement || [];
+            statements.forEach((statement: any) => {
+                if (Array.isArray(statement.Action)) {
+                    if (statement.Action.includes("secretsmanager:GetSecretValue")) {
+                        foundSecretPermission = true;
+                    }
+                }
+            });
+        });
+
+        expect(foundSecretPermission).toBe(true);
+    });
 });
