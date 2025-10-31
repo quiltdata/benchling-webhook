@@ -99,6 +99,39 @@ def create_app():
         """Liveness probe for orchestration."""
         return jsonify({"status": "alive"})
 
+    @app.route("/health/secrets", methods=["GET"])
+    def secrets_health():
+        """Report secret resolution status and source."""
+        try:
+            # Determine secret source (without exposing values)
+            benchling_secrets_env = os.getenv("BENCHLING_SECRETS")
+            if benchling_secrets_env:
+                if benchling_secrets_env.startswith("arn:"):
+                    source = "secrets_manager"
+                else:
+                    source = "environment_json"
+            elif os.getenv("BENCHLING_TENANT"):
+                source = "environment_vars"
+            else:
+                source = "not_configured"
+
+            # Check if secrets are valid
+            secrets_valid = bool(
+                config.benchling_tenant and config.benchling_client_id and config.benchling_client_secret
+            )
+
+            return jsonify(
+                {
+                    "status": "healthy" if secrets_valid else "unhealthy",
+                    "source": source,
+                    "secrets_valid": secrets_valid,
+                    "tenant_configured": bool(config.benchling_tenant),
+                }
+            )
+        except Exception as e:
+            logger.error("Secrets health check failed", error=str(e))
+            return jsonify({"status": "unhealthy", "error": str(e)}), 503
+
     @app.route("/event", methods=["POST"])
     @require_webhook_verification(config)
     def handle_event():

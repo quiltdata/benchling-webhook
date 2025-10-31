@@ -248,11 +248,7 @@ class TestFlaskApp:
 
     def test_health_secrets_endpoint_with_json(self, monkeypatch):
         """Test /health/secrets reports JSON secret source."""
-        json_str = json.dumps({
-            "tenant": "test-tenant",
-            "clientId": "test-id",
-            "clientSecret": "test-secret"
-        })
+        json_str = json.dumps({"tenant": "test-tenant", "clientId": "test-id", "clientSecret": "test-secret"})
         monkeypatch.setenv("BENCHLING_SECRETS", json_str)
         # Set other required env vars
         monkeypatch.setenv("AWS_REGION", "us-east-2")
