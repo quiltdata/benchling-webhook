@@ -16,6 +16,9 @@ export interface Config {
   benchlingClientSecret: string;
   benchlingAppDefinitionId: string;
 
+  // Unified secrets configuration (ARN or JSON)
+  benchlingSecrets?: string;
+
   // AWS
   cdkAccount: string;
   cdkRegion: string;
@@ -46,6 +49,7 @@ export interface ConfigOptions {
   profile?: string;
   region?: string;
   imageTag?: string;
+  benchlingSecrets?: string;
 }
 
 export interface ValidationResult {
@@ -136,6 +140,9 @@ export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
         benchlingClientId: options.clientId || envVars.BENCHLING_CLIENT_ID,
         benchlingClientSecret: options.clientSecret || envVars.BENCHLING_CLIENT_SECRET,
         benchlingAppDefinitionId: options.appId || envVars.BENCHLING_APP_DEFINITION_ID,
+
+        // Unified secrets (priority: CLI > env > .env)
+        benchlingSecrets: options.benchlingSecrets || envVars.BENCHLING_SECRETS,
 
         // AWS
         cdkAccount: envVars.CDK_DEFAULT_ACCOUNT,
