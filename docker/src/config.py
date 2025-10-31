@@ -6,22 +6,35 @@ from .secrets_resolver import SecretsResolutionError, resolve_benchling_secrets
 
 @dataclass
 class Config:
-    flask_env: str = os.getenv("FLASK_ENV", "development")
-    log_level: str = os.getenv("LOG_LEVEL", "INFO")
-    aws_region: str = os.getenv("AWS_REGION", "us-east-2")
-    s3_bucket_name: str = os.getenv("QUILT_USER_BUCKET", "")
-    s3_prefix: str = os.getenv("PKG_PREFIX", "benchling")
-    package_key: str = os.getenv("PKG_KEY", "experiment_id")
-    quilt_catalog: str = os.getenv("QUILT_CATALOG", "stable.quilttest.com")
-    quilt_database: str = os.getenv("QUILT_DATABASE", "")
-    queue_arn: str = os.getenv("QUEUE_ARN", "")
+    flask_env: str = ""
+    log_level: str = ""
+    aws_region: str = ""
+    s3_bucket_name: str = ""
+    s3_prefix: str = ""
+    package_key: str = ""
+    quilt_catalog: str = ""
+    quilt_database: str = ""
+    queue_arn: str = ""
     benchling_tenant: str = ""  # Will be resolved in __post_init__
     benchling_client_id: str = ""  # Will be resolved in __post_init__
     benchling_client_secret: str = ""  # Will be resolved in __post_init__
-    benchling_app_definition_id: str = os.getenv("BENCHLING_APP_DEFINITION_ID", "")
-    enable_webhook_verification: bool = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "true").lower() == "true"
+    benchling_app_definition_id: str = ""  # Will be resolved in __post_init__
+    enable_webhook_verification: bool = True
 
     def __post_init__(self):
+        # Read environment variables at instantiation time (not import time)
+        # This allows tests to override environment variables via monkeypatch
+        self.flask_env = os.getenv("FLASK_ENV", "development")
+        self.log_level = os.getenv("LOG_LEVEL", "INFO")
+        self.aws_region = os.getenv("AWS_REGION", "us-east-2")
+        self.s3_bucket_name = os.getenv("QUILT_USER_BUCKET", "")
+        self.s3_prefix = os.getenv("PKG_PREFIX", "benchling")
+        self.package_key = os.getenv("PKG_KEY", "experiment_id")
+        self.quilt_catalog = os.getenv("QUILT_CATALOG", "stable.quilttest.com")
+        self.quilt_database = os.getenv("QUILT_DATABASE", "")
+        self.queue_arn = os.getenv("QUEUE_ARN", "")
+        self.benchling_app_definition_id = os.getenv("BENCHLING_APP_DEFINITION_ID", "")
+        self.enable_webhook_verification = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "true").lower() == "true"
         # Resolve Benchling secrets first using the secrets resolver
         try:
             secrets = resolve_benchling_secrets(self.aws_region)
