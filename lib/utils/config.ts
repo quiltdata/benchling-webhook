@@ -200,7 +200,11 @@ export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
         benchlingAppDefinitionId: options.appId || envVars.BENCHLING_APP_DEFINITION_ID,
 
         // Unified secrets (priority: CLI > env > .env)
-        benchlingSecrets: options.benchlingSecrets || envVars.BENCHLING_SECRETS,
+        // Process file input syntax (@file.json) if present
+        benchlingSecrets: (() => {
+            const rawSecrets = options.benchlingSecrets || envVars.BENCHLING_SECRETS;
+            return rawSecrets ? processBenchlingSecretsInput(rawSecrets) : undefined;
+        })(),
 
         // AWS
         cdkAccount: envVars.CDK_DEFAULT_ACCOUNT,

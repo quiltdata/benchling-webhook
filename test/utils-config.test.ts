@@ -416,10 +416,15 @@ describe("config utility", () => {
     describe("processBenchlingSecretsInput", () => {
         const testSecretsFile = resolve(__dirname, ".test-secrets.json");
 
+        beforeEach(() => {
+            delete process.env.BENCHLING_SECRETS;
+        });
+
         afterEach(() => {
             if (existsSync(testSecretsFile)) {
                 unlinkSync(testSecretsFile);
             }
+            delete process.env.BENCHLING_SECRETS;
         });
 
         it("should return trimmed ARN string unchanged", () => {
@@ -515,6 +520,124 @@ describe("config utility", () => {
             } finally {
                 require("fs").rmdirSync(testDir);
             }
+        });
+    });
+
+    describe("loadConfigSync with file processing integration", () => {
+        const testSecretsFile = resolve(__dirname, ".test-secrets.json");
+        const testEnvFile = resolve(__dirname, ".test.env");
+
+        beforeEach(() => {
+            delete process.env.BENCHLING_SECRETS;
+        });
+
+        afterEach(() => {
+            if (existsSync(testSecretsFile)) {
+                unlinkSync(testSecretsFile);
+            }
+            if (existsSync(testEnvFile)) {
+                unlinkSync(testEnvFile);
+            }
+            delete process.env.BENCHLING_SECRETS;
+        });
+
+        it("should process @file syntax in CLI option", () => {
+            const fileContent = '{"client_id":"test","client_secret":"secret","tenant":"company"}';
+            writeFileSync(testSecretsFile, fileContent);
+
+            const config = loadConfigSync({
+                benchlingSecrets: `@${testSecretsFile}`,
+            });
+
+            expect(config.benchlingSecrets).toBe(fileContent);
+        });
+
+        it("should process @file syntax in environment variable", () => {
+            const fileContent = '{"client_id":"test","client_secret":"secret","tenant":"company"}';
+            writeFileSync(testSecretsFile, fileContent);
+
+            process.env.BENCHLING_SECRETS = `@${testSecretsFile}`;
+            const config = loadConfigSync({});
+
+            expect(config.benchlingSecrets).toBe(fileContent);
+        });
+
+        it("should process @file syntax in .env file", () => {
+            const fileContent = '{"client_id":"test","client_secret":"secret","tenant":"company"}';
+            writeFileSync(testSecretsFile, fileContent);
+            writeFileSync(testEnvFile, `BENCHLING_SECRETS=@${testSecretsFile}`);
+
+            const config = loadConfigSync({ envFile: testEnvFile });
+
+            expect(config.benchlingSecrets).toBe(fileContent);
+        });
+
+        it("should pass through ARN without modification", () => {
+            const arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:name";
+            const config = loadConfigSync({ benchlingSecrets: arn });
+
+            expect(config.benchlingSecrets).toBe(arn);
+        });
+
+        it("should pass through JSON without modification", () => {
+            const json = '{"client_id":"test","client_secret":"secret","tenant":"company"}';
+            const config = loadConfigSync({ benchlingSecrets: json });
+
+            expect(config.benchlingSecrets).toBe(json);
+        });
+
+        it("should throw error for missing @file", () => {
+            expect(() => {
+                loadConfigSync({ benchlingSecrets: "@/nonexistent/file.json" });
+            }).toThrow("Secrets file not found");
+        });
+
+        it("CLI option should override environment variable with @file processing", () => {
+            const fileContent1 = '{"client_id":"cli","client_secret":"secret1","tenant":"company"}';
+            const fileContent2 = '{"client_id":"env","client_secret":"secret2","tenant":"company"}';
+            const cliFile = resolve(__dirname, ".test-cli-secrets.json");
+            const envFile = resolve(__dirname, ".test-env-secrets.json");
+
+            try {
+                writeFileSync(cliFile, fileContent1);
+                writeFileSync(envFile, fileContent2);
+
+                process.env.BENCHLING_SECRETS = `@${envFile}`;
+                const config = loadConfigSync({ benchlingSecrets: `@${cliFile}` });
+
+                expect(config.benchlingSecrets).toBe(fileContent1);
+            } finally {
+                if (existsSync(cliFile)) unlinkSync(cliFile);
+                if (existsSync(envFile)) unlinkSync(envFile);
+            }
+        });
+
+        it("environment variable should override .env file with @file processing", () => {
+            const fileContent1 = '{"client_id":"env","client_secret":"secret1","tenant":"company"}';
+            const fileContent2 = '{"client_id":"dotenv","client_secret":"secret2","tenant":"company"}';
+            const envFile = resolve(__dirname, ".test-env-secrets.json");
+            const dotenvFile = resolve(__dirname, ".test-dotenv-secrets.json");
+            const testEnv = resolve(__dirname, ".test.env");
+
+            try {
+                writeFileSync(envFile, fileContent1);
+                writeFileSync(dotenvFile, fileContent2);
+                writeFileSync(testEnv, `BENCHLING_SECRETS=@${dotenvFile}`);
+
+                process.env.BENCHLING_SECRETS = `@${envFile}`;
+                const config = loadConfigSync({ envFile: testEnv });
+
+                expect(config.benchlingSecrets).toBe(fileContent1);
+            } finally {
+                if (existsSync(envFile)) unlinkSync(envFile);
+                if (existsSync(dotenvFile)) unlinkSync(dotenvFile);
+                if (existsSync(testEnv)) unlinkSync(testEnv);
+            }
+        });
+
+        it("should return undefined when no secrets provided", () => {
+            const config = loadConfigSync({});
+            expect(config.benchlingSecrets).toBeUndefined();
         });
     });
 });
