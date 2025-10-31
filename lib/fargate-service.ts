@@ -193,6 +193,7 @@ export class FargateService extends Construct {
         });
 
         // Build environment variables based on parameter mode
+        // Note: BENCHLING_TENANT is set conditionally below based on parameter mode
         const environmentVars: { [key: string]: string } = {
             QUILT_USER_BUCKET: props.bucket.bucketName,
             QUEUE_ARN: props.queueArn,
@@ -212,9 +213,11 @@ export class FargateService extends Construct {
         // Add Benchling configuration based on parameter mode
         if (useNewParam) {
             // New mode: Single consolidated secrets parameter
+            // Sets: BENCHLING_SECRETS: props.benchlingSecrets
             environmentVars.BENCHLING_SECRETS = props.benchlingSecrets!;
         } else {
             // Old mode: Individual tenant parameter
+            // Sets: BENCHLING_TENANT: props.benchlingTenant
             environmentVars.BENCHLING_TENANT = props.benchlingTenant;
         }
 
