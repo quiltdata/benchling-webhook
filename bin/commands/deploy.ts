@@ -170,7 +170,23 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
         // We need to synthesize to cdk.out and then deploy
         result.app.synth();
 
-        const cdkCommand = `npx cdk deploy --require-approval ${options.requireApproval || "never"}`;
+        // Build CloudFormation parameters to pass explicitly
+        const parameters = [
+            `ImageTag=${config.imageTag || "latest"}`,
+            `BucketName=${config.quiltUserBucket}`,
+            `PackagePrefix=${config.pkgPrefix || "benchling"}`,
+            `PackageKey=${config.pkgKey || "experiment_id"}`,
+            `QueueArn=${config.queueArn}`,
+            `QuiltDatabase=${config.quiltDatabase}`,
+            `BenchlingTenant=${config.benchlingTenant}`,
+            `LogLevel=${config.logLevel || "INFO"}`,
+            `EnableWebhookVerification=${config.enableWebhookVerification ?? "true"}`,
+            `QuiltCatalog=${config.quiltCatalog || "open.quiltdata.com"}`,
+            `WebhookAllowList=${config.webhookAllowList || ""}`,
+        ];
+
+        const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
+        const cdkCommand = `npx cdk deploy --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
 
         execSync(cdkCommand, {
             stdio: "inherit",
