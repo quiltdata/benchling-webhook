@@ -1,6 +1,6 @@
 import { config as dotenvConfig } from "dotenv";
 import { expand as dotenvExpand } from "dotenv-expand";
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { execSync } from "child_process";
 
@@ -107,6 +107,64 @@ export function loadDotenv(filePath: string): Record<string, string> {
     }
 
     return result.parsed || {};
+}
+
+/**
+ * Process benchling-secrets parameter, handling @file.json syntax
+ *
+ * Supports three input formats:
+ * - ARN: `arn:aws:secretsmanager:...` - passed through unchanged
+ * - JSON: `{"client_id":"...","client_secret":"...","tenant":"..."}` - passed through unchanged
+ * - File: `@secrets.json` - reads file content from path after @ symbol
+ *
+ * @param input - The benchling-secrets value (ARN, JSON, or @filepath)
+ * @returns Processed secret string (trimmed)
+ * @throws Error if file not found or not readable
+ *
+ * @example
+ * // Pass through ARN
+ * processBenchlingSecretsInput("arn:aws:secretsmanager:...")
+ * // Returns: "arn:aws:secretsmanager:..."
+ *
+ * @example
+ * // Pass through JSON
+ * processBenchlingSecretsInput('{"client_id":"...","client_secret":"...","tenant":"..."}')
+ * // Returns: '{"client_id":"...","client_secret":"...","tenant":"..."}'
+ *
+ * @example
+ * // Read from file
+ * processBenchlingSecretsInput("@secrets.json")
+ * // Returns: contents of secrets.json (trimmed)
+ */
+export function processBenchlingSecretsInput(input: string): string {
+    const trimmed = input.trim();
+
+    // Check for @file syntax
+    if (trimmed.startsWith("@")) {
+        const filePath = trimmed.slice(1); // Remove @ prefix
+        const resolvedPath = resolve(filePath);
+
+        if (!existsSync(resolvedPath)) {
+            throw new Error(
+                `Secrets file not found: ${filePath}\n` +
+                `  Resolved path: ${resolvedPath}\n` +
+                "  Tip: Use relative or absolute path after @ (e.g., @secrets.json or @/path/to/secrets.json)",
+            );
+        }
+
+        try {
+            const fileContent = readFileSync(resolvedPath, "utf-8");
+            return fileContent.trim();
+        } catch (error) {
+            throw new Error(
+                `Failed to read secrets file: ${filePath}\n` +
+                `  Error: ${(error as Error).message}`,
+            );
+        }
+    }
+
+    // Return as-is for ARN or inline JSON
+    return trimmed;
 }
 
 /**

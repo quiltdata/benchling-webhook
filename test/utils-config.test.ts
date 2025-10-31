@@ -412,4 +412,109 @@ describe("config utility", () => {
             expect(config.benchlingTenant).toBe("test-tenant");
         });
     });
+
+    describe("processBenchlingSecretsInput", () => {
+        const testSecretsFile = resolve(__dirname, ".test-secrets.json");
+
+        afterEach(() => {
+            if (existsSync(testSecretsFile)) {
+                unlinkSync(testSecretsFile);
+            }
+        });
+
+        it("should return trimmed ARN string unchanged", () => {
+            const { processBenchlingSecretsInput } = require("../lib/utils/config");
+            const arn = "  arn:aws:secretsmanager:us-east-1:123456789012:secret:name  ";
+            const result = processBenchlingSecretsInput(arn);
+            expect(result).toBe("arn:aws:secretsmanager:us-east-1:123456789012:secret:name");
+        });
+
+        it("should return trimmed JSON string unchanged", () => {
+            const { processBenchlingSecretsInput } = require("../lib/utils/config");
+            const json = '  {"client_id":"abc","client_secret":"secret","tenant":"company"}  ';
+            const result = processBenchlingSecretsInput(json);
+            expect(result).toBe('{"client_id":"abc","client_secret":"secret","tenant":"company"}');
+        });
+
+        it("should read file content when input starts with @", () => {
+            const { processBenchlingSecretsInput } = require("../lib/utils/config");
+            const fileContent = '{"client_id":"test","client_secret":"secret","tenant":"company"}';
+            writeFileSync(testSecretsFile, fileContent);
+
+            const result = processBenchlingSecretsInput(`@${testSecretsFile}`);
+            expect(result).toBe(fileContent);
+        });
+
+        it("should throw error when @file not found with clear message", () => {
+            const { processBenchlingSecretsInput } = require("../lib/utils/config");
+            const nonExistentFile = "/nonexistent/secrets.json";
+
+            expect(() => processBenchlingSecretsInput(`@${nonExistentFile}`)).toThrow("Secrets file not found");
+        });
+
+        it("should handle relative file paths correctly", () => {
+            const { processBenchlingSecretsInput } = require("../lib/utils/config");
+            const fileContent = '{"client_id":"test","client_secret":"secret","tenant":"company"}';
+            writeFileSync(testSecretsFile, fileContent);
+
+            // Use relative path from test directory
+            const relativePath = ".test-secrets.json";
+            const testDir = __dirname;
+            process.chdir(testDir);
+
+            const result = processBenchlingSecretsInput(`@${relativePath}`);
+            expect(result).toBe(fileContent);
+        });
+
+        it("should handle absolute file paths correctly", () => {
+            const { processBenchlingSecretsInput } = require("../lib/utils/config");
+            const fileContent = '{"client_id":"test","client_secret":"secret","tenant":"company"}';
+            writeFileSync(testSecretsFile, fileContent);
+
+            const result = processBenchlingSecretsInput(`@${testSecretsFile}`);
+            expect(result).toBe(fileContent);
+        });
+
+        it("should trim whitespace from file content", () => {
+            const { processBenchlingSecretsInput } = require("../lib/utils/config");
+            const fileContent = '\n  {"client_id":"test","client_secret":"secret","tenant":"company"}  \n';
+            writeFileSync(testSecretsFile, fileContent);
+
+            const result = processBenchlingSecretsInput(`@${testSecretsFile}`);
+            expect(result).toBe('{"client_id":"test","client_secret":"secret","tenant":"company"}');
+        });
+
+        it("should include resolved path in error messages", () => {
+            const { processBenchlingSecretsInput } = require("../lib/utils/config");
+            const relativePath = "nonexistent.json";
+
+            try {
+                processBenchlingSecretsInput(`@${relativePath}`);
+                fail("Should have thrown error");
+            } catch (error) {
+                expect((error as Error).message).toContain("Resolved path:");
+            }
+        });
+
+        it("should handle file read errors with clear message", () => {
+            const { processBenchlingSecretsInput } = require("../lib/utils/config");
+            // Create a file and make it unreadable (this test may not work on all systems)
+            writeFileSync(testSecretsFile, "content");
+            // We can't reliably test read permissions in all environments, so test with a directory instead
+            const testDir = resolve(__dirname, ".test-dir");
+            if (!existsSync(testDir)) {
+                require("fs").mkdirSync(testDir);
+            }
+
+            try {
+                // Trying to read a directory as a file should fail
+                processBenchlingSecretsInput(`@${testDir}`);
+                fail("Should have thrown error");
+            } catch (error) {
+                expect((error as Error).message).toContain("Failed to read secrets file");
+            } finally {
+                require("fs").rmdirSync(testDir);
+            }
+        });
+    });
 });
