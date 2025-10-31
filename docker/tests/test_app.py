@@ -246,6 +246,7 @@ class TestFlaskApp:
             assert isinstance(markdown_block, MarkdownUiBlockUpdate)
             assert "test.txt" in markdown_block.value
 
+    @pytest.mark.local
     def test_health_secrets_endpoint_with_json(self, monkeypatch):
         """Test /health/secrets reports JSON secret source."""
         json_str = json.dumps({"tenant": "test-tenant", "clientId": "test-id", "clientSecret": "test-secret"})
@@ -275,6 +276,7 @@ class TestFlaskApp:
             assert data["secrets_valid"] is True
             assert data["tenant_configured"] is True
 
+    @pytest.mark.local
     def test_health_secrets_endpoint_with_arn(self, mocker, monkeypatch):
         """Test /health/secrets reports Secrets Manager source."""
         from src.secrets_resolver import BenchlingSecrets
@@ -308,6 +310,7 @@ class TestFlaskApp:
             assert data["status"] == "healthy"
             assert data["source"] == "secrets_manager"
 
+    @pytest.mark.local
     def test_health_secrets_endpoint_with_individual_vars(self, monkeypatch):
         """Test /health/secrets reports individual env var source."""
         monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
