@@ -10,5 +10,9 @@ module.exports = {
       }
     }]
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!(.*)\\.ts$)'
+  ],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   cacheDirectory: '<rootDir>/.jest-cache'
 };
