@@ -139,3 +139,49 @@ def parse_secrets_json(json_str: str) -> BenchlingSecrets:
     secrets.validate()
 
     return secrets
+
+
+def fetch_from_secrets_manager(arn: str, aws_region: str) -> BenchlingSecrets:
+    """Fetch secret from AWS Secrets Manager and parse.
+
+    Args:
+        arn: Secret ARN
+        aws_region: AWS region for client
+
+    Returns:
+        BenchlingSecrets with parsed data
+
+    Raises:
+        SecretsResolutionError: If fetch fails or secret is invalid
+    """
+    try:
+        import boto3
+        from botocore.exceptions import ClientError
+
+        logger.debug("Fetching secret from Secrets Manager", arn=arn, region=aws_region)
+
+        client = boto3.client("secretsmanager", region_name=aws_region)
+        response = client.get_secret_value(SecretId=arn)
+        secret_string = response["SecretString"]
+
+        logger.debug("Successfully fetched secret from Secrets Manager")
+
+        return parse_secrets_json(secret_string)
+
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "ResourceNotFoundException":
+            raise SecretsResolutionError(
+                f"Secret not found: {arn}. " "Verify the ARN is correct and the secret exists."
+            )
+        elif error_code == "AccessDeniedException":
+            raise SecretsResolutionError(
+                f"Access denied to secret: {arn}. " "Check IAM permissions for secretsmanager:GetSecretValue"
+            )
+        else:
+            raise SecretsResolutionError(f"Failed to fetch secret: {e.response['Error']['Message']}")
+    except SecretsResolutionError:
+        # Re-raise secrets resolution errors (from parse_secrets_json)
+        raise
+    except Exception as e:
+        raise SecretsResolutionError(f"Unexpected error fetching secret from Secrets Manager: {str(e)}")
