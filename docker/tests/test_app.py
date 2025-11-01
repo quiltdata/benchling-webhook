@@ -246,9 +246,14 @@ class TestFlaskApp:
             assert isinstance(markdown_block, MarkdownUiBlockUpdate)
             assert "test.txt" in markdown_block.value
 
-    @pytest.mark.local
+    @pytest.mark.skip(reason="Legacy mode removed - secrets-only mode now required (QuiltStackARN + BenchlingSecret)")
     def test_health_secrets_endpoint_with_json(self, monkeypatch):
-        """Test /health/secrets reports JSON secret source."""
+        """Test /health/secrets reports JSON secret source.
+
+        NOTE: This test is for deprecated legacy mode. The application now only
+        supports secrets-only mode using QuiltStackARN and BenchlingSecret environment
+        variables. Individual environment variables are no longer supported.
+        """
         json_str = json.dumps({"tenant": "test-tenant", "clientId": "test-id", "clientSecret": "test-secret"})
         monkeypatch.setenv("BENCHLING_SECRETS", json_str)
         # Set other required env vars
@@ -276,9 +281,14 @@ class TestFlaskApp:
             assert data["secrets_valid"] is True
             assert data["tenant_configured"] is True
 
-    @pytest.mark.local
+    @pytest.mark.skip(reason="Legacy mode removed - secrets-only mode now required (QuiltStackARN + BenchlingSecret)")
     def test_health_secrets_endpoint_with_arn(self, mocker, monkeypatch):
-        """Test /health/secrets reports Secrets Manager source."""
+        """Test /health/secrets reports Secrets Manager source.
+
+        NOTE: This test is for deprecated legacy mode. The application now only
+        supports secrets-only mode using QuiltStackARN and BenchlingSecret environment
+        variables. Individual environment variables are no longer supported.
+        """
         from src.secrets_resolver import BenchlingSecrets
 
         arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:benchling-AbCdEf"
@@ -310,9 +320,14 @@ class TestFlaskApp:
             assert data["status"] == "healthy"
             assert data["source"] == "secrets_manager"
 
-    @pytest.mark.local
+    @pytest.mark.skip(reason="Legacy mode removed - secrets-only mode now required (QuiltStackARN + BenchlingSecret)")
     def test_health_secrets_endpoint_with_individual_vars(self, monkeypatch):
-        """Test /health/secrets reports individual env var source."""
+        """Test /health/secrets reports individual env var source.
+
+        NOTE: This test is for deprecated legacy mode. The application now only
+        supports secrets-only mode using QuiltStackARN and BenchlingSecret environment
+        variables. Individual environment variables are no longer supported.
+        """
         monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
         monkeypatch.setenv("BENCHLING_TENANT", "test-tenant")
         monkeypatch.setenv("BENCHLING_CLIENT_ID", "test-id")

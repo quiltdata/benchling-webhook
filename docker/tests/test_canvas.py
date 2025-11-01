@@ -108,7 +108,8 @@ class TestCanvasManager:
         # Verify the relevant URLs are present (don't check specific text which may change)
         assert canvas_manager.sync_uri() in markdown
         assert canvas_manager.catalog_url in markdown
-        assert canvas_manager.upload_url() in markdown
+        # Note: upload_url() was removed from markdown in commit 34026bc (v0.5.4)
+        # The method still exists but is no longer included in canvas markdown
 
     def test_sync_uri_different_bucket_names(self, mock_benchling, mock_config, mock_payload):
         """Test sync_uri with different bucket names containing special characters."""
