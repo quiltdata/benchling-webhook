@@ -8,16 +8,25 @@ import {
     mergeInferredConfig,
     validateConfig,
     formatValidationErrors,
+    maskArn,
     type Config,
     type ConfigOptions,
 } from "../../lib/utils/config";
+import {
+    parseAndValidateSecrets,
+    SecretsValidationError,
+} from "../../lib/utils/secrets";
+import {
+    parseStackArn,
+    ConfigResolverError,
+} from "../../lib/utils/config-resolver";
 import {
     checkCdkBootstrap,
     inferConfiguration,
     createStack,
 } from "../benchling-webhook";
 
-export async function deployCommand(options: ConfigOptions & { yes?: boolean; bootstrapCheck?: boolean; requireApproval?: string }): Promise<void> {
+export async function deployCommand(options: ConfigOptions & { yes?: boolean; bootstrapCheck?: boolean; requireApproval?: string; quiltStackArn?: string; benchlingSecret?: string }): Promise<void> {
     console.log(
         boxen(chalk.bold("Benchling Webhook Deployment"), {
             padding: 1,
@@ -27,6 +36,17 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
     );
     console.log();
 
+    // Detect deployment mode
+    const quiltStackArn = options.quiltStackArn || process.env.QUILT_STACK_ARN;
+    const benchlingSecret = options.benchlingSecret || process.env.BENCHLING_SECRET;
+    const useSecretsOnlyMode = !!(quiltStackArn && benchlingSecret);
+
+    if (useSecretsOnlyMode) {
+        // ===== SECRETS-ONLY MODE (v0.6.0+) =====
+        return await deploySecretsOnlyMode(quiltStackArn!, benchlingSecret!, options);
+    }
+
+    // ===== LEGACY MODE =====
     // 1. Load configuration
     const spinner = ora("Loading configuration...").start();
     let config = loadConfigSync(options);
@@ -47,8 +67,64 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
         spinner.succeed("Configuration loaded");
     }
 
+    // 2a. Validate benchling-secrets if provided (Episode 7)
+    if (config.benchlingSecrets) {
+        spinner.text = "Validating Benchling secrets...";
+
+        try {
+            const secretsConfig = parseAndValidateSecrets(config.benchlingSecrets);
+
+            // Episode 10: Display secret source and format
+            if (secretsConfig.format === "arn") {
+                spinner.info(`Using Benchling secrets from ARN: ${maskArn(secretsConfig.arn!)}`);
+            } else {
+                spinner.info("Using Benchling secrets from JSON configuration");
+            }
+
+            // Episode 8: Check for deprecated parameter usage
+            const hasOldParams = !!(
+                config.benchlingTenant ||
+                config.benchlingClientId ||
+                config.benchlingClientSecret
+            );
+
+            if (hasOldParams) {
+                spinner.warn("Both --benchling-secrets and individual secret parameters provided");
+                console.log(chalk.yellow("\n  ⚠ DEPRECATION WARNING:"));
+                console.log(chalk.yellow("  Individual secret parameters (--tenant, --client-id, --client-secret) are deprecated."));
+                console.log(chalk.yellow("  The --benchling-secrets parameter will take precedence.\n"));
+                console.log(chalk.dim("  Migration guide: https://github.com/quiltdata/benchling-webhook#secrets-configuration\n"));
+
+                // Clear old parameters to avoid confusion
+                config.benchlingTenant = undefined as unknown as string;
+                config.benchlingClientId = undefined as unknown as string;
+                config.benchlingClientSecret = undefined as unknown as string;
+                config.benchlingAppDefinitionId = undefined as unknown as string;
+            }
+
+            spinner.start("Validating configuration...");
+        } catch (error) {
+            spinner.fail("Secret validation failed");
+            console.log();
+
+            if (error instanceof SecretsValidationError) {
+                console.error(chalk.red.bold("❌ Benchling Secrets Error\n"));
+                console.error(error.formatForCLI());
+                console.log(chalk.yellow("Secrets format:"));
+                console.log("  ARN:  arn:aws:secretsmanager:region:account:secret:name");
+                console.log("  JSON: {\"client_id\":\"...\",\"client_secret\":\"...\",\"tenant\":\"...\"}");
+                console.log("  File: @secrets.json\n");
+            } else {
+                console.error(chalk.red((error as Error).message));
+            }
+
+            process.exit(1);
+        }
+    } else {
+        spinner.start("Validating configuration...");
+    }
+
     // 3. Validate configuration
-    spinner.start("Validating configuration...");
     const validation = validateConfig(config);
 
     if (!validation.valid) {
@@ -119,11 +195,35 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
     console.log(`    ${chalk.bold("Quilt Catalog:")}            ${config.quiltCatalog}`);
     console.log(`    ${chalk.bold("Quilt Database:")}           ${config.quiltDatabase}`);
     console.log(`    ${chalk.bold("Quilt User Bucket:")}        ${config.quiltUserBucket}`);
-    console.log(`    ${chalk.bold("Benchling Tenant:")}         ${config.benchlingTenant}`);
-    console.log(`    ${chalk.bold("Benchling Client ID:")}      ${config.benchlingClientId}`);
-    console.log(`    ${chalk.bold("Benchling Client Secret:")}  ${config.benchlingClientSecret ? "***" + config.benchlingClientSecret.slice(-4) : "(not set)"}`);
-    if (config.benchlingAppDefinitionId) {
-        console.log(`    ${chalk.bold("Benchling App ID:")}        ${config.benchlingAppDefinitionId}`);
+
+    // Episode 9: Display Benchling configuration based on new or old parameters
+    if (config.benchlingSecrets) {
+        try {
+            const secretsConfig = parseAndValidateSecrets(config.benchlingSecrets);
+
+            if (secretsConfig.format === "arn") {
+                console.log(`    ${chalk.bold("Benchling Secrets:")}        ARN (${maskArn(secretsConfig.arn!)})`);
+            } else {
+                // Display from parsed JSON
+                console.log(`    ${chalk.bold("Benchling Tenant:")}         ${secretsConfig.data!.tenant}`);
+                console.log(`    ${chalk.bold("Benchling Client ID:")}      ${secretsConfig.data!.client_id}`);
+                console.log(`    ${chalk.bold("Benchling Client Secret:")}  ***${secretsConfig.data!.client_secret.slice(-4)}`);
+                if (secretsConfig.data!.app_definition_id) {
+                    console.log(`    ${chalk.bold("Benchling App ID:")}        ${secretsConfig.data!.app_definition_id}`);
+                }
+            }
+        } catch {
+            // Validation already passed, so this shouldn't happen, but fall back to old display
+            console.log(`    ${chalk.bold("Benchling Secrets:")}        (configured)`);
+        }
+    } else {
+        // Fallback to individual parameters (deprecated path)
+        console.log(`    ${chalk.bold("Benchling Tenant:")}         ${config.benchlingTenant}`);
+        console.log(`    ${chalk.bold("Benchling Client ID:")}      ${config.benchlingClientId}`);
+        console.log(`    ${chalk.bold("Benchling Client Secret:")}  ${config.benchlingClientSecret ? "***" + config.benchlingClientSecret.slice(-4) : "(not set)"}`);
+        if (config.benchlingAppDefinitionId) {
+            console.log(`    ${chalk.bold("Benchling App ID:")}        ${config.benchlingAppDefinitionId}`);
+        }
     }
     console.log(`    ${chalk.bold("Queue ARN:")}                ${config.queueArn}`);
     console.log(`    ${chalk.bold("Package Prefix:")}           ${config.pkgPrefix || "benchling"}`);
@@ -178,12 +278,22 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
             `PackageKey=${config.pkgKey || "experiment_id"}`,
             `QueueArn=${config.queueArn}`,
             `QuiltDatabase=${config.quiltDatabase}`,
-            `BenchlingTenant=${config.benchlingTenant}`,
             `LogLevel=${config.logLevel || "INFO"}`,
             `EnableWebhookVerification=${config.enableWebhookVerification ?? "true"}`,
             `QuiltCatalog=${config.quiltCatalog || "open.quiltdata.com"}`,
             `WebhookAllowList=${config.webhookAllowList || ""}`,
         ];
+
+        // Add Benchling secrets parameter based on configuration
+        if (config.benchlingSecrets) {
+            // New parameter: consolidated secrets
+            parameters.push(`BenchlingSecrets=${config.benchlingSecrets}`);
+        } else {
+            // Old parameters: individual values (deprecated but supported)
+            parameters.push(`BenchlingTenant=${config.benchlingTenant || ""}`);
+            parameters.push(`BenchlingClientId=${config.benchlingClientId || ""}`);
+            parameters.push(`BenchlingClientSecret=${config.benchlingClientSecret || ""}`);
+        }
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
         const cdkCommand = `npx cdk deploy --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
@@ -257,6 +367,205 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
           `     ${chalk.cyan(webhookUrl || "<WEBHOOK_URL>")}\n\n` +
           "  2. Test the integration by creating a Quilt package in Benchling\n\n" +
           `${chalk.dim("For more info: https://github.com/quiltdata/benchling-webhook#readme")}`,
+                { padding: 1, borderColor: "green", borderStyle: "round" },
+            ),
+        );
+    } catch (error) {
+        spinner.fail("Deployment failed");
+        console.error();
+        console.error(chalk.red((error as Error).message));
+        process.exit(1);
+    }
+}
+
+/**
+ * Deploy using secrets-only mode (v0.6.0+)
+ * Only requires QuiltStackARN and BenchlingSecret
+ */
+async function deploySecretsOnlyMode(
+    quiltStackArn: string,
+    benchlingSecret: string,
+    options: { yes?: boolean; bootstrapCheck?: boolean; requireApproval?: string; imageTag?: string; region?: string }
+): Promise<void> {
+    const spinner = ora("Validating secrets-only mode parameters...").start();
+
+    // Parse stack ARN to extract region/account
+    let parsed;
+    try {
+        parsed = parseStackArn(quiltStackArn);
+        spinner.succeed("Stack ARN validated");
+    } catch (error) {
+        spinner.fail("Invalid Stack ARN");
+        console.log();
+        if (error instanceof ConfigResolverError) {
+            console.error(error.format());
+        } else {
+            console.error(chalk.red((error as Error).message));
+        }
+        console.log();
+        console.log(chalk.yellow("Expected format:"));
+        console.log("  arn:aws:cloudformation:region:account:stack/name/id");
+        console.log();
+        console.log(chalk.yellow("Example:"));
+        console.log("  arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123");
+        process.exit(1);
+    }
+
+    // Use region from stack ARN, but allow override from CLI
+    const deployRegion = options.region || parsed.region;
+    const deployAccount = parsed.account;
+
+    // Check CDK bootstrap
+    if (options.bootstrapCheck !== false) {
+        spinner.start("Checking CDK bootstrap status...");
+
+        const bootstrapStatus = await checkCdkBootstrap(deployAccount, deployRegion);
+
+        if (!bootstrapStatus.bootstrapped) {
+            spinner.fail("CDK is not bootstrapped");
+            console.log();
+            console.error(chalk.red.bold("❌ CDK Bootstrap Error\n"));
+            console.error(bootstrapStatus.message);
+            console.log();
+            console.log("To bootstrap CDK, run:");
+            console.log(chalk.cyan(`  ${bootstrapStatus.command}`));
+            console.log();
+            console.log(chalk.dim("What is CDK bootstrap?"));
+            console.log(chalk.dim("  It creates necessary AWS resources (S3 bucket, IAM roles) that CDK"));
+            console.log(chalk.dim("  needs to deploy CloudFormation stacks. This is a one-time setup per"));
+            console.log(chalk.dim("  AWS account/region combination."));
+            console.log();
+            process.exit(1);
+        }
+
+        if (bootstrapStatus.warning) {
+            spinner.warn(`CDK bootstrap: ${bootstrapStatus.warning}`);
+        } else {
+            spinner.succeed(`CDK is bootstrapped (${bootstrapStatus.status})`);
+        }
+    }
+
+    // Display deployment plan
+    console.log();
+    console.log(chalk.bold("Deployment Plan"));
+    console.log(chalk.gray("─".repeat(80)));
+    console.log(`  ${chalk.bold("Mode:")}                      ${chalk.green("Secrets-Only (v0.6.0+)")}`);
+    console.log(`  ${chalk.bold("Stack:")}                     BenchlingWebhookStack`);
+    console.log(`  ${chalk.bold("Account:")}                   ${deployAccount}`);
+    console.log(`  ${chalk.bold("Region:")}                    ${deployRegion}`);
+    console.log();
+    console.log(chalk.bold("  Stack Parameters:"));
+    console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(quiltStackArn)}`);
+    console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
+    console.log(`    ${chalk.bold("Docker Image Tag:")}        ${options.imageTag || "latest"}`);
+    console.log();
+    console.log(chalk.dim("  ℹ️  All other configuration will be resolved from AWS at runtime"));
+    console.log(chalk.gray("─".repeat(80)));
+    console.log();
+
+    // Confirm (unless --yes)
+    if (!options.yes) {
+        const response: { proceed: boolean } = await prompt({
+            type: "confirm",
+            name: "proceed",
+            message: "Proceed with deployment?",
+            initial: true,
+        });
+
+        if (!response.proceed) {
+            console.log(chalk.yellow("Deployment cancelled"));
+            process.exit(0);
+        }
+        console.log();
+    }
+
+    // Deploy using CDK CLI with secrets-only parameters
+    spinner.start("Deploying to AWS (this may take a few minutes)...");
+    spinner.stop();
+    console.log();
+
+    try {
+        // Build CloudFormation parameters for secrets-only mode
+        const parameters = [
+            `QuiltStackARN=${quiltStackArn}`,
+            `BenchlingSecret=${benchlingSecret}`,
+            `ImageTag=${options.imageTag || "latest"}`,
+        ];
+
+        const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
+        const cdkCommand = `npx cdk deploy --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
+
+        execSync(cdkCommand, {
+            stdio: "inherit",
+            env: {
+                ...process.env,
+                CDK_DEFAULT_ACCOUNT: deployAccount,
+                CDK_DEFAULT_REGION: deployRegion,
+            },
+        });
+
+        console.log();
+        spinner.succeed("Stack deployed successfully");
+
+        // Get stack outputs
+        spinner.start("Retrieving stack outputs...");
+        let webhookUrl = "";
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const { CloudFormationClient, DescribeStacksCommand } = require("@aws-sdk/client-cloudformation");
+            const cloudformation = new CloudFormationClient({
+                region: deployRegion,
+            });
+
+            const command = new DescribeStacksCommand({
+                StackName: "BenchlingWebhookStack",
+            });
+            const response = await cloudformation.send(command);
+
+            if (response.Stacks && response.Stacks.length > 0) {
+                const stack = response.Stacks[0];
+                const output = stack.Outputs?.find((o: { OutputKey?: string }) => o.OutputKey === "WebhookEndpoint");
+                webhookUrl = output?.OutputValue || "";
+            }
+            spinner.succeed("Stack outputs retrieved");
+        } catch {
+            spinner.warn("Could not retrieve stack outputs");
+        }
+
+        // Test the webhook endpoint
+        if (webhookUrl) {
+            console.log();
+            spinner.start("Testing webhook endpoint...");
+            try {
+                const testCmd = `curl -s -w "\\n%{http_code}" "${webhookUrl}/health"`;
+                const testResult = execSync(testCmd, { encoding: "utf-8", timeout: 10000 });
+                const lines = testResult.trim().split("\n");
+                const statusCode = lines[lines.length - 1];
+
+                if (statusCode === "200") {
+                    spinner.succeed("Webhook health check passed");
+                } else {
+                    spinner.warn(`Webhook returned HTTP ${statusCode}`);
+                }
+            } catch {
+                spinner.warn("Could not test webhook endpoint");
+            }
+        }
+
+        // Success message
+        console.log();
+        console.log(
+            boxen(
+                `${chalk.green.bold("✓ Deployment completed successfully!")}\n\n` +
+                `Stack:  ${chalk.cyan("BenchlingWebhookStack")}\n` +
+                `Region: ${chalk.cyan(deployRegion)}\n` +
+                `Mode:   ${chalk.cyan("Secrets-Only (v0.6.0+)")}\n` +
+                (webhookUrl ? `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` : "\n") +
+                `${chalk.bold("Next steps:")}\n` +
+                "  1. Set the webhook URL in your Benchling app settings:\n" +
+                `     ${chalk.cyan(webhookUrl || "<WEBHOOK_URL>")}\n\n` +
+                "  2. Test the integration by creating a Quilt package in Benchling\n\n" +
+                `${chalk.dim("For more info: https://github.com/quiltdata/benchling-webhook#readme")}`,
                 { padding: 1, borderColor: "green", borderStyle: "round" },
             ),
         );

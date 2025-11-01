@@ -1,0 +1,237 @@
+"""Secret resolution for Benchling credentials.
+
+This module provides runtime resolution of Benchling secrets from multiple sources
+with hierarchical fallback:
+
+1. AWS Secrets Manager (via ARN in BENCHLING_SECRETS env var)
+2. JSON environment variable (BENCHLING_SECRETS with JSON content)
+3. Individual environment variables (legacy: BENCHLING_TENANT, etc.)
+
+Usage:
+    from src.secrets_resolver import resolve_benchling_secrets
+
+    secrets = resolve_benchling_secrets(aws_region="us-east-2")
+    print(f"Tenant: {secrets.tenant}")
+
+Environment Variables:
+    BENCHLING_SECRETS: ARN or JSON string with Benchling credentials
+    BENCHLING_TENANT: (Legacy) Benchling tenant name
+    BENCHLING_CLIENT_ID: (Legacy) OAuth client ID
+    BENCHLING_CLIENT_SECRET: (Legacy) OAuth client secret
+
+Raises:
+    SecretsResolutionError: When secrets cannot be resolved or are invalid
+
+Security:
+    - Never logs secret values
+    - Validates all required fields
+    - Provides clear error messages without exposing secrets
+"""
+
+import json
+import os
+from dataclasses import dataclass
+from enum import Enum
+
+import structlog
+
+logger = structlog.get_logger(__name__)
+
+
+class SecretsResolutionError(Exception):
+    """Raised when secrets cannot be resolved or are invalid."""
+
+    pass
+
+
+class SecretFormat(Enum):
+    """Format of BENCHLING_SECRETS environment variable."""
+
+    ARN = "arn"
+    JSON = "json"
+
+
+@dataclass
+class BenchlingSecrets:
+    """Benchling credentials resolved from Secrets Manager or environment.
+
+    Attributes:
+        tenant: Benchling tenant name (e.g., 'mycompany')
+        client_id: OAuth client ID for Benchling API authentication
+        client_secret: OAuth client secret for Benchling API authentication
+    """
+
+    tenant: str
+    client_id: str
+    client_secret: str
+
+    def validate(self) -> None:
+        """Validate that all required fields are present and non-empty.
+
+        Raises:
+            SecretsResolutionError: If any required field is missing or empty
+        """
+        if not self.tenant:
+            raise SecretsResolutionError("tenant is required")
+        if not self.client_id:
+            raise SecretsResolutionError("client_id is required")
+        if not self.client_secret:
+            raise SecretsResolutionError("client_secret is required")
+
+
+def detect_secret_format(value: str) -> SecretFormat:
+    """Detect if value is an ARN or JSON string.
+
+    Args:
+        value: String value from BENCHLING_SECRETS env var
+
+    Returns:
+        SecretFormat.ARN or SecretFormat.JSON
+
+    Raises:
+        SecretsResolutionError: If format is invalid or cannot be determined
+    """
+    if not value or not value.strip():
+        raise SecretsResolutionError("Invalid BENCHLING_SECRETS format: empty value")
+
+    # Check for ARN format
+    if value.startswith("arn:aws:secretsmanager:"):
+        return SecretFormat.ARN
+
+    # Check for JSON format
+    if value.strip().startswith("{"):
+        return SecretFormat.JSON
+
+    # Neither format recognized
+    raise SecretsResolutionError(
+        f"Invalid BENCHLING_SECRETS format. Must be ARN starting with "
+        f"'arn:aws:secretsmanager:' or JSON starting with '{{'. "
+        f"Got: {value[:50]}..."
+    )
+
+
+def parse_secrets_json(json_str: str) -> BenchlingSecrets:
+    """Parse JSON string into BenchlingSecrets.
+
+    Args:
+        json_str: JSON string with Benchling credentials
+
+    Returns:
+        BenchlingSecrets with validated data
+
+    Raises:
+        SecretsResolutionError: If JSON is invalid or missing required fields
+    """
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        raise SecretsResolutionError(f"Invalid JSON in BENCHLING_SECRETS: {str(e)}")
+
+    # Map from JSON camelCase to Python snake_case
+    secrets = BenchlingSecrets(
+        tenant=data.get("tenant", ""),
+        client_id=data.get("clientId", ""),
+        client_secret=data.get("clientSecret", ""),
+    )
+
+    # Validate all required fields are present and non-empty
+    secrets.validate()
+
+    return secrets
+
+
+def fetch_from_secrets_manager(arn: str, aws_region: str) -> BenchlingSecrets:
+    """Fetch secret from AWS Secrets Manager and parse.
+
+    Args:
+        arn: Secret ARN
+        aws_region: AWS region for client
+
+    Returns:
+        BenchlingSecrets with parsed data
+
+    Raises:
+        SecretsResolutionError: If fetch fails or secret is invalid
+    """
+    try:
+        import boto3
+        from botocore.exceptions import ClientError
+
+        logger.debug("Fetching secret from Secrets Manager", arn=arn, region=aws_region)
+
+        client = boto3.client("secretsmanager", region_name=aws_region)
+        response = client.get_secret_value(SecretId=arn)
+        secret_string = response["SecretString"]
+
+        logger.debug("Successfully fetched secret from Secrets Manager")
+
+        return parse_secrets_json(secret_string)
+
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "ResourceNotFoundException":
+            raise SecretsResolutionError(
+                f"Secret not found: {arn}. " "Verify the ARN is correct and the secret exists."
+            )
+        elif error_code == "AccessDeniedException":
+            raise SecretsResolutionError(
+                f"Access denied to secret: {arn}. " "Check IAM permissions for secretsmanager:GetSecretValue"
+            )
+        else:
+            raise SecretsResolutionError(f"Failed to fetch secret: {e.response['Error']['Message']}")
+    except SecretsResolutionError:
+        # Re-raise secrets resolution errors (from parse_secrets_json)
+        raise
+    except Exception as e:
+        raise SecretsResolutionError(f"Unexpected error fetching secret from Secrets Manager: {str(e)}")
+
+
+def resolve_benchling_secrets(aws_region: str) -> BenchlingSecrets:
+    """Resolve Benchling secrets from environment with hierarchical fallback.
+
+    Resolution order:
+    1. BENCHLING_SECRETS (ARN) -> Fetch from Secrets Manager
+    2. BENCHLING_SECRETS (JSON) -> Parse directly
+    3. Individual env vars -> Legacy fallback
+    4. None -> Fail with error
+
+    Args:
+        aws_region: AWS region for Secrets Manager client
+
+    Returns:
+        BenchlingSecrets with resolved credentials
+
+    Raises:
+        SecretsResolutionError: If secrets cannot be resolved
+    """
+    benchling_secrets_env = os.getenv("BENCHLING_SECRETS")
+
+    # Priority 1: BENCHLING_SECRETS env var
+    if benchling_secrets_env:
+        secret_format = detect_secret_format(benchling_secrets_env)
+
+        if secret_format == SecretFormat.ARN:
+            logger.info("Resolving Benchling secrets from Secrets Manager")
+            return fetch_from_secrets_manager(benchling_secrets_env, aws_region)
+        else:  # JSON
+            logger.info("Resolving Benchling secrets from JSON environment variable")
+            return parse_secrets_json(benchling_secrets_env)
+
+    # Priority 2: Individual environment variables (backward compatibility)
+    tenant = os.getenv("BENCHLING_TENANT", "")
+    client_id = os.getenv("BENCHLING_CLIENT_ID", "")
+    client_secret = os.getenv("BENCHLING_CLIENT_SECRET", "")
+
+    if tenant and client_id and client_secret:
+        logger.info("Resolving Benchling secrets from individual environment variables")
+        secrets = BenchlingSecrets(tenant=tenant, client_id=client_id, client_secret=client_secret)
+        secrets.validate()
+        return secrets
+
+    # Priority 3: None found - fail with clear error
+    raise SecretsResolutionError(
+        "No Benchling secrets found. Configure one of:\n"
+        "1. BENCHLING_SECRETS (ARN to Secrets Manager)\n"
+        "2. BENCHLING_SECRETS (JSON with tenant, clientId, clientSecret)\n"
+        "3. Individual vars: BENCHLING_TENANT, BENCHLING_CLIENT_ID, BENCHLING_CLIENT_SECRET"
+    )

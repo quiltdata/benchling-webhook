@@ -131,6 +131,7 @@ export function createStack(config: Config): DeploymentResult {
         benchlingClientId: config.benchlingClientId,
         benchlingClientSecret: config.benchlingClientSecret,
         benchlingTenant: config.benchlingTenant,
+        benchlingAppDefinitionId: config.benchlingAppDefinitionId,
         quiltCatalog: config.quiltCatalog,
         quiltDatabase: config.quiltDatabase,
         webhookAllowList: config.webhookAllowList,

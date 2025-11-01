@@ -247,14 +247,14 @@ bin/cli.ts                             [NEW] Main CLI entry point
 bin/commands/deploy.ts                 [NEW] Deploy command
 bin/commands/init.ts                   [NEW] Init command
 bin/commands/validate.ts               [NEW] Validate command
-.scratch/cli/CLI_SPEC.md               [NEW] Complete specification
-.scratch/cli/REFACTORING_GUIDE.md      [NEW] Implementation guide
-.scratch/cli/EXAMPLES.md               [NEW] Usage examples
-.scratch/cli/DOCUMENTATION_UPDATES.md  [NEW] Documentation plan
-.scratch/cli/README.md                 [NEW] Specification index
-.scratch/cli/QUICK_REFERENCE.md        [NEW] Quick reference
-.scratch/cli/IMPLEMENTATION_CHECKLIST.md [NEW] Checklist
-.scratch/cli/IMPLEMENTATION_SUMMARY.md [NEW] This file
+spec/cli/CLI_SPEC.md               [NEW] Complete specification
+spec/cli/REFACTORING_GUIDE.md      [NEW] Implementation guide
+spec/cli/EXAMPLES.md               [NEW] Usage examples
+spec/cli/DOCUMENTATION_UPDATES.md  [NEW] Documentation plan
+spec/cli/README.md                 [NEW] Specification index
+spec/cli/QUICK_REFERENCE.md        [NEW] Quick reference
+spec/cli/IMPLEMENTATION_CHECKLIST.md [NEW] Checklist
+spec/cli/IMPLEMENTATION_SUMMARY.md [NEW] This file
 ```
 
 ### Modified Files
@@ -398,7 +398,7 @@ npx @quiltdata/benchling-webhook deploy
 ## Timeline
 
 ### Completed (October 29, 2025)
-- ✅ Specification (all documents in .scratch/cli/)
+- ✅ Specification (all documents in spec/cli/)
 - ✅ Phase 1: Project Setup (~2 hours)
 - ✅ Phase 2: Extract Core Logic (~4 hours)
 - ✅ Phase 3: Implement CLI (~8 hours)
@@ -504,7 +504,7 @@ benchling-webhook/
 │       └── config.ts             # Configuration utilities
 ├── package.json                  # Package metadata
 ├── tsconfig.json                 # TypeScript config
-└── .scratch/cli/                 # Specifications
+└── spec/cli/                 # Specifications
 ```
 
 ---

@@ -39,7 +39,7 @@ def linkify_urls(text: str) -> str:
     return URL_PATTERN.sub(replace_url, text)
 
 
-def format_package_header(package_name: str, display_id: str, catalog_url: str, sync_url: str, upload_url: str) -> str:
+def format_package_header(package_name: str, display_id: str, catalog_url: str, sync_url: str) -> str:
     """Format primary package header with action links.
 
     Args:
@@ -47,14 +47,13 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
         display_id: Entry display ID
         catalog_url: URL to catalog view
         sync_url: URL for sync action
-        upload_url: URL for upload action
 
     Returns:
         Formatted markdown string
     """
     return f"""## {display_id}
 
-* Package: [{package_name}]({catalog_url}) [[🔄 sync]]({sync_url}) [[⬆️ upload]]({upload_url})
+* Package: [{package_name}]({catalog_url}) [[🔄 sync]]({sync_url})
 """
 
 

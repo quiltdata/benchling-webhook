@@ -222,7 +222,6 @@ jobs:
             echo "Publishing production release to npm with 'latest' tag"
             npm publish --provenance --access public --tag latest
           fi
-        continue-on-error: true
 
       - name: Summary
         run: |

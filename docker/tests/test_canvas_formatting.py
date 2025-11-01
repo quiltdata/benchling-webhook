@@ -66,7 +66,6 @@ class TestFormatPackageHeader:
             display_id="EXP-001",
             catalog_url="https://catalog.com/package",
             sync_url="https://catalog.com/sync",
-            upload_url="https://catalog.com/upload",
         )
 
         # Display ID should be the heading
@@ -76,7 +75,6 @@ class TestFormatPackageHeader:
         # URLs should be present
         assert "https://catalog.com/package" in result
         assert "https://catalog.com/sync" in result
-        assert "https://catalog.com/upload" in result
 
 
 class TestDictToMarkdownList:
