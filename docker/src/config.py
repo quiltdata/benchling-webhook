@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass
 
+from .config_resolver import ConfigResolver, ConfigResolverError
 from .secrets_resolver import SecretsResolutionError, resolve_benchling_secrets
 
 
@@ -22,6 +23,52 @@ class Config:
     enable_webhook_verification: bool = True
 
     def __post_init__(self):
+        """Initialize configuration from environment variables or AWS.
+
+        Supports two modes:
+        1. Secrets-Only Architecture: QuiltStackARN + BenchlingSecret (NEW)
+        2. Individual Environment Variables (LEGACY - for backward compatibility and testing)
+        """
+        # Check if we're using the new secrets-only architecture
+        quilt_stack_arn = os.getenv("QuiltStackARN")
+        benchling_secret = os.getenv("BenchlingSecret")
+
+        if quilt_stack_arn and benchling_secret:
+            # NEW: Secrets-only architecture
+            # All configuration derived from CloudFormation + Secrets Manager
+            self._load_from_aws(quilt_stack_arn, benchling_secret)
+        else:
+            # LEGACY: Load from individual environment variables
+            # Used for backward compatibility and local testing
+            self._load_from_env_vars()
+
+    def _load_from_aws(self, quilt_stack_arn: str, benchling_secret: str):
+        """Load configuration from AWS CloudFormation and Secrets Manager."""
+        try:
+            resolver = ConfigResolver()
+            resolved = resolver.resolve(quilt_stack_arn, benchling_secret)
+
+            # Map resolved config to Config fields
+            self.aws_region = resolved.aws_region
+            self.s3_bucket_name = resolved.quilt_user_bucket
+            self.s3_prefix = resolved.pkg_prefix
+            self.package_key = resolved.pkg_key
+            self.quilt_catalog = resolved.quilt_catalog
+            self.quilt_database = resolved.quilt_database
+            self.queue_arn = resolved.queue_arn
+            self.benchling_tenant = resolved.benchling_tenant
+            self.benchling_client_id = resolved.benchling_client_id
+            self.benchling_client_secret = resolved.benchling_client_secret
+            self.benchling_app_definition_id = resolved.benchling_app_definition_id or ""
+            self.enable_webhook_verification = resolved.enable_webhook_verification
+            self.log_level = resolved.log_level
+            self.flask_env = "production"  # Always production when using AWS resolution
+
+        except (ConfigResolverError, ValueError) as e:
+            raise ValueError(f"Failed to resolve configuration from AWS: {str(e)}")
+
+    def _load_from_env_vars(self):
+        """Load configuration from individual environment variables (legacy mode)."""
         # Read environment variables at instantiation time (not import time)
         # This allows tests to override environment variables via monkeypatch
         self.flask_env = os.getenv("FLASK_ENV", "development")
@@ -35,7 +82,8 @@ class Config:
         self.queue_arn = os.getenv("QUEUE_ARN", "")
         self.benchling_app_definition_id = os.getenv("BENCHLING_APP_DEFINITION_ID", "")
         self.enable_webhook_verification = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "true").lower() == "true"
-        # Resolve Benchling secrets first using the secrets resolver
+
+        # Resolve Benchling secrets using the secrets resolver
         try:
             secrets = resolve_benchling_secrets(self.aws_region)
             self.benchling_tenant = secrets.tenant
