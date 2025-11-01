@@ -36,13 +36,20 @@ class ConfigResolverError(Exception):
     """Raised when configuration resolution fails."""
 
     def __init__(self, message: str, suggestion: Optional[str] = None, details: Optional[str] = None):
-        super().__init__(message)
+        # Include all parts in the base exception message for better error reporting
+        full_message = message
+        if suggestion:
+            full_message += f"\n\n{suggestion}"
+        if details:
+            full_message += f"\n\n{details}"
+        super().__init__(full_message)
+        self.message = message
         self.suggestion = suggestion
         self.details = details
 
     def format(self) -> str:
         """Format error for console output with suggestions."""
-        output = f"❌ Configuration Error: {str(self)}"
+        output = f"❌ Configuration Error: {self.message}"
         if self.suggestion:
             output += f"\n   💡 {self.suggestion}"
         if self.details:
@@ -62,42 +69,83 @@ class ParsedStackArn:
 
 @dataclass
 class BenchlingSecretData:
-    """Benchling credentials from Secrets Manager."""
+    """All runtime parameters from Benchling secret.
 
+    All fields are REQUIRED. Missing fields cause startup failure.
+    This dataclass contains all 10 runtime configuration parameters
+    that must be stored in AWS Secrets Manager.
+
+    Attributes:
+        tenant: Benchling subdomain (e.g., 'quilt-dtt' from 'quilt-dtt.benchling.com')
+        client_id: OAuth client ID from Benchling app
+        client_secret: OAuth client secret from Benchling app (sensitive)
+        app_definition_id: App definition ID for webhook signature verification
+        pkg_prefix: Quilt package name prefix
+        pkg_key: Metadata key for linking Benchling entries to Quilt packages
+        user_bucket: S3 bucket name for Benchling exports
+        log_level: Application logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        enable_webhook_verification: Verify webhook signatures (boolean)
+        webhook_allow_list: Comma-separated IP allowlist (empty string for no restrictions)
+    """
+
+    # Benchling Authentication
     tenant: str
     client_id: str
     client_secret: str
-    app_definition_id: Optional[str] = None
-    api_url: Optional[str] = None
+    app_definition_id: str
+
+    # Quilt Package Configuration
+    pkg_prefix: str
+    pkg_key: str
+    user_bucket: str
+
+    # Application Behavior
+    log_level: str
+    enable_webhook_verification: bool
+    webhook_allow_list: str
 
 
 @dataclass
 class ResolvedConfig:
-    """Complete resolved configuration."""
+    """Complete resolved configuration from AWS sources.
 
-    # AWS
+    All fields are required. No defaults.
+    Configuration is assembled from CloudFormation outputs and Benchling secret.
+
+    Infrastructure parameters come from CloudFormation:
+        - aws_region, aws_account: Parsed from stack ARN
+        - quilt_catalog, quilt_database, queue_arn: Stack outputs
+        - benchling_api_url: Stack output (optional)
+
+    Runtime parameters come from Benchling secret:
+        - All Benchling authentication fields
+        - All Quilt package configuration fields
+        - All application behavior fields
+    """
+
+    # AWS Context (from ARN parsing)
     aws_region: str
     aws_account: str
 
-    # Quilt
+    # Infrastructure (from CloudFormation outputs)
     quilt_catalog: str
     quilt_database: str
-    quilt_user_bucket: str
     queue_arn: str
 
-    # Benchling
+    # Runtime Configuration (from Benchling secret - all 10 parameters)
     benchling_tenant: str
     benchling_client_id: str
     benchling_client_secret: str
-    benchling_app_definition_id: Optional[str] = None
-    benchling_api_url: Optional[str] = None
+    benchling_app_definition_id: str
+    pkg_prefix: str
+    pkg_key: str
+    user_bucket: str
+    log_level: str
+    enable_webhook_verification: bool
+    webhook_allow_list: str
 
-    # Optional
-    pkg_prefix: str = "benchling"
-    pkg_key: str = "experiment_id"
-    log_level: str = "INFO"
-    webhook_allow_list: Optional[str] = None
-    enable_webhook_verification: bool = True
+    # Optional infrastructure outputs
+    benchling_api_url: Optional[str] = None
 
     def to_dict(self) -> Dict[str, any]:
         """Convert to dictionary for easier access."""
@@ -106,8 +154,8 @@ class ResolvedConfig:
             "aws_account": self.aws_account,
             "quilt_catalog": self.quilt_catalog,
             "quilt_database": self.quilt_database,
-            "quilt_user_bucket": self.quilt_user_bucket,
             "queue_arn": self.queue_arn,
+            "user_bucket": self.user_bucket,
             "benchling_tenant": self.benchling_tenant,
             "benchling_client_id": self.benchling_client_id,
             "benchling_client_secret": self.benchling_client_secret,
@@ -119,6 +167,32 @@ class ResolvedConfig:
             "webhook_allow_list": self.webhook_allow_list,
             "enable_webhook_verification": self.enable_webhook_verification,
         }
+
+
+def parse_bool(value: any) -> bool:
+    """Parse boolean from JSON (native bool or string representation).
+
+    Args:
+        value: Value to parse (bool, str, or other)
+
+    Returns:
+        Boolean value
+
+    Raises:
+        ValueError: If value cannot be parsed as boolean
+
+    Accepts:
+        - Native JSON booleans: true, false
+        - String representations: "true", "false", "True", "False", "1", "0"
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        if value.lower() in ["true", "1"]:
+            return True
+        if value.lower() in ["false", "0"]:
+            return False
+    raise ValueError(f"Invalid boolean value: {value!r}. Expected: true, false, 'true', 'false', '1', or '0'")
 
 
 def parse_stack_arn(arn: str) -> ParsedStackArn:
@@ -222,22 +296,85 @@ def resolve_and_fetch_secret(client, region: str, secret_identifier: str) -> Ben
                 "Secret contains invalid JSON", "Ensure secret value is valid JSON", f"Parse error: {str(e)}"
             )
 
-        # Validate required fields
-        required = ["client_id", "client_secret", "tenant"]
-        missing = [f for f in required if not data.get(f)]
+        # Validate all 10 required parameters
+        required = [
+            "tenant",
+            "client_id",
+            "client_secret",
+            "app_definition_id",
+            "pkg_prefix",
+            "pkg_key",
+            "user_bucket",
+            "log_level",
+            "enable_webhook_verification",
+            "webhook_allow_list",
+        ]
+        # Check if parameters exist in data (not checking for truthy values yet, as webhook_allow_list can be "")
+        missing = [f for f in required if f not in data]
 
         if missing:
+            example_secret = {
+                "tenant": "quilt-dtt",
+                "client_id": "wqFfVOhbYe",
+                "client_secret": "6NUPNtpWP7f...",
+                "app_definition_id": "appdef_wqFfaXBVMu",
+                "pkg_prefix": "benchling",
+                "pkg_key": "experiment_id",
+                "user_bucket": "my-s3-bucket",
+                "log_level": "INFO",
+                "enable_webhook_verification": "true",
+                "webhook_allow_list": "",
+            }
+            import json
+
             raise ConfigResolverError(
-                f"Invalid secret structure: missing {', '.join(missing)}",
-                'Expected format: {"client_id":"...","client_secret":"...","tenant":"..."}',
+                f"Missing required parameters in secret '{secret_identifier}'",
+                f"Missing: {', '.join(missing)}",
+                f"Expected secret format (JSON):\n{json.dumps(example_secret, indent=2)}\n\n"
+                "See: https://github.com/quiltdata/benchling-webhook#secret-format",
             )
+
+        # Validate log level
+        valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        log_level = data["log_level"]
+        if log_level not in valid_log_levels:
+            raise ConfigResolverError(
+                f"Invalid value for parameter 'log_level'",
+                f"Received: {log_level!r}",
+                f"Expected one of: {', '.join(valid_log_levels)}",
+            )
+
+        # Parse boolean parameter
+        try:
+            enable_webhook_verification = parse_bool(data["enable_webhook_verification"])
+        except ValueError as e:
+            raise ConfigResolverError(
+                f"Invalid value for parameter 'enable_webhook_verification'",
+                str(e),
+                "Expected: true, false, 'true', 'false', '1', or '0'",
+            )
+
+        # Validate non-empty strings for required string parameters
+        string_params = ["tenant", "client_id", "client_secret", "app_definition_id", "pkg_prefix", "pkg_key", "user_bucket"]
+        for param in string_params:
+            if not isinstance(data[param], str) or len(data[param]) == 0:
+                raise ConfigResolverError(
+                    f"Invalid value for parameter '{param}'",
+                    f"Received: {data[param]!r}",
+                    f"Expected: non-empty string",
+                )
 
         return BenchlingSecretData(
             tenant=data["tenant"],
             client_id=data["client_id"],
             client_secret=data["client_secret"],
-            app_definition_id=data.get("app_definition_id"),
-            api_url=data.get("api_url"),
+            app_definition_id=data["app_definition_id"],
+            pkg_prefix=data["pkg_prefix"],
+            pkg_key=data["pkg_key"],
+            user_bucket=data["user_bucket"],
+            log_level=data["log_level"],
+            enable_webhook_verification=enable_webhook_verification,
+            webhook_allow_list=data["webhook_allow_list"],
         )
 
     except ClientError as e:
@@ -352,20 +489,26 @@ class ConfigResolver:
 
         # Step 7: Assemble complete configuration
         config = ResolvedConfig(
-            # AWS
+            # AWS Context (from ARN parsing)
             aws_region=parsed.region,
             aws_account=parsed.account,
-            # Quilt
+            # Infrastructure (from CloudFormation outputs)
             quilt_catalog=catalog,
             quilt_database=outputs["UserAthenaDatabaseName"],
-            quilt_user_bucket=outputs.get("UserBucket") or outputs.get("BucketName"),
             queue_arn=outputs["PackagerQueueArn"],
-            # Benchling
+            # Runtime Configuration (from Benchling secret - all 10 parameters)
             benchling_tenant=secret.tenant,
             benchling_client_id=secret.client_id,
             benchling_client_secret=secret.client_secret,
             benchling_app_definition_id=secret.app_definition_id,
-            benchling_api_url=secret.api_url,
+            pkg_prefix=secret.pkg_prefix,
+            pkg_key=secret.pkg_key,
+            user_bucket=secret.user_bucket,
+            log_level=secret.log_level,
+            enable_webhook_verification=secret.enable_webhook_verification,
+            webhook_allow_list=secret.webhook_allow_list,
+            # Optional infrastructure outputs
+            benchling_api_url=outputs.get("ApiGatewayEndpoint"),
         )
 
         # Cache for container lifetime
@@ -381,12 +524,11 @@ class ConfigResolver:
         return config
 
     def _validate_required_outputs(self, outputs: Dict[str, str]) -> None:
-        """Validate that required CloudFormation outputs are present."""
-        required = ["UserAthenaDatabaseName", "PackagerQueueArn"]
+        """Validate that required CloudFormation outputs are present.
 
-        # UserBucket or BucketName (at least one required)
-        if "UserBucket" not in outputs and "BucketName" not in outputs:
-            required.append("UserBucket or BucketName")
+        USER_BUCKET now comes from secret, not CloudFormation.
+        """
+        required = ["UserAthenaDatabaseName", "PackagerQueueArn"]
 
         missing = [key for key in required if key not in outputs]
 

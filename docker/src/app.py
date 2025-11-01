@@ -81,20 +81,25 @@ def create_app():
 
         if quilt_stack_arn and benchling_secret:
             config_source = "secrets-only-mode"
-            config_version = "v0.6.0+"
+            config_version = "v1.0.0"
+            config_parameters = 10  # All 10 runtime parameters from secret
         else:
             config_source = "legacy-mode"
             config_version = "v0.5.x"
+            config_parameters = None
 
-        return jsonify(
-            {
-                "status": "healthy",
-                "service": "benchling-webhook",
-                "version": "1.0.0",
-                "config_source": config_source,
-                "config_version": config_version,
-            }
-        )
+        response = {
+            "status": "healthy",
+            "service": "benchling-webhook",
+            "version": "1.0.0",
+            "config_source": config_source,
+            "config_version": config_version,
+        }
+
+        if config_parameters:
+            response["config_parameters"] = config_parameters
+
+        return jsonify(response)
 
     @app.route("/health/ready", methods=["GET"])
     def readiness():
