@@ -19,25 +19,42 @@ npx @quiltdata/benchling-webhook manifest
 
 Follow the displayed instructions to [upload the manifest](https://docs.benchling.com/docs/getting-started-benchling-apps#creating-an-app-from-a-manifest) to Benchling and get your App Definition ID.
 
-### 2. Configure Benchling Secrets
+### 2. Store Benchling Secrets in AWS Secrets Manager
 
-Create a JSON file with your Benchling credentials:
+Create a secret in AWS Secrets Manager with your Benchling credentials:
 
 ```bash
-cat > benchling-secrets.json << EOF
-{
-  "client_id": "your-benchling-client-id",
-  "client_secret": "your-benchling-client-secret",
-  "tenant": "your-tenant"
-}
-EOF
+aws secretsmanager create-secret \
+  --name benchling-webhook-credentials \
+  --description "Benchling OAuth credentials" \
+  --secret-string '{
+    "client_id": "your-benchling-client-id",
+    "client_secret": "your-benchling-client-secret",
+    "tenant": "your-tenant",
+    "app_definition_id": "your-app-definition-id"
+  }'
 ```
 
-> **Important**: Never commit secrets to version control. Add `benchling-secrets.json` to `.gitignore`.
+> **Note**: The secret must contain `client_id`, `client_secret`, and `tenant`. The `app_definition_id` is optional but recommended.
 
-**See [Secrets Configuration Guide](./docs/SECRETS_CONFIGURATION.md) for detailed configuration options**
+### 3. Deploy to AWS (Secrets-Only Mode - v0.6.0+)
 
-### 3. Deploy to AWS
+**Recommended: Secrets-Only Mode** - Minimal configuration, all settings resolved from AWS:
+
+```bash
+npx @quiltdata/benchling-webhook deploy \
+  --quilt-stack-arn "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123" \
+  --benchling-secret "benchling-webhook-credentials"
+```
+
+That's it! The deployment automatically resolves:
+- Quilt catalog URL from your stack
+- S3 bucket configuration
+- Athena database name
+- SQS queue ARN
+- AWS region and account
+
+**Alternative: Legacy Mode** - For existing deployments or manual configuration:
 
 ```bash
 npx @quiltdata/benchling-webhook deploy \
@@ -45,7 +62,7 @@ npx @quiltdata/benchling-webhook deploy \
   --catalog your-catalog.quiltdata.com
 ```
 
-The interactive wizard will auto-detect or request configuration information, deploy to AWS, and test the webhook automatically.
+**See [Secrets Configuration Guide](./docs/SECRETS_CONFIGURATION.md) and [Migration Guide](./docs/MIGRATION_GUIDE_V06.md) for more options**
 
 ### 4. Install in Benchling
 
@@ -57,34 +74,56 @@ In Benchling: Create entry → Insert Canvas → "Quilt Integration" → Create/
 
 ## Configuration
 
-### Secrets Management (v0.6.0+)
+### Deployment Modes (v0.6.0+)
 
-The webhook supports multiple ways to configure Benchling credentials:
+#### Secrets-Only Mode (Recommended)
 
-#### Option 1: Inline JSON
+The simplest deployment method - just provide two parameters:
+
 ```bash
 npx @quiltdata/benchling-webhook deploy \
-  --benchling-secrets '{"client_id":"xxx","client_secret":"yyy","tenant":"company"}'
+  --quilt-stack-arn "arn:aws:cloudformation:region:account:stack/QuiltStack/id" \
+  --benchling-secret "my-secret-name"
 ```
 
-#### Option 2: JSON File (Recommended)
+**Benefits**:
+- ✅ Minimal configuration - only 2 parameters needed
+- ✅ Centralized secrets in AWS Secrets Manager
+- ✅ Automatic configuration resolution from CloudFormation
+- ✅ No manual parameter updates when infrastructure changes
+- ✅ Better security - no secrets in CI/CD pipelines
+
+**How to find your Quilt Stack ARN**:
 ```bash
-npx @quiltdata/benchling-webhook deploy --benchling-secrets @benchling-secrets.json
+# List your CloudFormation stacks
+aws cloudformation describe-stacks --query 'Stacks[?contains(StackName, `Quilt`)].StackId'
+
+# Or from the AWS Console → CloudFormation → Stack Details → Stack info → ARN
 ```
 
-#### Option 3: AWS Secrets Manager ARN
+#### Legacy Mode
+
+For existing deployments or manual configuration:
+
 ```bash
+# Option 1: Inline JSON
 npx @quiltdata/benchling-webhook deploy \
-  --benchling-secrets "arn:aws:secretsmanager:us-east-1:123456789012:secret:benchling-creds"
+  --benchling-secrets '{"client_id":"xxx","client_secret":"yyy","tenant":"company"}' \
+  --catalog your-catalog.quiltdata.com
+
+# Option 2: JSON File
+npx @quiltdata/benchling-webhook deploy \
+  --benchling-secrets @benchling-secrets.json \
+  --catalog your-catalog.quiltdata.com
+
+# Option 3: AWS Secrets Manager ARN
+npx @quiltdata/benchling-webhook deploy \
+  --benchling-secrets "arn:aws:secretsmanager:region:account:secret:name" \
+  --catalog your-catalog.quiltdata.com
 ```
 
-#### Option 4: Environment Variable
-```bash
-export BENCHLING_SECRETS='{"client_id":"xxx","client_secret":"yyy","tenant":"company"}'
-npx @quiltdata/benchling-webhook deploy
-```
-
-**📖 [Complete Secrets Configuration Guide](./docs/SECRETS_CONFIGURATION.md)**
+**📖 [Complete Configuration Guide](./docs/SECRETS_CONFIGURATION.md)**
+**📖 [Migration Guide to v0.6.0](./docs/MIGRATION_GUIDE_V06.md)**
 
 ### Secret Format
 
@@ -152,16 +191,18 @@ npx @quiltdata/benchling-webhook --help
 npx @quiltdata/benchling-webhook deploy [options]
 ```
 
-**Secrets Configuration**:
-- `--benchling-secrets <value>` - Benchling secrets (ARN, JSON, or @file)
+**Secrets-Only Mode (v0.6.0+ - Recommended)**:
+- `--quilt-stack-arn <arn>` - ARN of Quilt CloudFormation stack
+- `--benchling-secret <name>` - Name or ARN of Benchling secret in Secrets Manager
 
-**Quilt Configuration**:
+**Legacy Mode Configuration**:
+- `--benchling-secrets <value>` - Benchling secrets (ARN, JSON, or @file)
 - `--catalog <url>` - Quilt catalog URL
 - `--bucket <name>` - S3 bucket for data
 
 **AWS Configuration**:
 - `--profile <name>` - AWS profile to use
-- `--region <region>` - AWS region to deploy to
+- `--region <region>` - AWS region to deploy to (auto-detected in secrets-only mode)
 - `--image-tag <tag>` - Docker image tag to deploy (default: latest)
 
 **Deployment Options**:
@@ -174,12 +215,12 @@ npx @quiltdata/benchling-webhook deploy [options]
 
 > ⚠️ **Warning**: The following parameters are deprecated and will be removed in v1.0.0
 
-- `--tenant` - Use `--benchling-secrets` instead
-- `--client-id` - Use `--benchling-secrets` instead
-- `--client-secret` - Use `--benchling-secrets` instead
-- `--app-id` - Use `--benchling-secrets` instead
+- `--tenant` - Use `--benchling-secrets` or secrets-only mode instead
+- `--client-id` - Use `--benchling-secrets` or secrets-only mode instead
+- `--client-secret` - Use `--benchling-secrets` or secrets-only mode instead
+- `--app-id` - Use `--benchling-secrets` or secrets-only mode instead
 
-**Migration guide**: See [Secrets Configuration - Migration Guide](./docs/SECRETS_CONFIGURATION.md#migration-guide)
+**Migration guide**: See [Migration Guide to v0.6.0](./docs/MIGRATION_GUIDE_V06.md)
 
 ## Documentation
 
