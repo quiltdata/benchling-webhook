@@ -20,6 +20,7 @@ export interface FargateServiceProps {
     readonly benchlingClientId: string;
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
+    readonly benchlingAppDefinitionId?: string;
     /**
      * Consolidated Benchling secrets as JSON string.
      * When provided and non-empty, the container will receive BENCHLING_SECRETS environment variable.
@@ -164,11 +165,18 @@ export class FargateService extends Construct {
             secretValue = props.benchlingSecrets!;
         } else {
             // Old approach: Build JSON from individual parameters
-            secretValue = JSON.stringify({
+            const secretData: Record<string, string> = {
                 client_id: props.benchlingClientId,
                 client_secret: props.benchlingClientSecret,
                 tenant: props.benchlingTenant,
-            });
+            };
+
+            // Include app_definition_id if provided
+            if (props.benchlingAppDefinitionId) {
+                secretData.app_definition_id = props.benchlingAppDefinitionId;
+            }
+
+            secretValue = JSON.stringify(secretData);
         }
 
         // Create or reference Secrets Manager secret for Benchling credentials

@@ -16,6 +16,7 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
     readonly benchlingClientId: string;
     readonly benchlingClientSecret: string;
     readonly benchlingTenant: string;
+    readonly benchlingAppDefinitionId?: string;
     /**
      * Consolidated Benchling secrets as JSON string.
      * When provided, this takes precedence over individual secret parameters.
@@ -208,6 +209,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             benchlingClientId: props.benchlingClientId,
             benchlingClientSecret: props.benchlingClientSecret,
             benchlingTenant: benchlingTenantValue,
+            benchlingAppDefinitionId: props.benchlingAppDefinitionId,
             // Use props.benchlingSecrets (original value) to determine mode
             // The CloudFormation parameter value (benchlingSecretsValue) is a token that can't be evaluated at synth time
             benchlingSecrets: props.benchlingSecrets,
