@@ -61,7 +61,7 @@ class Config:
 
             # Map resolved config to Config fields
             self.aws_region = resolved.aws_region
-            self.s3_bucket_name = resolved.quilt_user_bucket
+            self.s3_bucket_name = resolved.user_bucket  # Changed from quilt_user_bucket
             self.s3_prefix = resolved.pkg_prefix
             self.package_key = resolved.pkg_key
             self.quilt_catalog = resolved.quilt_catalog
@@ -70,7 +70,7 @@ class Config:
             self.benchling_tenant = resolved.benchling_tenant
             self.benchling_client_id = resolved.benchling_client_id
             self.benchling_client_secret = resolved.benchling_client_secret
-            self.benchling_app_definition_id = resolved.benchling_app_definition_id or ""
+            self.benchling_app_definition_id = resolved.benchling_app_definition_id
             self.enable_webhook_verification = resolved.enable_webhook_verification
             self.log_level = resolved.log_level
             self.flask_env = "production"

@@ -58,22 +58,28 @@ def mock_config_resolver(monkeypatch):
     monkeypatch.setenv("QuiltStackARN", "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc-123")
     monkeypatch.setenv("BenchlingSecret", "test-secret")
 
-    # Create mock resolved config
+    # Create mock resolved config with all 10 runtime parameters
     mock_resolved = ResolvedConfig(
+        # AWS Context
         aws_region="us-east-1",
         aws_account="123456789012",
+        # Infrastructure (CloudFormation)
         quilt_catalog="test.quiltdata.com",
         quilt_database="test_database",
-        quilt_user_bucket="test-bucket",
         queue_arn="arn:aws:sqs:us-east-1:123456789012:test-queue",
-        pkg_prefix="benchling",
-        pkg_key="experiment_id",
+        # Runtime Configuration (Secret - all 10 parameters)
         benchling_tenant="test-tenant",
         benchling_client_id="test-client-id",
         benchling_client_secret="test-client-secret",
         benchling_app_definition_id="test-app-id",
-        enable_webhook_verification=True,
+        pkg_prefix="benchling",
+        pkg_key="experiment_id",
+        user_bucket="test-bucket",
         log_level="INFO",
+        enable_webhook_verification=True,
+        webhook_allow_list="",
+        # Optional infrastructure outputs
+        benchling_api_url=None,
     )
 
     # Mock ConfigResolver.resolve() to return our test config
