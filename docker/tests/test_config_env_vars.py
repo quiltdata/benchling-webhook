@@ -26,6 +26,7 @@ def test_environment_variable_names_are_documented():
     # Expected environment variable names (must match CDK stack)
     # NOTE: BENCHLING_TENANT, BENCHLING_CLIENT_ID, BENCHLING_CLIENT_SECRET are now
     # resolved through secrets_resolver.py, not directly via os.getenv()
+    # NOTE: QuiltStackARN and BenchlingSecret are new secrets-only mode parameters
     expected_env_vars = {
         "FLASK_ENV",
         "LOG_LEVEL",
@@ -38,6 +39,8 @@ def test_environment_variable_names_are_documented():
         "QUEUE_ARN",  # SQS Queue ARN (not URL!)
         "BENCHLING_APP_DEFINITION_ID",
         "ENABLE_WEBHOOK_VERIFICATION",
+        "QuiltStackARN",  # New: secrets-only mode
+        "BenchlingSecret",  # New: secrets-only mode
     }
 
     # Verify all expected variables are present
@@ -129,6 +132,9 @@ def test_cdk_environment_variables_match_config():
 
     This cross-checks the TypeScript CDK code against the Python config to
     ensure they stay in sync.
+
+    Note: This test validates both legacy mode (individual env vars) and
+    secrets-only mode (QuiltStackARN + BenchlingSecret).
     """
     # Navigate from docker/tests up two levels to project root, then to lib
     test_dir = Path(__file__).parent  # docker/tests
@@ -142,8 +148,9 @@ def test_cdk_environment_variables_match_config():
 
     fargate_content = fargate_service_path.read_text()
 
-    # Critical environment variables that must be set by CDK
-    critical_vars = [
+    # Critical environment variables that must be set by CDK in LEGACY mode
+    # In secrets-only mode, these are resolved at runtime
+    legacy_vars = [
         "QUEUE_ARN",  # SQS Queue ARN (not URL!)
         "QUILT_USER_BUCKET",
         "PKG_PREFIX",
@@ -151,29 +158,80 @@ def test_cdk_environment_variables_match_config():
         "QUILT_CATALOG",
         "QUILT_DATABASE",
         "BENCHLING_TENANT",
+    ]
+
+    # Common environment variables set in both modes
+    common_vars = [
         "LOG_LEVEL",
         "AWS_REGION",
         "ENABLE_WEBHOOK_VERIFICATION",
     ]
 
-    missing_vars = []
-    for var in critical_vars:
-        # Match either: VAR: or "VAR": or 'VAR':
+    # Secrets-only mode variables (v0.6.0+)
+    secrets_only_vars = [
+        "QuiltStackARN",
+        "BenchlingSecret",
+    ]
+
+    # Check that all common vars are present
+    missing_common = []
+    for var in common_vars:
+        # Match patterns like: VAR:, "VAR":, 'VAR':, or environmentVars.VAR
         if (
             f"{var}:" not in fargate_content
             and f'"{var}":' not in fargate_content
             and f"'{var}':" not in fargate_content
+            and f"environmentVars.{var}" not in fargate_content
         ):
-            missing_vars.append(var)
+            missing_common.append(var)
 
-    assert not missing_vars, (
-        f"CDK Fargate service missing environment variables: {missing_vars}\n"
-        f"These variables are required by the Flask config but not set in fargate-service.ts"
+    assert not missing_common, (
+        f"CDK Fargate service missing common environment variables: {missing_common}\n"
+        f"These variables are required in both legacy and secrets-only modes"
     )
 
-    # Specifically verify QUEUE_ARN is used (not QUEUE_URL)
-    assert "QUEUE_ARN" in fargate_content, "fargate-service.ts must set QUEUE_ARN environment variable"
+    # Check that BOTH legacy vars AND secrets-only vars are present
+    # (they are used in different conditional branches)
+    missing_legacy_vars = []
+    for var in legacy_vars:
+        # Match patterns like: VAR:, "VAR":, 'VAR':, or environmentVars.VAR
+        if (
+            f"{var}:" not in fargate_content
+            and f'"{var}":' not in fargate_content
+            and f"'{var}':" not in fargate_content
+            and f"environmentVars.{var}" not in fargate_content
+        ):
+            missing_legacy_vars.append(var)
 
-    # Check that QUEUE_URL is not used instead (we want ARN, not URL)
-    if "QUEUE_URL" in fargate_content and "QUEUE_ARN" not in fargate_content:
-        raise AssertionError("fargate-service.ts uses QUEUE_URL but should use QUEUE_ARN")
+    missing_secrets_only_vars = []
+    for var in secrets_only_vars:
+        # Match patterns like: VAR:, "VAR":, 'VAR':, or environmentVars.VAR
+        if (
+            f"{var}:" not in fargate_content
+            and f'"{var}":' not in fargate_content
+            and f"'{var}':" not in fargate_content
+            and f"environmentVars.{var}" not in fargate_content
+        ):
+            missing_secrets_only_vars.append(var)
+
+    assert not missing_legacy_vars, (
+        f"CDK Fargate service missing legacy mode environment variables: {missing_legacy_vars}\n"
+        f"These variables must be present (used in legacy mode conditional branch)"
+    )
+
+    assert not missing_secrets_only_vars, (
+        f"CDK Fargate service missing secrets-only mode environment variables: {missing_secrets_only_vars}\n"
+        f"These variables must be present (used in secrets-only mode conditional branch)"
+    )
+
+    # Both modes should be supported
+    has_legacy_vars = not missing_legacy_vars
+    has_secrets_only_vars = not missing_secrets_only_vars
+
+    # Specifically verify QUEUE_ARN is used in legacy mode (not QUEUE_URL)
+    if has_legacy_vars:
+        assert "QUEUE_ARN" in fargate_content, "fargate-service.ts must set QUEUE_ARN environment variable in legacy mode"
+
+        # Check that QUEUE_URL is not used instead (we want ARN, not URL)
+        if "QUEUE_URL" in fargate_content and "QUEUE_ARN" not in fargate_content:
+            raise AssertionError("fargate-service.ts uses QUEUE_URL but should use QUEUE_ARN")

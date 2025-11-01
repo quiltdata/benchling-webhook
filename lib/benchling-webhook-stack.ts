@@ -9,13 +9,29 @@ import { EcrRepository } from "./ecr-repository";
 import packageJson from "../package.json";
 
 export interface BenchlingWebhookStackProps extends cdk.StackProps {
-    readonly bucketName: string;
-    readonly environment: string;
-    readonly prefix: string;
-    readonly queueArn: string;
-    readonly benchlingClientId: string;
-    readonly benchlingClientSecret: string;
-    readonly benchlingTenant: string;
+    // ===== Secrets-Only Mode (NEW - v0.6.0+) =====
+    /**
+     * ARN of the Quilt CloudFormation stack.
+     * When provided with benchlingSecret, enables secrets-only mode where all configuration
+     * is resolved from AWS (CloudFormation outputs + Secrets Manager).
+     * Format: arn:aws:cloudformation:{region}:{account}:stack/{name}/{id}
+     */
+    readonly quiltStackArn?: string;
+    /**
+     * Name or ARN of the AWS Secrets Manager secret containing Benchling credentials.
+     * When provided with quiltStackArn, enables secrets-only mode.
+     * Secret must contain: client_id, client_secret, tenant, app_definition_id (optional)
+     */
+    readonly benchlingSecret?: string;
+
+    // ===== Legacy Mode (DEPRECATED - use secrets-only mode instead) =====
+    readonly bucketName?: string;
+    readonly environment?: string;
+    readonly prefix?: string;
+    readonly queueArn?: string;
+    readonly benchlingClientId?: string;
+    readonly benchlingClientSecret?: string;
+    readonly benchlingTenant?: string;
     readonly benchlingAppDefinitionId?: string;
     /**
      * Consolidated Benchling secrets as JSON string.
@@ -25,8 +41,10 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
      */
     readonly benchlingSecrets?: string;
     readonly quiltCatalog?: string;
-    readonly quiltDatabase: string;
+    readonly quiltDatabase?: string;
     readonly webhookAllowList?: string;
+
+    // ===== Common Options =====
     readonly createEcrRepository?: boolean;
     readonly ecrRepositoryName?: string;
     readonly logLevel?: string;
@@ -45,15 +63,46 @@ export class BenchlingWebhookStack extends cdk.Stack {
         props: BenchlingWebhookStackProps,
     ) {
         super(scope, id, props);
-        if (props.prefix.includes("/")) {
-            throw new Error("Prefix should not contain a '/' character.");
+
+        // Determine which mode we're operating in
+        const useSecretsOnlyMode = !!(props.quiltStackArn && props.benchlingSecret);
+
+        // Validation
+        if (useSecretsOnlyMode) {
+            // Secrets-only mode: only quiltStackArn and benchlingSecret are required
+            console.log("✓ Using secrets-only mode (v0.6.0+)");
+        } else {
+            // Legacy mode: validate required legacy props
+            if (!props.bucketName || !props.prefix || !props.queueArn || !props.quiltDatabase) {
+                throw new Error(
+                    "Legacy mode requires: bucketName, prefix, queueArn, quiltDatabase.\n" +
+                    "Or use secrets-only mode with: quiltStackArn, benchlingSecret"
+                );
+            }
+            if (props.prefix.includes("/")) {
+                throw new Error("Prefix should not contain a '/' character.");
+            }
+            console.log("⚠️  Using legacy mode (DEPRECATED - consider migrating to secrets-only mode)");
         }
 
         // Create CloudFormation parameters for runtime-configurable values
         // Note: Use actual values from props during initial deployment to avoid empty string issues
         // Parameters can be updated later via CloudFormation stack updates
 
-        // Security and configuration parameters
+        // ===== Secrets-Only Mode Parameters (NEW) =====
+        const quiltStackArnParam = new cdk.CfnParameter(this, "QuiltStackARN", {
+            type: "String",
+            description: "[v0.6.0+] ARN of Quilt CloudFormation stack (enables secrets-only mode with BenchlingSecret)",
+            default: props.quiltStackArn || "",
+        });
+
+        const benchlingSecretParam = new cdk.CfnParameter(this, "BenchlingSecret", {
+            type: "String",
+            description: "[v0.6.0+] Name/ARN of Secrets Manager secret with Benchling credentials (enables secrets-only mode with QuiltStackARN)",
+            default: props.benchlingSecret || "",
+        });
+
+        // ===== Legacy Mode Parameters (DEPRECATED) =====
         const webhookAllowListParam = new cdk.CfnParameter(this, "WebhookAllowList", {
             type: "String",
             description: "Comma-separated list of IP addresses allowed to send webhooks (leave empty to allow all IPs)",
@@ -69,14 +118,14 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // Infrastructure parameters - these can be updated without redeploying
         const bucketNameParam = new cdk.CfnParameter(this, "BucketName", {
             type: "String",
-            description: "S3 bucket name for storing packages",
-            default: props.bucketName,
+            description: "[LEGACY] S3 bucket name for storing packages (not used in secrets-only mode)",
+            default: props.bucketName || "",
         });
 
         const prefixParam = new cdk.CfnParameter(this, "PackagePrefix", {
             type: "String",
-            description: "Prefix for package names (no slashes)",
-            default: props.prefix,
+            description: "[LEGACY] Prefix for package names (not used in secrets-only mode)",
+            default: props.prefix || "benchling",
         });
 
         const pkgKeyParam = new cdk.CfnParameter(this, "PackageKey", {
@@ -87,14 +136,14 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         const queueArnParam = new cdk.CfnParameter(this, "QueueArn", {
             type: "String",
-            description: "SQS queue ARN for package notifications",
-            default: props.queueArn,
+            description: "[LEGACY] SQS queue ARN for package notifications (not used in secrets-only mode)",
+            default: props.queueArn || "",
         });
 
         const quiltDatabaseParam = new cdk.CfnParameter(this, "QuiltDatabase", {
             type: "String",
-            description: "Quilt database name (Glue Data Catalog database)",
-            default: props.quiltDatabase,
+            description: "[LEGACY] Quilt database name (not used in secrets-only mode)",
+            default: props.quiltDatabase || "",
         });
 
         // DEPRECATED: Benchling tenant parameter (kept for backward compatibility)
@@ -168,7 +217,16 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const benchlingClientSecretValue = benchlingClientSecretParam.valueAsString;
 
-        this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", bucketNameValue);
+        // New secrets-only mode parameter values
+        const quiltStackArnValue = quiltStackArnParam.valueAsString;
+        const benchlingSecretValue = benchlingSecretParam.valueAsString;
+
+        // In secrets-only mode, bucket name will be resolved at runtime from CloudFormation outputs
+        // For CDK purposes, we still need a bucket reference for IAM permissions
+        // Use a placeholder that will be overridden at runtime
+        this.bucket = useSecretsOnlyMode
+            ? s3.Bucket.fromBucketName(this, "BWBucket", "placeholder-bucket-resolved-at-runtime")
+            : s3.Bucket.fromBucketName(this, "BWBucket", bucketNameValue);
 
         // Get the default VPC or create a new one
         const vpc = ec2.Vpc.fromLookup(this, "DefaultVPC", {
@@ -198,30 +256,41 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const isDevVersion = imageTagValue.match(/^\d+\.\d+\.\d+-\d{8}T\d{6}Z$/);
         const stackVersion = isDevVersion ? imageTagValue : packageJson.version;
 
-        this.fargateService = new FargateService(this, "FargateService", {
+        // Build Fargate Service props based on mode
+        const fargateProps: any = {
             vpc,
             bucket: this.bucket,
-            queueArn: queueArnValue,
             region: this.region,
             account: this.account,
-            prefix: prefixValue,
-            pkgKey: pkgKeyValue,
-            benchlingClientId: props.benchlingClientId,
-            benchlingClientSecret: props.benchlingClientSecret,
-            benchlingTenant: benchlingTenantValue,
-            benchlingAppDefinitionId: props.benchlingAppDefinitionId,
-            // Use props.benchlingSecrets (original value) to determine mode
-            // The CloudFormation parameter value (benchlingSecretsValue) is a token that can't be evaluated at synth time
-            benchlingSecrets: props.benchlingSecrets,
-            quiltCatalog: quiltCatalogValue,
-            quiltDatabase: quiltDatabaseValue,
-            webhookAllowList: webhookAllowListValue,
             ecrRepository: ecrRepo,
             imageTag: imageTagValue,
             stackVersion: stackVersion,
             logLevel: logLevelValue,
             enableWebhookVerification: enableWebhookVerificationValue,
-        });
+        };
+
+        if (useSecretsOnlyMode) {
+            // Secrets-only mode: Pass only the 2 required parameters
+            fargateProps.quiltStackArn = quiltStackArnValue;
+            fargateProps.benchlingSecret = benchlingSecretValue;
+        } else {
+            // Legacy mode: Pass all individual parameters
+            fargateProps.queueArn = queueArnValue;
+            fargateProps.prefix = prefixValue;
+            fargateProps.pkgKey = pkgKeyValue;
+            fargateProps.benchlingClientId = props.benchlingClientId;
+            fargateProps.benchlingClientSecret = props.benchlingClientSecret;
+            fargateProps.benchlingTenant = benchlingTenantValue;
+            fargateProps.benchlingAppDefinitionId = props.benchlingAppDefinitionId;
+            // Use props.benchlingSecrets (original value) to determine mode
+            // The CloudFormation parameter value (benchlingSecretsValue) is a token that can't be evaluated at synth time
+            fargateProps.benchlingSecrets = props.benchlingSecrets;
+            fargateProps.quiltCatalog = quiltCatalogValue;
+            fargateProps.quiltDatabase = quiltDatabaseValue;
+            fargateProps.webhookAllowList = webhookAllowListValue;
+        }
+
+        this.fargateService = new FargateService(this, "FargateService", fargateProps);
 
         // Create API Gateway that routes to the ALB
         this.api = new AlbApiGateway(this, "ApiGateway", {
