@@ -230,7 +230,9 @@ def test_cdk_environment_variables_match_config():
 
     # Specifically verify QUEUE_ARN is used in legacy mode (not QUEUE_URL)
     if has_legacy_vars:
-        assert "QUEUE_ARN" in fargate_content, "fargate-service.ts must set QUEUE_ARN environment variable in legacy mode"
+        assert (
+            "QUEUE_ARN" in fargate_content
+        ), "fargate-service.ts must set QUEUE_ARN environment variable in legacy mode"
 
         # Check that QUEUE_URL is not used instead (we want ARN, not URL)
         if "QUEUE_URL" in fargate_content and "QUEUE_ARN" not in fargate_content:

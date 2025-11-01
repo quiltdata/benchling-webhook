@@ -74,8 +74,27 @@ def create_app():
 
     @app.route("/health", methods=["GET"])
     def health():
-        """Application health status."""
-        return jsonify({"status": "healthy", "service": "benchling-webhook", "version": "1.0.0"})
+        """Application health status with configuration info."""
+        # Determine configuration source
+        quilt_stack_arn = os.getenv("QuiltStackARN")
+        benchling_secret = os.getenv("BenchlingSecret")
+
+        if quilt_stack_arn and benchling_secret:
+            config_source = "secrets-only-mode"
+            config_version = "v0.6.0+"
+        else:
+            config_source = "legacy-mode"
+            config_version = "v0.5.x"
+
+        return jsonify(
+            {
+                "status": "healthy",
+                "service": "benchling-webhook",
+                "version": "1.0.0",
+                "config_source": config_source,
+                "config_version": config_version,
+            }
+        )
 
     @app.route("/health/ready", methods=["GET"])
     def readiness():
@@ -131,6 +150,75 @@ def create_app():
         except Exception as e:
             logger.error("Secrets health check failed", error=str(e))
             return jsonify({"status": "unhealthy", "error": str(e)}), 503
+
+    @app.route("/config", methods=["GET"])
+    def config_status():
+        """Display resolved configuration (secrets masked)."""
+        try:
+            # Determine configuration mode
+            quilt_stack_arn = os.getenv("QuiltStackARN")
+            benchling_secret_name = os.getenv("BenchlingSecret")
+
+            config_mode = "secrets-only" if (quilt_stack_arn and benchling_secret_name) else "legacy"
+
+            # Mask sensitive values
+            def mask_value(value, show_last=4):
+                """Mask a value, showing only last N characters."""
+                if not value:
+                    return None
+                if len(value) <= show_last:
+                    return "***"
+                return f"***{value[-show_last:]}"
+
+            def mask_arn(arn):
+                """Mask ARN account ID."""
+                if not arn or not arn.startswith("arn:"):
+                    return arn
+                parts = arn.split(":")
+                if len(parts) >= 5:
+                    # Mask account ID (5th component)
+                    parts[4] = mask_value(parts[4], 4)
+                return ":".join(parts)
+
+            response = {
+                "config_mode": config_mode,
+                "aws": {
+                    "region": config.aws_region or os.getenv("AWS_REGION", "not-set"),
+                },
+                "quilt": {
+                    "catalog": config.quilt_catalog,
+                    "database": config.quilt_database,
+                    "bucket": config.quilt_user_bucket,
+                    "queue_arn": mask_arn(config.queue_arn) if config.queue_arn else None,
+                },
+                "benchling": {
+                    "tenant": config.benchling_tenant,
+                    "client_id": mask_value(config.benchling_client_id, 4),
+                    "has_client_secret": bool(config.benchling_client_secret),
+                    "has_app_definition_id": bool(config.benchling_app_definition_id),
+                },
+                "optional": {
+                    "pkg_prefix": config.pkg_prefix,
+                    "pkg_key": config.pkg_key,
+                    "log_level": config.log_level,
+                    "webhook_allow_list": config.webhook_allow_list if config.webhook_allow_list else None,
+                    "enable_webhook_verification": config.enable_webhook_verification,
+                },
+            }
+
+            # Add secrets-only mode specific info
+            if config_mode == "secrets-only":
+                response["secrets_only_params"] = {
+                    "quilt_stack_arn": mask_arn(quilt_stack_arn),
+                    "benchling_secret_name": benchling_secret_name,
+                    "note": "All configuration resolved from AWS CloudFormation and Secrets Manager",
+                }
+
+            return jsonify(response)
+
+        except Exception as e:
+            logger.error("Config status check failed", error=str(e))
+            return jsonify({"status": "error", "error": str(e)}), 500
 
     @app.route("/event", methods=["POST"])
     @require_webhook_verification(config)
