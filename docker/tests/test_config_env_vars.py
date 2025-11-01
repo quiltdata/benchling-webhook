@@ -1,20 +1,22 @@
 """Test environment variable naming consistency between CDK and Flask config.
 
 This test file specifically validates that the environment variable names
-used in config.py match what the CDK stack provides, preventing issues
-like the QUEUE_URL vs QUEUE_ARN bug.
+used in config.py match what the CDK stack provides.
 """
 
 import re
 from pathlib import Path
 
+import pytest
+
+from src.config import get_config
+
 
 def test_environment_variable_names_are_documented():
     """
-    Test that critical environment variable names are correctly used in config.py.
+    Test that config.py only reads QuiltStackARN and BenchlingSecret.
 
-    This test parses config.py to ensure it reads from the correct environment
-    variable names that match what the CDK stack provides.
+    This ensures secrets-only mode is properly implemented with just 2 env vars.
     """
     config_path = Path(__file__).parent.parent / "src" / "config.py"
     config_content = config_path.read_text()
@@ -23,24 +25,12 @@ def test_environment_variable_names_are_documented():
     env_var_pattern = r'os\.getenv\("([^"]+)"'
     actual_env_vars = set(re.findall(env_var_pattern, config_content))
 
-    # Expected environment variable names (must match CDK stack)
-    # NOTE: BENCHLING_TENANT, BENCHLING_CLIENT_ID, BENCHLING_CLIENT_SECRET are now
-    # resolved through secrets_resolver.py, not directly via os.getenv()
-    # NOTE: QuiltStackARN and BenchlingSecret are new secrets-only mode parameters
+    # Expected environment variable names (secrets-only mode)
+    # Config.py now ONLY reads QuiltStackARN and BenchlingSecret
+    # All other configuration is resolved from AWS CloudFormation and Secrets Manager
     expected_env_vars = {
-        "FLASK_ENV",
-        "LOG_LEVEL",
-        "AWS_REGION",
-        "QUILT_USER_BUCKET",
-        "PKG_PREFIX",
-        "PKG_KEY",
-        "QUILT_CATALOG",
-        "QUILT_DATABASE",
-        "QUEUE_ARN",  # SQS Queue ARN (not URL!)
-        "BENCHLING_APP_DEFINITION_ID",
-        "ENABLE_WEBHOOK_VERIFICATION",
-        "QuiltStackARN",  # New: secrets-only mode
-        "BenchlingSecret",  # New: secrets-only mode
+        "QuiltStackARN",  # CloudFormation stack ARN
+        "BenchlingSecret",  # Secrets Manager secret name
     }
 
     # Verify all expected variables are present
@@ -53,77 +43,41 @@ def test_environment_variable_names_are_documented():
     )
 
 
-# Episode 6: Config integration with secrets resolver
-import json
+class TestConfigWithSecretsOnlyMode:
+    """Test Config with secrets-only mode (mocked AWS)."""
 
-import pytest
+    def test_config_with_mocked_resolver(self, mock_config_resolver):
+        """Test Config initialization with mocked ConfigResolver.
 
-from src.config import get_config
-from src.secrets_resolver import SecretsResolutionError
-
-
-class TestConfigWithSecretsResolver:
-    """Test Config integration with secrets resolver."""
-
-    @pytest.fixture
-    def minimal_env_vars(self, monkeypatch):
-        """Set minimal required env vars (non-Benchling)."""
-        monkeypatch.setenv("AWS_REGION", "us-east-2")
-        monkeypatch.setenv("QUILT_USER_BUCKET", "test-bucket")
-        monkeypatch.setenv("QUEUE_ARN", "arn:aws:sqs:us-east-2:123456789012:test-queue")
-        monkeypatch.setenv("QUILT_CATALOG", "test.quiltdata.com")
-        monkeypatch.setenv("BENCHLING_APP_DEFINITION_ID", "app-123")
-
-    @pytest.mark.local
-    def test_config_with_benchling_secrets_json(self, monkeypatch, minimal_env_vars):
-        """Test Config initialization with BENCHLING_SECRETS JSON."""
-        json_str = json.dumps({"tenant": "json-tenant", "clientId": "json-id", "clientSecret": "json-secret"})
-        monkeypatch.setenv("BENCHLING_SECRETS", json_str)
-
+        This tests the SAME code path as production (secrets-only mode)
+        but with mocked AWS responses. No individual environment variables needed.
+        """
         config = get_config()
 
-        assert config.benchling_tenant == "json-tenant"
-        assert config.benchling_client_id == "json-id"
-        assert config.benchling_client_secret == "json-secret"
+        # Verify all configuration was resolved from mocked AWS
+        assert config.aws_region == "us-east-1"
+        assert config.quilt_catalog == "test.quiltdata.com"
+        assert config.quilt_database == "test_database"
+        assert config.s3_bucket_name == "test-bucket"
+        assert config.queue_arn == "arn:aws:sqs:us-east-1:123456789012:test-queue"
+        assert config.s3_prefix == "benchling"
+        assert config.package_key == "experiment_id"
+        assert config.benchling_tenant == "test-tenant"
+        assert config.benchling_client_id == "test-client-id"
+        assert config.benchling_client_secret == "test-client-secret"
+        assert config.benchling_app_definition_id == "test-app-id"
+        assert config.enable_webhook_verification is True
+        assert config.log_level == "INFO"
+        assert config.flask_env == "production"
 
-    @pytest.mark.local
-    def test_config_with_individual_env_vars(self, monkeypatch, minimal_env_vars):
-        """Test Config with individual Benchling env vars (backward compatible)."""
-        monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
-        monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
-        monkeypatch.setenv("BENCHLING_CLIENT_SECRET", "env-secret")
-
-        config = get_config()
-
-        assert config.benchling_tenant == "env-tenant"
-        assert config.benchling_client_id == "env-id"
-        assert config.benchling_client_secret == "env-secret"
-
-    def test_config_fails_without_secrets(self, monkeypatch, minimal_env_vars):
-        """Test Config fails when no Benchling secrets provided."""
-        # Remove all Benchling env vars
-        monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
-        monkeypatch.delenv("BENCHLING_TENANT", raising=False)
-        monkeypatch.delenv("BENCHLING_CLIENT_ID", raising=False)
-        monkeypatch.delenv("BENCHLING_CLIENT_SECRET", raising=False)
-
-        with pytest.raises(ValueError, match="Failed to resolve Benchling secrets"):
+    def test_config_fails_without_environment_variables(self, monkeypatch):
+        """Test that Config raises error when QuiltStackARN or BenchlingSecret is missing."""
+        # isolate_environment fixture already clears all env vars
+        with pytest.raises(
+            ValueError,
+            match="Missing required environment variables: QuiltStackARN and BenchlingSecret",
+        ):
             get_config()
-
-    @pytest.mark.local
-    def test_config_priority_benchling_secrets_over_individual(self, monkeypatch, minimal_env_vars):
-        """Test BENCHLING_SECRETS takes priority over individual vars."""
-        # Set both
-        json_str = json.dumps({"tenant": "json-tenant", "clientId": "json-id", "clientSecret": "json-secret"})
-        monkeypatch.setenv("BENCHLING_SECRETS", json_str)
-        monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
-        monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
-        monkeypatch.setenv("BENCHLING_CLIENT_SECRET", "env-secret")
-
-        config = get_config()
-
-        # Should use BENCHLING_SECRETS (JSON)
-        assert config.benchling_tenant == "json-tenant"
 
 
 def test_cdk_environment_variables_match_config():
