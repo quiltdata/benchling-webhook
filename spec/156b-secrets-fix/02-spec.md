@@ -1,23 +1,15 @@
-# Spec 165b: Secrets-Only Mode Deployment Fix
+# Spec: Secrets-Only Mode Deployment Fix
 
-**Status**: ✅ Complete
+**Spec**: 165b
 **Date**: 2025-11-01
+**Status**: ✅ Implemented
 **Related**: Spec 156a (Secrets-Only Architecture)
-**Branch**: `156-secrets-manager`
-**Commits**: `f47b04c`, `8a800b8`
 
 ## Executive Summary
 
 Fixed ECS Circuit Breaker deployment failure by removing "legacy mode" from production code and ensuring both production and tests use **identical secrets-only mode code paths**.
 
-### The Problem
-
-`npm run cdk:dev` was failing with ECS Circuit Breaker triggered because:
-1. It was attempting to deploy using "legacy mode" (10+ environment variables)
-2. Legacy mode was **never meant to be deployed** - it was only for test backward compatibility
-3. Python config had broken code paths in legacy mode (environment variable mismatches)
-
-### The Solution
+### Solution
 
 1. **Updated `cdk:dev` to use secrets-only mode** with AWS Secrets Manager
 2. **Removed legacy mode entirely from Python config** - now ONLY supports secrets-only mode
@@ -28,135 +20,16 @@ Fixed ECS Circuit Breaker deployment failure by removing "legacy mode" from prod
 ✅ Production and tests now use **THE EXACT SAME CODE PATH**
 ✅ Only 2 environment variables needed: `QuiltStackARN` + `BenchlingSecret`
 ✅ All configuration automatically resolved from AWS
-✅ Simpler, clearer, more maintainable code
-
----
+✅ Simpler, clearer, more maintainable code (-15 lines total)
 
 ## Table of Contents
 
-1. [Problem Statement](#problem-statement)
-2. [Root Cause Analysis](#root-cause-analysis)
-3. [Solution Design](#solution-design)
-4. [Implementation](#implementation)
-5. [Testing Strategy](#testing-strategy)
-6. [Deployment](#deployment)
-7. [Migration Guide](#migration-guide)
-
----
-
-## Problem Statement
-
-### Symptoms
-
-When running `npm run cdk:dev`, deployment failed after ~4.5 minutes with:
-
-```
-CREATE_FAILED | AWS::ECS::Service | FargateServiceECC8084D
-Error: ECS Deployment Circuit Breaker was triggered
-```
-
-### Investigation Results
-
-1. **Infrastructure created successfully**: VPC, Load Balancer, Task Definition ✅
-2. **Only ECS service failed**: Container startup issue ❌
-3. **No container logs available**: Log group deleted during rollback
-4. **CloudFormation rolled back**: Stack in `ROLLBACK_COMPLETE` state
-
-### Initial Hypotheses (from spec 156a)
-
-From [spec/156a-secrets-only/06-testing-results.md](../156a-secrets-only/06-testing-results.md):
-
-1. Environment variable mismatch (most likely)
-2. Health check timeout too short
-3. Secrets Manager format or access issue
-4. Python dependencies missing
-
----
-
-## Root Cause Analysis
-
-### Discovery Process
-
-1. **Read deployment context** from `NEXT_SESSION_PROMPT.md`
-2. **Examined source code** - found mismatch in how secrets are configured
-3. **Asked critical question**: "WHY DO WE EVEN HAVE A LEGACY MODE?"
-4. **Reviewed requirements** - discovered legacy mode is **test-only**
-
-### Root Cause
-
-From [spec/156a-secrets-only/01-requirements.md:96-105](../156a-secrets-only/01-requirements.md#L96-L105):
-
-```markdown
-### R7: Backward Compatibility NOT Required
-
-This is a **breaking change**. The new architecture does NOT need to maintain
-backward compatibility with:
-- Individual Benchling environment variables
-- Multiple configuration sources
-- .env file inference for deployed containers
-
-Backward compatibility is ONLY required for:
-- Local mock testing (non-Docker)
-- Test suite behavior
-```
-
-**The smoking gun**: Legacy mode was NEVER meant to be deployed!
-
-### Why Legacy Mode Failed
-
-In legacy mode, the Python application's `config.py`:
-
-```python
-def _load_from_env_vars(self):
-    # ... set basic config from env vars ...
-
-    # Resolve Benchling secrets using the secrets resolver
-    secrets = resolve_benchling_secrets(self.aws_region)  # ❌ This fails
-```
-
-The `resolve_benchling_secrets()` function expects:
-- Either `BENCHLING_SECRETS` environment variable (JSON or ARN)
-- Or ALL THREE: `BENCHLING_TENANT`, `BENCHLING_CLIENT_ID`, `BENCHLING_CLIENT_SECRET`
-
-But the CDK stack in legacy mode:
-- Sets `BENCHLING_TENANT` as environment variable ✅
-- Sets `BENCHLING_CLIENT_ID`, `BENCHLING_CLIENT_SECRET` as ECS Secrets ✅
-- But `secrets_resolver.py` checks if all are present **before** trying to use them ❌
-
-**Result**: Container fails to start because config initialization fails.
-
-### Why Was `cdk:dev` Using Legacy Mode?
-
-Looking at [bin/cdk-dev.js](../../bin/cdk-dev.js#L239):
-
-```javascript
-// OLD (before fix):
-run(`npm run cli -- --image-tag ${imageTag} --yes`);
-
-// This calls the CLI WITHOUT --quilt-stack-arn or --benchling-secret
-// So deploy command falls back to legacy mode
-```
-
-From [bin/commands/deploy.ts:39-48](../../bin/commands/deploy.ts#L39-L48):
-
-```typescript
-// Detect deployment mode
-const quiltStackArn = options.quiltStackArn || process.env.QUILT_STACK_ARN;
-const benchlingSecret = options.benchlingSecret || process.env.BENCHLING_SECRET;
-const useSecretsOnlyMode = !!(quiltStackArn && benchlingSecret);
-
-if (useSecretsOnlyMode) {
-    return await deploySecretsOnlyMode(...);
-}
-
-// ❌ Falls back to legacy mode if parameters not provided
-```
-
-### The Fundamental Problem
-
-**We were testing one thing (secrets-only mode with mocked AWS) but deploying another (legacy mode with real AWS).**
-
-This violated the core principle: **Production and tests must use the SAME code path.**
+1. [Solution Design](#solution-design)
+2. [Implementation](#implementation)
+3. [Testing](#testing)
+4. [Deployment](#deployment)
+5. [Migration Guide](#migration-guide)
+6. [Lessons Learned](#lessons-learned)
 
 ---
 
@@ -257,7 +130,7 @@ aws cloudformation describe-stacks \
 
 ### Phase 2: Update Deployment Script
 
-**File**: `bin/cdk-dev.js`
+**File**: [bin/cdk-dev.js](../../bin/cdk-dev.js)
 
 ```javascript
 // BEFORE:
@@ -274,7 +147,7 @@ run(`npm run cli -- --quilt-stack-arn ${quiltStackArn} --benchling-secret ${benc
 
 ### Phase 3: Remove Legacy Mode
 
-**File**: `docker/src/config.py`
+**File**: [docker/src/config.py](../../docker/src/config.py)
 
 ```python
 # BEFORE: ~116 lines with legacy fallback
@@ -312,7 +185,7 @@ def __post_init__(self):
 
 ### Phase 4: Update Test Fixtures
 
-**File**: `docker/tests/conftest.py`
+**File**: [docker/tests/conftest.py](../../docker/tests/conftest.py)
 
 ```python
 @pytest.fixture(scope="function")
@@ -356,7 +229,7 @@ def mock_config_resolver(monkeypatch):
 
 ### Phase 5: Update Tests
 
-**File**: `docker/tests/test_config_env_vars.py`
+**File**: [docker/tests/test_config_env_vars.py](../../docker/tests/test_config_env_vars.py)
 
 ```python
 # BEFORE: Tests with individual environment variables
@@ -395,7 +268,7 @@ Code is **simpler and shorter** despite adding comprehensive mocking!
 
 ---
 
-## Testing Strategy
+## Testing
 
 ### Unit Tests
 
@@ -642,8 +515,8 @@ with patch('src.config.ConfigResolver') as mock:
 
 ### Technical Debt
 
-1. `lib/fargate-service.ts` still has legacy mode code paths (lines 169-325)
-2. `bin/commands/deploy.ts` still has legacy deploy function (lines 49-383)
+1. [lib/fargate-service.ts:169-325](../../lib/fargate-service.ts#L169-L325) still has legacy mode code paths
+2. [bin/commands/deploy.ts:49-383](../../bin/commands/deploy.ts#L49-L383) still has legacy deploy function
 3. `docker/src/secrets_resolver.py` is no longer used in production
 
 These can be cleaned up in a future PR once secrets-only mode is fully validated.
@@ -652,6 +525,7 @@ These can be cleaned up in a future PR once secrets-only mode is fully validated
 
 ## References
 
+- **Requirements**: [01-requirements.md](./01-requirements.md)
 - **Spec 156a**: [Secrets-Only Architecture](../156a-secrets-only/)
 - **PR #160**: https://github.com/quiltdata/benchling-webhook/pull/160
 - **Branch**: `156-secrets-manager`
