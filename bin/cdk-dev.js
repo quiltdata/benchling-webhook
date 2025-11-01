@@ -230,13 +230,18 @@ async function main() {
 
   await waitForWorkflow(commitSha);
 
-  // 5. Deploy CDK stack with CI-built image tag
+  // 5. Deploy CDK stack with CI-built image tag using secrets-only mode
   console.log('');
-  console.log(`Step 5: Deploying CDK stack with CI-built image...`);
+  console.log(`Step 5: Deploying CDK stack with CI-built image (secrets-only mode)...`);
   process.chdir(path.join(__dirname, '..'));
   // Use the full version with timestamp (without 'v' prefix)
   const imageTag = devTag.replace(/^v/, '');
-  run(`npm run cli -- --image-tag ${imageTag} --yes`);
+
+  // Secrets-only mode parameters
+  const quiltStackArn = 'arn:aws:cloudformation:us-east-1:712023778557:stack/quilt-staging/e51b0c10-10c9-11ee-9b41-12fda87498a3';
+  const benchlingSecret = 'benchling-webhook-dev';
+
+  run(`npm run cli -- --quilt-stack-arn ${quiltStackArn} --benchling-secret ${benchlingSecret} --image-tag ${imageTag} --yes`);
 
   console.log('');
   console.log('✅ Development deployment complete!');
