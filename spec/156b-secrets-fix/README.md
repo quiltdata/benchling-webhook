@@ -1,109 +1,150 @@
-# Spec 165b: Secrets-Only Mode Deployment Fix
+# Incident Report: ECS Deployment Circuit Breaker Failure
 
-**Status**: ✅ Complete
+**Spec**: 156b
 **Date**: 2025-11-01
-**Related**: Spec 156a (Secrets-Only Architecture)
+**Status**: Incident Resolved, Requirements Documented
+**Related**: Spec 156a (Secrets-Only Architecture), GitHub Issue #156
 **Branch**: `156-secrets-manager`
-**Commits**: `f47b04c`, `8a800b8`
 
-## Overview
+## Incident Summary
 
-Fixed ECS Circuit Breaker deployment failure by removing "legacy mode" from production code and ensuring both production and tests use **identical secrets-only mode code paths**.
+### What Went Wrong
 
-### Problem
+On 2025-11-01, deployment via `npm run cdk:dev` failed with ECS Circuit Breaker triggered after ~4.5 minutes:
 
-`npm run cdk:dev` was failing because:
-1. It was attempting to deploy using "legacy mode" (10+ environment variables)
-2. Legacy mode was **never meant to be deployed** - it was only for test backward compatibility
-3. Python config had broken code paths in legacy mode
+```text
+CREATE_FAILED | AWS::ECS::Service | FargateServiceECC8084D
+Error: ECS Deployment Circuit Breaker was triggered
+```
 
-### Solution
+**Observations**:
 
-1. **Updated `cdk:dev` to use secrets-only mode** with AWS Secrets Manager
-2. **Removed legacy mode entirely from Python config** - now ONLY supports secrets-only mode
-3. **Updated tests to mock `ConfigResolver`** - tests use same code path as production
+- Infrastructure resources created successfully (VPC, Load Balancer, Task Definition) ✅
+- ECS service failed to start containers ❌
+- No container logs available (log group deleted during rollback)
+- CloudFormation stack in `ROLLBACK_COMPLETE` state
 
-### Result
+### Root Cause
 
-✅ Production and tests now use **THE EXACT SAME CODE PATH**
-✅ Only 2 environment variables needed: `QuiltStackARN` + `BenchlingSecret`
-✅ All configuration automatically resolved from AWS
-✅ Simpler, clearer, more maintainable code (-15 lines)
+The deployment script `bin/cdk-dev.js` was deploying using **legacy mode** (10+ individual environment variables) instead of **secrets-only mode** (2 AWS parameters).
+
+**Key Problem**: We were testing secrets-only mode with mocked AWS, but deploying legacy mode with real AWS - two completely different code paths. Production and tests were divergent.
+
+### Why It Failed
+
+In legacy mode, the Python application tries to load individual environment variables like `BENCHLING_TENANT`, `BENCHLING_CLIENT_ID`, etc. However:
+
+1. The CDK stack was only partially configured for legacy mode
+2. Some variables were passed as environment variables, others as ECS Secrets
+3. The configuration resolver couldn't find all required values
+4. Container startup failed due to configuration initialization errors
+
+**Fundamental Issue**: Legacy mode was never intended for production deployment - it existed only for backward-compatible testing with environment variables.
+
+## Suggested Fix
+
+### The Solution
+
+Implement GitHub Issue #156's vision completely:
+
+1. **Store all 11 runtime parameters in AWS Secrets Manager** (not just 4 Benchling credentials)
+2. **Require only 2 environment variables** for container startup:
+   - `QuiltStackARN` - CloudFormation stack containing Quilt infrastructure
+   - `BenchlingSecret` - Secrets Manager secret containing all 11 runtime parameters
+3. **Remove legacy mode entirely** from production code
+4. **Make production and test code paths identical** via mocked `ConfigResolver`
+
+### What This Achieves
+
+- **Maximum simplicity**: 2 inputs instead of 10+
+- **Full customizability**: All 11 parameters configurable via secret without code changes
+- **Testability**: Mock at AWS boundary, not environment variables
+- **Single code path**: Production and tests execute identical logic
+
+## Current Status vs Requirements
+
+### What's Implemented (Commits `f47b04c`, `8a800b8`)
+
+✅ Removed legacy mode from Python config
+✅ Updated `cdk:dev` to pass secrets-only parameters
+✅ Tests use mocked `ConfigResolver` (same code path as production)
+✅ Deployment working with 2 environment variables
+
+### What's NOT Yet Aligned with Issue #156
+
+❌ Secret only stores 4 Benchling credentials (not all 11 parameters)
+❌ Other parameters use hardcoded defaults (can't customize without code changes)
+❌ `USER_BUCKET` comes from CloudFormation (should be in secret per issue)
+❌ `PKG_PREFIX`, `PKG_KEY`, `LOG_LEVEL` hardcoded (should be in secret per issue)
+❌ `WEBHOOK_ALLOW_LIST`, `ECR_REPOSITORY_NAME` not implemented
 
 ## Documents
 
-This specification is split into two documents:
+This incident report references two documents:
 
-1. **[Requirements](./01-requirements.md)** - Problem statement, requirements, success criteria, breaking changes
-2. **[Spec](./02-spec.md)** - Solution design, implementation details, testing, deployment, migration guide
+1. **[01-requirements.md](./01-requirements.md)** - Complete requirements from GitHub Issue #156
+2. **[02-spec.md](./02-spec.md)** - Behavioral specification of what must be done (no code)
 
-## Quick Links
+## Issue #156: The Complete Vision
 
-### Key Sections
+GitHub Issue #156 describes a **3-component architecture**:
 
-- **Problem Analysis**: [Requirements → Problem Statement](./01-requirements.md#problem-statement)
-- **Requirements**: [Requirements → Requirements](./01-requirements.md#requirements)
-- **Solution Design**: [Spec → Solution Design](./02-spec.md#solution-design)
-- **Implementation**: [Spec → Implementation](./02-spec.md#implementation)
-- **Testing**: [Spec → Testing](./02-spec.md#testing)
-- **Migration Guide**: [Spec → Migration Guide](./02-spec.md#migration-guide)
-- **Lessons Learned**: [Spec → Lessons Learned](./02-spec.md#lessons-learned)
+### A. Benchling Secret (11 Runtime Parameters)
 
-### Critical Information
+All runtime configuration stored in AWS Secrets Manager secret:
 
-- **Breaking Changes**: [Requirements → Breaking Changes](./01-requirements.md#breaking-changes)
-- **Success Criteria**: [Requirements → Success Criteria](./01-requirements.md#success-criteria)
-- **Deployment Steps**: [Spec → Deployment](./02-spec.md#deployment)
-- **Files Changed**: [Spec → Files Changed Summary](./02-spec.md#files-changed-summary)
+| Parameter | Description |
+|-----------|-------------|
+| `CLIENT_ID` | OAuth client ID from Benchling app |
+| `CLIENT_SECRET` | OAuth client secret from Benchling app |
+| `TENANT` | Benchling subdomain |
+| `APP_DEFINITION_ID` | App definition ID for webhook verification |
+| `ECR_REPOSITORY_NAME` | Custom ECR repo name |
+| `ENABLE_WEBHOOK_VERIFICATION` | Verify webhook signatures |
+| `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
+| `PKG_PREFIX` | Quilt package name prefix |
+| `PKG_KEY` | Metadata key for linking entries to packages |
+| `USER_BUCKET` | S3 bucket for Benchling exports |
+| `WEBHOOK_ALLOW_LIST` | Comma-separated IP allowlist |
 
-## Implementation Summary
+### B. Docker Container (2 Environment Variables)
 
-### Files Changed
+Container extracts all 11 runtime parameters from just 2 inputs:
 
-| File | Change |
-|------|--------|
-| [docker/src/config.py](../../docker/src/config.py) | -32 lines (removed legacy mode) |
-| [docker/tests/conftest.py](../../docker/tests/conftest.py) | +46 lines (added mock fixture) |
-| [docker/tests/test_config_env_vars.py](../../docker/tests/test_config_env_vars.py) | -34 lines (updated tests) |
-| [bin/cdk-dev.js](../../bin/cdk-dev.js) | +5 lines (added parameters) |
-| **Total** | **-15 lines (-2.4%)** |
+1. `QuiltStackARN` - CloudFormation stack ARN
+2. `BenchlingSecret` - Secrets Manager secret name
 
-### Commits
+The container's `ConfigResolver`:
 
-- **`f47b04c`**: fix: switch cdk:dev to use secrets-only mode deployment
-- **`8a800b8`**: refactor: remove legacy mode, use secrets-only everywhere
+- Parses CloudFormation ARN to get region/account
+- Fetches stack outputs (if needed for additional infrastructure details)
+- Fetches all 11 parameters from Secrets Manager
+- Assembles complete configuration
 
-### Test Results
+### C. Webhook Process
 
-```bash
-$ pytest docker/tests/test_config_env_vars.py -v
-============================== 4 passed in 0.07s ==============================
-```
-
-## Related Documentation
-
-- **Spec 156a**: [Secrets-Only Architecture](../156a-secrets-only/) - Original architecture design
-- **Issue #156**: [GitHub Issue](https://github.com/quiltdata/benchling-webhook/issues/156)
-- **PR #160**: [Pull Request](https://github.com/quiltdata/benchling-webhook/pull/160)
-
-## Status
-
-- ✅ Requirements documented
-- ✅ Specification complete
-- ✅ Implementation complete
-- ✅ Unit tests passing
-- ⏳ Deployment pending
-- ⏳ Integration testing pending
+Calls Benchling and Amazon APIs to generate packages and canvases using resolved configuration.
 
 ## Next Steps
 
-1. Deploy to development environment (`npm run cdk:dev`)
-2. Verify health and config endpoints
-3. Review and merge PR #160
-4. Deploy to production
-5. Optional: Clean up legacy CDK code paths
+1. **Complete requirements analysis** - Document all 11 parameters from Issue #156 in [01-requirements.md](./01-requirements.md)
+2. **Write behavioral specification** - Describe what must happen (not how) in [02-spec.md](./02-spec.md)
+3. **Implement missing parameters** - Store all 11 in secret, not just 4
+4. **Update ConfigResolver** - Read all parameters from secret
+5. **Verify Make targets** - Ensure `npm run test`, `npm run docker:test`, `npm run cdk:dev` work as described
+6. **Deploy and validate** - Test with real AWS resources
+
+## References
+
+- **GitHub Issue**: <https://github.com/quiltdata/benchling-webhook/issues/156>
+- **Spec 156a**: [Original secrets-only architecture design](../156a-secrets-only/)
+- **Branch**: `156-secrets-manager`
+- **Commits (Partial Fix)**:
+  - `f47b04c` - fix: switch cdk:dev to use secrets-only mode deployment
+  - `8a800b8` - refactor: remove legacy mode, use secrets-only everywhere
 
 ---
 
+**Report Status**: Complete
 **Last Updated**: 2025-11-01
-**Document Version**: 1.0
+**Next Action**: Rewrite requirements and specification to match Issue #156
