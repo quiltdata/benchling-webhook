@@ -67,6 +67,7 @@
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
     "aws-cdk": "2.1031.1",
+    "aws-sdk-client-mock": "^4.1.0",
     "dotenv": "^17.2.3",
     "esbuild": "0.25.11",
     "eslint": "^9.22.0",
@@ -79,6 +80,7 @@
   "dependencies": {
     "@aws-sdk/client-cloudformation": "^3.920.0",
     "@aws-sdk/client-s3": "^3.758.0",
+    "@aws-sdk/client-secrets-manager": "^3.922.0",
     "adm-zip": "^0.5.10",
     "aws-cdk-lib": "2.221.1",
     "aws-sdk": "^2.1574.0",
