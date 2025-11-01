@@ -1,299 +1,340 @@
-# Requirements: Secrets-Only Mode Deployment Fix
+# Requirements: Secrets Manager Architecture
 
-**Spec**: 165b
+**Spec**: 156b
 **Date**: 2025-11-01
-**Status**: ✅ Complete
-**Related**: Spec 156a (Secrets-Only Architecture)
+**Status**: In Progress
+**Related**: GitHub Issue #156, Spec 156a (Secrets-Only Architecture)
 
-## Problem Statement
+## Objective
 
-### Current Situation
+Redesign the Benchling webhook for **maximum simplicity, testability, and modifiability** by splitting configuration into three distinct components as described in GitHub Issue #156.
 
-`npm run cdk:dev` fails during ECS deployment with Circuit Breaker triggered after ~4.5 minutes:
+## Architecture Overview
 
-```
-CREATE_FAILED | AWS::ECS::Service | FargateServiceECC8084D
-Error: ECS Deployment Circuit Breaker was triggered
-```
+### Three-Component Design
 
-**Observations**:
-- Infrastructure creates successfully (VPC, Load Balancer, Task Definition) ✅
-- Only ECS service fails (container startup issue) ❌
-- No container logs available (log group deleted during rollback)
-- CloudFormation in `ROLLBACK_COMPLETE` state
+#### A. Benchling Secret (AWS Secrets Manager)
 
-### Root Cause
+A single AWS Secrets Manager secret containing **all 11 runtime parameters**.
 
-The deployment script `bin/cdk-dev.js` was deploying in **legacy mode** (10+ environment variables) instead of **secrets-only mode** (2 parameters).
+**Required Parameters**:
 
-From [spec/156a-secrets-only/01-requirements.md:96-105](../156a-secrets-only/01-requirements.md#L96-L105):
+| Parameter | Type | Example | Description |
+|-----------|------|---------|-------------|
+| `APP_DEFINITION_ID` | string | `appdef_wqFfaXBVMu` | App definition ID for webhook verification |
+| `CLIENT_ID` | string | `wqFfVOhbYe` | OAuth client ID from Benchling app |
+| `CLIENT_SECRET` | string | `6NUPNtpWP7f...` | OAuth client secret from Benchling app |
+| `ECR_REPOSITORY_NAME` | string | `quiltdata/benchling` | Custom ECR repository name |
+| `ENABLE_WEBHOOK_VERIFICATION` | boolean/string | `true` | Verify webhook signatures |
+| `LOG_LEVEL` | string | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
+| `PKG_PREFIX` | string | `benchling` | Quilt package name prefix |
+| `PKG_KEY` | string | `experiment_id` | Metadata key for linking entries to packages |
+| `TENANT` | string | `quilt-dtt` | Benchling subdomain (e.g., `myorg` from `myorg.benchling.com`) |
+| `USER_BUCKET` | string | `my-s3-bucket` | S3 bucket for Benchling exports |
+| `WEBHOOK_ALLOW_LIST` | string | `` | Comma-separated IP allowlist (empty for no restrictions) |
 
-> **R7: Backward Compatibility NOT Required**
->
-> Backward compatibility is ONLY required for:
-> - Local mock testing (non-Docker)
-> - Test suite behavior
+**Note**: All 11 parameters MUST be stored in the Benchling secret. The application MUST NOT use hardcoded defaults for any of these values.
 
-**Legacy mode was never meant to be deployed to production.**
+#### B. Docker Container (2 Environment Variables)
 
-### Why Legacy Mode Failed
+The container extracts all 11 runtime parameters from just **2 environment variable inputs**:
 
-In legacy mode, Python's `config.py` tries to load individual environment variables, but the CDK stack configuration was incomplete:
+1. **`QuiltStackARN`** - CloudFormation stack ARN containing Quilt infrastructure
+   - Example: `arn:aws:cloudformation:us-east-1:712023778557:stack/quilt-staging/e51b0c10-10c9-11ee-9b41-12fda87498a3`
+   - Purpose: Provides AWS region, account, and access to CloudFormation outputs (if needed)
 
-- Sets `BENCHLING_TENANT` as environment variable ✅
-- Sets `BENCHLING_CLIENT_ID`, `BENCHLING_CLIENT_SECRET` as ECS Secrets ✅
-- But `secrets_resolver.py` needs ALL THREE as environment variables OR the `BENCHLING_SECRETS` parameter ❌
+2. **`BenchlingSecret`** - AWS Secrets Manager secret name containing all 11 runtime parameters
+   - Example: `benchling-webhook-dev`
+   - Purpose: Contains all application configuration
 
-**Result**: Container fails to start because config initialization fails.
+The container's configuration resolver MUST:
 
-### The Fundamental Problem
+- Parse the CloudFormation ARN to extract region and account
+- Fetch CloudFormation stack outputs (for infrastructure details like SQS queue, database)
+- Fetch all 11 runtime parameters from the Benchling secret
+- Assemble complete application configuration
+- Fail fast with clear error messages if any required parameter is missing
 
-**We were testing one thing (secrets-only mode with mocked AWS) but deploying another (legacy mode with real AWS).**
+#### C. Webhook Process
 
-This violated the core principle: **Production and tests must use the SAME code path.**
+The webhook process uses the resolved configuration to call Benchling and Amazon APIs to generate packages and canvases.
 
 ## Requirements
 
-### R1: Single Code Path ⭐ CRITICAL
+### R1: Single Configuration Source (CRITICAL)
 
-Production and tests MUST execute identical code paths.
-
-**Acceptance Criteria**:
-- ✅ Production uses `ConfigResolver.resolve()` with real AWS APIs
-- ✅ Tests use `ConfigResolver.resolve()` with mocked AWS APIs
-- ✅ Both paths initialize `Config` class identically
-- ✅ No conditional logic based on deployment mode
-
-**Rationale**: Divergent code paths lead to bugs that only appear in production.
-
-### R2: Remove Legacy Mode from Production
-
-Python `config.py` MUST NOT support individual environment variables in production.
+All runtime parameters MUST be stored in the Benchling secret in AWS Secrets Manager.
 
 **Acceptance Criteria**:
-- ✅ Remove `_load_from_env_vars()` method from `docker/src/config.py`
-- ✅ Remove imports of `secrets_resolver` module
-- ✅ `Config.__post_init__()` requires `QuiltStackARN` and `BenchlingSecret`
-- ✅ Clear error message when environment variables are missing
 
-**Rationale**: Legacy mode was only for backward-compatible testing, not production deployment.
+- All 11 parameters listed in section A are stored in the secret as JSON
+- The application reads ALL configuration from the secret (no hardcoded defaults)
+- Users can change any parameter by updating the secret (no code changes required)
+- The secret follows a documented JSON schema
 
-### R3: Update Deployment Script
+**Rationale**: Issue #156 specifies that all runtime parameters must be in the secret for maximum simplicity and modifiability.
 
-`bin/cdk-dev.js` MUST deploy using secrets-only mode.
+### R2: Two Environment Variables Only
 
-**Acceptance Criteria**:
-- ✅ Pass `--quilt-stack-arn` parameter to deploy command
-- ✅ Pass `--benchling-secret` parameter to deploy command
-- ✅ Use existing AWS Secrets Manager secret (`benchling-webhook-dev`)
-- ✅ Use existing Quilt CloudFormation stack ARN
-
-**Rationale**: Deployment script must match production configuration requirements.
-
-### R4: Update Test Fixtures
-
-Tests MUST use mocked `ConfigResolver` instead of environment variables.
+The container MUST require exactly 2 environment variables at startup.
 
 **Acceptance Criteria**:
-- ✅ Create `mock_config_resolver` fixture in `conftest.py`
-- ✅ Mock `ConfigResolver.resolve()` to return test configuration
-- ✅ Set `QuiltStackARN` and `BenchlingSecret` environment variables in fixture
-- ✅ All config tests use the fixture
 
-**Rationale**: Tests must execute the same code path as production.
+- Container fails immediately if `QuiltStackARN` is not set
+- Container fails immediately if `BenchlingSecret` is not set
+- Container MUST NOT read any other environment variables for runtime configuration
+- Error messages clearly state which variables are missing
 
-### R5: Backward Compatibility for Tests
+**Rationale**: Simplicity - 2 inputs instead of 10+.
 
-Tests MUST continue to pass without requiring AWS credentials.
+### R3: Configuration Resolver
+
+The application MUST have a configuration resolver that fetches and assembles complete configuration from AWS.
 
 **Acceptance Criteria**:
-- ✅ Tests do not require real AWS API calls
-- ✅ Tests do not require `.env` files
-- ✅ Tests mock at the AWS API boundary (not environment variables)
-- ✅ All existing test assertions remain valid
 
-**Rationale**: Developer experience must not degrade - tests should run locally without AWS setup.
+- Resolver parses CloudFormation ARN to extract region and account
+- Resolver calls AWS Secrets Manager to fetch the Benchling secret
+- Resolver validates all 11 required parameters are present in the secret
+- Resolver calls CloudFormation DescribeStacks to get infrastructure outputs (queue ARN, database name, etc.)
+- Resolver assembles complete configuration object
+- Resolver caches configuration for container lifetime (no repeated AWS calls)
 
-### R6: Clear Error Messages
+**Rationale**: The container must dynamically resolve configuration from AWS services.
+
+### R4: No Legacy Mode
+
+The application MUST NOT support reading individual environment variables (legacy mode).
+
+**Acceptance Criteria**:
+
+- Remove all code that reads `BENCHLING_TENANT`, `BENCHLING_CLIENT_ID`, etc. from environment
+- Remove all code that reads `PKG_PREFIX`, `PKG_KEY`, `LOG_LEVEL` from environment
+- Only `QuiltStackARN` and `BenchlingSecret` are read from environment
+- All other configuration comes from AWS Secrets Manager
+
+**Rationale**: Legacy mode caused the deployment failure. Issue #156 specifies a clean, simple architecture with no backward compatibility.
+
+### R5: Production and Tests Use Identical Code Path
+
+Production and tests MUST execute the exact same configuration resolution logic.
+
+**Acceptance Criteria**:
+
+- Production: `ConfigResolver.resolve()` calls real AWS APIs
+- Tests: `ConfigResolver.resolve()` is mocked to return test data
+- Both execute identical application startup logic
+- No conditional code based on environment (test vs production)
+- Tests do not require AWS credentials or real AWS resources
+
+**Rationale**: Divergent code paths led to the deployment failure. Tests must validate production behavior.
+
+### R6: NPM Scripts (Make Targets)
+
+The following npm scripts MUST work as described in Issue #156:
+
+#### `npm run config` (Future)
+
+Generate the Benchling secret from `.env` file or command-line arguments.
+
+**Acceptance Criteria**:
+
+- Reads 11 parameters from `.env` file with `BENCHLING_` prefix
+- Creates or updates AWS Secrets Manager secret
+- Validates all required parameters are present
+- Outputs success message with secret ARN
+
+**Status**: Not yet implemented (future work)
+
+#### `npm run test`
+
+Unit tests the webhook process with mocks (no secrets required).
+
+**Acceptance Criteria**:
+
+- Mocks `ConfigResolver` to return test data
+- Runs all Python and TypeScript unit tests
+- Requires no AWS credentials
+- Runs successfully in CI/CD environment
+
+**Status**: Partially implemented (needs update for full 11-parameter secret)
+
+#### `npm run docker:test`
+
+Integration tests which generate the secret and run the webhook process locally via freshly built Docker container with REAL data.
+
+**Acceptance Criteria**:
+
+- Builds Docker container locally
+- Creates temporary secret in AWS Secrets Manager (or uses existing dev secret)
+- Runs container with real AWS resources
+- Validates end-to-end configuration resolution
+- Requires AWS credentials
+
+**Status**: Partially implemented
+
+#### `npm run cdk:dev`
+
+Uses CI to build a container (linux/amd64) and deploy a stack around it.
+
+**Acceptance Criteria**:
+
+- Creates dev tag (e.g., `v0.5.4-20251101T185415Z`)
+- Pushes tag to GitHub
+- Waits for CI to build Docker image (x86_64)
+- Deploys CloudFormation stack with secrets-only mode:
+  - `--quilt-stack-arn <arn>`
+  - `--benchling-secret <secret-name>`
+- Deployment succeeds without Circuit Breaker
+- ECS tasks start successfully
+
+**Status**: Partially implemented (works with 4-parameter secret, needs 11-parameter secret)
+
+### R7: Clear Error Messages
 
 Configuration errors MUST provide actionable guidance.
 
 **Acceptance Criteria**:
-- ✅ Missing environment variables show clear error message
-- ✅ Error message explains which variables are required
-- ✅ Error message links to deployment documentation
+
+- Missing environment variables show which variables are required
+- Missing secret parameters show which parameters are missing
+- Invalid CloudFormation ARN shows expected format
+- AWS permission errors suggest which permissions are needed
+- All errors include links to documentation
 
 **Example**:
-```python
-raise ValueError(
-    "Missing required environment variables for secrets-only mode.\n"
-    "Required: QuiltStackARN, BenchlingSecret\n"
-    "See: https://github.com/quiltdata/benchling-webhook#deployment"
-)
+
+```text
+❌ Configuration Error: Missing required parameters in secret 'benchling-webhook-dev'
+
+Missing: LOG_LEVEL, PKG_PREFIX, USER_BUCKET
+
+Expected secret format:
+{
+  "CLIENT_ID": "...",
+  "CLIENT_SECRET": "...",
+  "TENANT": "...",
+  "APP_DEFINITION_ID": "...",
+  "LOG_LEVEL": "INFO",
+  "PKG_PREFIX": "benchling",
+  "PKG_KEY": "experiment_id",
+  "USER_BUCKET": "my-bucket",
+  "ECR_REPOSITORY_NAME": "quiltdata/benchling",
+  "ENABLE_WEBHOOK_VERIFICATION": "true",
+  "WEBHOOK_ALLOW_LIST": ""
+}
+
+See: https://github.com/quiltdata/benchling-webhook#configuration
 ```
 
-### R7: Code Simplification
+### R8: Backward Compatibility NOT Required
 
-Changes MUST result in simpler, more maintainable code.
+Individual environment variables (legacy mode) are DEPRECATED and no longer supported.
+
+**Breaking Change**: Applications using individual environment variables MUST migrate to secrets-only mode.
 
 **Acceptance Criteria**:
-- ✅ Net reduction in lines of code
-- ✅ Fewer code paths in `config.py`
-- ✅ Single source of truth for configuration
 
-**Target**: Reduce complexity by removing dual-mode support.
+- Documentation clearly states breaking change
+- Migration guide provided
+- Legacy mode code completely removed
+
+### R9: Full Customizability
+
+Users MUST be able to customize all 11 parameters without code changes.
+
+**Acceptance Criteria**:
+
+- All parameters read from secret (not hardcoded)
+- Changing a parameter requires only updating the secret
+- No container rebuild required to change parameters
+- No code changes required to change parameters
+
+**Rationale**: Issue #156 emphasizes "modifiability" - users must be able to configure the application via the secret.
 
 ## Success Criteria
 
 ### Deployment Success
 
-1. ✅ `npm run cdk:dev` completes successfully
-2. ✅ CloudFormation creates all 36/36 resources
-3. ✅ ECS service starts without Circuit Breaker
-4. ✅ 2 tasks running and healthy
-5. ✅ Health endpoint returns `200 OK`
+1. `npm run cdk:dev` completes successfully
+2. CloudFormation creates all resources without rollback
+3. ECS service starts without Circuit Breaker
+4. 2 tasks running and healthy
+5. Health endpoint returns `200 OK`
+6. Config endpoint shows all 11 parameters from secret
 
 ### Code Quality
 
-1. ✅ All tests pass (`pytest docker/tests/`)
-2. ✅ Net reduction in total lines of code
-3. ✅ No conditional deployment mode logic in Python
-4. ✅ Clear error messages for misconfiguration
+1. All tests pass (`npm run test`)
+2. Production and tests use identical code paths
+3. No legacy mode code remains
+4. No hardcoded configuration defaults
 
 ### Documentation
 
-1. ✅ Migration guide for existing deployments
-2. ✅ Updated deployment instructions
-3. ✅ Breaking changes documented
+1. README updated with new architecture
+2. Migration guide for existing deployments
+3. Breaking changes clearly documented
+4. All 11 parameters documented with examples
+
+## Breaking Changes
+
+### Environment Variables No Longer Supported
+
+⚠️ **BREAKING**: Individual environment variables are no longer supported.
+
+**Before** (no longer works):
+
+```bash
+export BENCHLING_TENANT=test
+export BENCHLING_CLIENT_ID=test-id
+export BENCHLING_CLIENT_SECRET=test-secret
+export BENCHLING_APP_DEFINITION_ID=appdef_test
+export BENCHLING_PKG_BUCKET=test-bucket
+export BENCHLING_PKG_PREFIX=benchling
+export BENCHLING_PKG_KEY=experiment_id
+# ... etc
+```
+
+**After** (required):
+
+```bash
+export QuiltStackARN=arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123
+export BenchlingSecret=benchling-webhook-prod
+```
+
+All configuration parameters are stored in the `benchling-webhook-prod` secret in AWS Secrets Manager.
 
 ## Non-Requirements
 
 ### Out of Scope
 
-The following are explicitly **NOT** required for this fix:
+The following are explicitly **NOT** required:
 
-1. ❌ **Remove legacy mode from CDK** - Can be done in future cleanup
-2. ❌ **Remove legacy deploy command** - Can be done in future cleanup
-3. ❌ **Update all documentation** - Only update deployment guide
-4. ❌ **Secrets rotation support** - Future enhancement
-5. ❌ **Pre-deployment validation** - Future enhancement
+1. Support for legacy mode (individual environment variables)
+2. Reading configuration from `.env` files in production
+3. CloudFormation parameter overrides for individual fields
+4. Multiple secrets (all parameters in one secret)
+5. Dynamic secret rotation during runtime
 
 ### Future Work
 
-These improvements are deferred to future PRs:
+These enhancements are deferred:
 
-1. Clean up `lib/fargate-service.ts` legacy code paths (lines 169-325)
-2. Clean up `bin/commands/deploy.ts` legacy deploy function (lines 49-383)
-3. Remove unused `docker/src/secrets_resolver.py`
-4. Add pre-deployment validation (check secrets exist before deploying)
-5. Improve health checks (add dependency checks)
-
-## Breaking Changes
-
-### Python Configuration
-
-⚠️ **BREAKING**: Individual Benchling environment variables are no longer supported.
-
-**Before** (no longer works):
-```bash
-export BENCHLING_TENANT=test
-export BENCHLING_CLIENT_ID=test-id
-export BENCHLING_CLIENT_SECRET=test-secret
-```
-
-**After** (required):
-```bash
-export QuiltStackARN=arn:aws:cloudformation:region:account:stack/name/id
-export BenchlingSecret=benchling-webhook-prod
-```
-
-### Test Configuration
-
-⚠️ **BREAKING**: Tests must use `mock_config_resolver` fixture.
-
-**Before** (no longer works):
-```python
-def test_config(monkeypatch):
-    monkeypatch.setenv("BENCHLING_TENANT", "test")
-    config = get_config()
-```
-
-**After** (required):
-```python
-def test_config(mock_config_resolver):
-    config = get_config()  # Uses mocked resolver
-```
-
-## Dependencies
-
-### AWS Resources Required
-
-1. **Benchling Secret** in AWS Secrets Manager
-   - Name: `benchling-webhook-dev` (development)
-   - Contains: `client_id`, `client_secret`, `tenant`, `app_definition_id`
-   - Created: 2025-11-01
-
-2. **Quilt CloudFormation Stack**
-   - Stack: `quilt-staging` (development)
-   - ARN: `arn:aws:cloudformation:us-east-1:712023778557:stack/quilt-staging/e51b0c10-10c9-11ee-9b41-12fda87498a3`
-   - Contains: S3 bucket, SQS queue, RDS database outputs
-
-### Permissions Required
-
-Deployment requires AWS permissions for:
-- `secretsmanager:GetSecretValue` on Benchling secret
-- `cloudformation:DescribeStacks` on Quilt stack
-- `ecs:*` for ECS service management
-- `ecr:*` for Docker image push
-
-## Validation
-
-### Pre-Deployment Checklist
-
-- ✅ Benchling secret exists in AWS Secrets Manager
-- ✅ Quilt stack is deployed and accessible
-- ✅ AWS credentials configured with appropriate permissions
-- ✅ All unit tests passing
-- ✅ Docker image builds successfully
-
-### Post-Deployment Verification
-
-1. **Health Check**:
-   ```bash
-   curl http://<alb-dns>/health
-   # Expected: {"status": "healthy", "config_source": "secrets-only-mode"}
-   ```
-
-2. **Config Endpoint**:
-   ```bash
-   curl http://<alb-dns>/config
-   # Expected: {"mode": "secrets-only", ...}
-   ```
-
-3. **ECS Service**:
-   ```bash
-   aws ecs describe-services --cluster benchling-webhook --services benchling-webhook
-   # Expected: runningCount: 2, desiredCount: 2
-   ```
-
-4. **Container Logs**:
-   ```bash
-   aws logs tail /aws/ecs/benchling-webhook --follow
-   # Expected: "Starting Benchling webhook processor..."
-   ```
-
-## Timeline
-
-- **Requirements**: 2025-11-01 (this document)
-- **Implementation**: 2025-11-01 (commits `f47b04c`, `8a800b8`)
-- **Testing**: 2025-11-01 (all tests passing)
-- **Deployment**: Pending (ready for `npm run cdk:dev`)
+1. `npm run config` command to generate secrets from `.env`
+2. Pre-deployment validation (check secrets exist before deploying)
+3. Secrets rotation support with graceful reload
+4. Configuration validation at startup (schema validation)
+5. Configuration diff tool (compare running config vs secret)
 
 ## References
 
-- **Spec 156a**: [Secrets-Only Architecture](../156a-secrets-only/)
-- **Issue #156**: https://github.com/quiltdata/benchling-webhook/issues/156
+- **GitHub Issue #156**: <https://github.com/quiltdata/benchling-webhook/issues/156>
+- **Spec 156a**: [Original secrets-only architecture design](../156a-secrets-only/)
 - **Branch**: `156-secrets-manager`
-- **Commits**:
-  - `f47b04c`: fix: switch cdk:dev to use secrets-only mode deployment
-  - `8a800b8`: refactor: remove legacy mode, use secrets-only everywhere
+
+---
+
+**Document Status**: Complete
+**Last Updated**: 2025-11-01
+**Next**: Write behavioral specification in [02-spec.md](./02-spec.md)
