@@ -12,14 +12,25 @@ import { Construct } from "constructs";
 export interface FargateServiceProps {
     readonly vpc: ec2.IVpc;
     readonly bucket: s3.IBucket;
-    readonly queueArn: string;
     readonly region: string;
     readonly account: string;
-    readonly prefix: string;
-    readonly pkgKey: string;
-    readonly benchlingClientId: string;
-    readonly benchlingClientSecret: string;
-    readonly benchlingTenant: string;
+    readonly ecrRepository: ecr.IRepository;
+    readonly imageTag?: string;
+    readonly stackVersion?: string;
+    readonly logLevel?: string;
+    readonly enableWebhookVerification?: string;
+
+    // Secrets-only mode (v0.6.0+)
+    readonly quiltStackArn?: string;
+    readonly benchlingSecret?: string;
+
+    // Legacy mode (DEPRECATED)
+    readonly queueArn?: string;
+    readonly prefix?: string;
+    readonly pkgKey?: string;
+    readonly benchlingClientId?: string;
+    readonly benchlingClientSecret?: string;
+    readonly benchlingTenant?: string;
     readonly benchlingAppDefinitionId?: string;
     /**
      * Consolidated Benchling secrets as JSON string.
@@ -27,14 +38,9 @@ export interface FargateServiceProps {
      * Otherwise, individual environment variables (BENCHLING_TENANT) and secrets (BENCHLING_CLIENT_ID, BENCHLING_CLIENT_SECRET) are used.
      */
     readonly benchlingSecrets?: string;
-    readonly quiltCatalog: string;
-    readonly quiltDatabase: string;
-    readonly webhookAllowList: string;
-    readonly ecrRepository: ecr.IRepository;
-    readonly imageTag?: string;
-    readonly stackVersion?: string;
-    readonly logLevel?: string;
-    readonly enableWebhookVerification?: string;
+    readonly quiltCatalog?: string;
+    readonly quiltDatabase?: string;
+    readonly webhookAllowList?: string;
 }
 
 export class FargateService extends Construct {
@@ -81,27 +87,120 @@ export class FargateService extends Construct {
 
         // Note: ECR pull permissions will be automatically granted by fromEcrRepository()
 
+        // Determine which mode we're using
+        const useSecretsOnlyMode = !!(props.quiltStackArn && props.benchlingSecret);
+
         // Create IAM Task Role (for the container to access AWS services)
         const taskRole = new iam.Role(this, "TaskRole", {
             assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
         });
 
-        // Grant S3 bucket access to task role
-        props.bucket.grantReadWrite(taskRole);
+        // In secrets-only mode, grant permissions for CloudFormation and Secrets Manager
+        if (useSecretsOnlyMode) {
+            // Grant CloudFormation read access (to query stack outputs)
+            taskRole.addToPolicy(
+                new iam.PolicyStatement({
+                    actions: [
+                        "cloudformation:DescribeStacks",
+                        "cloudformation:DescribeStackResources",
+                    ],
+                    resources: [props.quiltStackArn!],
+                }),
+            );
 
-        // Grant SQS access to task role using the actual ARN
-        taskRole.addToPolicy(
-            new iam.PolicyStatement({
-                actions: [
-                    "sqs:SendMessage",
-                    "sqs:GetQueueUrl",
-                    "sqs:GetQueueAttributes",
-                ],
-                resources: [props.queueArn],
-            }),
-        );
+            // Grant Secrets Manager read access (to fetch Benchling credentials)
+            // Allow both name and ARN formats
+            taskRole.addToPolicy(
+                new iam.PolicyStatement({
+                    actions: [
+                        "secretsmanager:GetSecretValue",
+                        "secretsmanager:DescribeSecret",
+                    ],
+                    resources: [
+                        // Support both secret name and ARN
+                        `arn:aws:secretsmanager:${props.region}:${props.account}:secret:${props.benchlingSecret}*`,
+                    ],
+                }),
+            );
 
-        // Grant Athena access to task role for package querying
+            // Grant wildcard S3 access (bucket name will be resolved at runtime)
+            taskRole.addToPolicy(
+                new iam.PolicyStatement({
+                    actions: [
+                        "s3:GetObject",
+                        "s3:PutObject",
+                        "s3:ListBucket",
+                    ],
+                    resources: [
+                        "arn:aws:s3:::*",
+                    ],
+                }),
+            );
+
+            // Grant wildcard SQS access (queue ARN will be resolved at runtime)
+            taskRole.addToPolicy(
+                new iam.PolicyStatement({
+                    actions: [
+                        "sqs:SendMessage",
+                        "sqs:GetQueueUrl",
+                        "sqs:GetQueueAttributes",
+                    ],
+                    resources: [
+                        `arn:aws:sqs:${props.region}:${props.account}:*`,
+                    ],
+                }),
+            );
+
+            // Grant wildcard Glue access (database name will be resolved at runtime)
+            taskRole.addToPolicy(
+                new iam.PolicyStatement({
+                    actions: [
+                        "glue:GetDatabase",
+                        "glue:GetTable",
+                        "glue:GetPartitions",
+                    ],
+                    resources: [
+                        `arn:aws:glue:${props.region}:${props.account}:catalog`,
+                        `arn:aws:glue:${props.region}:${props.account}:database/*`,
+                        `arn:aws:glue:${props.region}:${props.account}:table/*`,
+                    ],
+                }),
+            );
+        } else {
+            // Legacy mode: Grant specific resource access
+            // Grant S3 bucket access to task role
+            props.bucket.grantReadWrite(taskRole);
+
+            // Grant SQS access to task role using the actual ARN
+            taskRole.addToPolicy(
+                new iam.PolicyStatement({
+                    actions: [
+                        "sqs:SendMessage",
+                        "sqs:GetQueueUrl",
+                        "sqs:GetQueueAttributes",
+                    ],
+                    resources: [props.queueArn!],
+                }),
+            );
+
+            // Grant Glue Data Catalog access (required for Athena queries)
+            taskRole.addToPolicy(
+                new iam.PolicyStatement({
+                    actions: [
+                        "glue:GetDatabase",
+                        "glue:GetTable",
+                        "glue:GetPartitions",
+                    ],
+                    resources: [
+                        `arn:aws:glue:${props.region}:${props.account}:catalog`,
+                        `arn:aws:glue:${props.region}:${props.account}:database/${props.quiltDatabase}`,
+                        `arn:aws:glue:${props.region}:${props.account}:table/${props.quiltDatabase}/*`,
+                    ],
+                }),
+            );
+        }
+
+        // Grant Athena access to task role for package querying (both modes)
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
@@ -117,24 +216,7 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Grant Glue Data Catalog access (required for Athena queries)
-        taskRole.addToPolicy(
-            new iam.PolicyStatement({
-                actions: [
-                    "glue:GetDatabase",
-                    "glue:GetTable",
-                    "glue:GetPartitions",
-                ],
-                resources: [
-                    `arn:aws:glue:${props.region}:${props.account}:catalog`,
-                    `arn:aws:glue:${props.region}:${props.account}:database/${props.quiltDatabase}`,
-                    `arn:aws:glue:${props.region}:${props.account}:table/${props.quiltDatabase}/*`,
-                ],
-            }),
-        );
-
-        // Grant S3 access for Athena query results
-        // Athena needs to write query results to an S3 bucket
+        // Grant S3 access for Athena query results (both modes)
         const athenaResultsBucketArn = `arn:aws:s3:::aws-athena-query-results-${props.account}-${props.region}`;
         taskRole.addToPolicy(
             new iam.PolicyStatement({
@@ -151,45 +233,52 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Determine which parameter mode to use
+        // Determine which parameter mode to use for legacy Benchling secrets
         // Check if the benchlingSecrets prop is provided and non-empty
-        const useNewParam = props.benchlingSecrets !== undefined &&
+        const useNewParam = !useSecretsOnlyMode && props.benchlingSecrets !== undefined &&
                            props.benchlingSecrets !== null &&
                            props.benchlingSecrets.trim() !== "";
 
-        // Create Secrets Manager secret with proper parameter handling
-        let secretValue: string;
+        // In legacy mode, create Secrets Manager secret for Benchling credentials
+        let benchlingSecret: secretsmanager.ISecret | undefined = undefined;
 
-        if (useNewParam) {
-            // New approach: Use consolidated secrets JSON
-            secretValue = props.benchlingSecrets!;
-        } else {
-            // Old approach: Build JSON from individual parameters
-            const secretData: Record<string, string> = {
-                client_id: props.benchlingClientId,
-                client_secret: props.benchlingClientSecret,
-                tenant: props.benchlingTenant,
-            };
+        if (!useSecretsOnlyMode) {
+            // Legacy mode: Create or reference Secrets Manager secret
+            let secretValue: string;
 
-            // Include app_definition_id if provided
-            if (props.benchlingAppDefinitionId) {
-                secretData.app_definition_id = props.benchlingAppDefinitionId;
+            if (useNewParam) {
+                // New approach: Use consolidated secrets JSON
+                secretValue = props.benchlingSecrets!;
+            } else {
+                // Old approach: Build JSON from individual parameters
+                const secretData: Record<string, string> = {
+                    client_id: props.benchlingClientId!,
+                    client_secret: props.benchlingClientSecret!,
+                    tenant: props.benchlingTenant!,
+                };
+
+                // Include app_definition_id if provided
+                if (props.benchlingAppDefinitionId) {
+                    secretData.app_definition_id = props.benchlingAppDefinitionId;
+                }
+
+                secretValue = JSON.stringify(secretData);
             }
 
-            secretValue = JSON.stringify(secretData);
+            // Create Secrets Manager secret for Benchling credentials
+            // Note: We still use unsafePlainText() because CloudFormation parameters are strings.
+            // The actual secret values are protected by noEcho in the parameters.
+            benchlingSecret = new secretsmanager.Secret(this, "BenchlingCredentials", {
+                secretName: "benchling-webhook/credentials",
+                description: "Benchling API credentials for webhook processor",
+                secretStringValue: cdk.SecretValue.unsafePlainText(secretValue),
+            });
+
+            // Grant read access to secrets
+            benchlingSecret.grantRead(taskRole);
         }
-
-        // Create or reference Secrets Manager secret for Benchling credentials
-        // Note: We still use unsafePlainText() because CloudFormation parameters are strings.
-        // The actual secret values are protected by noEcho in the parameters.
-        const benchlingSecret = new secretsmanager.Secret(this, "BenchlingCredentials", {
-            secretName: "benchling-webhook/credentials",
-            description: "Benchling API credentials for webhook processor",
-            secretStringValue: cdk.SecretValue.unsafePlainText(secretValue),
-        });
-
-        // Grant read access to secrets
-        benchlingSecret.grantRead(taskRole);
+        // In secrets-only mode, no CDK-created secret is needed
+        // The container will read the secret directly using the benchlingSecret parameter
 
         // Create Fargate Task Definition
         const taskDefinition = new ecs.FargateTaskDefinition(this, "TaskDefinition", {
@@ -200,16 +289,8 @@ export class FargateService extends Construct {
             family: "benchling-webhook-task",
         });
 
-        // Build environment variables based on parameter mode
-        // Note: BENCHLING_TENANT is set conditionally below based on parameter mode
+        // Build environment variables based on mode
         const environmentVars: { [key: string]: string } = {
-            QUILT_USER_BUCKET: props.bucket.bucketName,
-            QUEUE_ARN: props.queueArn,
-            PKG_PREFIX: props.prefix,
-            PKG_KEY: props.pkgKey,
-            QUILT_CATALOG: props.quiltCatalog,
-            QUILT_DATABASE: props.quiltDatabase,
-            WEBHOOK_ALLOW_LIST: props.webhookAllowList,
             AWS_REGION: props.region,
             AWS_DEFAULT_REGION: props.region,
             FLASK_ENV: "production",
@@ -218,21 +299,35 @@ export class FargateService extends Construct {
             BENCHLING_WEBHOOK_VERSION: props.stackVersion || props.imageTag || "latest",
         };
 
-        // Add Benchling configuration based on parameter mode
-        if (useNewParam) {
-            // New mode: Single consolidated secrets parameter
-            // Sets: BENCHLING_SECRETS: props.benchlingSecrets
-            environmentVars.BENCHLING_SECRETS = props.benchlingSecrets!;
+        if (useSecretsOnlyMode) {
+            // Secrets-only mode: Only pass 2 environment variables
+            // Container will query CloudFormation and Secrets Manager for everything else
+            environmentVars.QuiltStackARN = props.quiltStackArn!;
+            environmentVars.BenchlingSecret = props.benchlingSecret!;
         } else {
-            // Old mode: Individual tenant parameter
-            // Sets: BENCHLING_TENANT: props.benchlingTenant
-            environmentVars.BENCHLING_TENANT = props.benchlingTenant;
+            // Legacy mode: Pass all configuration as environment variables
+            environmentVars.QUILT_USER_BUCKET = props.bucket.bucketName;
+            environmentVars.QUEUE_ARN = props.queueArn!;
+            environmentVars.PKG_PREFIX = props.prefix!;
+            environmentVars.PKG_KEY = props.pkgKey!;
+            environmentVars.QUILT_CATALOG = props.quiltCatalog!;
+            environmentVars.QUILT_DATABASE = props.quiltDatabase!;
+            environmentVars.WEBHOOK_ALLOW_LIST = props.webhookAllowList!;
+
+            // Add Benchling configuration based on parameter mode
+            if (useNewParam) {
+                // New mode: Single consolidated secrets parameter
+                environmentVars.BENCHLING_SECRETS = props.benchlingSecrets!;
+            } else {
+                // Old mode: Individual tenant parameter
+                environmentVars.BENCHLING_TENANT = props.benchlingTenant!;
+            }
         }
 
-        // Build secrets configuration (only for old mode)
+        // Build secrets configuration (only for legacy mode with individual secrets)
         let secretsConfig: { [key: string]: ecs.Secret } | undefined = undefined;
 
-        if (!useNewParam) {
+        if (!useSecretsOnlyMode && !useNewParam && benchlingSecret) {
             // Old mode: Individual secrets from Secrets Manager
             secretsConfig = {
                 BENCHLING_CLIENT_ID: ecs.Secret.fromSecretsManager(
@@ -249,6 +344,7 @@ export class FargateService extends Construct {
                 ),
             };
         }
+        // In secrets-only mode, no ECS secrets are needed (container reads from Secrets Manager directly)
 
         // Add container with configured environment
         const container = taskDefinition.addContainer("BenchlingWebhookContainer", {

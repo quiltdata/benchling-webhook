@@ -153,9 +153,7 @@ class TestSecretsResolutionValidation:
         # 2. Mock AWS SDK (just validates code path)
         #
         # For now, we validate that the code expects the right structure
-        monkeypatch.setenv(
-            "BENCHLING_SECRETS", "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-AbCdEf"
-        )
+        monkeypatch.setenv("BENCHLING_SECRETS", "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-AbCdEf")
         monkeypatch.setenv("AWS_REGION", "us-east-2")
         monkeypatch.setenv("QUILT_USER_BUCKET", "test-bucket")
         monkeypatch.setenv("QUEUE_ARN", "arn:aws:sqs:us-east-2:123456789012:test")

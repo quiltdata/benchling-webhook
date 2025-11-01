@@ -184,7 +184,9 @@ def extract_stack_outputs(client, stack_name: str) -> Dict[str, str]:
         )
 
     except Exception as e:
-        raise ConfigResolverError(f"Unexpected error describing stack: {str(e)}", "Check AWS credentials and permissions")
+        raise ConfigResolverError(
+            f"Unexpected error describing stack: {str(e)}", "Check AWS credentials and permissions"
+        )
 
 
 def resolve_and_fetch_secret(client, region: str, secret_identifier: str) -> BenchlingSecretData:
@@ -206,7 +208,9 @@ def resolve_and_fetch_secret(client, region: str, secret_identifier: str) -> Ben
         secret_string = response.get("SecretString")
 
         if not secret_string:
-            raise ConfigResolverError("Secret does not contain string data", "Ensure secret is stored as JSON string, not binary")
+            raise ConfigResolverError(
+                "Secret does not contain string data", "Ensure secret is stored as JSON string, not binary"
+            )
 
         # Parse JSON
         import json
@@ -214,7 +218,9 @@ def resolve_and_fetch_secret(client, region: str, secret_identifier: str) -> Ben
         try:
             data = json.loads(secret_string)
         except json.JSONDecodeError as e:
-            raise ConfigResolverError("Secret contains invalid JSON", "Ensure secret value is valid JSON", f"Parse error: {str(e)}")
+            raise ConfigResolverError(
+                "Secret contains invalid JSON", "Ensure secret value is valid JSON", f"Parse error: {str(e)}"
+            )
 
         # Validate required fields
         required = ["client_id", "client_secret", "tenant"]
@@ -251,13 +257,17 @@ def resolve_and_fetch_secret(client, region: str, secret_identifier: str) -> Ben
                 f"Region: {region}",
             )
 
-        raise ConfigResolverError(f"Failed to fetch secret: {e.response['Error']['Message']}", "Check AWS credentials and permissions")
+        raise ConfigResolverError(
+            f"Failed to fetch secret: {e.response['Error']['Message']}", "Check AWS credentials and permissions"
+        )
 
     except ConfigResolverError:
         # Re-raise ConfigResolverError
         raise
     except Exception as e:
-        raise ConfigResolverError(f"Unexpected error fetching secret: {str(e)}", "Check AWS credentials and permissions")
+        raise ConfigResolverError(
+            f"Unexpected error fetching secret: {str(e)}", "Check AWS credentials and permissions"
+        )
 
 
 class ConfigResolver:
@@ -312,7 +322,9 @@ class ConfigResolver:
                 "    Example: my-benchling-creds"
             )
 
-        logger.info("Resolving configuration from AWS", quilt_stack_arn=quilt_stack_arn, benchling_secret=benchling_secret)
+        logger.info(
+            "Resolving configuration from AWS", quilt_stack_arn=quilt_stack_arn, benchling_secret=benchling_secret
+        )
 
         # Step 1: Parse stack ARN
         parsed = parse_stack_arn(quilt_stack_arn)
