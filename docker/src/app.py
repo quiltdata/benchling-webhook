@@ -125,19 +125,33 @@ def create_app():
 
     @app.route("/health/secrets", methods=["GET"])
     def secrets_health():
-        """Report secret resolution status and source."""
+        """Report secret resolution status and source (secrets-only mode)."""
         try:
-            # Determine secret source (without exposing values)
-            benchling_secrets_env = os.getenv("BENCHLING_SECRETS")
-            if benchling_secrets_env:
-                if benchling_secrets_env.startswith("arn:"):
-                    source = "secrets_manager"
+            # Secrets-only mode: Check for QuiltStackARN and BenchlingSecret
+            quilt_stack_arn = os.getenv("QuiltStackARN")
+            benchling_secret = os.getenv("BenchlingSecret")
+
+            # Determine configuration mode and source
+            if quilt_stack_arn and benchling_secret:
+                # Secrets-only mode (v0.6.0+)
+                mode = "secrets-only"
+                if benchling_secret.startswith("arn:aws:secretsmanager:"):
+                    source = "secrets_manager_arn"
                 else:
-                    source = "environment_json"
-            elif os.getenv("BENCHLING_TENANT"):
-                source = "environment_vars"
+                    source = "secrets_manager_name"
             else:
-                source = "not_configured"
+                # Legacy mode or misconfigured
+                mode = "legacy_or_misconfigured"
+                benchling_secrets_env = os.getenv("BENCHLING_SECRETS")
+                if benchling_secrets_env:
+                    if benchling_secrets_env.startswith("arn:"):
+                        source = "legacy_secrets_manager"
+                    else:
+                        source = "legacy_environment_json"
+                elif os.getenv("BENCHLING_TENANT"):
+                    source = "legacy_environment_vars"
+                else:
+                    source = "not_configured"
 
             # Check if secrets are valid
             secrets_valid = bool(
@@ -147,9 +161,11 @@ def create_app():
             return jsonify(
                 {
                     "status": "healthy" if secrets_valid else "unhealthy",
+                    "mode": mode,
                     "source": source,
                     "secrets_valid": secrets_valid,
                     "tenant_configured": bool(config.benchling_tenant),
+                    "quilt_stack_configured": bool(quilt_stack_arn),
                 }
             )
         except Exception as e:
