@@ -71,7 +71,7 @@
     "aws-cdk": "2.1031.1",
     "aws-sdk-client-mock": "^4.1.0",
     "dotenv": "^17.2.3",
-    "esbuild": "0.25.11",
+    "esbuild": "0.25.12",
     "eslint": "^9.22.0",
     "globals": "^16.0.0",
     "jest": "^30.0.0",
