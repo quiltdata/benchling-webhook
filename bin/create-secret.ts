@@ -4,8 +4,11 @@
  * Create or update Benchling webhook secret in AWS Secrets Manager
  *
  * Usage:
+ *   npm run config
  *   npm run config -- --secret-name benchling-webhook-dev --region us-east-1
  *   npm run config -- --secret-name benchling-webhook-prod --region us-east-1 --env-file .env.prod
+ *
+ * Default secret name: @quiltdata/benchling-webhook (package name)
  *
  * Required parameters (from .env file or environment):
  *   BENCHLING_TENANT
@@ -190,7 +193,7 @@ async function main() {
   program
     .name('npm run config')
     .description('Create or update Benchling webhook secret in AWS Secrets Manager')
-    .requiredOption('-s, --secret-name <name>', 'Secret name (e.g., benchling-webhook-dev)')
+    .option('-s, --secret-name <name>', 'Secret name (defaults to package name)', '@quiltdata/benchling-webhook')
     .option('-r, --region <region>', 'AWS region', 'us-east-1')
     .option('-e, --env-file <path>', '.env file path', '.env')
     .option('-d, --dry-run', 'Show what would be created without making changes', false)
