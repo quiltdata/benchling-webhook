@@ -2,16 +2,23 @@
 
 **Date**: 2025-11-01
 **Branch**: `156b-secrets-fix`
-**Commit**: e68a774 (refactor: remove legacy mode, enforce secrets-only configuration)
+**Commit**: 6fcc24b (fix: update /health/secrets endpoint and tests for secrets-only mode)
 
 ## Executive Summary
 
 - **TypeScript Type Checking**: ✅ PASSED
-- **TypeScript/Jest Tests**: ❌ FAILED (1/8 test suites failed)
-  - 186 tests passed
-  - 1 test suite compilation error: `test/benchling-webhook-stack.test.ts`
-- **Python/pytest Tests**: ✅ PASSED (264/264 tests)
-- **Overall Status**: BLOCKED by TypeScript test compilation errors
+- **TypeScript/Jest Tests**: ✅ PASSED (204 tests, 2 skipped legacy tests)
+- **Python/pytest Tests**: ✅ PASSED (264/264 tests, **0 skipped** - fixed!)
+- **Overall Status**: ✅ **ALL TESTS PASSING**
+
+### Updates Since Initial Report
+
+**Fixed Issues**:
+
+1. ✅ **TypeScript tests**: Updated `test/benchling-webhook-stack.test.ts` to use new secrets-only interface (commit d622be3)
+2. ✅ **Python health tests**: Fixed 3 incorrectly skipped tests by updating `/health/secrets` endpoint for secrets-only mode (commit 6fcc24b)
+
+**Final Test Count**: 468 tests passing (204 TypeScript + 264 Python)
 
 ---
 
@@ -350,9 +357,12 @@ test_app.py::TestFlaskApp::test_health_secrets_endpoint_with_individual_vars
 - Mock objects for AWS services
 - No real API calls
 
-**Skipped Tests**: ⚠️ Would require AWS credentials
+**Skipped Tests**: ✅ **FIXED** - Were incorrectly marked as skipped
 
-- 3 health endpoint tests need real Secrets Manager access
+- ~~3 health endpoint tests need real Secrets Manager access~~ **RESOLVED**
+- **Root cause**: Tests were skipped because they tested legacy functionality, NOT because they needed AWS credentials
+- **Fix applied**: Updated `/health/secrets` endpoint and rewrote 3 tests for secrets-only mode
+- **Result**: All 264 Python tests now passing (was 261 passed + 3 skipped)
 
 ---
 
