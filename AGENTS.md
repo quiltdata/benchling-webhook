@@ -226,3 +226,104 @@ aws logs tail /ecs/benchling-webhook --follow
 ## License
 
 Apache-2.0 - See [LICENSE](LICENSE) file for details
+
+# Benchling Webhook Agents Guide (CLAUDE.md)
+
+## 1. Mission
+
+Define the optimal workflow for development, testing, and deployment of the Benchling Webhook system, ensuring predictable automation and resilience to configuration errors.
+
+---
+
+## 2. Ideal Developer Workflow
+
+### 2.1 One-Command Bootstrap
+
+Developers should be able to run:
+
+```bash
+npx @quiltdata/benchling-webhook
+```
+
+This command must:
+
+1. Detect the Quilt3 catalog and infer stack parameters.
+2. Validate AWS and Docker environments.
+3. Prompt interactively for Benchling credentials.
+4. Generate `.env` and `.env.deploy` with all required fields.
+
+If any inferred value fails validation, the script exits with explicit diagnostics (e.g., “Cannot find Quilt catalog in ~/.quilt3/config.yml”).
+
+### 2.2 Daily Development Loop
+
+```bash
+npm run build && npm run lint && npm run typecheck
+make -C docker test-local
+```
+
+- **Lint** → ensures code quality.
+- **Typecheck** → verifies interfaces between TS & Python layers.
+- **Local tests** → run Flask service with simulated Benchling payloads.
+
+Commits follow `type(scope): summary` and PRs must include:
+
+- Verified local tests
+- Deployment notes or configuration deltas
+
+---
+
+## 3. Testing Tiers
+
+### 3.1 Unit Tests
+
+- TypeScript: `npm run test:ts`
+- Python: `make -C docker test-unit`
+
+### 3.2 Integration Tests
+
+- Local Docker validation: `make -C docker test-local`
+- ECR validation: `make -C docker test-ecr`
+
+### 3.3 System Tests
+
+- `npm run cdk:dev` to deploy isolated stack.
+- `make -C docker test-integration` to verify cross-stack events.
+
+### 3.4 CI/CD Pipeline
+
+Automated steps:
+
+1. Lint and typecheck
+2. Run tests and build image
+3. Push to ECR
+4. Deploy via CDK if all checks pass
+
+---
+
+## 4. Configuration Failure Modes
+
+| Failure | Cause | Mitigation |
+|----------|--------|-------------|
+| Missing Quilt catalog | Quilt3 not configured | Prompt user to run `quilt3 config` and retry |
+| Incomplete `.env` | Skipped prompt step | Add schema validation before deploy |
+| AWS auth error | Invalid credentials | Check AWS_PROFILE and region before CDK deploy |
+| Docker build failure | Outdated base image | Auto-pull latest base before build |
+| Secrets not found | Not synced to AWS Secrets Manager | Run `npm run secrets:sync` automatically before deploy |
+| CDK stack drift | Manual AWS changes | Add drift detection preflight via `cdk diff` |
+
+---
+
+## 5. Operational Principles
+
+- **Single Source of Truth:** Quilt catalog defines the environment.
+- **Fail Fast:** Validation before deployment prevents partial stacks.
+- **Idempotence:** Re-running bootstrap should never break a working setup.
+- **Observability:** Every stage logs explicit diagnostics to CloudWatch.
+
+---
+
+## 6. Future Goals
+
+- Interactive configuration assistant with self-healing defaults.
+- Declarative environment lockfile (`benchling.env.json`).
+- Integrated smoke tests for cross-service health.
