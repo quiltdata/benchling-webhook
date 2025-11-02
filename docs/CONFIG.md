@@ -33,6 +33,7 @@ This command will:
    - `BENCHLING_CLIENT_SECRET`
    - `BENCHLING_APP_DEFINITION_ID`
 4. Write a `.env` file with inferred and user-provided values.
+   1. Extending and/or backing up the EXISTING file as needed.
 
 ---
 
