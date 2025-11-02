@@ -5,6 +5,11 @@ import { resolve } from "path";
 import { execSync } from "child_process";
 
 export interface Config {
+  // Secrets-Only Mode (v0.6.0+)
+  quiltStackArn?: string;
+  benchlingSecret?: string;
+
+  // Legacy Mode (DEPRECATED)
   // Quilt
   quiltCatalog: string;
   quiltUserBucket: string;
