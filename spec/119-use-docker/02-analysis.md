@@ -2,7 +2,7 @@
 
 ## Reference
 
-Based on requirements from: `.scratch/119-use-docker/01-requirements.md` (pending creation)
+Based on requirements from: `spec/119-use-docker/01-requirements.md` (pending creation)
 
 Related GitHub Issue: #119 (assumed)
 

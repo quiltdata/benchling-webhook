@@ -1,23 +1,17 @@
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import chalk from "chalk";
 import ora from "ora";
 import boxen from "boxen";
 import { prompt } from "enquirer";
+import { SecretsManagerClient, DescribeSecretCommand } from "@aws-sdk/client-secrets-manager";
+import { maskArn } from "../../lib/utils/config";
 import {
-    loadConfigSync,
-    mergeInferredConfig,
-    validateConfig,
-    formatValidationErrors,
-    type Config,
-    type ConfigOptions,
-} from "../../lib/utils/config";
-import {
-    checkCdkBootstrap,
-    inferConfiguration,
-    createStack,
-} from "../benchling-webhook";
+    parseStackArn,
+    ConfigResolverError,
+} from "../../lib/utils/config-resolver";
+import { checkCdkBootstrap } from "../benchling-webhook";
 
-export async function deployCommand(options: ConfigOptions & { yes?: boolean; bootstrapCheck?: boolean; requireApproval?: string }): Promise<void> {
+export async function deployCommand(options: { yes?: boolean; bootstrapCheck?: boolean; requireApproval?: string; quiltStackArn?: string; benchlingSecret?: string; imageTag?: string; region?: string; envFile?: string }): Promise<void> {
     console.log(
         boxen(chalk.bold("Benchling Webhook Deployment"), {
             padding: 1,
@@ -27,61 +21,155 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
     );
     console.log();
 
-    // 1. Load configuration
-    const spinner = ora("Loading configuration...").start();
-    let config = loadConfigSync(options);
+    // Get required parameters
+    const quiltStackArn = options.quiltStackArn || process.env.QUILT_STACK_ARN;
+    // Use default secret name if not provided
+    const benchlingSecret = options.benchlingSecret || process.env.BENCHLING_SECRET || "@quiltdata/benchling-webhook";
 
-    // 2. Attempt inference if catalog is available
-    if (config.quiltCatalog) {
-        spinner.text = "Inferring configuration from catalog...";
-
-        const inferenceResult = await inferConfiguration(config.quiltCatalog);
-
-        if (inferenceResult.success) {
-            config = mergeInferredConfig(config, inferenceResult.inferredVars);
-            spinner.succeed("Configuration loaded and inferred");
-        } else {
-            spinner.warn(`Configuration loaded (inference failed: ${inferenceResult.error})`);
-        }
-    } else {
-        spinner.succeed("Configuration loaded");
-    }
-
-    // 3. Validate configuration
-    spinner.start("Validating configuration...");
-    const validation = validateConfig(config);
-
-    if (!validation.valid) {
-        spinner.fail("Configuration validation failed");
+    // Validate required parameter
+    if (!quiltStackArn) {
+        console.error(chalk.red.bold("❌ Missing Required Parameter\n"));
+        console.error(chalk.red("  --quilt-stack-arn is required"));
         console.log();
-        console.error(chalk.red.bold("❌ Configuration Error\n"));
-        console.error(formatValidationErrors(validation));
-        console.log(chalk.yellow("To fix this, you can:"));
-        console.log("  1. Run interactive setup: " + chalk.cyan("npx @quiltdata/benchling-webhook init"));
-        console.log("  2. Create/edit .env file with required values");
-        console.log("  3. Pass values as CLI options");
+        console.log(chalk.yellow("Usage:"));
+        console.log(chalk.cyan("  npx @quiltdata/benchling-webhook deploy --quilt-stack-arn <arn>"));
         console.log();
-        console.log("For help: " + chalk.cyan("npx @quiltdata/benchling-webhook --help"));
+        console.log(chalk.yellow("Example:"));
+        console.log(chalk.cyan('  npx @quiltdata/benchling-webhook deploy \\'));
+        console.log(chalk.cyan('    --quilt-stack-arn "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123"'));
+        console.log();
         process.exit(1);
     }
 
-    spinner.succeed("Configuration validated");
+    // Deploy
+    return await deploy(quiltStackArn, benchlingSecret, options);
+}
 
-    if (validation.warnings.length > 0) {
-        console.log();
-        for (const warning of validation.warnings) {
-            console.log(chalk.yellow(`  ⚠ ${warning}`));
+/**
+ * Check if a secret exists in AWS Secrets Manager
+ */
+async function checkSecretExists(secretName: string, region: string): Promise<boolean> {
+    try {
+        const client = new SecretsManagerClient({ region });
+        await client.send(new DescribeSecretCommand({ SecretId: secretName }));
+        return true;
+    } catch (error: unknown) {
+        if (error && typeof error === 'object' && 'name' in error && error.name === 'ResourceNotFoundException') {
+            return false;
         }
+        // For other errors (e.g., permission issues), throw them
+        throw error;
+    }
+}
+
+/**
+ * Run npm run config to create the secret
+ */
+function runConfigCommand(secretName: string, region: string, envFile: string = ".env"): boolean {
+    console.log();
+    console.log(chalk.yellow("📝 Secret not found. Running configuration setup..."));
+    console.log();
+
+    const result = spawnSync(
+        "npm",
+        ["run", "config", "--", "--secret-name", secretName, "--region", region, "--env-file", envFile],
+        {
+            stdio: "inherit",
+            shell: true,
+        }
+    );
+
+    if (result.status !== 0) {
+        console.log();
+        console.log(chalk.red("❌ Failed to create secret. Please run:"));
+        console.log(chalk.cyan(`   npm run config -- --secret-name ${secretName} --region ${region}`));
+        console.log();
+        return false;
     }
 
-    // 4. Check CDK bootstrap
+    console.log();
+    return true;
+}
+
+/**
+ * Deploy the Benchling webhook stack
+ */
+async function deploy(
+    quiltStackArn: string,
+    benchlingSecret: string,
+    options: { yes?: boolean; bootstrapCheck?: boolean; requireApproval?: string; imageTag?: string; region?: string; envFile?: string }
+): Promise<void> {
+    const spinner = ora("Validating parameters...").start();
+
+    // Parse stack ARN to extract region/account
+    let parsed;
+    try {
+        parsed = parseStackArn(quiltStackArn);
+        spinner.succeed("Stack ARN validated");
+    } catch (error) {
+        spinner.fail("Invalid Stack ARN");
+        console.log();
+        if (error instanceof ConfigResolverError) {
+            console.error(error.format());
+        } else {
+            console.error(chalk.red((error as Error).message));
+        }
+        console.log();
+        console.log(chalk.yellow("Expected format:"));
+        console.log("  arn:aws:cloudformation:region:account:stack/name/id");
+        console.log();
+        console.log(chalk.yellow("Example:"));
+        console.log("  arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123");
+        process.exit(1);
+    }
+
+    // Use region from stack ARN, but allow override from CLI
+    const deployRegion = options.region || parsed.region;
+    const deployAccount = parsed.account;
+
+    // Check if secret exists, create if needed
+    spinner.start("Checking if Benchling secret exists...");
+    try {
+        const secretExists = await checkSecretExists(benchlingSecret, deployRegion);
+
+        if (!secretExists) {
+            spinner.info(`Secret '${benchlingSecret}' not found`);
+
+            // Ask user if they want to create it
+            const response: { createSecret: boolean } = await prompt({
+                type: "confirm",
+                name: "createSecret",
+                message: `Would you like to create the secret '${benchlingSecret}' now using your .env file?`,
+                initial: true,
+            });
+
+            if (response.createSecret) {
+                const created = runConfigCommand(benchlingSecret, deployRegion, options.envFile || ".env");
+                if (!created) {
+                    process.exit(1);
+                }
+                spinner.succeed(`Secret '${benchlingSecret}' created successfully`);
+            } else {
+                spinner.fail("Secret is required for deployment");
+                console.log();
+                console.log(chalk.yellow("To create the secret manually, run:"));
+                console.log(chalk.cyan(`  npm run config -- --secret-name ${benchlingSecret} --region ${deployRegion}`));
+                console.log();
+                process.exit(1);
+            }
+        } else {
+            spinner.succeed(`Secret '${benchlingSecret}' exists`);
+        }
+    } catch (error) {
+        spinner.warn("Could not verify secret existence (will attempt deployment anyway)");
+        console.log(chalk.dim(`  ${(error as Error).message}`));
+    }
+
+    // Check CDK bootstrap
     if (options.bootstrapCheck !== false) {
         spinner.start("Checking CDK bootstrap status...");
 
-        const bootstrapStatus = await checkCdkBootstrap(
-            config.cdkAccount!,
-            config.cdkRegion!,
-        );
+        const bootstrapStatus = await checkCdkBootstrap(deployAccount, deployRegion);
 
         if (!bootstrapStatus.bootstrapped) {
             spinner.fail("CDK is not bootstrapped");
@@ -107,39 +195,24 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
         }
     }
 
-    // 5. Display deployment plan
+    // Display deployment plan
     console.log();
     console.log(chalk.bold("Deployment Plan"));
     console.log(chalk.gray("─".repeat(80)));
-    console.log(`  ${chalk.bold("Stack:")}                      BenchlingWebhookStack`);
-    console.log(`  ${chalk.bold("Account:")}                    ${config.cdkAccount}`);
-    console.log(`  ${chalk.bold("Region:")}                     ${config.cdkRegion}`);
+    console.log(`  ${chalk.bold("Stack:")}                     BenchlingWebhookStack`);
+    console.log(`  ${chalk.bold("Account:")}                   ${deployAccount}`);
+    console.log(`  ${chalk.bold("Region:")}                    ${deployRegion}`);
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
-    console.log(`    ${chalk.bold("Quilt Catalog:")}            ${config.quiltCatalog}`);
-    console.log(`    ${chalk.bold("Quilt Database:")}           ${config.quiltDatabase}`);
-    console.log(`    ${chalk.bold("Quilt User Bucket:")}        ${config.quiltUserBucket}`);
-    console.log(`    ${chalk.bold("Benchling Tenant:")}         ${config.benchlingTenant}`);
-    console.log(`    ${chalk.bold("Benchling Client ID:")}      ${config.benchlingClientId}`);
-    console.log(`    ${chalk.bold("Benchling Client Secret:")}  ${config.benchlingClientSecret ? "***" + config.benchlingClientSecret.slice(-4) : "(not set)"}`);
-    if (config.benchlingAppDefinitionId) {
-        console.log(`    ${chalk.bold("Benchling App ID:")}        ${config.benchlingAppDefinitionId}`);
-    }
-    console.log(`    ${chalk.bold("Queue ARN:")}                ${config.queueArn}`);
-    console.log(`    ${chalk.bold("Package Prefix:")}           ${config.pkgPrefix || "benchling"}`);
-    console.log(`    ${chalk.bold("Package Key:")}              ${config.pkgKey || "experiment_id"}`);
-    console.log(`    ${chalk.bold("Log Level:")}                ${config.logLevel || "INFO"}`);
-    if (config.webhookAllowList) {
-        console.log(`    ${chalk.bold("Webhook Allow List:")}      ${config.webhookAllowList}`);
-    }
-    console.log(`    ${chalk.bold("Webhook Verification:")}    ${config.enableWebhookVerification ?? "true"}`);
-    console.log(`    ${chalk.bold("Create ECR Repository:")}   ${config.createEcrRepository || "false"}`);
-    console.log(`    ${chalk.bold("ECR Repository Name:")}     ${config.ecrRepositoryName || "quiltdata/benchling"}`);
-    console.log(`    ${chalk.bold("Docker Image Tag:")}        ${config.imageTag || "latest"}`);
+    console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(quiltStackArn)}`);
+    console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
+    console.log(`    ${chalk.bold("Docker Image Tag:")}        ${options.imageTag || "latest"}`);
+    console.log();
+    console.log(chalk.dim("  ℹ️  All other configuration will be resolved from AWS at runtime"));
     console.log(chalk.gray("─".repeat(80)));
     console.log();
 
-    // 6. Confirm (unless --yes)
+    // Confirm (unless --yes)
     if (!options.yes) {
         const response: { proceed: boolean } = await prompt({
             type: "confirm",
@@ -155,34 +228,17 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
         console.log();
     }
 
-    // 7. Create stack (synthesis)
-    spinner.start("Synthesizing CDK stack...");
+    // Deploy using CDK CLI
+    spinner.start("Deploying to AWS (this may take a few minutes)...");
+    spinner.stop();
+    console.log();
+
     try {
-        const result = createStack(config as Config);
-        spinner.succeed("Stack synthesized");
-
-        // 8. Deploy using CDK CLI
-        spinner.start("Deploying to AWS (this may take a few minutes)...");
-        spinner.stop(); // Stop spinner for CDK output
-        console.log(); // New line for CDK output
-
-        // Execute CDK deploy directly - the app.synth() will be called by CDK
-        // We need to synthesize to cdk.out and then deploy
-        result.app.synth();
-
-        // Build CloudFormation parameters to pass explicitly
+        // Build CloudFormation parameters
         const parameters = [
-            `ImageTag=${config.imageTag || "latest"}`,
-            `BucketName=${config.quiltUserBucket}`,
-            `PackagePrefix=${config.pkgPrefix || "benchling"}`,
-            `PackageKey=${config.pkgKey || "experiment_id"}`,
-            `QueueArn=${config.queueArn}`,
-            `QuiltDatabase=${config.quiltDatabase}`,
-            `BenchlingTenant=${config.benchlingTenant}`,
-            `LogLevel=${config.logLevel || "INFO"}`,
-            `EnableWebhookVerification=${config.enableWebhookVerification ?? "true"}`,
-            `QuiltCatalog=${config.quiltCatalog || "open.quiltdata.com"}`,
-            `WebhookAllowList=${config.webhookAllowList || ""}`,
+            `QuiltStackARN=${quiltStackArn}`,
+            `BenchlingSecret=${benchlingSecret}`,
+            `ImageTag=${options.imageTag || "latest"}`,
         ];
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
@@ -192,21 +248,22 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
             stdio: "inherit",
             env: {
                 ...process.env,
-                CDK_DEFAULT_ACCOUNT: config.cdkAccount,
-                CDK_DEFAULT_REGION: config.cdkRegion,
+                CDK_DEFAULT_ACCOUNT: deployAccount,
+                CDK_DEFAULT_REGION: deployRegion,
             },
         });
 
+        console.log();
         spinner.succeed("Stack deployed successfully");
 
-        // 9. Get stack outputs
+        // Get stack outputs
         spinner.start("Retrieving stack outputs...");
         let webhookUrl = "";
         try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { CloudFormationClient, DescribeStacksCommand } = require("@aws-sdk/client-cloudformation");
             const cloudformation = new CloudFormationClient({
-                region: config.cdkRegion,
+                region: deployRegion,
             });
 
             const command = new DescribeStacksCommand({
@@ -224,7 +281,7 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
             spinner.warn("Could not retrieve stack outputs");
         }
 
-        // 10. Test the webhook endpoint
+        // Test the webhook endpoint
         if (webhookUrl) {
             console.log();
             spinner.start("Testing webhook endpoint...");
@@ -244,19 +301,19 @@ export async function deployCommand(options: ConfigOptions & { yes?: boolean; bo
             }
         }
 
-        // 11. Success message
+        // Success message
         console.log();
         console.log(
             boxen(
                 `${chalk.green.bold("✓ Deployment completed successfully!")}\n\n` +
-          `Stack:  ${chalk.cyan(result.stackName)}\n` +
-          `Region: ${chalk.cyan(config.cdkRegion)}\n` +
-          (webhookUrl ? `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` : "\n") +
-          `${chalk.bold("Next steps:")}\n` +
-          "  1. Set the webhook URL in your Benchling app settings:\n" +
-          `     ${chalk.cyan(webhookUrl || "<WEBHOOK_URL>")}\n\n` +
-          "  2. Test the integration by creating a Quilt package in Benchling\n\n" +
-          `${chalk.dim("For more info: https://github.com/quiltdata/benchling-webhook#readme")}`,
+                `Stack:  ${chalk.cyan("BenchlingWebhookStack")}\n` +
+                `Region: ${chalk.cyan(deployRegion)}\n` +
+                (webhookUrl ? `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` : "\n") +
+                `${chalk.bold("Next steps:")}\n` +
+                "  1. Set the webhook URL in your Benchling app settings:\n" +
+                `     ${chalk.cyan(webhookUrl || "<WEBHOOK_URL>")}\n\n` +
+                "  2. Test the integration by creating a Quilt package in Benchling\n\n" +
+                `${chalk.dim("For more info: https://github.com/quiltdata/benchling-webhook#readme")}`,
                 { padding: 1, borderColor: "green", borderStyle: "round" },
             ),
         );

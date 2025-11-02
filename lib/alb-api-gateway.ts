@@ -88,7 +88,7 @@ export class AlbApiGateway {
 
     private createResourcePolicy(
         allowedIps: string[] | undefined,
-        rawParameter: string | undefined
+        rawParameter: string | undefined,
     ): iam.PolicyDocument | undefined {
         // Don't create policy if no IPs provided
         if (!allowedIps) {

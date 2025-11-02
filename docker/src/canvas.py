@@ -195,7 +195,6 @@ class CanvasManager:
             display_id=self.entry.display_id,
             catalog_url=self.catalog_url,
             sync_url=self.sync_uri(),
-            upload_url=self.upload_url(),
         )
 
         # Async notice
