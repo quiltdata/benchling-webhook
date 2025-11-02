@@ -28,6 +28,7 @@
 ```
 
 ### Analysis
+
 - TypeScript compilation for source code is clean
 - No type errors in production code
 - Tests have compilation errors (see section 2)
@@ -54,6 +55,7 @@ and 'bucketName' does not exist in type 'BenchlingWebhookStackProps'.
 ```
 
 **Locations**:
+
 - Line 13: Test setup
 - Line 117: Test case setup
 - Line 372: Test case setup
@@ -66,6 +68,7 @@ and 'bucketName' does not exist in type 'BenchlingWebhookStackProps'.
 The `BenchlingWebhookStackProps` interface was refactored (issue #156b) to use **secrets-only mode**:
 
 **Old Interface** (used in tests):
+
 ```typescript
 {
   bucketName: string;
@@ -79,6 +82,7 @@ The `BenchlingWebhookStackProps` interface was refactored (issue #156b) to use *
 ```
 
 **New Interface** (current implementation):
+
 ```typescript
 {
   quiltStackArn: string;        // NEW: CloudFormation stack ARN
@@ -114,6 +118,7 @@ The `BenchlingWebhookStackProps` interface was refactored (issue #156b) to use *
 ### Test Coverage Gap
 
 ❌ **Missing Test Coverage**:
+
 - CDK stack construction with new secrets-only interface
 - CloudFormation parameter creation and validation
 - Runtime config resolution from CloudFormation + Secrets Manager
@@ -197,6 +202,7 @@ test_app.py::TestFlaskApp::test_health_secrets_endpoint_with_individual_vars
 ### Python Test Environment
 
 **Prerequisites**: ✅ All met
+
 - Python 3.11.13 (via pyenv)
 - uv package manager installed
 - Dependencies installed in `.venv`
@@ -211,6 +217,7 @@ test_app.py::TestFlaskApp::test_health_secrets_endpoint_with_individual_vars
 **Reason**: Stopped at TypeScript test failure (see section 2)
 
 **Execution order**:
+
 1. ✅ `npm run typecheck` - PASSED
 2. ❌ `npm run test:ts` - FAILED (compilation error)
 3. ⏭️ `npm run test:python` - SKIPPED (due to failure)
@@ -226,13 +233,16 @@ test_app.py::TestFlaskApp::test_health_secrets_endpoint_with_individual_vars
 **Pattern**: Production code refactored to new architecture, tests still use old interface
 
 **Affected Files**:
+
 - ❌ `test/benchling-webhook-stack.test.ts` (6 locations)
 
 **Required Properties (New)**:
+
 - `quiltStackArn`: CloudFormation stack ARN
 - `benchlingSecret`: Secrets Manager secret name/ARN
 
 **Removed Properties (Old)**:
+
 - `bucketName`
 - `benchlingClientId`
 - `benchlingClientSecret`
@@ -247,12 +257,14 @@ test_app.py::TestFlaskApp::test_health_secrets_endpoint_with_individual_vars
 **Pattern**: Python tests use comprehensive mocking for AWS services
 
 **Benefits**:
+
 - No AWS credentials needed
 - Fast execution (~15 seconds for 264 tests)
 - Deterministic results
 - Tests secrets resolution logic without real AWS calls
 
 **Mocked Services**:
+
 - AWS Secrets Manager
 - AWS CloudFormation
 - AWS S3
@@ -265,6 +277,7 @@ test_app.py::TestFlaskApp::test_health_secrets_endpoint_with_individual_vars
 **Pattern**: Python application fully implements secrets-only configuration
 
 **Evidence**:
+
 - ✅ 30 tests for secrets resolver (all passing)
 - ✅ 4 tests for config env vars (all passing)
 - ✅ 18 tests for config validation (all passing)
@@ -332,11 +345,13 @@ test_app.py::TestFlaskApp::test_health_secrets_endpoint_with_individual_vars
 **TypeScript Tests**: ✅ No AWS credentials needed (all mocked)
 
 **Python Tests**: ✅ No AWS credentials needed (all mocked)
+
 - Uses `test/.test.env` for test fixtures
 - Mock objects for AWS services
 - No real API calls
 
 **Skipped Tests**: ⚠️ Would require AWS credentials
+
 - 3 health endpoint tests need real Secrets Manager access
 
 ---
