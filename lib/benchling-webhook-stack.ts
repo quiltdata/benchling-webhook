@@ -50,7 +50,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 "Secrets-only mode (v0.6.0+) requires both:\n" +
                 "  - quiltStackArn: CloudFormation stack ARN\n" +
                 "  - benchlingSecret: Secrets Manager secret name\n\n" +
-                "See: https://github.com/quiltdata/benchling-webhook/issues/156"
+                "See: https://github.com/quiltdata/benchling-webhook/issues/156",
             );
         }
         console.log("✓ Using secrets-only mode (v0.6.0+)");
