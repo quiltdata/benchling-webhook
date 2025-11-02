@@ -34,7 +34,7 @@ Use this checklist to track progress while implementing the CLI functionality.
 ### Directory Structure
 - [ ] Create `lib/utils/` directory
 - [ ] Create `bin/commands/` directory
-- [ ] Create `.scratch/cli/` directory (already exists)
+- [ ] Create `spec/cli/` directory (already exists)
 - [ ] Verify all directories exist
 
 ---
