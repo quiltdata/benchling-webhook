@@ -29,7 +29,7 @@ help:
 	@echo "  install               - Install dependencies with uv"
 	@echo ""
 	@echo "Development Servers:"
-	@echo "  run                   - Docker dev with hot-reload (needs AWS, port $(PORT_DOCKER_DEV))"
+	@echo "  run / run-dev         - Docker dev with hot-reload (needs AWS, port $(PORT_DOCKER_DEV))"
 	@echo "  run-ngrok             - Docker dev + ngrok tunnel (port $(PORT_DOCKER_DEV))"
 	@echo "  run-local             - Local Flask with mocked AWS (port $(PORT_LOCAL))"
 	@echo "  run-local-verbose     - Local Flask with debug logging (port $(PORT_LOCAL))"
@@ -118,6 +118,9 @@ run: build check-env
 	@echo "💡 If you encounter issues, run 'make docker-clean' first"
 	docker-compose --profile dev up app-dev
 
+# Alias for run (for consistency with test-dev)
+run-dev: run
+
 run-ngrok:
 	@make run &
 	@make ngrok PORT=$(PORT_DOCKER_DEV) SLEEP=10
@@ -197,10 +200,14 @@ test-local: check-env health-local
 	@echo "Running local server tests (auto-start/stop)..."
 	uv run python scripts/run_local.py --test
 
-# Test webhooks against docker dev server
-test-dev: health-dev
+# Test webhooks against docker dev server (requires server running)
+test-dev:
+	@if ! curl -s http://localhost:$(PORT_DOCKER_DEV)/health >/dev/null 2>&1; then \
+		echo "❌ Dev server not running on port $(PORT_DOCKER_DEV)"; \
+		echo "Start it first with: make run-dev (or make run)"; \
+		exit 1; \
+	fi
 	@echo "Testing webhooks against http://localhost:$(PORT_DOCKER_DEV)"
-	@echo "Make sure 'make run-dev' is running first"
 	uv run python scripts/test_webhook.py http://localhost:$(PORT_DOCKER_DEV)
 
 # Test webhooks against docker production (auto-starts if not running)
