@@ -35,8 +35,8 @@ export async function deployCommand(options: { yes?: boolean; bootstrapCheck?: b
         console.log(chalk.cyan("  npx @quiltdata/benchling-webhook deploy --quilt-stack-arn <arn>"));
         console.log();
         console.log(chalk.yellow("Example:"));
-        console.log(chalk.cyan('  npx @quiltdata/benchling-webhook deploy \\'));
-        console.log(chalk.cyan('    --quilt-stack-arn "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123"'));
+        console.log(chalk.cyan("  npx @quiltdata/benchling-webhook deploy \\"));
+        console.log(chalk.cyan("    --quilt-stack-arn \"arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123\""));
         console.log();
         process.exit(1);
     }
@@ -54,7 +54,7 @@ async function checkSecretExists(secretName: string, region: string): Promise<bo
         await client.send(new DescribeSecretCommand({ SecretId: secretName }));
         return true;
     } catch (error: unknown) {
-        if (error && typeof error === 'object' && 'name' in error && error.name === 'ResourceNotFoundException') {
+        if (error && typeof error === "object" && "name" in error && error.name === "ResourceNotFoundException") {
             return false;
         }
         // For other errors (e.g., permission issues), throw them
@@ -76,7 +76,7 @@ function runConfigCommand(secretName: string, region: string, envFile: string = 
         {
             stdio: "inherit",
             shell: true,
-        }
+        },
     );
 
     if (result.status !== 0) {
@@ -97,7 +97,7 @@ function runConfigCommand(secretName: string, region: string, envFile: string = 
 async function deploy(
     quiltStackArn: string,
     benchlingSecret: string,
-    options: { yes?: boolean; bootstrapCheck?: boolean; requireApproval?: string; imageTag?: string; region?: string; envFile?: string }
+    options: { yes?: boolean; bootstrapCheck?: boolean; requireApproval?: string; imageTag?: string; region?: string; envFile?: string },
 ): Promise<void> {
     const spinner = ora("Validating parameters...").start();
 
