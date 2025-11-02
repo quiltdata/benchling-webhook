@@ -355,7 +355,15 @@ def resolve_and_fetch_secret(client, region: str, secret_identifier: str) -> Ben
             )
 
         # Validate non-empty strings for required string parameters
-        string_params = ["tenant", "client_id", "client_secret", "app_definition_id", "pkg_prefix", "pkg_key", "user_bucket"]
+        string_params = [
+            "tenant",
+            "client_id",
+            "client_secret",
+            "app_definition_id",
+            "pkg_prefix",
+            "pkg_key",
+            "user_bucket",
+        ]
         for param in string_params:
             if not isinstance(data[param], str) or len(data[param]) == 0:
                 raise ConfigResolverError(

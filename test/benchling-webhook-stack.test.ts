@@ -217,7 +217,11 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
-    test("environment variables match Flask config expectations", () => {
+    test.skip("environment variables match Flask config expectations (LEGACY TEST - secrets-only mode uses ConfigResolver)", () => {
+        // SKIP: This test is for legacy mode with individual environment variables
+        // In secrets-only mode, we only use 2 env vars: QuiltStackARN and BenchlingSecret
+        // All runtime parameters come from the Benchling secret via ConfigResolver
+
         // Read the Python config files to extract expected environment variable names
         const configPath = path.join(__dirname, "../docker/src/config.py");
         const secretsResolverPath = path.join(__dirname, "../docker/src/secrets_resolver.py");

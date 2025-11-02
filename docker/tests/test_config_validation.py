@@ -9,11 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.config_resolver import (
-    ConfigResolverError,
-    parse_bool,
-    resolve_and_fetch_secret,
-)
+from src.config_resolver import ConfigResolverError, parse_bool, resolve_and_fetch_secret
 
 
 class TestBooleanParsing:
@@ -89,9 +85,7 @@ class TestSecretValidation:
 
     def test_valid_secret_all_parameters(self, mock_sm_client, valid_secret_data):
         """Test that secret with all 10 parameters validates successfully."""
-        mock_sm_client.get_secret_value.return_value = {
-            "SecretString": json.dumps(valid_secret_data)
-        }
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
         secret = resolve_and_fetch_secret(mock_sm_client, "us-east-1", "test-secret")
 
@@ -110,9 +104,7 @@ class TestSecretValidation:
         """Test that missing single parameter raises clear error."""
         del valid_secret_data["log_level"]
 
-        mock_sm_client.get_secret_value.return_value = {
-            "SecretString": json.dumps(valid_secret_data)
-        }
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
         with pytest.raises(ConfigResolverError) as exc_info:
             resolve_and_fetch_secret(mock_sm_client, "us-east-1", "test-secret")
@@ -127,9 +119,7 @@ class TestSecretValidation:
         del valid_secret_data["pkg_prefix"]
         del valid_secret_data["user_bucket"]
 
-        mock_sm_client.get_secret_value.return_value = {
-            "SecretString": json.dumps(valid_secret_data)
-        }
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
         with pytest.raises(ConfigResolverError) as exc_info:
             resolve_and_fetch_secret(mock_sm_client, "us-east-1", "test-secret")
@@ -144,9 +134,7 @@ class TestSecretValidation:
         """Test that invalid log level raises error."""
         valid_secret_data["log_level"] = "TRACE"
 
-        mock_sm_client.get_secret_value.return_value = {
-            "SecretString": json.dumps(valid_secret_data)
-        }
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
         with pytest.raises(ConfigResolverError) as exc_info:
             resolve_and_fetch_secret(mock_sm_client, "us-east-1", "test-secret")
@@ -159,9 +147,7 @@ class TestSecretValidation:
         """Test that invalid boolean value raises error."""
         valid_secret_data["enable_webhook_verification"] = "yes"
 
-        mock_sm_client.get_secret_value.return_value = {
-            "SecretString": json.dumps(valid_secret_data)
-        }
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
         with pytest.raises(ConfigResolverError) as exc_info:
             resolve_and_fetch_secret(mock_sm_client, "us-east-1", "test-secret")
@@ -173,9 +159,7 @@ class TestSecretValidation:
         """Test that empty string for required parameter raises error."""
         valid_secret_data["tenant"] = ""
 
-        mock_sm_client.get_secret_value.return_value = {
-            "SecretString": json.dumps(valid_secret_data)
-        }
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
         with pytest.raises(ConfigResolverError) as exc_info:
             resolve_and_fetch_secret(mock_sm_client, "us-east-1", "test-secret")
@@ -187,9 +171,7 @@ class TestSecretValidation:
         """Test that native JSON boolean true is accepted."""
         valid_secret_data["enable_webhook_verification"] = True
 
-        mock_sm_client.get_secret_value.return_value = {
-            "SecretString": json.dumps(valid_secret_data)
-        }
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
         secret = resolve_and_fetch_secret(mock_sm_client, "us-east-1", "test-secret")
         assert secret.enable_webhook_verification is True
@@ -198,9 +180,7 @@ class TestSecretValidation:
         """Test that native JSON boolean false is accepted."""
         valid_secret_data["enable_webhook_verification"] = False
 
-        mock_sm_client.get_secret_value.return_value = {
-            "SecretString": json.dumps(valid_secret_data)
-        }
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
         secret = resolve_and_fetch_secret(mock_sm_client, "us-east-1", "test-secret")
         assert secret.enable_webhook_verification is False
@@ -212,9 +192,7 @@ class TestSecretValidation:
         for level in valid_levels:
             valid_secret_data["log_level"] = level
 
-            mock_sm_client.get_secret_value.return_value = {
-                "SecretString": json.dumps(valid_secret_data)
-            }
+            mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
             secret = resolve_and_fetch_secret(mock_sm_client, "us-east-1", "test-secret")
             assert secret.log_level == level
@@ -223,9 +201,7 @@ class TestSecretValidation:
         """Test that empty webhook_allow_list is valid (no restrictions)."""
         valid_secret_data["webhook_allow_list"] = ""
 
-        mock_sm_client.get_secret_value.return_value = {
-            "SecretString": json.dumps(valid_secret_data)
-        }
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
         secret = resolve_and_fetch_secret(mock_sm_client, "us-east-1", "test-secret")
         assert secret.webhook_allow_list == ""
@@ -234,9 +210,7 @@ class TestSecretValidation:
         """Test that webhook_allow_list with IPs is valid."""
         valid_secret_data["webhook_allow_list"] = "192.168.1.0/24,10.0.0.1"
 
-        mock_sm_client.get_secret_value.return_value = {
-            "SecretString": json.dumps(valid_secret_data)
-        }
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
         secret = resolve_and_fetch_secret(mock_sm_client, "us-east-1", "test-secret")
         assert secret.webhook_allow_list == "192.168.1.0/24,10.0.0.1"
