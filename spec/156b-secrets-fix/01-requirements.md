@@ -133,18 +133,26 @@ Production and tests MUST execute the exact same configuration resolution logic.
 
 The following npm scripts MUST work as described in Issue #156:
 
-#### `npm run config` (Future)
+#### `npm run config`
 
 Generate the Benchling secret from `.env` file or command-line arguments.
 
 **Acceptance Criteria**:
 
-- Reads 11 parameters from `.env` file with `BENCHLING_` prefix
+- Reads 10 parameters from `.env` file with `BENCHLING_` prefix
 - Creates or updates AWS Secrets Manager secret
 - Validates all required parameters are present
 - Outputs success message with secret ARN
+- Supports dry-run mode to preview changes
 
-**Status**: Not yet implemented (future work)
+**Status**: ✅ Implemented
+
+**Usage**:
+```bash
+npm run config -- --secret-name benchling-webhook-dev --region us-east-1
+npm run config -- --secret-name benchling-webhook-prod --env-file .env.prod
+npm run config -- --secret-name test-secret --dry-run
+```
 
 #### `npm run test`
 
@@ -319,13 +327,13 @@ The following are explicitly **NOT** required:
 
 ### Future Work
 
-These enhancements are deferred:
+These enhancements are deferred to future releases:
 
-1. `npm run config` command to generate secrets from `.env`
+1. ~~`npm run config` command to generate secrets from `.env`~~ ✅ **IMPLEMENTED**
 2. Pre-deployment validation (check secrets exist before deploying)
 3. Secrets rotation support with graceful reload
-4. Configuration validation at startup (schema validation)
-5. Configuration diff tool (compare running config vs secret)
+4. Configuration diff tool (compare running config vs secret)
+5. Secret schema versioning for forward compatibility
 
 ## References
 

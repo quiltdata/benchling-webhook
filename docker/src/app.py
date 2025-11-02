@@ -193,7 +193,7 @@ def create_app():
                 "quilt": {
                     "catalog": config.quilt_catalog,
                     "database": config.quilt_database,
-                    "bucket": config.quilt_user_bucket,
+                    "bucket": config.s3_bucket_name,
                     "queue_arn": mask_arn(config.queue_arn) if config.queue_arn else None,
                 },
                 "benchling": {
@@ -202,11 +202,12 @@ def create_app():
                     "has_client_secret": bool(config.benchling_client_secret),
                     "has_app_definition_id": bool(config.benchling_app_definition_id),
                 },
-                "optional": {
+                "parameters": {
                     "pkg_prefix": config.pkg_prefix,
                     "pkg_key": config.pkg_key,
+                    "user_bucket": config.s3_bucket_name,
                     "log_level": config.log_level,
-                    "webhook_allow_list": config.webhook_allow_list if config.webhook_allow_list else None,
+                    "webhook_allow_list": config.webhook_allow_list if config.webhook_allow_list else "",
                     "enable_webhook_verification": config.enable_webhook_verification,
                 },
             }

@@ -16,6 +16,7 @@ class Config:
         - ConfigResolver is mocked to return test data
         - No environment variables needed
     """
+
     flask_env: str = ""
     log_level: str = ""
     aws_region: str = ""
@@ -30,6 +31,8 @@ class Config:
     benchling_client_secret: str = ""
     benchling_app_definition_id: str = ""
     enable_webhook_verification: bool = True
+    webhook_allow_list: str = ""
+    pkg_prefix: str = ""
 
     def __post_init__(self):
         """Initialize configuration from AWS CloudFormation and Secrets Manager.
@@ -72,6 +75,8 @@ class Config:
             self.benchling_client_secret = resolved.benchling_client_secret
             self.benchling_app_definition_id = resolved.benchling_app_definition_id
             self.enable_webhook_verification = resolved.enable_webhook_verification
+            self.webhook_allow_list = resolved.webhook_allow_list
+            self.pkg_prefix = resolved.pkg_prefix
             self.log_level = resolved.log_level
             self.flask_env = "production"
 
