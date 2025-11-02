@@ -10,16 +10,9 @@ describe("BenchlingWebhookStack", () => {
     beforeEach(() => {
         const app = new cdk.App();
         const stack = new BenchlingWebhookStack(app, "TestStack", {
-            bucketName: "test-bucket",
-            environment: "test",
-            prefix: "test-prefix",
-            queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
-            benchlingClientId: "test-client-id",
-            benchlingClientSecret: "test-client-secret",
-            benchlingTenant: "test-tenant",
-            quiltCatalog: "https://quilt-example.com",
-            quiltDatabase: "test-database",
-            webhookAllowList: "203.0.113.10,198.51.100.5",
+            quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
+            benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+            logLevel: "INFO",
             env: {
                 account: "123456789012",
                 region: "us-east-1",
@@ -110,25 +103,18 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
-    test("throws error for invalid prefix", () => {
+    test("throws error when missing required parameters", () => {
         const app = new cdk.App();
         expect(() => {
             new BenchlingWebhookStack(app, "TestStack", {
-                bucketName: "test-bucket",
-                environment: "test",
-                prefix: "invalid/prefix",
-                queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
-                benchlingClientId: "test-client-id",
-                benchlingClientSecret: "test-client-secret",
-                benchlingTenant: "test-tenant",
-                quiltCatalog: "https://quilt-example.com",
-                quiltDatabase: "test-database",
+                quiltStackArn: "",
+                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-secret",
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
                 },
             });
-        }).toThrow("Prefix should not contain a '/' character.");
+        }).toThrow("Secrets-only mode");
     });
 
     test("creates IAM role with correct permissions", () => {
@@ -170,7 +156,9 @@ describe("BenchlingWebhookStack", () => {
         expect(foundSQSPolicy).toBe(true);
     });
 
-    test("creates Secrets Manager secret for Benchling credentials", () => {
+    test.skip("creates Secrets Manager secret for Benchling credentials [LEGACY TEST - secrets-only mode uses external secret]", () => {
+        // SKIP: In secrets-only mode, we reference an existing Secrets Manager secret
+        // We don't create one in the stack
         template.hasResourceProperties("AWS::SecretsManager::Secret", {
             Name: "benchling-webhook/credentials",
             Description: "Benchling API credentials for webhook processor",
@@ -292,56 +280,40 @@ describe("BenchlingWebhookStack", () => {
     });
 
     // ===================================================================
-    // Phase 3 Episode 1: CloudFormation Parameter Tests (RED)
+    // Secrets-Only Mode: CloudFormation Parameter Tests
     // ===================================================================
 
-    test("creates BenchlingSecrets CloudFormation parameter", () => {
+    test("creates QuiltStackARN CloudFormation parameter", () => {
         const parameters = template.toJSON().Parameters;
-        expect(parameters).toHaveProperty("BenchlingSecrets");
+        expect(parameters).toHaveProperty("QuiltStackARN");
 
-        const param = parameters.BenchlingSecrets;
+        const param = parameters.QuiltStackARN;
         expect(param.Type).toBe("String");
-        expect(param.NoEcho).toBe(true);
-        expect(param.Description).toContain("Benchling secrets");
+        expect(param.Description).toContain("Quilt CloudFormation stack");
     });
 
-    test("marks old Benchling parameters as deprecated", () => {
+    test("creates BenchlingSecret CloudFormation parameter", () => {
         const parameters = template.toJSON().Parameters;
+        expect(parameters).toHaveProperty("BenchlingSecret");
 
-        // Check that old parameters exist for backward compatibility
-        expect(parameters).toHaveProperty("BenchlingClientId");
-        expect(parameters).toHaveProperty("BenchlingClientSecret");
-        expect(parameters).toHaveProperty("BenchlingTenant");
-
-        // Check that they're marked as deprecated
-        expect(parameters.BenchlingClientId.Description).toContain("[DEPRECATED]");
-        expect(parameters.BenchlingClientSecret.Description).toContain("[DEPRECATED]");
-        expect(parameters.BenchlingTenant.Description).toContain("[DEPRECATED]");
+        const param = parameters.BenchlingSecret;
+        expect(param.Type).toBe("String");
+        expect(param.Description).toContain("Secrets Manager secret");
     });
 
-    test("old secret parameters have NoEcho enabled", () => {
+    test("creates LogLevel CloudFormation parameter", () => {
         const parameters = template.toJSON().Parameters;
+        expect(parameters).toHaveProperty("LogLevel");
 
-        expect(parameters.BenchlingClientId.NoEcho).toBe(true);
-        expect(parameters.BenchlingClientSecret.NoEcho).toBe(true);
+        const param = parameters.LogLevel;
+        expect(param.Type).toBe("String");
+        expect(param.AllowedValues).toContain("INFO");
+        expect(param.AllowedValues).toContain("DEBUG");
     });
 
     // ===================================================================
-    // Phase 3 Episode 3: Secrets Manager Secret Creation Tests (RED)
+    // Secrets-Only Mode: IAM and Container Environment Tests
     // ===================================================================
-
-    test("creates Secrets Manager secret without unsafePlainText", () => {
-        const secrets = template.findResources("AWS::SecretsManager::Secret");
-        const secretKeys = Object.keys(secrets);
-        expect(secretKeys.length).toBeGreaterThan(0);
-
-        const secret = secrets[secretKeys[0]];
-        expect(secret.Properties.Name).toBe("benchling-webhook/credentials");
-
-        // Verify secret structure supports both new and old parameters
-        // The actual implementation will use CloudFormation conditions
-        expect(secret.Properties.SecretString).toBeDefined();
-    });
 
     test("task role has Secrets Manager read permissions", () => {
         const policies = template.findResources("AWS::IAM::Policy");
@@ -361,165 +333,43 @@ describe("BenchlingWebhookStack", () => {
         expect(foundSecretPermission).toBe(true);
     });
 
-    // ===================================================================
-    // Phase 3 Episode 5: Container Environment Tests (RED)
-    // ===================================================================
+    test("task role has CloudFormation read permissions", () => {
+        const policies = template.findResources("AWS::IAM::Policy");
+        let foundCfnPermission = false;
 
-    test("container receives BENCHLING_SECRETS when new parameter provided", () => {
-        // Create a new stack with benchlingSecrets provided
-        const app = new cdk.App();
-        const stackWithSecrets = new BenchlingWebhookStack(app, "TestStackWithSecrets", {
-            bucketName: "test-bucket",
-            environment: "test",
-            prefix: "test-prefix",
-            queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
-            benchlingClientId: "",  // Empty to simulate new param usage
-            benchlingClientSecret: "",
-            benchlingTenant: "",
-            benchlingSecrets: JSON.stringify({
-                client_id: "test-id",
-                client_secret: "test-secret",
-                tenant: "test-tenant",
-            }),
-            quiltDatabase: "test-database",
-            env: {
-                account: "123456789012",
-                region: "us-east-1",
-            },
+        Object.values(policies).forEach((policy: any) => {
+            const statements = policy.Properties?.PolicyDocument?.Statement || [];
+            statements.forEach((statement: any) => {
+                if (Array.isArray(statement.Action)) {
+                    if (statement.Action.some((action: string) => action.startsWith("cloudformation:"))) {
+                        foundCfnPermission = true;
+                    }
+                }
+            });
         });
 
-        const templateWithSecrets = Template.fromStack(stackWithSecrets);
-        const taskDefs = templateWithSecrets.findResources("AWS::ECS::TaskDefinition");
-        const taskDefKeys = Object.keys(taskDefs);
-        const taskDef = taskDefs[taskDefKeys[0]];
-        const containerDef = taskDef.Properties.ContainerDefinitions[0];
-        const environment = containerDef.Environment || [];
-
-        const benchlingSecretsEnv = environment.find((e: any) => e.Name === "BENCHLING_SECRETS");
-        expect(benchlingSecretsEnv).toBeDefined();
+        expect(foundCfnPermission).toBe(true);
     });
 
-    test("container receives individual vars when old parameters provided", () => {
-        // This is the existing test stack setup (backward compatibility)
+    test("container receives QuiltStackARN environment variable", () => {
         const taskDefs = template.findResources("AWS::ECS::TaskDefinition");
         const taskDefKeys = Object.keys(taskDefs);
         const taskDef = taskDefs[taskDefKeys[0]];
         const containerDef = taskDef.Properties.ContainerDefinitions[0];
         const environment = containerDef.Environment || [];
-        const secrets = containerDef.Secrets || [];
 
-        // Should have BENCHLING_TENANT as environment variable
-        const tenantEnv = environment.find((e: any) => e.Name === "BENCHLING_TENANT");
-        expect(tenantEnv).toBeDefined();
-
-        // Should have CLIENT_ID and CLIENT_SECRET as secrets
-        const clientIdSecret = secrets.find((s: any) => s.Name === "BENCHLING_CLIENT_ID");
-        const clientSecretSecret = secrets.find((s: any) => s.Name === "BENCHLING_CLIENT_SECRET");
-        expect(clientIdSecret).toBeDefined();
-        expect(clientSecretSecret).toBeDefined();
+        const stackArnEnv = environment.find((e: any) => e.Name === "QuiltStackARN");
+        expect(stackArnEnv).toBeDefined();
     });
 
-    // ===================================================================
-    // Phase 3 Episode 7: Backward Compatibility Tests (RED)
-    // ===================================================================
-
-    test("stack works with old parameters (backward compatibility)", () => {
-        const app = new cdk.App();
-        const legacyStack = new BenchlingWebhookStack(app, "LegacyStack", {
-            bucketName: "test-bucket",
-            environment: "test",
-            prefix: "test-prefix",
-            queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
-            benchlingClientId: "legacy-client-id",
-            benchlingClientSecret: "legacy-client-secret",
-            benchlingTenant: "legacy-tenant",
-            quiltDatabase: "test-database",
-            env: {
-                account: "123456789012",
-                region: "us-east-1",
-            },
-        });
-
-        const legacyTemplate = Template.fromStack(legacyStack);
-
-        // Verify stack creates successfully
-        legacyTemplate.resourceCountIs("AWS::ECS::Service", 1);
-        legacyTemplate.resourceCountIs("AWS::SecretsManager::Secret", 1);
-
-        // Verify container uses old environment variable pattern
-        const taskDefs = legacyTemplate.findResources("AWS::ECS::TaskDefinition");
-        const taskDef = taskDefs[Object.keys(taskDefs)[0]];
+    test("container receives BenchlingSecret environment variable", () => {
+        const taskDefs = template.findResources("AWS::ECS::TaskDefinition");
+        const taskDefKeys = Object.keys(taskDefs);
+        const taskDef = taskDefs[taskDefKeys[0]];
         const containerDef = taskDef.Properties.ContainerDefinitions[0];
         const environment = containerDef.Environment || [];
 
-        const tenantEnv = environment.find((e: any) => e.Name === "BENCHLING_TENANT");
-        expect(tenantEnv).toBeDefined();
-        expect(tenantEnv.Value).toBeDefined();
-    });
-
-    test("new parameter takes precedence when both provided", () => {
-        const app = new cdk.App();
-        const mixedStack = new BenchlingWebhookStack(app, "MixedStack", {
-            bucketName: "test-bucket",
-            environment: "test",
-            prefix: "test-prefix",
-            queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
-            benchlingClientId: "old-client-id",
-            benchlingClientSecret: "old-client-secret",
-            benchlingTenant: "old-tenant",
-            benchlingSecrets: JSON.stringify({
-                client_id: "new-client-id",
-                client_secret: "new-client-secret",
-                tenant: "new-tenant",
-            }),
-            quiltDatabase: "test-database",
-            env: {
-                account: "123456789012",
-                region: "us-east-1",
-            },
-        });
-
-        const mixedTemplate = Template.fromStack(mixedStack);
-        const taskDefs = mixedTemplate.findResources("AWS::ECS::TaskDefinition");
-        const taskDef = taskDefs[Object.keys(taskDefs)[0]];
-        const containerDef = taskDef.Properties.ContainerDefinitions[0];
-        const environment = containerDef.Environment || [];
-
-        // Should use new parameter (BENCHLING_SECRETS)
-        const secretsEnv = environment.find((e: any) => e.Name === "BENCHLING_SECRETS");
-        expect(secretsEnv).toBeDefined();
-
-        // Should NOT have old individual vars
-        const tenantEnv = environment.find((e: any) => e.Name === "BENCHLING_TENANT");
-        expect(tenantEnv).toBeUndefined();
-    });
-
-    test("empty new parameter falls back to old parameters", () => {
-        const app = new cdk.App();
-        const fallbackStack = new BenchlingWebhookStack(app, "FallbackStack", {
-            bucketName: "test-bucket",
-            environment: "test",
-            prefix: "test-prefix",
-            queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
-            benchlingClientId: "fallback-client-id",
-            benchlingClientSecret: "fallback-client-secret",
-            benchlingTenant: "fallback-tenant",
-            benchlingSecrets: "",  // Empty string
-            quiltDatabase: "test-database",
-            env: {
-                account: "123456789012",
-                region: "us-east-1",
-            },
-        });
-
-        const fallbackTemplate = Template.fromStack(fallbackStack);
-        const taskDefs = fallbackTemplate.findResources("AWS::ECS::TaskDefinition");
-        const taskDef = taskDefs[Object.keys(taskDefs)[0]];
-        const containerDef = taskDef.Properties.ContainerDefinitions[0];
-        const environment = containerDef.Environment || [];
-
-        // Should fall back to old parameter pattern
-        const tenantEnv = environment.find((e: any) => e.Name === "BENCHLING_TENANT");
-        expect(tenantEnv).toBeDefined();
+        const secretEnv = environment.find((e: any) => e.Name === "BenchlingSecret");
+        expect(secretEnv).toBeDefined();
     });
 });
