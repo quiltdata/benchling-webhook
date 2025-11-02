@@ -214,95 +214,158 @@ Define the optimal workflow for development, testing, and deployment of the Benc
 
 ---
 
-## 2. Ideal Developer Workflow
+## 2. Architecture Principles (v0.6.0+)
 
-### 2.1 One-Command Bootstrap
+### 2.0 Technology Stack
 
-Developers should be able to run:
+- **Makefile** → Top-level orchestration (environment-agnostic)
+- **npm** → CDK infrastructure and implementation scripts
+- **Python** → Docker container application
+- **XDG** → Configuration storage (`~/.config/benchling-webhook/`)
+
+### 2.1 Configuration Model
+
+**XDG-Compliant Storage:**
+- User settings stored in `~/.config/benchling-webhook/default.json`
+- Avoids `.env` files and environment variable pollution
+- Single source of truth for credentials and deployment artifacts
+
+**Configuration Flow:**
+1. `make install` prompts for user settings → stores in XDG
+2. npm scripts read from XDG for CDK operations
+3. Secrets synced to AWS Secrets Manager
+4. Deployment outputs written back to XDG config
+
+---
+
+## 3. Ideal Developer Workflow
+
+### 3.1 One-Command Bootstrap
 
 ```bash
-npx @quiltdata/benchling-webhook
+make install
 ```
 
 This command must:
 
-1. Detect the Quilt3 catalog and infer stack parameters.
-2. Validate AWS and Docker environments.
-3. Prompt interactively for Benchling credentials.
-4. Generate `.env` and `.env.deploy` with all required fields.
+1. Install Node.js and Python dependencies
+2. Create XDG-compliant folder (`~/.config/benchling-webhook/`)
+3. Auto-infer Quilt catalog from `~/.quilt3/config.yml` (or prompt)
+4. Prompt interactively for Benchling credentials (tenant, client ID/secret, app definition ID)
+5. Validate Benchling credentials and bucket access
+6. Create or sync secrets to AWS Secrets Manager
+7. Generate `~/.config/benchling-webhook/default.json` with QuiltStackArn and BenchlingSecretArn
 
-If any inferred value fails validation, the script exits with explicit diagnostics (e.g., “Cannot find Quilt catalog in ~/.quilt3/config.yml”).
+If any step fails validation, the script exits with explicit diagnostics (e.g., "Cannot find Quilt catalog in ~/.quilt3/config.yml").
 
-### 2.2 Daily Development Loop
+### 3.2 Daily Development Loop
 
 ```bash
-npm run build && npm run lint && npm run typecheck
-make -C docker test-local
+make test
 ```
 
-- **Lint** → ensures code quality.
-- **Typecheck** → verifies interfaces between TS & Python layers.
-- **Local tests** → run Flask service with simulated Benchling payloads.
+- **Lint** → `npm run lint` + `make -C docker lint`
+- **Typecheck** → Verifies TS interfaces
+- **Unit tests** → Mocked tests for TypeScript and Python
+- **Code quality** → Confirms local functional correctness
 
 Commits follow `type(scope): summary` and PRs must include:
 
-- Verified local tests
+- Verified local tests (`make test`)
+- Integration test results (`make test-local`)
 - Deployment notes or configuration deltas
 
 ---
 
-## 3. Testing Tiers
+## 4. Testing Tiers
 
-### 3.1 Unit Tests
+### 4.1 Unit Tests (`make test`)
 
+- Runs linters for TypeScript and Python
+- Executes mocked unit tests (no external dependencies)
+- Validates code quality and local correctness
+
+**Commands:**
 - TypeScript: `npm run test:ts`
 - Python: `make -C docker test-unit`
 
-### 3.2 Integration Tests
+### 4.2 Local Integration (`make test-local`)
 
-- Local Docker validation: `make -C docker test-local`
-- ECR validation: `make -C docker test-ecr`
+- Builds local Docker image (`make -C docker build`)
+- Pulls credentials from AWS Secrets Manager
+- Runs Flask webhook with **real Benchling payloads**
+- Tests end-to-end flow without cloud deployment
 
-### 3.3 System Tests
+### 4.3 Remote Integration (`make test-remote`)
 
-- `npm run cdk:dev` to deploy isolated stack.
-- `make -C docker test-integration` to verify cross-stack events.
+CI workflow:
+1. Build and push **dev** Docker image to ECR (not `latest`)
+2. CDK synthesizes and deploys **dev stack** (isolated)
+3. Execute remote integration tests: API Gateway → ALB → Fargate → S3/SQS
+4. Validate secrets, IAM roles, and networking across deployed stack
 
-### 3.4 CI/CD Pipeline
+### 4.4 Release (`make release`)
 
-Automated steps:
+Production promotion (CI-only):
+1. Called after successful `make test-remote`
+2. Promotes verified image + stack to **production**
+3. Generates `deploy.json` with endpoint, image URI, and stack outputs
 
-1. Lint and typecheck
-2. Run tests and build image
-3. Push to ECR
-4. Deploy via CDK if all checks pass
+### 4.5 Tagging (`make tag`)
+
+Version management:
+- Creates and pushes version tag (triggers release pipeline)
+- Tags Docker image and CDK stack: `benchling-webhook:vX.Y.Z`
 
 ---
 
-## 4. Configuration Failure Modes
+## 5. Secret Environment Variables
+
+**Required secrets** (stored in AWS Secrets Manager and XDG config):
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BENCHLING_APP_DEFINITION_ID` | Yes | - | Benchling app identifier |
+| `BENCHLING_CLIENT_ID` | Yes | - | OAuth client ID |
+| `BENCHLING_CLIENT_SECRET` | Yes | - | OAuth client secret |
+| `BENCHLING_PKG_BUCKET` | Yes | - | S3 bucket for packages |
+| `BENCHLING_TENANT` | Yes | - | Benchling tenant name |
+| `BENCHLING_TEST_ENTRY` | No | - | Test entry ID for validation |
+| `BENCHLING_ENABLE_WEBHOOK_VERIFICATION` | No | `true` | Enable signature verification |
+| `BENCHLING_LOG_LEVEL` | No | `INFO` | Python logging level |
+| `BENCHLING_PKG_KEY` | No | `experiment_id` | Package metadata key |
+| `BENCHLING_PKG_PREFIX` | No | `benchling` | S3 key prefix |
+| `BENCHLING_WEBHOOK_ALLOW_LIST` | No | `""` | IP allowlist (comma-separated) |
+
+---
+
+## 6. Configuration Failure Modes
 
 | Failure | Cause | Mitigation |
 |----------|--------|-------------|
 | Missing Quilt catalog | Quilt3 not configured | Prompt user to run `quilt3 config` and retry |
-| Incomplete `.env` | Skipped prompt step | Add schema validation before deploy |
-| AWS auth error | Invalid credentials | Check AWS_PROFILE and region before CDK deploy |
+| XDG config corrupted | Manual file edit | Validate JSON schema on read; re-run `make install` |
+| AWS auth error | Invalid credentials | Check `AWS_PROFILE` and region before operations |
 | Docker build failure | Outdated base image | Auto-pull latest base before build |
-| Secrets not found | Not synced to AWS Secrets Manager | Run `npm run secrets:sync` automatically before deploy |
-| CDK stack drift | Manual AWS changes | Add drift detection preflight via `cdk diff` |
+| Secrets not synced | Secrets Manager unreachable | Validate IAM permissions; retry sync with backoff |
+| CDK stack drift | Manual AWS changes | Run `cdk diff` preflight; warn on drift detection |
+| Missing secret variables | Incomplete `make install` | Schema validation before secrets sync |
 
 ---
 
-## 5. Operational Principles
+## 7. Operational Principles
 
-- **Single Source of Truth:** Quilt catalog defines the environment.
-- **Fail Fast:** Validation before deployment prevents partial stacks.
-- **Idempotence:** Re-running bootstrap should never break a working setup.
-- **Observability:** Every stage logs explicit diagnostics to CloudWatch.
+- **Single Source of Truth:** XDG config defines the environment
+- **Fail Fast:** Validation before deployment prevents partial stacks
+- **Idempotence:** Re-running `make install` never breaks working setup
+- **Observability:** Every stage logs explicit diagnostics to CloudWatch
+- **Separation of Concerns:** Makefile orchestrates, npm/Python implement
 
 ---
 
-## 6. Future Goals
+## 8. Future Goals
 
-- Interactive configuration assistant with self-healing defaults.
-- Declarative environment lockfile (`benchling.env.json`).
-- Integrated smoke tests for cross-service health.
+- Interactive configuration assistant with self-healing defaults
+- Declarative environment lockfile (`benchling.env.json`)
+- Integrated smoke tests for cross-service health
+- Automatic credential rotation via Secrets Manager
