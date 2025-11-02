@@ -23,17 +23,8 @@ program
 program
     .command("deploy", { isDefault: true })
     .description("Deploy the CDK stack to AWS")
-    // Secrets-only mode (v0.6.0+)
-    .option("--quilt-stack-arn <arn>", "ARN of Quilt CloudFormation stack (enables secrets-only mode)")
-    .option("--benchling-secret <name>", "Name or ARN of Benchling secret in Secrets Manager (enables secrets-only mode)")
-    // Legacy mode options
-    .option("--catalog <url>", "Quilt catalog URL (legacy mode)")
-    .option("--bucket <name>", "S3 bucket for data (legacy mode)")
-    .option("--benchling-secrets <value>", "Benchling secrets configuration (ARN, JSON, or @file) (legacy mode)")
-    .option("--tenant <name>", "Benchling tenant (deprecated, use --benchling-secrets or secrets-only mode)")
-    .option("--client-id <id>", "Benchling OAuth client ID (deprecated, use --benchling-secrets or secrets-only mode)")
-    .option("--client-secret <secret>", "Benchling OAuth client secret (deprecated, use --benchling-secrets or secrets-only mode)")
-    .option("--app-id <id>", "Benchling app definition ID (deprecated, use --benchling-secrets or secrets-only mode)")
+    .option("--quilt-stack-arn <arn>", "ARN of Quilt CloudFormation stack")
+    .option("--benchling-secret <name>", "Name or ARN of Benchling secret in Secrets Manager (defaults to package name)", "@quiltdata/benchling-webhook")
     .option("--env-file <path>", "Path to .env file", ".env")
     // Common options
     .option("--no-bootstrap-check", "Skip CDK bootstrap verification")
@@ -44,21 +35,16 @@ program
     .option("--yes", "Skip confirmation prompts")
     .addHelpText("after", `
 Examples:
-  Secrets-Only Mode (v0.6.0+ - Recommended):
+  Deploy with default secret name:
+    $ npx @quiltdata/benchling-webhook deploy \\
+        --quilt-stack-arn "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123"
+
+  Deploy with custom secret name:
     $ npx @quiltdata/benchling-webhook deploy \\
         --quilt-stack-arn "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123" \\
         --benchling-secret "my-benchling-credentials"
 
-  Legacy Mode (using Secrets Manager ARN):
-    $ npx @quiltdata/benchling-webhook deploy --benchling-secrets "arn:aws:secretsmanager:us-east-1:123456789012:secret:benchling-credentials"
-
-  Legacy Mode (using inline JSON):
-    $ npx @quiltdata/benchling-webhook deploy --benchling-secrets '{"client_id":"xxx","client_secret":"yyy","tenant":"company"}'
-
-  Legacy Mode (using JSON file):
-    $ npx @quiltdata/benchling-webhook deploy --benchling-secrets @secrets.json
-
-For more information: https://github.com/quiltdata/benchling-webhook#secrets-configuration
+For more information: https://github.com/quiltdata/benchling-webhook#deployment
 `)
     .action(async (options) => {
         try {
