@@ -41,9 +41,9 @@ curl $WEBHOOK_ENDPOINT/health
 
 ## Documentation
 
-- [AGENTS.md](AGENTS.md) - Complete deployment guide, architecture, configuration
-- [docker/README.md](docker/README.md) - Development workflows
-- [doc/RELEASE.md](doc/RELEASE.md) - Release process
+- [AGENTS.md](../AGENTS.md) - Complete deployment guide, architecture, configuration
+- [docker/README.md](../docker/README.md) - Development workflows
+- [docs/RELEASE.md](RELEASE.md) - Release process
 
 ## License
 

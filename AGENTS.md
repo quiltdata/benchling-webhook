@@ -113,7 +113,7 @@ Edit `.env` with your configuration:
 | `WEBHOOK_ALLOW_LIST` | (empty) | Comma-separated IP allowlist |
 | `ECR_REPOSITORY_NAME` | `quiltdata/benchling` | Custom ECR repo name |
 
-See [doc/PARAMETERS.md](doc/PARAMETERS.md) for complete reference.
+See [docs/PARAMETERS.md](docs/PARAMETERS.md) for complete reference.
 
 ### 3. Deploy Infrastructure
 
@@ -181,6 +181,106 @@ aws logs tail /ecs/benchling-webhook --follow
 
 **Python App:**
 - See [docker/README.md](docker/README.md) or run `make help` in docker/ directory
+
+### Test Actions Reference
+
+A comprehensive guide to all testing commands, organized by scope and execution order.
+
+#### NPM Test Commands
+
+**Primary Test Suites:**
+1. `npm run typecheck` - TypeScript type checking (no emit)
+2. `npm run test:ts` - Jest tests for TypeScript code
+3. `npm run test:python` - Python unit tests via `make -C docker test-unit`
+4. `npm run test` - Full test suite (typecheck + test:ts + test:python)
+5. `npm run test-ci` - CI optimized tests (typecheck + test:ts, skips Python)
+
+**Integration & Docker:**
+6. `npm run docker:test` - Full Docker test suite via `make -C docker test`
+7. `npm run docker-check` - Validate Docker images
+
+#### Make Test Commands (docker/)
+
+**Setup & Prerequisites:**
+1. `make -C docker check-env` - Verify .env exists (auto-creates from template)
+2. `make -C docker check-ngrok` - Verify ngrok configured (auto-adds authtoken)
+3. `make -C docker install` - Install Python dependencies with uv
+
+**Unit & Linting:**
+4. `make -C docker lint` - Auto-fix code formatting (black + isort)
+5. `make -C docker test-unit` - Run pytest unit tests
+
+**Credential Verification:**
+6. `make -C docker test-benchling` - Test Benchling OAuth credentials
+7. `make -C docker test-query` - Test Quilt package query via Athena
+
+**Server Health Checks:**
+8. `make -C docker health-local` - Check local server health (port 5001)
+9. `make -C docker health-dev` - Check Docker dev health (port 5002)
+10. `make -C docker health-prod` - Check Docker prod health (port 5003)
+
+**Webhook Testing (by environment):**
+11. `make -C docker test-local` - Test webhooks with auto-managed local server
+12. `make -C docker test-dev` - Test webhooks against Docker dev (requires `make run`)
+13. `make -C docker test-prod` - Test webhooks against Docker prod (auto-starts)
+14. `make -C docker test-ecr` - Test ECR image (auto-starts, tests, cleans up)
+
+**Integration Testing:**
+15. `make -C docker test-integration` - Full integration tests with execution monitoring (requires real Benchling credentials)
+
+**Comprehensive Test Suites:**
+16. `make -C docker test` - Standalone tests (lint + test-unit + test-integration)
+17. `make -C docker test-all` - All tests including dev server (lint + test-unit + test-dev + test-integration)
+
+#### Recommended Test Order
+
+For local development:
+```bash
+# 1. Setup
+make -C docker check-env
+make -C docker install
+
+# 2. Code quality
+make -C docker lint
+npm run typecheck
+
+# 3. Unit tests
+npm run test:ts
+make -C docker test-unit
+
+# 4. Local integration
+make -C docker test-local
+
+# 5. Full test suite
+npm run test
+```
+
+For CI/CD pipeline:
+```bash
+# 1. Fast feedback
+npm run test-ci
+
+# 2. Python tests
+make -C docker test-unit
+
+# 3. Docker validation
+npm run docker-check
+
+# 4. Integration tests
+make -C docker test-integration
+```
+
+For pre-deployment validation:
+```bash
+# 1. Complete test suite
+npm run test
+
+# 2. Docker tests
+make -C docker test
+
+# 3. ECR image validation
+make -C docker test-ecr
+```
 
 ### Coding Style
 
