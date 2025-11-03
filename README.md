@@ -256,17 +256,17 @@ npm run test:local
 npm run test:remote
 
 # Individual test commands
-npm run test-ts      # TypeScript tests only
-npm run test:python  # Python unit tests only
-npm run typecheck    # Type checking only
-npm run lint         # Linting only
+npm run test:ts          # TypeScript tests only
+npm run test:python      # Python unit tests only
+npm run build:typecheck  # Type checking only
+npm run lint             # Linting only
 ```
 
 ### Release Workflow
 
 ```bash
 # Create and push version tag (triggers release pipeline)
-npm run tag
+npm run release:tag
 
 # CI will run:
 # - npm run test:remote (builds dev image, deploys dev stack, tests)
