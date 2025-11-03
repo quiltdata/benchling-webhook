@@ -228,7 +228,7 @@ class CanvasManager:
 
         # Footer with version and deployment info
         content += fmt.format_canvas_footer(
-            version="0.6.2",
+            version="0.6.1",
             quilt_host=self.config.quilt_catalog,
             bucket=self.config.s3_bucket_name,
         )
