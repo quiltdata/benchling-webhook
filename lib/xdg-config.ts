@@ -10,9 +10,10 @@
  * @module xdg-config
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, copyFileSync } from "fs";
 import { resolve } from "path";
 import { homedir } from "os";
+import { tmpdir } from "os";
 import Ajv from "ajv";
 
 /**
@@ -227,5 +228,73 @@ export class XDGConfig {
         }
 
         return config;
+    }
+
+    /**
+     * Gets the backup file path for a configuration type
+     *
+     * @param configType - Type of configuration
+     * @returns Backup file path
+     */
+    public getBackupPath(configType: ConfigType): string {
+        const configPath = this.getConfigPath(configType);
+        return `${configPath}.backup`;
+    }
+
+    /**
+     * Validates configuration against schema
+     *
+     * @param config - Configuration object to validate
+     * @throws {Error} If validation fails
+     */
+    private validateConfigSchema(config: BaseConfig): void {
+        const ajv = new Ajv();
+        const validate = ajv.compile(CONFIG_SCHEMA);
+        const valid = validate(config);
+
+        if (!valid) {
+            const errors = validate.errors?.map((err) => `${err.instancePath} ${err.message}`).join(", ");
+            throw new Error(`Invalid configuration schema: ${errors}`);
+        }
+    }
+
+    /**
+     * Writes a configuration file atomically with backup
+     *
+     * Uses a temporary file and rename operation for atomic writes.
+     * Creates a backup of the existing file before overwriting.
+     *
+     * @param configType - Type of configuration to write ("user", "derived", or "deploy")
+     * @param config - Configuration object to write
+     * @throws {Error} If validation fails or write operation fails
+     */
+    public writeConfig(configType: ConfigType, config: BaseConfig): void {
+        // Validate configuration before writing
+        this.validateConfigSchema(config);
+
+        const configPath = this.getConfigPath(configType);
+        const backupPath = this.getBackupPath(configType);
+
+        // Create backup if file exists
+        if (existsSync(configPath)) {
+            try {
+                copyFileSync(configPath, backupPath);
+            } catch (error) {
+                throw new Error(`Failed to create backup: ${(error as Error).message}`);
+            }
+        }
+
+        // Write to temporary file first (atomic write)
+        const tempPath = resolve(tmpdir(), `benchling-webhook-config-${Date.now()}.json`);
+        const configJson = JSON.stringify(config, null, 4);
+
+        try {
+            writeFileSync(tempPath, configJson, "utf-8");
+
+            // Atomic rename
+            renameSync(tempPath, configPath);
+        } catch (error) {
+            throw new Error(`Failed to write configuration file: ${(error as Error).message}`);
+        }
     }
 }
