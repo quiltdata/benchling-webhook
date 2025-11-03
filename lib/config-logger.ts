@@ -10,7 +10,7 @@
  * @module lib/config-logger
  */
 
-import { writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
+import { existsSync, mkdirSync, appendFileSync } from "fs";
 import { resolve } from "path";
 import { homedir } from "os";
 
