@@ -108,4 +108,70 @@ describe("XDGConfig", () => {
             expect(() => testInstance.readConfig("user")).toThrow("Invalid JSON");
         });
     });
+
+    describe("writeConfig", () => {
+        const testInstance = new XDGConfig(testConfigDir);
+        const userConfigPath = resolve(testConfigDir, "default.json");
+
+        beforeEach(() => {
+            testInstance.ensureDirectories();
+        });
+
+        it("should write configuration file atomically", () => {
+            const config = {
+                quiltCatalog: "catalog.example.com",
+                benchlingTenant: "test-tenant",
+            };
+            testInstance.writeConfig("user", config);
+            const writtenConfig = testInstance.readConfig("user");
+            expect(writtenConfig).toEqual(config);
+        });
+
+        it("should create backup before overwriting", () => {
+            const originalConfig = {
+                quiltCatalog: "original-catalog.com",
+                benchlingTenant: "original-tenant",
+            };
+            testInstance.writeConfig("user", originalConfig);
+
+            const newConfig = {
+                quiltCatalog: "new-catalog.com",
+                benchlingTenant: "new-tenant",
+            };
+            testInstance.writeConfig("user", newConfig);
+
+            const backupPath = testInstance.getBackupPath("user");
+            expect(existsSync(backupPath)).toBe(true);
+
+            // Verify new config was written
+            const writtenConfig = testInstance.readConfig("user");
+            expect(writtenConfig).toEqual(newConfig);
+        });
+
+        it("should prevent writing invalid configuration", () => {
+            const invalidConfig = { invalid: "config" };
+
+            expect(() => testInstance.writeConfig("user", invalidConfig)).toThrow("Invalid configuration schema");
+        });
+
+        it("should write to derived configuration file", () => {
+            const config = {
+                cdkAccount: "123456789012",
+                cdkRegion: "us-east-1",
+            };
+            testInstance.writeConfig("derived", config);
+            const writtenConfig = testInstance.readConfig("derived");
+            expect(writtenConfig).toEqual(config);
+        });
+
+        it("should write to deployment configuration file", () => {
+            const config = {
+                webhookUrl: "https://api.example.com/webhook",
+                deploymentTimestamp: "2025-11-02T14:30:00Z",
+            };
+            testInstance.writeConfig("deploy", config);
+            const writtenConfig = testInstance.readConfig("deploy");
+            expect(writtenConfig).toEqual(config);
+        });
+    });
 });
