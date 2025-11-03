@@ -21,10 +21,12 @@ All notable changes to this project will be documented in this file.
   - `npm run test:remote` - Deploy dev stack and test via API Gateway
   - Added `BENCHLING_TEST_MODE` to disable webhook verification for local testing
 
-- **npm Script Reorganization**
-  - Consistent naming: `setup:*`, `build:*`, `test:*`, `release:*`
+- **npm Script Reorganization** (#175)
+  - Consistent naming: `setup:*`, `build:*`, `test:*`, `deploy:*`, `release:*`
   - `npm run setup:infer` - Infer Quilt config from catalog
   - `npm run setup:sync-secrets` - Sync secrets to AWS Secrets Manager
+  - `npm run deploy:prod` - Deploy to production AWS (renamed from `cli`)
+  - `npm run deploy:dev` - Deploy to dev AWS (renamed from `release:dev`)
   - `npm run release:tag` - Create and push version tag
 
 ### Changed
@@ -46,6 +48,10 @@ All notable changes to this project will be documented in this file.
 - Test entry ID displays correctly on subsequent wizard runs
 - Setup script exits cleanly (no hanging from AWS SDK connection pools)
 - Removed environment variable dependency in non-interactive setup
+- **Deploy command now passes parameters correctly** (#175)
+  - Fixed `deploy:prod` not passing `quiltStackArn` and `benchlingSecret` to CDK stack
+  - CLI deploy command now sets environment variables for CDK synthesis
+  - Production deployment workflow now fully documented
 
 ## [0.5.4] - 2025-10-30
 

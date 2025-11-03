@@ -250,6 +250,8 @@ async function deploy(
                 ...process.env,
                 CDK_DEFAULT_ACCOUNT: deployAccount,
                 CDK_DEFAULT_REGION: deployRegion,
+                QUILT_STACK_ARN: quiltStackArn,
+                BENCHLING_SECRET: benchlingSecret,
             },
         });
 

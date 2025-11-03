@@ -241,7 +241,7 @@ async function main() {
   const quiltStackArn = 'arn:aws:cloudformation:us-east-1:712023778557:stack/quilt-staging/e51b0c10-10c9-11ee-9b41-12fda87498a3';
   const benchlingSecret = 'benchling-webhook-dev';
 
-  run(`npm run cli -- --quilt-stack-arn ${quiltStackArn} --benchling-secret ${benchlingSecret} --image-tag ${imageTag} --yes`);
+  run(`npm run deploy:prod -- --quilt-stack-arn ${quiltStackArn} --benchling-secret ${benchlingSecret} --image-tag ${imageTag} --yes`);
 
   // 6. Get and store the deployment endpoint
   console.log('');
