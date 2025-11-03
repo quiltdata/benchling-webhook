@@ -3,31 +3,24 @@
  * Quilt Catalog Auto-Inference
  *
  * Automatically infers Quilt catalog configuration from:
- * 1. quilt3 CLI configuration (~/.quilt3/config.yml)
- * 2. Interactive catalog selection (if multiple catalogs available)
- * 3. AWS CloudFormation stack inspection
+ * 1. quilt3 CLI command (`quilt3 config`)
+ * 2. AWS CloudFormation stack inspection
+ * 3. Interactive catalog selection (if multiple catalogs available)
  *
  * @module scripts/infer-quilt-config
  */
 
 import { execSync } from "child_process";
-import { existsSync, readFileSync } from "fs";
-import { resolve } from "path";
-import { homedir } from "os";
 import * as readline from "readline";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { DerivedConfig } from "../lib/types/config";
 
 /**
- * Quilt catalog configuration from quilt3 CLI
+ * Quilt CLI configuration
  */
-interface QuiltCatalogConfig {
-    navigator_url?: string;
-    s3Bucket?: string;
-    region?: string;
-    registryUrl?: string;
-    apiGatewayEndpoint?: string;
+interface QuiltCliConfig {
+    catalogUrl?: string;
 }
 
 /**
@@ -56,54 +49,21 @@ interface InferenceResult {
 }
 
 /**
- * Reads quilt3 CLI configuration from ~/.quilt3/config.yml
+ * Executes quilt3 config command to get current catalog URL
  *
- * @returns Parsed quilt3 configuration or null if not found
+ * @returns Catalog URL from quilt3 CLI or null if command fails
  */
-function readQuilt3Config(): QuiltCatalogConfig | null {
-    const quilt3ConfigPath = resolve(homedir(), ".quilt3", "config.yml");
-
-    if (!existsSync(quilt3ConfigPath)) {
-        return null;
-    }
-
-    try {
-        const configContent = readFileSync(quilt3ConfigPath, "utf-8");
-        const config: QuiltCatalogConfig = {};
-
-        // Parse YAML manually (simple key-value extraction)
-        const lines = configContent.split("\n");
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith("navigator_url:")) {
-                config.navigator_url = trimmed.split("navigator_url:")[1].trim().replace(/['"]/g, "");
-            } else if (trimmed.startsWith("s3Bucket:")) {
-                config.s3Bucket = trimmed.split("s3Bucket:")[1].trim().replace(/['"]/g, "");
-            } else if (trimmed.startsWith("region:")) {
-                config.region = trimmed.split("region:")[1].trim().replace(/['"]/g, "");
-            } else if (trimmed.startsWith("registryUrl:")) {
-                config.registryUrl = trimmed.split("registryUrl:")[1].trim().replace(/['"]/g, "");
-            } else if (trimmed.startsWith("apiGatewayEndpoint:")) {
-                config.apiGatewayEndpoint = trimmed.split("apiGatewayEndpoint:")[1].trim().replace(/['"]/g, "");
-            }
-        }
-
-        return config;
-    } catch (error) {
-        console.error(`Warning: Failed to read quilt3 config: ${(error as Error).message}`);
-        return null;
-    }
-}
-
-/**
- * Executes quilt3 config command to get current configuration
- *
- * @returns Quilt3 config output or null if command fails
- */
-function executeQuilt3ConfigCommand(): string | null {
+function getQuilt3Catalog(): QuiltCliConfig | null {
     try {
         const output = execSync("quilt3 config", { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] });
-        return output.trim();
+        const catalogUrl = output.trim();
+
+        if (catalogUrl && catalogUrl.startsWith("http")) {
+            console.log(`Found quilt3 CLI configuration: ${catalogUrl}`);
+            return { catalogUrl };
+        }
+
+        return null;
     } catch (error) {
         // quilt3 command not available or failed
         return null;
@@ -228,7 +188,7 @@ async function promptCatalogSelection(options: string[]): Promise<number> {
  * Infers Quilt configuration from multiple sources
  *
  * Priority order:
- * 1. quilt3 CLI configuration
+ * 1. quilt3 CLI command (`quilt3 config`)
  * 2. CloudFormation stack inspection
  * 3. Interactive selection if multiple options
  *
@@ -246,78 +206,83 @@ export async function inferQuiltConfig(options: {
         source: "none",
     };
 
-    // Step 1: Try quilt3 CLI configuration
+    // Step 1: Try quilt3 CLI command
     console.log("Checking quilt3 CLI configuration...");
-    const quilt3Config = readQuilt3Config();
+    const quilt3Config = getQuilt3Catalog();
 
-    if (quilt3Config) {
-        console.log("Found quilt3 configuration:");
-        if (quilt3Config.navigator_url) {
-            console.log(`  Catalog URL: ${quilt3Config.navigator_url}`);
-            result.catalogUrl = quilt3Config.navigator_url;
-        }
-        if (quilt3Config.s3Bucket) {
-            console.log(`  S3 Bucket: ${quilt3Config.s3Bucket}`);
-            result.quiltUserBucket = quilt3Config.s3Bucket;
-        }
-        if (quilt3Config.region) {
-            console.log(`  Region: ${quilt3Config.region}`);
-            result.quiltRegion = quilt3Config.region;
-        }
-        if (quilt3Config.registryUrl) {
-            result.registryUrl = quilt3Config.registryUrl;
-        }
-
+    if (quilt3Config?.catalogUrl) {
+        result.catalogUrl = quilt3Config.catalogUrl;
         result.source = "quilt3-cli";
     } else {
         console.log("No quilt3 CLI configuration found.");
     }
 
-    // Step 2: Try CloudFormation stack discovery
+    // Step 2: Search for CloudFormation stacks
     console.log("\nSearching for Quilt CloudFormation stacks...");
     const stacks = await findQuiltStacks(region, profile);
 
-    if (stacks.length > 0) {
-        console.log(`Found ${stacks.length} Quilt stack(s):`);
-
-        let selectedStack: QuiltStackInfo;
-
-        if (stacks.length === 1) {
-            selectedStack = stacks[0];
-            console.log(`  Using stack: ${selectedStack.stackName}`);
-        } else if (interactive) {
-            const options = stacks.map((s) => `${s.stackName} (${s.region})`);
-            const selectedIndex = await promptCatalogSelection(options);
-            selectedStack = stacks[selectedIndex];
-        } else {
-            selectedStack = stacks[0];
-            console.log(`  Using first stack: ${selectedStack.stackName}`);
-        }
-
-        // Merge stack information
-        if (selectedStack.stackArn) {
-            result.quiltStackArn = selectedStack.stackArn;
-        }
-        if (selectedStack.bucket && !result.quiltUserBucket) {
-            result.quiltUserBucket = selectedStack.bucket;
-        }
-        if (selectedStack.queueArn) {
-            result.queueArn = selectedStack.queueArn;
-        }
-        if (selectedStack.catalogUrl && !result.catalogUrl) {
-            result.catalogUrl = selectedStack.catalogUrl;
-        }
-        if (selectedStack.region && !result.quiltRegion) {
-            result.quiltRegion = selectedStack.region;
-        }
-
-        if (result.source === "none") {
-            result.source = "cloudformation";
-        } else {
-            result.source = "quilt3-cli+cloudformation";
-        }
-    } else {
+    if (stacks.length === 0) {
         console.log("No Quilt CloudFormation stacks found.");
+        return result;
+    }
+
+    console.log(`Found ${stacks.length} Quilt stack(s):\n`);
+
+    let selectedStack: QuiltStackInfo;
+
+    // If we have a catalog URL from quilt3, try to find matching stack
+    if (result.catalogUrl && stacks.length > 1) {
+        const matchingStack = stacks.find((s) => s.catalogUrl === result.catalogUrl);
+        if (matchingStack) {
+            selectedStack = matchingStack;
+            console.log(`Auto-selected stack matching catalog URL: ${selectedStack.stackName}`);
+        } else {
+            // No match found, prompt user
+            console.log(`No stack found matching catalog URL: ${result.catalogUrl}`);
+            if (interactive) {
+                const options = stacks.map((s) => `${s.stackName} (${s.region})`);
+                const selectedIndex = await promptCatalogSelection(options);
+                selectedStack = stacks[selectedIndex];
+                console.log(`\nSelected: ${selectedStack.stackName}`);
+            } else {
+                selectedStack = stacks[0];
+                console.log(`Using first stack: ${selectedStack.stackName}`);
+            }
+        }
+    } else if (stacks.length === 1) {
+        selectedStack = stacks[0];
+        console.log(`Using stack: ${selectedStack.stackName}`);
+    } else if (interactive) {
+        const options = stacks.map((s) => `${s.stackName} (${s.region})`);
+        const selectedIndex = await promptCatalogSelection(options);
+        selectedStack = stacks[selectedIndex];
+        console.log(`\nSelected: ${selectedStack.stackName}`);
+    } else {
+        selectedStack = stacks[0];
+        console.log(`Using first stack: ${selectedStack.stackName}`);
+    }
+
+    // Populate result from selected stack
+    if (selectedStack.stackArn) {
+        result.quiltStackArn = selectedStack.stackArn;
+    }
+    if (selectedStack.bucket) {
+        result.quiltUserBucket = selectedStack.bucket;
+    }
+    if (selectedStack.queueArn) {
+        result.queueArn = selectedStack.queueArn;
+    }
+    if (selectedStack.catalogUrl && !result.catalogUrl) {
+        result.catalogUrl = selectedStack.catalogUrl;
+    }
+    if (selectedStack.region) {
+        result.quiltRegion = selectedStack.region;
+    }
+
+    if (result.source === "quilt3-cli") {
+        result.source = "quilt3-cli+cloudformation";
+    } else {
+        result.source = "cloudformation";
     }
 
     return result;
