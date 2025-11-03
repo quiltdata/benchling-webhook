@@ -15,6 +15,7 @@ import { resolve } from "path";
 import { homedir } from "os";
 import { tmpdir } from "os";
 import Ajv from "ajv";
+import merge from "lodash.merge";
 
 /**
  * Configuration file paths for XDG-compliant storage
@@ -35,6 +36,15 @@ export type ConfigType = "user" | "derived" | "deploy";
  */
 export interface BaseConfig {
     [key: string]: unknown;
+}
+
+/**
+ * Configuration set for merging
+ */
+export interface ConfigSet {
+    user?: BaseConfig;
+    derived?: BaseConfig;
+    deploy?: BaseConfig;
 }
 
 /**
@@ -296,5 +306,36 @@ export class XDGConfig {
         } catch (error) {
             throw new Error(`Failed to write configuration file: ${(error as Error).message}`);
         }
+    }
+
+    /**
+     * Merges multiple configuration sources with priority order
+     *
+     * Merges configurations in priority order (user → derived → deploy),
+     * where later configurations override earlier ones.
+     * Uses deep merge to handle nested objects.
+     *
+     * @param configs - Configuration set to merge
+     * @returns Merged configuration object
+     */
+    public mergeConfigs(configs: ConfigSet): BaseConfig {
+        // Start with empty config
+        let merged: BaseConfig = {};
+
+        // Merge in priority order: user → derived → deploy
+        // Each subsequent config overrides previous values
+        if (configs.user) {
+            merged = merge({}, merged, configs.user);
+        }
+
+        if (configs.derived) {
+            merged = merge({}, merged, configs.derived);
+        }
+
+        if (configs.deploy) {
+            merged = merge({}, merged, configs.deploy);
+        }
+
+        return merged;
     }
 }
