@@ -1,0 +1,4 @@
+@@ -120,2 +121,2 @@
+-        const clientConfig: { region: string; credentials?: unknown } = { region };
++        const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region };
+ 

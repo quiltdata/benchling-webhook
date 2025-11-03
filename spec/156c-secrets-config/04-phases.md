@@ -31,6 +31,7 @@ This document breaks down the configuration system refactoring into focused phas
 ### Deliverables
 
 #### 0.1: Configuration Reading Abstraction
+
 - **File**: `lib/config-reader.ts` (new)
 - **Changes**:
   - Create `ConfigReader` class for centralized configuration access
@@ -39,6 +40,7 @@ This document breaks down the configuration system refactoring into focused phas
 - **Success Criteria**: All configuration reads go through centralized reader
 
 #### 0.2: Makefile Configuration Standardization
+
 - **File**: `Makefile`
 - **Changes**:
   - Standardize variable naming
@@ -47,6 +49,7 @@ This document breaks down the configuration system refactoring into focused phas
 - **Success Criteria**: Clean, predictable Makefile configuration
 
 #### 0.3: Multi-Profile Configuration Support
+
 - **File**: `scripts/config-profile.ts` (new)
 - **Changes**:
   - Implement profile management logic
@@ -66,6 +69,7 @@ This document breaks down the configuration system refactoring into focused phas
 ### Deliverables
 
 #### 1.1: XDG Configuration Library
+
 - **Files**:
   - `lib/xdg-config.ts`
   - `lib/types/config.ts`
@@ -79,6 +83,7 @@ This document breaks down the configuration system refactoring into focused phas
 - **Success Criteria**: Secure, validated configuration storage
 
 #### 1.2: Configuration Profile Management
+
 - **File**: `scripts/config-profiles.ts`
 - **Changes**:
   - Create, list, and manage configuration profiles
@@ -87,6 +92,7 @@ This document breaks down the configuration system refactoring into focused phas
 - **Success Criteria**: Flexible multi-profile support with strict validation
 
 #### 1.3: Python Configuration Integration
+
 - **File**: `docker/app/xdg_config.py`
 - **Changes**:
   - Read-only XDG configuration for Python
@@ -106,6 +112,7 @@ This document breaks down the configuration system refactoring into focused phas
 ### Deliverables
 
 #### 2.1: Quilt Catalog Auto-Inference
+
 - **File**: `scripts/infer-quilt-config.ts`
 - **Changes**:
   - Use `quilt3 config` CLI for configuration detection
@@ -114,6 +121,7 @@ This document breaks down the configuration system refactoring into focused phas
 - **Success Criteria**: Automated Quilt catalog configuration
 
 #### 2.2: Interactive Configuration Wizard
+
 - **File**: `scripts/install-wizard.ts`
 - **Changes**:
   - Guided configuration through `inquirer`
@@ -126,6 +134,7 @@ This document breaks down the configuration system refactoring into focused phas
 - **Success Criteria**: Comprehensive configuration validation
 
 #### 2.3: AWS Secrets Manager Integration
+
 - **File**: `scripts/sync-secrets.ts`
 - **Changes**:
   - Sync configuration to AWS Secrets Manager
@@ -145,6 +154,7 @@ This document breaks down the configuration system refactoring into focused phas
 ### Deliverables
 
 #### 3.1: Configuration Test Suite
+
 - Implement extensive tests for:
   - Profile creation
   - Validation rules
@@ -152,6 +162,7 @@ This document breaks down the configuration system refactoring into focused phas
   - Cross-platform compatibility
 
 #### 3.2: CI/CD Configuration Validation
+
 - **File**: `.github/workflows/config-validation.yml`
 - Automated checks for:
   - Configuration schema
@@ -159,6 +170,7 @@ This document breaks down the configuration system refactoring into focused phas
   - Profile compatibility
 
 #### 3.3: Diagnostic Logging
+
 - Add comprehensive logging for configuration operations
 - Track configuration sources
 - Enable troubleshooting insights
@@ -175,12 +187,14 @@ This document breaks down the configuration system refactoring into focused phas
 ### Deliverables
 
 #### 4.1: Configuration Health Checks
+
 - Validate:
   - XDG configuration integrity
   - Secrets accessibility
   - Benchling credential freshness
 
 #### 4.2: Metrics and Monitoring
+
 - Add CloudWatch metrics for:
   - Configuration operations
   - Secret access patterns
@@ -191,11 +205,13 @@ This document breaks down the configuration system refactoring into focused phas
 ## Success Metrics
 
 ### Technical Metrics
+
 - Installation success rate > 95%
 - Configuration errors detected pre-deployment > 90%
 - Zero production incidents during migration
 
 ### Operational Metrics
+
 - Health check false positive rate < 2%
 - Mean time to configuration resolution < 15 minutes
 
@@ -204,6 +220,7 @@ This document breaks down the configuration system refactoring into focused phas
 ## Timeline and Resources
 
 ### Estimated Timeline
+
 - **Total Duration**: 12-16 working days
 - **Phase 0**: Days 1-2
 - **Phase 1**: Days 3-6
@@ -212,6 +229,7 @@ This document breaks down the configuration system refactoring into focused phas
 - **Phase 4**: Days 14-16
 
 ### Resource Requirements
+
 - 1 Senior Engineer (full-time)
 - 1 DevOps Engineer (50% time)
 - 1 QA Engineer (25% time)

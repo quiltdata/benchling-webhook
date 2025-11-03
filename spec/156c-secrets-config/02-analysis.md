@@ -55,12 +55,14 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
 ```
 
 **What Works**:
+
 - Stack accepts `quiltStackArn` and `benchlingSecret` parameters
 - CDK stack creates CloudFormation parameters
 - Container receives `QuiltStackARN` and `BenchlingSecret` environment variables
 - Python application resolves config via `ConfigResolver` at runtime (See `docker/src/config.py`)
 
 **What's Missing**:
+
 - No XDG configuration storage
 - No `make install` command
 - No interactive credential collection
@@ -71,12 +73,14 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
 #### Secret Creation Workflow
 
 **Current Process** (`bin/create-secret.ts`):
+
 1. Reads 10 variables from `.env` file or environment
 2. Validates required parameters
 3. Creates/updates secret in AWS Secrets Manager
 4. No local persistence of configuration
 
 **Problems**:
+
 - Manual `.env` file maintenance required
 - No validation until secret creation attempt
 - No feedback loop for missing configuration
@@ -110,6 +114,7 @@ export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
 ```
 
 **Characteristics**:
+
 - Synchronous, file-based configuration loading
 - Priority: CLI > env vars > .env file > quilt3 config
 - No validation until deployment attempt
@@ -139,6 +144,7 @@ class Config:
 ```
 
 **Characteristics**:
+
 - Runtime resolution from AWS APIs
 - Requires network connectivity and AWS credentials
 - No local caching or fallback
@@ -151,12 +157,14 @@ class Config:
 #### Current Test Organization
 
 **TypeScript Tests** (`test/` directory):
+
 - Unit tests for configuration utilities: `test/utils-config.test.ts`
 - Stack synthesis tests
 - No integration tests with real AWS services
 - Mocked AWS SDK clients
 
 **Python Tests** (`docker/tests/` directory):
+
 - Unit tests with mocked dependencies
 - Integration tests require manual server setup
 - No automated fixture management
@@ -164,6 +172,7 @@ class Config:
 #### Test Commands Analysis
 
 **npm Test Commands** (`package.json`):
+
 ```json
 {
     "test": "npm run typecheck && npm run test-ts && npm run test:python",
@@ -174,6 +183,7 @@ class Config:
 ```
 
 **Docker Test Commands** (`docker/Makefile`):
+
 - `make test` - Runs lint + test-unit + test-integration
 - `make test-unit` - Unit tests only (fast, no AWS)
 - `make test-local` - Auto-managed local server with test webhooks
@@ -201,6 +211,7 @@ class Config:
 8. Retrieve stack outputs and test webhook endpoint
 
 **Challenges**:
+
 - Interactive prompts require manual intervention
 - No automated credential validation before deployment
 - No persistent configuration file created
@@ -220,12 +231,14 @@ class Config:
 ```
 
 **Usage**:
+
 ```bash
 node bin/get-env.js https://catalog.example.com --write
 # Creates env.inferred file (not .env to avoid overwriting)
 ```
 
 **Problems**:
+
 - Separate tool, not integrated into deployment workflow
 - Inference happens at deploy-time, not at runtime
 - Results written to file that must be manually reviewed and merged
@@ -238,12 +251,14 @@ node bin/get-env.js https://catalog.example.com --write
 **Current State**: There is **NO top-level Makefile** in the project root.
 
 **Docker Makefile** (`docker/Makefile`):
+
 - Comprehensive targets for Docker development
 - No dependency on parent directory Makefile
 - Includes `.env` file from parent: `-include ../.env`
 - Delegates to npm scripts for some operations
 
 **Docker Deploy Makefile** (`docker/make.deploy`):
+
 - Separate file for deployment-related targets
 - ECR push operations
 - Image tagging logic
@@ -255,6 +270,7 @@ node bin/get-env.js https://catalog.example.com --write
 **Current State**: **No XDG support whatsoever**.
 
 **What Exists**:
+
 - `.env` files in project directory
 - Environment variables
 - No `~/.config/benchling-webhook/` directory
@@ -262,6 +278,7 @@ node bin/get-env.js https://catalog.example.com --write
 - No persistent configuration storage
 
 **What Would Be Required**:
+
 - XDG Base Directory specification compliance
 - JSON schema for `default.json` configuration
 - Atomic write operations for configuration updates
@@ -275,6 +292,7 @@ node bin/get-env.js https://catalog.example.com --write
 ### 2.1 TypeScript Conventions
 
 **Style** (Enforced by ESLint):
+
 - 4-space indentation
 - Double quotes for strings
 - Trailing commas required
@@ -282,6 +300,7 @@ node bin/get-env.js https://catalog.example.com --write
 - Explicit return types on exported functions
 
 **Example** (`lib/benchling-webhook-stack.ts`):
+
 ```typescript
 export class BenchlingWebhookStack extends cdk.Stack {
     constructor(
@@ -296,6 +315,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
 ```
 
 **Error Handling Pattern**:
+
 ```typescript
 export class ConfigResolverError extends Error {
     constructor(
@@ -316,11 +336,13 @@ export class ConfigResolverError extends Error {
 ### 2.2 Python Conventions
 
 **Style** (Enforced by black + isort):
+
 - PEP 8 compliance
 - Type hints on function signatures
 - Dataclasses for configuration objects
 
 **Example** (`docker/src/config.py`):
+
 ```python
 @dataclass
 class Config:
@@ -331,6 +353,7 @@ class Config:
 ```
 
 **Error Handling Pattern**:
+
 ```python
 try:
     resolver = ConfigResolver()
@@ -342,17 +365,20 @@ except (ConfigResolverError, ValueError) as e:
 ### 2.3 CLI Patterns
 
 **Commander.js Usage** (`bin/cli.ts`):
+
 - Command-based CLI structure
 - Options with validation
 - Help text with examples
 - Async action handlers
 
 **Ora Spinners** (`bin/commands/deploy.ts`):
+
 - Progress feedback for long operations
 - Success/failure indication
 - Contextual status messages
 
 **Enquirer Prompts**:
+
 - Interactive confirmation prompts
 - Input validation
 - Default values
@@ -360,6 +386,7 @@ except (ConfigResolverError, ValueError) as e:
 ### 2.4 AWS SDK Patterns
 
 **Client Instantiation**:
+
 ```typescript
 const client = new SecretsManagerClient({ region });
 const command = new GetSecretValueCommand({ SecretId: secretIdentifier });
@@ -367,6 +394,7 @@ const response = await client.send(command);
 ```
 
 **Error Handling**:
+
 ```typescript
 catch (error: unknown) {
     if (error instanceof ResourceNotFoundException) {
@@ -379,12 +407,14 @@ catch (error: unknown) {
 ### 2.5 Testing Patterns
 
 **Jest Tests**:
+
 - Describe/it structure
 - beforeEach/afterEach cleanup
 - Environment variable mocking
 - File system mocking
 
 **Python Tests**:
+
 - pytest fixtures
 - unittest.mock for AWS services
 - Parametrized tests for multiple scenarios
@@ -394,17 +424,20 @@ catch (error: unknown) {
 ### 3.1 AWS Infrastructure Constraints
 
 **CloudFormation Stack Dependencies**:
+
 - Stack must reference existing Quilt CloudFormation stack
 - Stack outputs must be queryable at runtime
 - IAM permissions required: `cloudformation:DescribeStacks`, `secretsmanager:GetSecretValue`
 
 **Secrets Manager Constraints**:
+
 - Secret format must match expected JSON schema
 - Secrets cannot be deleted immediately (30-day recovery period)
 - Secret names must be unique per region
 - ARN format varies (name vs. full ARN)
 
 **ECS/Fargate Constraints**:
+
 - Environment variables passed to container at startup
 - No hot-reload of configuration without service restart
 - Task role must have sufficient IAM permissions
@@ -413,10 +446,12 @@ catch (error: unknown) {
 ### 3.2 Quilt Stack Integration Constraints
 
 **Required Outputs**:
+
 - `UserAthenaDatabaseName` - Athena database for package queries
 - `PackagerQueueArn` - SQS queue for package creation
 
 **Optional but Useful**:
+
 - API Gateway endpoint (for catalog URL inference)
 - S3 bucket names (if standardized)
 
@@ -425,12 +460,14 @@ catch (error: unknown) {
 ### 3.3 Development Environment Constraints
 
 **Local Docker Development**:
+
 - Requires AWS credentials mounted at runtime
 - Mock mode exists but limited functionality
 - Hot-reload works via Docker volume mounts
 - Port conflicts possible (5001, 5002, 5003)
 
 **CI/CD Constraints**:
+
 - GitHub Actions runners don't persist home directory
 - XDG directories may not exist between jobs
 - Secrets must come from CI secrets store
@@ -439,11 +476,13 @@ catch (error: unknown) {
 ### 3.4 Backward Compatibility Constraints
 
 **v0.5.4 Deployments**:
+
 - Existing deployments use individual environment variables
 - CloudFormation stacks have parameters for each field
 - Migration path must not break existing installations
 
 **Deprecation Timeline** (from CHANGELOG.md):
+
 - v0.6.x: New parameter available, old parameters deprecated
 - v0.7.x - v0.9.x: Deprecation warnings continue
 - v1.0.x: Old parameters removed (breaking change)
@@ -458,6 +497,7 @@ catch (error: unknown) {
 **Impact**: Developer onboarding, debugging, maintenance
 
 **Issues**:
+
 1. Six different configuration sources create confusion
 2. Priority rules are implicit and undocumented
 3. No single source of truth for "current configuration"
@@ -465,6 +505,7 @@ catch (error: unknown) {
 5. Testing requires extensive mocking
 
 **Quantification**:
+
 - 10+ environment variables required minimum
 - 6 configuration sources to check
 - 3 different file formats (.env, JSON, YAML)
@@ -476,6 +517,7 @@ catch (error: unknown) {
 **Impact**: Development velocity, confidence in changes
 
 **Issues**:
+
 1. No top-level test orchestration
 2. Inconsistent test naming (test-unit vs. test-local vs. test-dev)
 3. Manual server management for integration tests
@@ -483,6 +525,7 @@ catch (error: unknown) {
 5. No test data management strategy
 
 **Quantification**:
+
 - TypeScript tests: ~15 test files, ~200 assertions
 - Python tests: ~20 test files, ~150 assertions
 - Integration tests require manual Benchling entry setup
@@ -494,6 +537,7 @@ catch (error: unknown) {
 **Impact**: User adoption, support burden
 
 **Current State**:
+
 - README covers basic deployment
 - No comprehensive setup guide
 - Configuration parameters scattered across multiple files
@@ -501,6 +545,7 @@ catch (error: unknown) {
 - Migration guides incomplete
 
 **Gap Analysis**:
+
 - No architecture decision records (ADRs) for key decisions
 - No runbook for common operational tasks
 - No debug guide for configuration issues
@@ -512,12 +557,14 @@ catch (error: unknown) {
 **Impact**: Audit compliance, security posture
 
 **Addressed**:
+
 - Secrets moved to AWS Secrets Manager
 - Secrets masked in CLI output
 - IAM least-privilege policies
 - CloudTrail audit logging
 
 **Remaining Gaps**:
+
 - No credential rotation automation
 - No expiration policy for secrets
 - Local `.env` files may contain sensitive data
@@ -530,12 +577,14 @@ catch (error: unknown) {
 **Requirement**: Run a single command that sets up the entire development environment.
 
 **Current State**:
+
 - No `make install` command exists
 - Manual `.env` file creation required
 - Manual secret creation via `npm run config`
 - Manual catalog inference via `node bin/get-env.js`
 
 **Gap Summary**:
+
 - ❌ No single command for complete setup
 - ❌ Multiple manual steps required
 - ❌ No automated dependency installation
@@ -548,12 +597,14 @@ catch (error: unknown) {
 **Requirement**: System automatically detects Quilt catalog and AWS settings.
 
 **Current State**:
+
 - Inference tool exists (`bin/get-env.js`) but is standalone
 - Inference happens at deployment time, not installation time
 - Results written to file, not persisted to XDG config
 - No integration with deployment workflow
 
 **Gap Summary**:
+
 - ⚠️ Partial implementation exists but not integrated
 - ❌ No automatic inference during installation
 - ❌ No persistence to XDG configuration
@@ -566,12 +617,14 @@ catch (error: unknown) {
 **Requirement**: Prompt only for information that cannot be automatically inferred.
 
 **Current State**:
+
 - `bin/commands/init.ts` exists but creates `.env` file
 - No integration with XDG configuration
 - No automatic inference integration
 - No credential validation before storage
 
 **Gap Summary**:
+
 - ⚠️ Interactive prompts exist but output to wrong format
 - ❌ No integration with automatic inference
 - ❌ No XDG configuration output
@@ -584,12 +637,14 @@ catch (error: unknown) {
 **Requirement**: Immediate feedback when credentials or settings are incorrect.
 
 **Current State**:
+
 - Basic validation in `bin/create-secret.ts`
 - Validation happens during secret creation, not before
 - No pre-deployment validation of complete configuration
 - No Benchling API test until runtime
 
 **Gap Summary**:
+
 - ⚠️ Basic validation exists but incomplete
 - ❌ No comprehensive validation framework
 - ❌ No credential testing before deployment
@@ -602,12 +657,14 @@ catch (error: unknown) {
 **Requirement**: Test changes at multiple levels (unit, local integration, remote integration).
 
 **Current State**:
+
 - Test infrastructure exists but poorly organized
 - No top-level Makefile for orchestration
 - Inconsistent naming of test targets
 - Manual server management for integration tests
 
 **Gap Summary**:
+
 - ⚠️ Test components exist but not well-organized
 - ❌ No unified `make test`, `make test-local`, `make test-remote`
 - ❌ No automated server lifecycle management
@@ -620,12 +677,14 @@ catch (error: unknown) {
 **Requirement**: All configuration stored in one location with clear precedence rules.
 
 **Current State**:
+
 - Six different configuration sources
 - No XDG configuration directory
 - No persistent configuration storage
 - Priority rules implicit and inconsistent
 
 **Gap Summary**:
+
 - ❌ No XDG configuration implementation
 - ❌ No single source of truth
 - ❌ No JSON schema validation
@@ -638,12 +697,14 @@ catch (error: unknown) {
 **Requirement**: Sensitive credentials stored in AWS Secrets Manager.
 
 **Current State**:
+
 - ✅ Secrets Manager integration exists
 - ✅ Secret creation/update tool exists
 - ⚠️ Manual process, not automated
 - ⚠️ No validation before storage
 
 **Gap Summary**:
+
 - ✅ Core functionality implemented
 - ❌ Not integrated into installation workflow
 - ❌ No automatic validation
@@ -656,12 +717,14 @@ catch (error: unknown) {
 **Requirement**: Re-run installation command without breaking working setup.
 
 **Current State**:
+
 - No installation command exists
 - `.env` files can be overwritten accidentally
 - No configuration backup mechanism
 - No merge logic for updates
 
 **Gap Summary**:
+
 - ❌ No installation command to make idempotent
 - ❌ No configuration preservation logic
 - ❌ No backup/restore mechanism
@@ -674,12 +737,14 @@ catch (error: unknown) {
 **Requirement**: Run and test Flask application locally with mocked AWS services.
 
 **Current State**:
+
 - ✅ Mock mode exists (`docker/scripts/run_local.py`)
 - ✅ Local server can run without AWS credentials
 - ⚠️ Limited functionality in mock mode
 - ⚠️ Mock data setup is manual
 
 **Gap Summary**:
+
 - ✅ Core mock functionality exists
 - ⚠️ Mock data management needs improvement
 - ⚠️ Documentation of mock mode incomplete
@@ -692,12 +757,14 @@ catch (error: unknown) {
 **Requirement**: Same Docker container and secrets architecture for standalone and Quilt Stack deployments.
 
 **Current State**:
+
 - ✅ Container uses secrets-only architecture
 - ✅ Same image works for both deployment types
 - ✅ Configuration resolution at runtime
 - ✅ No deployment-specific code in container
 
 **Gap Summary**:
+
 - ✅ Architecture correctly implemented
 - ✅ No gaps identified
 - ✅ Deployment agnostic
@@ -711,17 +778,20 @@ catch (error: unknown) {
 **Challenge**: How to maintain compatibility with CI/CD environments that rely on environment variables?
 
 **Current Situation**:
+
 - CI/CD systems (GitHub Actions, GitLab CI) provide secrets via environment variables
 - XDG configuration may not persist between CI jobs
 - Container deployment already uses environment variables
 
 **Design Considerations**:
+
 1. XDG configuration should be **primary** for local development
 2. Environment variables should **override** XDG for CI/CD
 3. Container runtime should support both sources
 4. Migration path must not break existing CI/CD pipelines
 
 **Proposed Priority**:
+
 ```
 CLI Options > Environment Variables > XDG Configuration > Defaults
 ```
@@ -731,11 +801,13 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Challenge**: Users may work with multiple Quilt catalogs (dev, staging, production).
 
 **Current Situation**:
+
 - `~/.quilt3/config.yml` stores single default catalog
 - No mechanism to specify catalog per project
 - Inference tool assumes single catalog
 
 **Design Considerations**:
+
 1. Should XDG config support multiple catalog profiles?
 2. Should catalog be specified per-project or globally?
 3. How to handle conflicts between inference from `quilt3 config` CLI and XDG config?
@@ -747,12 +819,14 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Challenge**: Existing users have `.env` files that must be migrated to XDG format.
 
 **Current Situation**:
+
 - `.env` files are widespread
 - Breaking change in v0.6.0 (NOT v1.0.0)
 
 **Requirements Decision**: NO automated migration support. This is a breaking change with no backward compatibility.
 
 **Migration Approach**:
+
 1. NO `make migrate` command provided
 2. NO parallel operation during transition
 3. `.env` files may work during development ONLY
@@ -760,6 +834,7 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 5. Clear documentation of breaking change in v0.6.0
 
 **Impact**:
+
 - Clean break simplifies implementation
 - Forces adoption of new architecture
 - Eliminates technical debt from supporting multiple configuration sources
@@ -769,11 +844,13 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Challenge**: Developers often use multiple AWS profiles (personal, company, client).
 
 **Current Situation**:
+
 - AWS SDK respects `AWS_PROFILE` environment variable
 - No profile-aware configuration storage
 - Single XDG configuration file
 
 **Design Considerations**:
+
 1. Should XDG config include AWS profile name?
 2. Should configuration path include profile: `~/.config/benchling-webhook/{profile}/default.json`?
 3. How to handle profile switching?
@@ -785,11 +862,13 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Challenge**: Keeping XDG configuration in sync with AWS Secrets Manager.
 
 **Current Situation**:
+
 - Secrets stored in AWS Secrets Manager
 - XDG config would store secret **references** (ARNs), not secrets themselves
 - No automatic sync mechanism
 
 **Design Considerations**:
+
 1. User settings file (`default.json`) contains actual credentials for `make install` to use
 2. Derived settings file (`config/default.json`) stores secret ARNs, not secret values
 3. `make install` creates/updates secret in AWS Secrets Manager
@@ -799,6 +878,7 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Requirements Decision**: Secret rotation is MANUAL. No automatic credential rotation support.
 
 **Security Consideration**:
+
 - User settings file contains credentials locally (user-managed, not encrypted per requirements)
 - Derived config stores only ARNs and references
 - Secrets synced to AWS Secrets Manager during `make install`
@@ -808,11 +888,13 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Challenge**: Integration tests require real AWS resources and credentials.
 
 **Current Situation**:
+
 - `make test-integration` requires real Benchling credentials
 - Tests modify real data (create packages, query Athena)
 - No isolated test environment
 
 **Design Considerations**:
+
 1. Provide test mode that uses dedicated test resources
 2. Clear separation between unit (mocked) and integration (real AWS)
 3. CI/CD builds packages and images only (no deployment testing)
@@ -821,6 +903,7 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Requirements Decision**: Offline mode support is NONE. No functionality available when AWS services are unreachable.
 
 **Risk**:
+
 - Integration tests can't run on contributor forks (no AWS credentials)
 - Must rely on core maintainer testing for integration coverage
 - Development requires AWS connectivity
@@ -897,6 +980,7 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Current State**: npm scripts are primary interface, no top-level Makefile.
 
 **Recommendation**: Implement top-level Makefile that delegates to npm scripts. This:
+
 - Provides environment-agnostic interface
 - Allows shell scripting for complex operations
 - Maintains npm scripts for TypeScript/Node operations
@@ -911,6 +995,7 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Proposed Schemas**:
 
 1. **`~/.config/benchling-webhook/default.json`** (User Settings):
+
 ```json
 {
   "quiltCatalog": "https://quilt-catalog.example.com",
@@ -924,6 +1009,7 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 ```
 
 2. **`~/.config/benchling-webhook/config/default.json`** (Derived Settings):
+
 ```json
 {
   "quiltStackArn": "arn:aws:cloudformation:...",
@@ -934,6 +1020,7 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 ```
 
 3. **`~/.config/benchling-webhook/deploy/default.json`** (Deployment Outputs):
+
 ```json
 {
   "webhookEndpoint": "https://...",
@@ -951,6 +1038,7 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Requirements Decision**: NONE. v0.6.0 is a breaking change with no backward compatibility.
 
 **Migration Path**:
+
 - v0.6.0: XDG configuration required, `.env` files NOT supported
 - Existing `.env` files may be used during development only
 - Legacy environment variables NOT SUPPORTED in production
@@ -966,6 +1054,7 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Requirements Decision**: CI/CD only creates packages and Docker containers. Users push information from XDG to their stack directly.
 
 **Recommendation**:
+
 - CI/CD builds and packages artifacts (npm packages, Docker images)
 - CI/CD does NOT perform deployments
 - Developers use local XDG configuration to deploy to their own stacks
@@ -977,12 +1066,14 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 ### 9.1 Configuration Module Consolidation
 
 **Current State**: Configuration logic scattered across multiple files:
+
 - `lib/utils/config.ts` (212 lines)
 - `lib/utils/config-loader.ts` (119 lines)
 - `lib/utils/config-resolver.ts` (300+ lines)
 - `bin/benchling-webhook.ts` (legacy getConfig function)
 
 **Opportunity**: Consolidate into cohesive module with clear responsibilities:
+
 - `lib/utils/config/index.ts` - Public API
 - `lib/utils/config/xdg.ts` - XDG storage operations (3 file types: default.json, config/default.json, deploy/default.json)
 - `lib/utils/config/inference.ts` - Automatic inference from `quilt3 config` CLI
@@ -992,6 +1083,7 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Note**: Prefer npm scripts over Python for new configuration utilities unless Python is dramatically easier.
 
 **Benefits**:
+
 - Clear separation of concerns
 - Easier testing
 - Better maintainability
@@ -1000,12 +1092,14 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 ### 9.2 Error Handling Standardization
 
 **Current State**: Multiple error types and patterns:
+
 - `ConfigResolverError` with `format()` method
 - Plain `Error` with string messages
 - Validation errors in arrays
 - Inconsistent error formatting
 
 **Opportunity**: Standardize on error hierarchy:
+
 ```typescript
 abstract class ConfigError extends Error {
     abstract format(): string;
@@ -1017,6 +1111,7 @@ class StorageError extends ConfigError { }
 ```
 
 **Benefits**:
+
 - Consistent error handling
 - Better error messages
 - Easier debugging
@@ -1027,6 +1122,7 @@ class StorageError extends ConfigError { }
 **Current State**: Tests mixed between unit and integration without clear structure.
 
 **Opportunity**: Reorganize tests:
+
 ```
 test/
   unit/          # Fast, mocked tests
@@ -1036,6 +1132,7 @@ test/
 ```
 
 **Benefits**:
+
 - Clear test separation
 - Faster test execution (unit only)
 - Better CI/CD configuration
@@ -1046,12 +1143,14 @@ test/
 **Current State**: Commands in `bin/commands/` directory, some logic in main CLI file.
 
 **Opportunity**: Consistent command structure:
+
 - Each command in own file
 - Shared validation utilities
 - Common error handling
 - Consistent help text format
 
 **Benefits**:
+
 - Easier to add new commands
 - Consistent UX
 - Better testability
@@ -1064,6 +1163,7 @@ test/
 The Benchling webhook integration has made significant progress toward a secrets-only architecture, but critical gaps remain:
 
 ✅ **Implemented**:
+
 - Secrets-only mode for container runtime
 - AWS Secrets Manager integration
 - Configuration resolution from CloudFormation
@@ -1071,6 +1171,7 @@ The Benchling webhook integration has made significant progress toward a secrets
 - Comprehensive test infrastructure
 
 ❌ **Missing**:
+
 - XDG configuration storage
 - `make install` bootstrap command
 - Automatic configuration inference during installation
@@ -1101,6 +1202,7 @@ To achieve the requirements, implementation must focus on:
 ### Success Criteria
 
 The implementation will be successful when:
+
 - A new developer can run `make install` and have a working environment in under 10 minutes
 - Configuration exists in a single location (`~/.config/benchling-webhook/default.json`)
 - Validation catches errors before deployment attempts
@@ -1110,6 +1212,7 @@ The implementation will be successful when:
 ### Risk Mitigation
 
 Key risks include:
+
 - Backward compatibility breakage → Mitigation: NONE. v0.6.0 is a breaking change. Clear communication and documentation required.
 - CI/CD configuration complexity → Mitigation: CI/CD only builds artifacts; users deploy from local XDG config
 - Quilt Stack output variability → Mitigation: Graceful degradation with manual overrides
