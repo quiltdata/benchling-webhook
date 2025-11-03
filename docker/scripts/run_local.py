@@ -122,6 +122,17 @@ def load_credentials_from_aws():
     return env_vars
 
 
+def get_test_env_vars():
+    """Get additional environment variables for test mode.
+
+    Returns:
+        dict: Additional environment variables for testing
+    """
+    return {
+        "BENCHLING_TEST_MODE": "true",
+    }
+
+
 # Set up environment variables from AWS before importing Flask app
 try:
     env_vars = load_credentials_from_aws()
@@ -213,6 +224,13 @@ if __name__ == "__main__":
         print("🚀 Starting Benchling webhook server in TEST MODE...")
         print("📍 Server will run on http://localhost:5001")
         print("🧪 Tests will run automatically and server will shutdown afterwards")
+        print()
+
+        # Apply test-specific environment variables
+        test_env = get_test_env_vars()
+        for key, value in test_env.items():
+            os.environ[key] = str(value)
+        print("🔓 Webhook verification disabled for local testing")
         print()
 
         # Set up minimal logging for test mode

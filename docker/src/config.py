@@ -74,11 +74,19 @@ class Config:
             self.benchling_client_id = resolved.benchling_client_id
             self.benchling_client_secret = resolved.benchling_client_secret
             self.benchling_app_definition_id = resolved.benchling_app_definition_id
-            self.enable_webhook_verification = resolved.enable_webhook_verification
-            self.webhook_allow_list = resolved.webhook_allow_list
             self.pkg_prefix = resolved.pkg_prefix
             self.log_level = resolved.log_level
             self.flask_env = "production"
+
+            # Test mode override: disable webhook verification for local integration tests
+            # This enables testing without Benchling webhook signatures
+            test_mode = os.getenv("BENCHLING_TEST_MODE", "").lower() in ("true", "1", "yes")
+            if test_mode:
+                self.enable_webhook_verification = False
+                self.webhook_allow_list = ""  # Disable IP filtering in test mode
+            else:
+                self.enable_webhook_verification = resolved.enable_webhook_verification
+                self.webhook_allow_list = resolved.webhook_allow_list
 
         except (ConfigResolverError, ValueError) as e:
             raise ValueError(f"Failed to resolve configuration from AWS: {str(e)}")
