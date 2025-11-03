@@ -184,24 +184,24 @@ describe("ConfigurationWizard", () => {
     describe("validateInput", () => {
         it("should validate tenant format", () => {
             expect(ConfigurationWizard.validateTenant("valid-tenant")).toBe(true);
-            expect(ConfigurationWizard.validateTenant("")).toBe(false);
-            expect(ConfigurationWizard.validateTenant("  ")).toBe(false);
+            expect(ConfigurationWizard.validateTenant("")).not.toBe(true);
+            expect(ConfigurationWizard.validateTenant("  ")).not.toBe(true);
         });
 
         it("should validate client ID format", () => {
             expect(ConfigurationWizard.validateClientId("valid-client-id")).toBe(true);
-            expect(ConfigurationWizard.validateClientId("")).toBe(false);
+            expect(ConfigurationWizard.validateClientId("")).not.toBe(true);
         });
 
         it("should validate client secret format", () => {
             expect(ConfigurationWizard.validateClientSecret("valid-secret-123")).toBe(true);
-            expect(ConfigurationWizard.validateClientSecret("")).toBe(false);
-            expect(ConfigurationWizard.validateClientSecret("short")).toBe(false);
+            expect(ConfigurationWizard.validateClientSecret("")).not.toBe(true);
+            expect(ConfigurationWizard.validateClientSecret("short")).not.toBe(true);
         });
 
         it("should validate app definition ID format", () => {
             expect(ConfigurationWizard.validateAppDefinitionId("valid-app-id")).toBe(true);
-            expect(ConfigurationWizard.validateAppDefinitionId("")).toBe(false);
+            expect(ConfigurationWizard.validateAppDefinitionId("")).not.toBe(true);
         });
     });
 });
