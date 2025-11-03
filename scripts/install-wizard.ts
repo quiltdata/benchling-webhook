@@ -15,8 +15,9 @@
 
 import inquirer from "inquirer";
 import { S3Client, HeadBucketCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
-import { XDGConfig } from "../lib/xdg-config";
+import { XDGConfig, BaseConfig } from "../lib/xdg-config";
 import { UserConfig, ProfileName } from "../lib/types/config";
 import { inferQuiltConfig, inferenceResultToDerivedConfig } from "./infer-quilt-config";
 import { syncSecretsToAWS } from "./sync-secrets";
@@ -193,7 +194,7 @@ async function validateS3BucketAccess(
     }
 
     try {
-        const clientConfig: { region: string; credentials?: unknown } = { region };
+        const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region };
 
         if (awsProfile) {
             const { fromIni } = await import("@aws-sdk/credential-providers");
@@ -329,7 +330,7 @@ export async function runInstallWizard(options: WizardOptions = {}): Promise<Use
                 type: "input",
                 name: "quiltCatalog",
                 message: "Quilt Catalog URL:",
-                default: config.quiltCatalog || config.catalogUrl,
+                default: config.quiltCatalog,
                 validate: (input: string) => input.trim().length > 0 || "Catalog URL is required",
             },
             {
@@ -566,7 +567,7 @@ export async function runInstallWizard(options: WizardOptions = {}): Promise<Use
 
     const xdgConfig = new XDGConfig();
     xdgConfig.ensureProfileDirectories(profile);
-    xdgConfig.writeProfileConfig("user", config, profile);
+    xdgConfig.writeProfileConfig("user", config as BaseConfig, profile);
 
     console.log(`✓ Configuration saved to profile: ${profile}`);
 

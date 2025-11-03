@@ -293,7 +293,7 @@ export class ConfigHealthChecker {
         try {
             const userConfig = this.xdgConfig.readProfileConfig("user", this.profile) as UserConfig;
 
-            const catalogUrl = userConfig.quiltCatalog || userConfig.catalogUrl;
+            const catalogUrl = userConfig.quiltCatalog || userConfig.quiltCatalog;
 
             if (!catalogUrl) {
                 return {
@@ -579,4 +579,4 @@ if (require.main === module) {
     });
 }
 
-export { ConfigHealthChecker, HealthStatus, HealthCheckResult };
+export type { HealthStatus, HealthCheckResult };

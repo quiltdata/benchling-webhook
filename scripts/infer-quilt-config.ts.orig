@@ -15,7 +15,6 @@ import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { homedir } from "os";
 import * as readline from "readline";
-import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { DerivedConfig } from "../lib/types/config";
 
@@ -119,7 +118,7 @@ function executeQuilt3ConfigCommand(): string | null {
  */
 async function findQuiltStacks(region: string = "us-east-1", profile?: string): Promise<QuiltStackInfo[]> {
     try {
-        const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region };
+        const clientConfig: { region: string; credentials?: unknown } = { region };
 
         if (profile) {
             // Load AWS profile credentials

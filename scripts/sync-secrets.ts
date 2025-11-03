@@ -19,7 +19,8 @@ import {
     DescribeSecretCommand,
     ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
-import { XDGConfig } from "../lib/xdg-config";
+import { XDGConfig, BaseConfig } from "../lib/xdg-config";
+import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { UserConfig, DerivedConfig, ProfileName } from "../lib/types/config";
 
 /**
@@ -78,7 +79,7 @@ function generateSecretName(profile: ProfileName, tenant: string): string {
  * @returns SecretsManagerClient instance
  */
 async function getSecretsManagerClient(region: string, awsProfile?: string): Promise<SecretsManagerClient> {
-    const clientConfig: { region: string; credentials?: unknown } = { region };
+    const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region };
 
     if (awsProfile) {
         const { fromIni } = await import("@aws-sdk/credential-providers");
@@ -302,7 +303,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
 
     // Update secret ARN
     derivedConfig.benchlingSecrets = secretArn;
-    derivedConfig.benchlingSecret = secretArn; // Backward compatibility
+    derivedConfig.benchlingSecrets= secretArn; // Backward compatibility
 
     // Update metadata
     derivedConfig._metadata = {
@@ -312,7 +313,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
     };
 
     // Write updated derived config
-    xdgConfig.writeProfileConfig("derived", derivedConfig, profile);
+    xdgConfig.writeProfileConfig("derived", derivedConfig as BaseConfig, profile);
 
     console.log("✓ XDG configuration updated with secret ARN");
 

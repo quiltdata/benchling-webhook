@@ -8,7 +8,7 @@
  * - Cross-platform compatibility
  */
 
-import { XDGConfig } from "../../lib/xdg-config";
+import { XDGConfig, BaseConfig } from "../../lib/xdg-config";
 import { UserConfig, DerivedConfig, DeploymentConfig } from "../../lib/types/config";
 import { existsSync } from "fs";
 import { tmpdir } from "os";
@@ -177,7 +177,7 @@ describe("XDG Configuration Validation", () => {
         it("should track secret ARNs in derived config", () => {
             const derivedConfig: DerivedConfig = {
                 benchlingSecrets: "arn:aws:secretsmanager:us-east-1:123456789012:secret:benchling-webhook/test-abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:benchling-webhook/test-abc123",
+                benchlingSecrets: "arn:aws:secretsmanager:us-east-1:123456789012:secret:benchling-webhook/test-abc123",
                 _metadata: {
                     source: "sync-secrets",
                     savedAt: new Date().toISOString(),
