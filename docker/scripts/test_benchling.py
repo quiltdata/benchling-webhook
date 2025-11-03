@@ -17,13 +17,13 @@ from pathlib import Path
 
 from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
 from benchling_sdk.benchling import Benchling
-from dotenv import load_dotenv
 
 # Import the classes and functions we're testing
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.config import Config  # type: ignore
 from src.entry_packager import EntryPackager  # type: ignore
 from src.payload import Payload  # type: ignore
+from src.xdg_config import XDGConfig  # type: ignore
 
 
 class BehaviorTest:
@@ -312,44 +312,59 @@ def main():
         description="Test Benchling entry packaging (BDD style)",
         epilog="""
 Examples:
-  # Test from .env file
+  # Test using XDG configuration (default profile)
   %(prog)s
+
+  # Test using specific XDG profile
+  %(prog)s --profile dev
 
   # Test specific entry
   %(prog)s --entry-id etr_abc123
 
-  # Test with CLI credentials
+  # Test with CLI credentials (overrides XDG config)
   %(prog)s --tenant mycompany --client-id abc123 --client-secret xyz789
+
+Configuration Priority:
+  1. CLI arguments (--tenant, --client-id, --client-secret)
+  2. Environment variables (BENCHLING_TENANT, BENCHLING_CLIENT_ID, BENCHLING_CLIENT_SECRET)
+  3. XDG configuration (~/.config/benchling-webhook/default.json)
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--env-file", default=".env", help="Path to .env file (default: .env)")
-    parser.add_argument("--tenant", "-t", help="Benchling tenant name")
-    parser.add_argument("--client-id", "-i", help="OAuth client ID")
-    parser.add_argument("--client-secret", "-s", help="OAuth client secret")
-    parser.add_argument("--entry-id", "-e", help="Specific entry ID to test")
+    parser.add_argument("--profile", default="default", help="XDG configuration profile (default: default)")
+    parser.add_argument("--tenant", "-t", help="Benchling tenant name (overrides XDG config)")
+    parser.add_argument("--client-id", "-i", help="OAuth client ID (overrides XDG config)")
+    parser.add_argument("--client-secret", "-s", help="OAuth client secret (overrides XDG config)")
+    parser.add_argument("--entry-id", "-e", help="Specific entry ID to test (overrides XDG config)")
     args = parser.parse_args()
 
-    # Load environment variables (check if already set first, e.g., from Makefile)
-    env_already_set = os.getenv("BENCHLING_TENANT") and os.getenv("BENCHLING_CLIENT_ID")
-
-    if not env_already_set:
-        env_path = Path(args.env_file)
-        if env_path.exists():
-            print(f"Loading credentials from: {env_path.absolute()}\n")
-            load_dotenv(env_path)
-        elif not (args.tenant and args.client_id and args.client_secret):
-            print(f"❌ Error: .env file not found at {env_path}")
-            print(f"   Provide credentials via CLI or create .env file")
-            sys.exit(1)
-    else:
-        print(f"Using credentials from environment variables\n")
-
-    # Get credentials (CLI overrides env)
+    # Load configuration from XDG config or environment variables
+    # Priority: CLI args > Environment variables > XDG config
     tenant = args.tenant or os.getenv("BENCHLING_TENANT")
     client_id = args.client_id or os.getenv("BENCHLING_CLIENT_ID")
     client_secret = args.client_secret or os.getenv("BENCHLING_CLIENT_SECRET")
     entry_id = args.entry_id or os.getenv("BENCHLING_TEST_ENTRY")
+
+    # If not provided via CLI or environment, try XDG config
+    if not (tenant and client_id and client_secret):
+        try:
+            print(f"Loading credentials from XDG configuration (profile: {args.profile})...\n")
+            xdg = XDGConfig(profile=args.profile)
+            config = xdg.load_complete_config()
+
+            # Map XDG config fields to variables (only if not already set)
+            tenant = tenant or config.get("benchlingTenant")
+            client_id = client_id or config.get("benchlingClientId")
+            client_secret = client_secret or config.get("benchlingClientSecret")
+            entry_id = entry_id or config.get("benchlingTestEntry")
+
+            print(f"✅ Loaded credentials from XDG configuration\n")
+        except FileNotFoundError as e:
+            print(f"⚠️  XDG configuration not found: {e}")
+            print(f"   Falling back to environment variables\n")
+        except Exception as e:
+            print(f"⚠️  Failed to load XDG configuration: {e}")
+            print(f"   Falling back to environment variables\n")
 
     # Validate credentials
     missing = []
