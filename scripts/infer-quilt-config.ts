@@ -141,7 +141,7 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
         const quiltStacks = stacks.filter(
             (stack) =>
                 stack.StackName?.toLowerCase().includes("quilt") ||
-                stack.StackName?.toLowerCase().includes("catalog")
+                stack.StackName?.toLowerCase().includes("catalog"),
         );
 
         // Get detailed information for each stack

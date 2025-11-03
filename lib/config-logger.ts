@@ -266,11 +266,11 @@ export class ConfigLogger {
         operation: ConfigOperation,
         profileName: string,
         source: string,
-        fn: () => Promise<T> | T
+        fn: () => Promise<T> | T,
     ): Promise<T> {
         const startTime = Date.now();
 
-        this.info(operation, `Starting operation`, {
+        this.info(operation, "Starting operation", {
             profileName,
             source,
         });
@@ -279,7 +279,7 @@ export class ConfigLogger {
             const result = await fn();
             const duration = Date.now() - startTime;
 
-            this.info(operation, `Operation completed successfully`, {
+            this.info(operation, "Operation completed successfully", {
                 profileName,
                 source,
                 duration,

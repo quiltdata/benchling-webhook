@@ -101,7 +101,7 @@ async function validateBenchlingTenant(tenant: string): Promise<ValidationResult
 async function validateBenchlingCredentials(
     tenant: string,
     clientId: string,
-    clientSecret: string
+    clientSecret: string,
 ): Promise<ValidationResult> {
     const result: ValidationResult = {
         isValid: false,
@@ -151,7 +151,7 @@ async function validateBenchlingCredentials(
                     console.log("  ✓ OAuth credentials validated successfully");
                 } else {
                     result.errors.push(
-                        `OAuth validation failed with status ${res.statusCode}: ${data.substring(0, 100)}`
+                        `OAuth validation failed with status ${res.statusCode}: ${data.substring(0, 100)}`,
                     );
                 }
                 resolve(result);
@@ -180,7 +180,7 @@ async function validateBenchlingCredentials(
 async function validateS3BucketAccess(
     bucketName: string,
     region: string,
-    awsProfile?: string
+    awsProfile?: string,
 ): Promise<ValidationResult> {
     const result: ValidationResult = {
         isValid: false,
@@ -216,7 +216,7 @@ async function validateS3BucketAccess(
         });
         await s3Client.send(listCommand);
 
-        console.log(`  ✓ S3 bucket list permission confirmed`);
+        console.log("  ✓ S3 bucket list permission confirmed");
 
         result.isValid = true;
     } catch (error) {
@@ -382,7 +382,7 @@ export async function runInstallWizard(options: WizardOptions = {}): Promise<Use
             const s3Validation = await validateS3BucketAccess(
                 config.quiltUserBucket,
                 config.quiltRegion || awsRegion,
-                awsProfile
+                awsProfile,
             );
             if (!s3Validation.isValid) {
                 console.error("\n❌ S3 bucket validation failed:");
@@ -465,7 +465,7 @@ export async function runInstallWizard(options: WizardOptions = {}): Promise<Use
                 const credValidation = await validateBenchlingCredentials(
                     config.benchlingTenant,
                     config.benchlingClientId,
-                    config.benchlingClientSecret
+                    config.benchlingClientSecret,
                 );
                 if (!credValidation.isValid) {
                     console.error("\n❌ Benchling OAuth credential validation failed:");
@@ -497,7 +497,7 @@ export async function runInstallWizard(options: WizardOptions = {}): Promise<Use
 
         if (!config.benchlingTenant || !config.benchlingClientId || !config.benchlingClientSecret) {
             throw new Error(
-                "Non-interactive mode requires BENCHLING_TENANT, BENCHLING_CLIENT_ID, and BENCHLING_CLIENT_SECRET environment variables"
+                "Non-interactive mode requires BENCHLING_TENANT, BENCHLING_CLIENT_ID, and BENCHLING_CLIENT_SECRET environment variables",
             );
         }
     }

@@ -76,7 +76,7 @@ class ProfileManager {
      */
     public createProfile(
         profileName: ProfileName,
-        options: { awsProfile?: string; description?: string } = {}
+        options: { awsProfile?: string; description?: string } = {},
     ): void {
         console.log(`Creating profile: ${profileName}\n`);
 
@@ -104,7 +104,7 @@ class ProfileManager {
 
         const paths = this.xdgConfig.getProfilePaths(profileName);
         console.log(`Profile '${profileName}' created successfully!`);
-        console.log(`\nConfiguration files:`);
+        console.log("\nConfiguration files:");
         console.log(`  User config:   ${paths.userConfig}`);
         console.log(`  Derived config: ${paths.derivedConfig}`);
         console.log(`  Deploy config:  ${paths.deployConfig}`);
