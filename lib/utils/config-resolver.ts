@@ -180,7 +180,7 @@ export async function extractStackOutputs(
         }
 
         throw new ConfigResolverError(
-            `Failed to describe stack: ${error.message}`,
+            `Failed to describe stack: ${(error as Error).message}`,
             "Check AWS credentials and permissions",
         );
     }
@@ -251,7 +251,7 @@ export async function resolveAndFetchSecret(
             );
         }
 
-        if (error.name === "AccessDeniedException") {
+        if ((error as Error).name === "AccessDeniedException") {
             throw new ConfigResolverError(
                 `Access denied to secret: ${secretIdentifier}`,
                 "Ensure the IAM role has secretsmanager:GetSecretValue permission",
@@ -260,7 +260,7 @@ export async function resolveAndFetchSecret(
         }
 
         throw new ConfigResolverError(
-            `Failed to fetch secret: ${error.message}`,
+            `Failed to fetch secret: ${(error as Error).message}`,
             "Check AWS credentials and permissions",
         );
     }
