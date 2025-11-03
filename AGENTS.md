@@ -33,11 +33,13 @@ npm run lint                 # Linting and formatting
 npm run build                # Compile TypeScript
 ```
 
-**Release:**
+**Release & Deploy:**
 
 ```bash
-npm run release:tag          # Create version tag and push (triggers CI)
-npm run release              # Promote to production (CI-only)
+npm run release:tag          # Create version tag (triggers CI build)
+npm run release              # Full release (test + tag + Docker push)
+npm run deploy:prod          # Deploy to production AWS
+npm run deploy:dev           # Deploy to dev AWS (full workflow)
 ```
 
 ### Code Organization
@@ -135,8 +137,8 @@ npm run test:local  # Integration with local Docker + real Benchling
 ### 3. Deploy
 
 ```bash
-npm run test:remote  # Deploys dev stack, runs integration tests
-npm run release      # Promotes to production (after tests pass)
+npm run deploy:dev    # Deploys dev stack (full workflow: test + deploy + verify)
+npm run deploy:prod   # Deploy to production AWS (after release)
 ```
 
 ### 4. Verify
@@ -181,8 +183,8 @@ npm run test:local           # Integration test with local Docker
 
 ```bash
 npm run test:ci              # Fast checks (typecheck + test:ts)
-npm run test:remote          # Full remote integration (builds dev stack)
-npm run release              # Promotes to production (after tests pass)
+npm run test:remote          # Full remote integration (deploys dev stack)
+npm run deploy:prod          # Deploy to production (after CI release)
 ```
 
 **Pre-deployment:**
@@ -190,7 +192,7 @@ npm run release              # Promotes to production (after tests pass)
 ```bash
 npm run test                 # Verify local changes
 npm run test:local           # Verify Docker + Benchling integration
-npm run test:remote          # Verify full stack deployment
+npm run deploy:dev           # Full dev deployment + verification
 ```
 
 ### Additional Test Commands
@@ -326,20 +328,42 @@ CI workflow:
 3. Executes remote integration tests: API Gateway → ALB → Fargate → S3/SQS
 4. Validates secrets, IAM roles, and networking across deployed stack
 
-### 4.4 Release (`npm run release`)
+### 4.4 Production Release Workflow
 
-Production promotion (CI-only):
+**Step 1: Create Release Tag (`npm run release:tag`)**
 
-1. Called after successful `npm run test:remote`
-2. Promotes verified image + stack to **production**
-3. Generates `deploy.json` with endpoint, image URI, and stack outputs
+```bash
+npm run release:tag
+```
 
-### 4.5 Tagging (`npm run tag`)
+This creates and pushes a version tag (e.g., `v0.6.0`), which triggers CI to:
+- Run all tests
+- Build Docker image for production (x86_64)
+- Push to ECR with version tag
+- Publish to npm
+- Create GitHub release
 
-Version management:
+**Step 2: Deploy to Production (`npm run deploy:prod`)**
 
-- Creates and pushes version tag (triggers release pipeline)
-- Tags Docker image and CDK stack: `benchling-webhook:vX.Y.Z`
+After CI completes, deploy to production:
+
+```bash
+npm run deploy:prod -- \
+  --quilt-stack-arn <arn> \
+  --benchling-secret <name> \
+  --image-tag <version> \
+  --yes
+```
+
+This deploys the CI-built image to your production AWS environment.
+
+### 4.5 Full Release Command (`npm run release`)
+
+Local release workflow (test + tag + Docker push):
+
+1. Runs all tests (`npm run test`)
+2. Creates git tag (`node bin/release.js`)
+3. Builds and pushes Docker to CI registry (`make -C docker push-ci`)
 
 ---
 
