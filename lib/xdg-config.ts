@@ -12,7 +12,7 @@
  * @module xdg-config
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, copyFileSync, readdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, copyFileSync, unlinkSync, readdirSync } from "fs";
 import { resolve } from "path";
 import { homedir } from "os";
 import { tmpdir } from "os";
@@ -307,8 +307,14 @@ export class XDGConfig {
         try {
             writeFileSync(tempPath, configJson, "utf-8");
 
-            // Atomic rename
-            renameSync(tempPath, configPath);
+            // Atomic rename (with fallback for cross-device on Windows)
+            try {
+                renameSync(tempPath, configPath);
+            } catch (renameError) {
+                // Fall back to copy+delete for cross-device scenarios (Windows)
+                copyFileSync(tempPath, configPath);
+                unlinkSync(tempPath);
+            }
         } catch (error) {
             throw new Error(`Failed to write configuration file: ${(error as Error).message}`);
         }
@@ -498,7 +504,7 @@ export class XDGConfig {
     public writeProfileConfig(
         configType: ConfigType,
         config: BaseConfig,
-        profileName: ProfileName = "default"
+        profileName: ProfileName = "default",
     ): void {
         // Validate configuration before writing
         this.validateConfigSchema(config);
@@ -541,8 +547,14 @@ export class XDGConfig {
         try {
             writeFileSync(tempPath, configJson, "utf-8");
 
-            // Atomic rename
-            renameSync(tempPath, configPath);
+            // Atomic rename (with fallback for cross-device on Windows)
+            try {
+                renameSync(tempPath, configPath);
+            } catch (renameError) {
+                // Fall back to copy+delete for cross-device scenarios (Windows)
+                copyFileSync(tempPath, configPath);
+                unlinkSync(tempPath);
+            }
         } catch (error) {
             throw new Error(`Failed to write configuration file: ${(error as Error).message}`);
         }
@@ -611,7 +623,7 @@ export class XDGConfig {
 
         // For safety, we'll require manual deletion
         throw new Error(
-            `Profile deletion must be done manually. Profile directory: ${profileDir}`
+            `Profile deletion must be done manually. Profile directory: ${profileDir}`,
         );
     }
 }
