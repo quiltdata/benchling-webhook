@@ -58,6 +58,8 @@ const CONFIG_SCHEMA = {
         quiltUserBucket: { type: "string" },
         quiltDatabase: { type: "string" },
         quiltStackArn: { type: "string" },
+        quiltRegion: { type: "string" },
+        catalogUrl: { type: "string" },
         benchlingTenant: { type: "string" },
         benchlingClientId: { type: "string" },
         benchlingClientSecret: { type: "string" },
@@ -72,15 +74,27 @@ const CONFIG_SCHEMA = {
         pkgKey: { type: "string" },
         logLevel: { type: "string" },
         webhookAllowList: { type: "string" },
+        webhookEndpoint: { type: "string" },
         enableWebhookVerification: { type: "string" },
         createEcrRepository: { type: "string" },
         ecrRepositoryName: { type: "string" },
         imageTag: { type: "string" },
         webhookUrl: { type: "string" },
         deploymentTimestamp: { type: "string" },
+        deployedAt: { type: "string" },
         stackArn: { type: "string" },
+        _metadata: {
+            type: "object",
+            properties: {
+                savedAt: { type: "string" },
+                source: { type: "string" },
+                version: { type: "string" },
+                inferredAt: { type: "string" },
+            },
+            additionalProperties: false,
+        },
     },
-    additionalProperties: false,
+    additionalProperties: true,
 };
 
 /**

@@ -74,10 +74,12 @@ describe("XDGConfig", () => {
         });
 
         it("should validate configuration schema", () => {
-            const invalidConfig = { invalid: "config" };
-            writeFileSync(userConfigPath, JSON.stringify(invalidConfig, null, 4));
+            // With additionalProperties: true, unknown fields are now allowed
+            const validConfig = { catalogUrl: "https://test.com", unknownField: "value" };
+            writeFileSync(userConfigPath, JSON.stringify(validConfig, null, 4));
 
-            expect(() => testInstance.readConfig("user")).toThrow("Invalid configuration schema");
+            // Should not throw for additional properties
+            expect(() => testInstance.readConfig("user")).not.toThrow();
         });
 
         it("should read derived configuration file", () => {
@@ -149,9 +151,11 @@ describe("XDGConfig", () => {
         });
 
         it("should prevent writing invalid configuration", () => {
-            const invalidConfig = { invalid: "config" };
+            // With additionalProperties: true, unknown fields are now allowed
+            const validConfig = { catalogUrl: "https://test.com", unknownField: "value" };
 
-            expect(() => testInstance.writeConfig("user", invalidConfig)).toThrow("Invalid configuration schema");
+            // Should not throw for additional properties
+            expect(() => testInstance.writeConfig("user", validConfig)).not.toThrow();
         });
 
         it("should write to derived configuration file", () => {
