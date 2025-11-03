@@ -1,228 +1,395 @@
-# Benchling Webhook Integration - Complete Guide
+# Benchling Webhook Integration - Developer Guide
 
-Complete deployment and operational guide for the Benchling webhook integration with Quilt.
+## Quick Start: Daily Development Workflow
 
-## Architecture Overview
+### Essential Commands
 
-This AWS CDK application deploys a highly available, auto-scaling webhook processor using:
+**Git & GitHub** (via `gh` CLI):
 
-- **Amazon API Gateway** → Routes HTTPS webhooks with IP-based access control
-- **Application Load Balancer (ALB)** → Distributes traffic across container instances
-- **AWS Fargate on Amazon ECS** → Runs containerized webhook processor (auto-scales 2-10 tasks)
-- **Amazon S3** → Stores webhook payloads and package data
-- **Amazon SQS** → Queues package creation requests for Quilt
-- **AWS Secrets Manager** → Securely stores Benchling OAuth credentials
-- **Amazon CloudWatch** → Provides centralized logging and monitoring
-- **AWS IAM** → Enforces least-privilege access controls
+```bash
+gh pr create                  # Create pull request
+gh pr list                    # List your PRs
+gh pr view                    # View PR details
+gh pr checks                  # Check CI status
+```
 
-**Request Flow:** Benchling → API Gateway → ALB → Fargate (Flask app) → S3 + SQS
+**Setup & Configuration:**
+
+```bash
+npm run setup                # Install deps + configure XDG + sync secrets
+npm run setup:infer          # Infer Quilt config from catalog
+npm run setup:sync-secrets   # Sync secrets to AWS Secrets Manager
+npm run setup:health         # Validate configuration
+```
+
+**Test & Build:**
+
+```bash
+npm run test                 # Unit tests (lint + typecheck + mocked tests)
+npm run test:local           # Local integration (Docker + real Benchling)
+npm run test:remote          # Remote integration (deploy dev stack + test)
+npm run build:typecheck      # TypeScript type checking only
+npm run lint                 # Linting and formatting
+npm run build                # Compile TypeScript
+```
+
+**Release:**
+
+```bash
+npm run release:tag          # Create version tag and push (triggers CI)
+npm run release              # Promote to production (CI-only)
+```
 
 ### Code Organization
 
-- **Infrastructure (CDK)**: `bin/` and `lib/` contain TypeScript CDK code for AWS deployment
-  - `lib/benchling-webhook-stack.ts` - Main stack orchestrating all components
-  - `lib/fargate-service.ts` - ECS Fargate service running Flask in Docker
-  - `lib/alb-api-gateway.ts` - API Gateway with HTTP integration to ALB
-  - `lib/ecr-repository.ts` - Docker image repository
-- **Application (Python)**: `docker/` contains Flask webhook processor
-  - See [docker/README.md](docker/README.md) for application development
+**Infrastructure & Build:**
+- **`lib/`** - CDK infrastructure constructs (TypeScript)
+  - [lib/benchling-webhook-stack.ts](lib/benchling-webhook-stack.ts) - Main orchestration
+  - [lib/fargate-service.ts](lib/fargate-service.ts) - ECS Fargate service
+  - [lib/alb-api-gateway.ts](lib/alb-api-gateway.ts) - API Gateway + ALB
+  - [lib/ecr-repository.ts](lib/ecr-repository.ts) - Docker registry
+  - [lib/xdg-config.ts](lib/xdg-config.ts) - XDG configuration management
+  - [lib/types/](lib/types/) - TypeScript type definitions
 
-## Prerequisites
+**CLI & Automation:**
+- **`bin/`** - Executable CLI tools & automation scripts (JavaScript/TypeScript)
+  - [bin/cli.ts](bin/cli.ts) - Main CLI entry point (`benchling-webhook` command)
+  - [bin/version.js](bin/version.js) - Version management (`npm run version`)
+  - [bin/release.js](bin/release.js) - Release automation
+  - [bin/cdk-dev.js](bin/cdk-dev.js) - Dev deployment workflow
+  - [bin/check-logs.js](bin/check-logs.js) - CloudWatch log viewer
+  - [bin/send-event.js](bin/send-event.js) - Test event sender
+  - [bin/commands/](bin/commands/) - CLI command implementations
 
-- **AWS Account** with appropriate IAM permissions
-- **AWS CLI** v2.x configured with credentials
-- **Node.js** >= 18.0.0
-- **Docker** for container builds
-- **Quilt Stack** deployed with S3 bucket and SQS queue configured
-- **Benchling Account** with app creation permissions
+**Setup & Configuration:**
+- **`scripts/`** - Interactive setup & configuration scripts (TypeScript, run via ts-node)
+  - [scripts/install-wizard.ts](scripts/install-wizard.ts) - Interactive setup wizard (`npm run setup`)
+  - [scripts/infer-quilt-config.ts](scripts/infer-quilt-config.ts) - Quilt catalog inference (`npm run setup:infer`)
+  - [scripts/sync-secrets.ts](scripts/sync-secrets.ts) - AWS Secrets Manager sync (`npm run setup:sync-secrets`)
+  - [scripts/config-health-check.ts](scripts/config-health-check.ts) - Configuration validation (`npm run setup:health`)
 
-## Installation
+**Application:**
+- **`docker/`** - Flask webhook processor (Python)
+  - See [docker/README.md](docker/README.md) for details
 
-### 1. Clone and Install
+**Key Distinction:**
+- **`bin/`** → CLI tools & compiled scripts (production runtime, often `.js`)
+- **`scripts/`** → Development-time setup scripts (TypeScript, via ts-node)
+
+### Coding Standards
+
+- **TypeScript**: 4-space indent, double quotes, trailing commas, required semicolons
+- **Types**: Avoid `any`; explicit return types on exports
+- **Commits**: Conventional format `type(scope): summary`
+- **PRs**: Include test results and deployment notes
+
+## Architecture
+
+AWS CDK application deploying auto-scaling webhook processor:
+
+- **API Gateway** → HTTPS webhook routing with IP filtering
+- **ALB** → Load balancing across containers
+- **Fargate (ECS)** → Flask app (auto-scales 2-10 tasks)
+- **S3** → Payload and package storage
+- **SQS** → Quilt package creation queue
+- **Secrets Manager** → Benchling OAuth credentials
+- **CloudWatch** → Logging and monitoring
+
+**Flow:** Benchling → API Gateway → ALB → Fargate → S3 + SQS
+
+## Setup & Installation
+
+### Prerequisites
+
+- AWS Account with IAM permissions
+- AWS CLI v2.x configured
+- Node.js >= 18.0.0
+- Docker
+- Quilt Stack (S3 bucket + SQS queue)
+- Benchling Account with app creation permissions
+
+### 1. Install
 
 ```bash
 git clone https://github.com/quiltdata/benchling-webhook.git
 cd benchling-webhook
-npm install
+npm run setup  # Interactive wizard: deps + XDG config + secrets sync
 ```
 
-### 2. Configure Environment
+This command:
+- Installs Node.js and Python dependencies
+- Creates XDG-compliant folder (`~/.config/benchling-webhook/`)
+- Auto-infers Quilt catalog from `~/.quilt3/config.yml` (or prompts)
+- Prompts for Benchling credentials (tenant, client ID/secret, app definition ID)
+- Validates Benchling credentials and bucket access
+- Creates or syncs secrets to AWS Secrets Manager
+- Generates `~/.config/benchling-webhook/default.json` with QuiltStackArn and BenchlingSecretArn
 
-#### Option A: Auto-infer from Quilt Catalog (Recommended)
-
-If you have an existing Quilt deployment, you can automatically infer most configuration values:
+### 2. Test Locally
 
 ```bash
-# Infer config from your Quilt catalog
-npm run get-env -- https://quilt-catalog.yourcompany.com --write
-
-# Review the generated env.inferred file
-cat env.inferred
-
-# Copy to .env and fill in Benchling credentials
-cp env.inferred .env
-# Then edit .env to add your Benchling-specific values
+npm run test        # Unit tests (lint + typecheck + mocked)
+npm run test:local  # Integration with local Docker + real Benchling
 ```
 
-The script will:
-
-- Fetch `config.json` from your Quilt catalog
-- Query AWS CloudFormation to find your Quilt stack
-- Extract bucket names, queue names, region, and account ID
-- Generate a `.env.inferred` file with pre-filled AWS/Quilt configuration
-
-**Note:** You'll still need to manually add Benchling credentials (tenant, client ID, client secret, etc.).
-
-#### Option B: Manual Configuration
+### 3. Deploy
 
 ```bash
-cp env.template .env
+npm run test:remote  # Deploys dev stack, runs integration tests
+npm run release      # Promotes to production (after tests pass)
 ```
 
-Edit `.env` with your configuration:
-
-**Required Variables** (you must provide these):
-
-| Variable | Description |
-|----------|-------------|
-| `QUILT_CATALOG` | Quilt catalog URL (e.g., `quilt-catalog.yourcompany.com`) |
-| `QUILT_USER_BUCKET` | Your S3 bucket for Benchling exports |
-| `BENCHLING_TENANT` | Benchling subdomain (e.g., `myorg` from `myorg.benchling.com`) |
-| `BENCHLING_CLIENT_ID` | OAuth client ID from Benchling app |
-| `BENCHLING_CLIENT_SECRET` | OAuth client secret from Benchling app |
-| `BENCHLING_APP_DEFINITION_ID` | App definition ID for webhook verification |
-
-**Auto-Inferred Variables** (automatically determined from your Quilt catalog):
-
-| Variable | How It's Inferred |
-|----------|-------------------|
-| `CDK_DEFAULT_ACCOUNT` | From AWS STS (your current account) |
-| `CDK_DEFAULT_REGION` | From catalog config.json |
-| `QUEUE_NAME` | From Quilt stack outputs |
-| `QUEUE_ARN` | From Quilt stack outputs |
-| `QUILT_DATABASE` | From Quilt stack outputs |
-
-**Optional Variables** (have sensible defaults):
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PKG_PREFIX` | `benchling` | Quilt package name prefix |
-| `PKG_KEY` | `experiment_id` | Metadata key for linking entries to packages |
-| `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
-| `ENABLE_WEBHOOK_VERIFICATION` | `true` | Verify webhook signatures |
-| `WEBHOOK_ALLOW_LIST` | (empty) | Comma-separated IP allowlist |
-| `ECR_REPOSITORY_NAME` | `quiltdata/benchling` | Custom ECR repo name |
-
-See [doc/PARAMETERS.md](doc/PARAMETERS.md) for complete reference.
-
-### 3. Deploy Infrastructure
+### 4. Verify
 
 ```bash
-# Bootstrap CDK (first time only)
-source .env
-npx cdk bootstrap aws://$CDK_DEFAULT_ACCOUNT/$CDK_DEFAULT_REGION
+# Configuration health check
+npm run setup:health
 
-# Deploy stack
-npm run deploy
-```
-
-The webhook URL will be saved to `.env.deploy`:
-
-```bash
-WEBHOOK_ENDPOINT=https://abc123.execute-api.us-east-1.amazonaws.com/prod
-```
-
-## Post-Deployment Configuration
-
-### Configure Benchling App
-
-1. **Create App**: Benchling → Developer Console → Apps → Create app → From manifest
-2. **Upload Manifest**: Use `app-manifest.yaml` from this repository
-3. **Set Credentials**: Create Client Secret → Copy ID and Secret to `.env`
-4. **Configure Webhook**: Overview → Webhook URL → Paste URL from `.env.deploy`
-5. **Install App**: Version History → Install → Activate
-6. **Grant Permissions**: Tenant Admin → Organizations → Apps → Add app → Set role to Admin
-
-### Verify Deployment
-
-```bash
-# Health check
-source .env.deploy
-curl $WEBHOOK_ENDPOINT/health
-
-# Monitor logs
+# Check CloudWatch logs
 aws logs tail /ecs/benchling-webhook --follow
 ```
 
-## Usage
+## Usage Flow
 
-1. **Create Entry** in Benchling notebook
-2. **Insert Canvas** → Select "Quilt Integration"
-3. **Create Package** → Generates versioned Quilt package
-4. **Add Files** → Attach experimental data
-5. **Update Package** → Creates new version with attachments
+Entry → Insert Canvas → Quilt Integration → Create Package → Add Files → Update
 
-## Development
+## Testing Reference
 
-### Common Commands
+### Quick Test Commands
 
-**Development:**
-- `npm run build` - Compile TypeScript
-- `npm run test` - Run Jest tests
-- `npm run lint` - Apply ESLint
+```bash
+npm run test                 # Unit tests (lint + typecheck + TS + Python)
+npm run test:local           # Local integration (build Docker + real Benchling)
+npm run test:remote          # Remote integration (deploy dev + test via API Gateway)
+npm run build:typecheck      # TypeScript type checking only
+npm run test:ts              # Jest tests only
+npm run test:python          # Python unit tests only
+npm run lint                 # Linting and auto-fix
+```
 
-**Deployment:**
-- `npm run deploy` - Test + deploy (outputs to `.env.deploy`)
-- `npm run cdk:dev` - Dev deployment with timestamped image tag (see [DEV_DEPLOYMENT.md](DEV_DEPLOYMENT.md))
-- `npm run docker-push` - Build and push Docker images
-- `npm run docker-check` - Validate Docker images
-- `npm run release` - Create production release
-- `npm run release:dev` - Create dev release tag with timestamp
+### Test Workflows
 
-**Python App:**
-- See [docker/README.md](docker/README.md) or run `make help` in docker/ directory
+**Local Development:**
 
-### Coding Style
+```bash
+npm run setup              # One-time setup (deps + config + secrets)
+npm run test                 # Fast unit tests (no Docker, no AWS)
+npm run test:local           # Integration test with local Docker
+```
 
-- **TypeScript**: 4-space indent, double quotes, trailing commas, required semicolons
-- **Types**: Avoid `any` in production; explicit return types on exports
-- **Organization**: Separate CDK constructs in `lib/`; application code in `docker/`
+**CI/CD:**
 
-### Commits & PRs
+```bash
+npm run test:ci              # Fast checks (typecheck + test:ts)
+npm run test:remote          # Full remote integration (builds dev stack)
+npm run release              # Promotes to production (after tests pass)
+```
 
-- Use Conventional Commits: `type(scope): summary`
-- Keep commits focused; update `package-lock.json` when needed
-- Include test results and deployment considerations in PRs
+**Pre-deployment:**
 
-## Security Best Practices
+```bash
+npm run test                 # Verify local changes
+npm run test:local           # Verify Docker + Benchling integration
+npm run test:remote          # Verify full stack deployment
+```
 
-- OAuth credentials stored in AWS Secrets Manager
-- IP-based access control via API Gateway resource policies
-- Container images scanned for vulnerabilities via Amazon ECR
-- IAM roles follow least-privilege principle
-- All traffic encrypted in transit (TLS 1.2+)
-- CloudWatch logs encrypted at rest
+### Additional Test Commands
 
-## Monitoring & Troubleshooting
+See [docker/README.md](docker/README.md) or `make -C docker help` for low-level Docker commands:
 
-### Monitoring
+- `make -C docker test-unit` - Python unit tests only
+- `make -C docker test-local` - Local Flask server integration
+- `make -C docker test-ecr` - ECR image validation
 
-- **CloudWatch Logs**: `/ecs/benchling-webhook`
-- **ECS Task Metrics**: CPU, memory, task count
-- **API Gateway Metrics**: Request count, latency, 4XX/5XX errors
-- **ALB Target Health**: Monitor unhealthy targets
+## Monitoring & Debugging
 
-### Health Endpoints
+**Logs:** `aws logs tail /ecs/benchling-webhook --follow`
 
-- `/health` - General health check
-- `/health/ready` - Readiness probe
+**Health:** `/health` (general), `/health/ready` (readiness)
 
-### Debugging
+**Metrics:** CloudWatch for ECS tasks, API Gateway, ALB health
 
-- **Deployment**: Check `.env.deploy` for outputs
-- **Logs**: `npm run logs` or `aws logs tail /ecs/benchling-webhook --follow`
-- **Events**: `npm run event` to send test events
+**Deployment:** Check `.env.deploy` for outputs
+
+## Security
+
+- Secrets in AWS Secrets Manager
+- IP-based access control (API Gateway)
+- Container scanning (ECR)
+- Least-privilege IAM roles
+- TLS 1.2+ encryption
 
 ## License
 
 Apache-2.0 - See [LICENSE](LICENSE) file for details
+
+# Benchling Webhook Agents Guide (CLAUDE.md)
+
+## 1. Mission
+
+Define the optimal workflow for development, testing, and deployment of the Benchling Webhook system, ensuring predictable automation and resilience to configuration errors.
+
+---
+
+## 2. Architecture Principles (v0.6.0+)
+
+### 2.0 Technology Stack
+
+- **Makefile** → Top-level orchestration (environment-agnostic)
+- **npm** → CDK infrastructure and implementation scripts
+- **Python** → Docker container application
+- **XDG** → Configuration storage (`~/.config/benchling-webhook/`)
+
+### 2.1 Configuration Model
+
+**XDG-Compliant Storage:**
+
+- User settings stored in `~/.config/benchling-webhook/default.json`
+- Avoids `.env` files and environment variable pollution
+- Single source of truth for credentials and deployment artifacts
+
+**Configuration Flow:**
+
+1. `make install` prompts for user settings → stores in XDG
+2. npm scripts read from XDG for CDK operations
+3. Secrets synced to AWS Secrets Manager
+4. Deployment outputs written back to XDG config
+
+---
+
+## 3. Ideal Developer Workflow
+
+### 3.1 One-Command Bootstrap
+
+```bash
+npm run setup
+```
+
+This command:
+
+1. Installs Node.js and Python dependencies
+2. Creates XDG-compliant folder (`~/.config/benchling-webhook/`)
+3. Auto-infers Quilt catalog from `~/.quilt3/config.yml` (or prompts)
+4. Prompts interactively for Benchling credentials (tenant, client ID/secret, app definition ID)
+5. Validates Benchling credentials and bucket access
+6. Creates or syncs secrets to AWS Secrets Manager
+7. Generates `~/.config/benchling-webhook/default.json` with QuiltStackArn and BenchlingSecretArn
+
+If any step fails validation, the script exits with explicit diagnostics (e.g., "Cannot find Quilt catalog in ~/.quilt3/config.yml").
+
+### 3.2 Daily Development Loop
+
+```bash
+npm run test
+```
+
+- **Lint** → `npm run lint` (includes `make -C docker lint`)
+- **Typecheck** → Verifies TS interfaces
+- **Unit tests** → Mocked tests for TypeScript and Python
+- **Code quality** → Confirms local functional correctness
+
+Commits follow `type(scope): summary` and PRs must include:
+
+- Verified local tests (`npm run test`)
+- Integration test results (`npm run test:local`)
+- Deployment notes or configuration deltas
+
+---
+
+## 4. Testing Tiers
+
+### 4.1 Unit Tests (`npm run test`)
+
+- Runs linters for TypeScript and Python
+- Executes mocked unit tests (no external dependencies)
+- Validates code quality and local correctness
+
+**Commands:**
+
+- All: `npm run test` (lint + typecheck + test:ts + test:python)
+- TypeScript: `npm run test:ts`
+- Python: `npm run test:python`
+
+### 4.2 Local Integration (`npm run test:local`)
+
+- Builds local Docker image (`make -C docker build`)
+- Pulls credentials from AWS Secrets Manager
+- Runs Flask webhook with **real Benchling payloads**
+- Tests end-to-end flow without cloud deployment
+
+### 4.3 Remote Integration (`npm run test:remote`)
+
+CI workflow:
+
+1. Builds and pushes **dev** Docker image to ECR (not `latest`)
+2. CDK synthesizes and deploys **dev stack** (isolated)
+3. Executes remote integration tests: API Gateway → ALB → Fargate → S3/SQS
+4. Validates secrets, IAM roles, and networking across deployed stack
+
+### 4.4 Release (`npm run release`)
+
+Production promotion (CI-only):
+
+1. Called after successful `npm run test:remote`
+2. Promotes verified image + stack to **production**
+3. Generates `deploy.json` with endpoint, image URI, and stack outputs
+
+### 4.5 Tagging (`npm run tag`)
+
+Version management:
+
+- Creates and pushes version tag (triggers release pipeline)
+- Tags Docker image and CDK stack: `benchling-webhook:vX.Y.Z`
+
+---
+
+## 5. Secret Environment Variables
+
+**Required secrets** (stored in AWS Secrets Manager and XDG config):
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BENCHLING_APP_DEFINITION_ID` | Yes | - | Benchling app identifier |
+| `BENCHLING_CLIENT_ID` | Yes | - | OAuth client ID |
+| `BENCHLING_CLIENT_SECRET` | Yes | - | OAuth client secret |
+| `BENCHLING_PKG_BUCKET` | Yes | - | S3 bucket for packages |
+| `BENCHLING_TENANT` | Yes | - | Benchling tenant name |
+| `BENCHLING_TEST_ENTRY` | No | - | Test entry ID for validation |
+| `BENCHLING_ENABLE_WEBHOOK_VERIFICATION` | No | `true` | Enable signature verification |
+| `BENCHLING_LOG_LEVEL` | No | `INFO` | Python logging level |
+| `BENCHLING_PKG_KEY` | No | `experiment_id` | Package metadata key |
+| `BENCHLING_PKG_PREFIX` | No | `benchling` | S3 key prefix |
+| `BENCHLING_WEBHOOK_ALLOW_LIST` | No | `""` | IP allowlist (comma-separated) |
+
+---
+
+## 6. Configuration Failure Modes
+
+| Failure | Cause | Mitigation |
+|----------|--------|-------------|
+| Missing Quilt catalog | Quilt3 not configured | Prompt user to run `quilt3 config` and retry |
+| XDG config corrupted | Manual file edit | Validate JSON schema on read; re-run `npm run setup` |
+| AWS auth error | Invalid credentials | Check `AWS_PROFILE` and region before operations |
+| Docker build failure | Outdated base image | Auto-pull latest base before build |
+| Secrets not synced | Secrets Manager unreachable | Validate IAM permissions; retry sync with backoff |
+| CDK stack drift | Manual AWS changes | Run `cdk diff` preflight; warn on drift detection |
+| Missing secret variables | Incomplete `npm run setup` | Schema validation before secrets sync |
+
+---
+
+## 7. Operational Principles
+
+- **Single Source of Truth:** XDG config defines the environment
+- **Fail Fast:** Validation before deployment prevents partial stacks
+- **Idempotence:** Re-running `npm run setup` never breaks working setup
+- **Observability:** Every stage logs explicit diagnostics to CloudWatch
+- **Separation of Concerns:** npm orchestrates, TypeScript/Python implement
+
+---
+
+## 8. Future Goals
+
+- Interactive configuration assistant with self-healing defaults
+- Declarative environment lockfile (`benchling.env.json`)
+- Integrated smoke tests for cross-service health
+- Automatic credential rotation via Secrets Manager

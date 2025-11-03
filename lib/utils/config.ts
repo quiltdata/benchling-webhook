@@ -1,10 +1,15 @@
 import { config as dotenvConfig } from "dotenv";
 import { expand as dotenvExpand } from "dotenv-expand";
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { execSync } from "child_process";
 
 export interface Config {
+  // Secrets-Only Mode (v0.6.0+)
+  quiltStackArn?: string;
+  benchlingSecret?: string;
+
+  // Legacy Mode (DEPRECATED)
   // Quilt
   quiltCatalog: string;
   quiltUserBucket: string;
@@ -15,6 +20,9 @@ export interface Config {
   benchlingClientId: string;
   benchlingClientSecret: string;
   benchlingAppDefinitionId: string;
+
+  // Unified secrets configuration (ARN or JSON)
+  benchlingSecrets?: string;
 
   // AWS
   cdkAccount: string;
@@ -46,6 +54,7 @@ export interface ConfigOptions {
   profile?: string;
   region?: string;
   imageTag?: string;
+  benchlingSecrets?: string;
 }
 
 export interface ValidationResult {
@@ -106,6 +115,95 @@ export function loadDotenv(filePath: string): Record<string, string> {
 }
 
 /**
+ * Process benchling-secrets parameter, handling @file.json syntax
+ *
+ * Supports three input formats:
+ * - ARN: `arn:aws:secretsmanager:...` - passed through unchanged
+ * - JSON: `{"client_id":"...","client_secret":"...","tenant":"..."}` - passed through unchanged
+ * - File: `@secrets.json` - reads file content from path after @ symbol
+ *
+ * @param input - The benchling-secrets value (ARN, JSON, or @filepath)
+ * @returns Processed secret string (trimmed)
+ * @throws Error if file not found or not readable
+ *
+ * @example
+ * // Pass through ARN
+ * processBenchlingSecretsInput("arn:aws:secretsmanager:...")
+ * // Returns: "arn:aws:secretsmanager:..."
+ *
+ * @example
+ * // Pass through JSON
+ * processBenchlingSecretsInput('{"client_id":"...","client_secret":"...","tenant":"..."}')
+ * // Returns: '{"client_id":"...","client_secret":"...","tenant":"..."}'
+ *
+ * @example
+ * // Read from file
+ * processBenchlingSecretsInput("@secrets.json")
+ * // Returns: contents of secrets.json (trimmed)
+ */
+export function processBenchlingSecretsInput(input: string): string {
+    const trimmed = input.trim();
+
+    // Check for @file syntax
+    if (trimmed.startsWith("@")) {
+        const filePath = trimmed.slice(1); // Remove @ prefix
+        const resolvedPath = resolve(filePath);
+
+        if (!existsSync(resolvedPath)) {
+            throw new Error(
+                `Secrets file not found: ${filePath}\n` +
+                `  Resolved path: ${resolvedPath}\n` +
+                "  Tip: Use relative or absolute path after @ (e.g., @secrets.json or @/path/to/secrets.json)",
+            );
+        }
+
+        try {
+            const fileContent = readFileSync(resolvedPath, "utf-8");
+            return fileContent.trim();
+        } catch (error) {
+            throw new Error(
+                `Failed to read secrets file: ${filePath}\n` +
+                `  Error: ${(error as Error).message}`,
+            );
+        }
+    }
+
+    // Return as-is for ARN or inline JSON
+    return trimmed;
+}
+
+/**
+ * Mask sensitive parts of ARN for display
+ *
+ * Shows region and partial secret name, masks account ID for security.
+ * Account ID is masked as ****XXXX where XXXX are the last 4 digits.
+ *
+ * @param arn - AWS Secrets Manager ARN to mask
+ * @returns Masked ARN string or original input if not valid ARN format
+ *
+ * @example
+ * maskArn("arn:aws:secretsmanager:us-east-1:123456789012:secret:name")
+ * // Returns: "arn:aws:secretsmanager:us-east-1:****9012:secret:name"
+ *
+ * @example
+ * maskArn("not-an-arn")
+ * // Returns: "not-an-arn"
+ */
+export function maskArn(arn: string): string {
+    // Pattern: arn:aws:secretsmanager:region:account:secret:name
+    const match = arn.match(/^(arn:aws:secretsmanager:[^:]+:)(\d{12})(:.+)$/);
+
+    if (match) {
+        const [, prefix, account, suffix] = match;
+        const maskedAccount = "****" + account.slice(-4);
+        return prefix + maskedAccount + suffix;
+    }
+
+    // Return as-is if pattern doesn't match
+    return arn;
+}
+
+/**
  * Load configuration from multiple sources with priority:
  * 1. CLI options (highest)
  * 2. Environment variables
@@ -136,6 +234,13 @@ export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
         benchlingClientId: options.clientId || envVars.BENCHLING_CLIENT_ID,
         benchlingClientSecret: options.clientSecret || envVars.BENCHLING_CLIENT_SECRET,
         benchlingAppDefinitionId: options.appId || envVars.BENCHLING_APP_DEFINITION_ID,
+
+        // Unified secrets (priority: CLI > env > .env)
+        // Process file input syntax (@file.json) if present
+        benchlingSecrets: ((): string | undefined => {
+            const rawSecrets = options.benchlingSecrets || envVars.BENCHLING_SECRETS;
+            return rawSecrets ? processBenchlingSecretsInput(rawSecrets) : undefined;
+        })(),
 
         // AWS
         cdkAccount: envVars.CDK_DEFAULT_ACCOUNT,

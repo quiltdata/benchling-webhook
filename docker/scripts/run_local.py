@@ -1,14 +1,17 @@
 #!/usr/bin/env uv run python3
 """
-Local development script with AWS mocking for testing Benchling webhooks
-without requiring full AWS infrastructure.
+Local development script for testing Benchling webhooks with real AWS credentials.
 
 Usage:
     python scripts/run_local.py           # Normal mode
     python scripts/run_local.py --verbose # Verbose logging
     python scripts/run_local.py --test    # Start server, run tests, then exit
+
+This script pulls credentials from AWS Secrets Manager using configuration
+stored in ~/.config/benchling-webhook/default.json
 """
 
+import json
 import logging
 import os
 import subprocess
@@ -16,143 +19,153 @@ import sys
 import threading
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from xdg_config import XDGConfig
 
 # Log file configuration
 LOG_DIR = Path(__file__).parent.parent / ".scratch"
 LOG_FILE = LOG_DIR / "benchling_webhook.log"
 
-# Set minimal required environment variables for local development
-os.environ.setdefault("FLASK_ENV", "development")
-os.environ.setdefault("FLASK_DEBUG", "true")
-os.environ.setdefault("AWS_REGION", "us-west-2")
-os.environ.setdefault("QUILT_USER_BUCKET", "local-test-bucket")
-os.environ.setdefault("PKG_PREFIX", "benchling")
-os.environ.setdefault("QUILT_CATALOG", "test.quilttest.com")
-os.environ.setdefault("QUEUE_ARN", "https://sqs.us-west-2.amazonaws.com/123456789012/test-queue")
-os.environ.setdefault("BENCHLING_TENANT", "test-tenant")
-os.environ.setdefault("BENCHLING_CLIENT_ID", "test-client-id")
-os.environ.setdefault("BENCHLING_CLIENT_SECRET", "test-client-secret")
-os.environ.setdefault(
-    "STEP_FUNCTION_ARN",
-    "arn:aws:states:us-west-2:123456789012:stateMachine:TestProcessor",
-)
-os.environ.setdefault(
-    "EVENTBRIDGE_CONNECTION_ARN",
-    "arn:aws:events:us-west-2:123456789012:connection/test",
-)
-# Disable webhook verification for local testing (no need for BENCHLING_APP_DEFINITION_ID)
-os.environ.setdefault("ENABLE_WEBHOOK_VERIFICATION", "false")
 
+def load_credentials_from_aws():
+    """Load credentials from AWS Secrets Manager using XDG configuration.
+
+    Returns:
+        dict: Environment variables to set for the Flask app
+
+    Raises:
+        FileNotFoundError: If XDG config does not exist
+        ValueError: If required configuration keys are missing
+        ClientError: If AWS Secrets Manager access fails
+    """
+    # Load XDG configuration
+    try:
+        xdg = XDGConfig()
+        config = xdg.load_complete_config()
+    except FileNotFoundError as e:
+        print(f"❌ XDG configuration not found: {e}")
+        print("💡 Run 'make install' to set up configuration")
+        raise
+
+    # Extract required ARNs from config
+    benchling_secret_arn = config.get("benchlingSecretArn")
+    quilt_stack_arn = config.get("quiltStackArn")
+
+    if not benchling_secret_arn:
+        raise ValueError("benchlingSecretArn not found in XDG config.\n" "Run 'make install' to configure secrets.")
+
+    if not quilt_stack_arn:
+        raise ValueError("quiltStackArn not found in XDG config.\n" "Run 'make install' to configure Quilt stack.")
+
+    # Extract region from ARN or config
+    # Try multiple field names for backward compatibility
+    aws_region = (
+        config.get("awsRegion")
+        or config.get("cdkRegion")
+        or config.get("quiltRegion")
+        or config.get("region")
+        or "us-east-1"  # Default to us-east-1 (most common AWS region)
+    )
+
+    print(f"🔐 Loading credentials from AWS Secrets Manager...")
+    print(f"   Region: {aws_region}")
+    print(f"   Benchling Secret ARN: {benchling_secret_arn}")
+    print(f"   Quilt Stack ARN: {quilt_stack_arn}")
+
+    # Create Secrets Manager client
+    try:
+        secrets_client = boto3.client("secretsmanager", region_name=aws_region)
+    except Exception as e:
+        print(f"❌ Failed to create AWS Secrets Manager client: {e}")
+        print("💡 Check your AWS credentials with 'aws sts get-caller-identity'")
+        raise
+
+    # Retrieve secret from Secrets Manager
+    try:
+        response = secrets_client.get_secret_value(SecretId=benchling_secret_arn)
+        secret_string = response["SecretString"]
+        secrets = json.loads(secret_string)
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "ResourceNotFoundException":
+            print(f"❌ Secret not found: {benchling_secret_arn}")
+            print("💡 Verify the secret exists in AWS Secrets Manager")
+        elif error_code == "AccessDeniedException":
+            print(f"❌ Access denied to secret: {benchling_secret_arn}")
+            print("💡 Check your IAM permissions for Secrets Manager")
+        else:
+            print(f"❌ Failed to retrieve secret: {e}")
+        raise
+    except json.JSONDecodeError as e:
+        print(f"❌ Secret contains invalid JSON: {e}")
+        raise
+
+    print(f"✅ Successfully loaded {len(secrets)} configuration parameters from AWS")
+
+    # Map secret values to environment variables
+    # The ConfigResolver in production expects QuiltStackARN and BenchlingSecret
+    # to be the actual ARN/name, not the resolved values
+    env_vars = {
+        "QuiltStackARN": quilt_stack_arn,
+        "BenchlingSecret": benchling_secret_arn,
+        "AWS_REGION": aws_region,
+        "FLASK_ENV": "development",
+        "FLASK_DEBUG": "true",
+    }
+
+    return env_vars
+
+
+def get_test_env_vars():
+    """Get additional environment variables for test mode.
+
+    Returns:
+        dict: Additional environment variables for testing
+    """
+    return {
+        "BENCHLING_TEST_MODE": "true",
+    }
+
+
+# Set up environment variables from AWS before importing Flask app
+try:
+    env_vars = load_credentials_from_aws()
+    for key, value in env_vars.items():
+        os.environ[key] = str(value)
+except Exception as e:
+    print(f"\n❌ Failed to load credentials: {e}")
+    print("\nCannot start server without valid AWS credentials.")
+    sys.exit(1)
+
+# Import Flask app after setting environment variables
 from src.app import create_app
 
 
-def mock_step_functions_client():
-    """Mock Step Functions client for local testing."""
-    mock_client = MagicMock()
-
-    # Mock successful execution start
-    mock_client.start_execution.return_value = {
-        "executionArn": "arn:aws:states:us-west-2:123456789012:execution:TestProcessor:test-execution-123"
-    }
-
-    # Mock state machine description for health check
-    mock_client.describe_state_machine.return_value = {
-        "stateMachineArn": "arn:aws:states:us-west-2:123456789012:stateMachine:TestProcessor",
-        "name": "TestProcessor",
-        "status": "ACTIVE",
-    }
-
-    # Mock execution status - using datetime objects instead of strings
-    from datetime import datetime
-
-    mock_client.describe_execution.return_value = {
-        "executionArn": "arn:aws:states:us-west-2:123456789012:execution:TestProcessor:test-execution-123",
-        "stateMachineArn": "arn:aws:states:us-west-2:123456789012:stateMachine:TestProcessor",
-        "name": "test-execution-123",
-        "status": "RUNNING",
-        "startDate": datetime(2024, 1, 1, 12, 0, 0),
-        "input": '{"test": "data"}',
-    }
-
-    return mock_client
-
-
-def mock_benchling_client():
-    """Mock Benchling SDK client for local testing."""
-    mock_client = MagicMock()
-
-    # Mock entry with display_id
-    mock_entry = MagicMock()
-    mock_entry.display_id = "TEST-001"
-    mock_entry.id = "etr_12345678"
-    mock_entry.name = "Test Entry"
-
-    # Mock entries.get_entry_by_id to return our mock entry
-    mock_client.entries.get_entry_by_id.return_value = mock_entry
-
-    # Mock apps.update_canvas for canvas updates
-    mock_client.apps.update_canvas.return_value = None
-
-    return mock_client
-
-
 def run_server(verbose=False):
-    """Run the Flask server with AWS and Benchling mocking."""
-    # Patch AWS clients and Benchling SDK to use mocks
-    with (
-        patch("boto3.client") as mock_boto3,
-        patch("src.app.Benchling") as mock_benchling_class,
-        patch("quilt3.search") as mock_quilt_search,
-    ):
+    """Run the Flask server with real AWS credentials."""
+    # Create and run the Flask app
+    app = create_app()
 
-        # Mock quilt3.search to return empty results (no linked packages)
-        mock_quilt_search.return_value = []
+    print("✅ Server starting with real AWS credentials")
+    print("📋 Available endpoints:")
+    print("   POST /event - Webhook receiver")
+    print("   GET  /health - Health check")
+    print("   GET  /health/ready - Readiness probe")
+    print("   GET  /health/live - Liveness probe")
+    print()
 
-        if verbose:
-            # Wrap mock client to log calls
-            base_client = mock_step_functions_client()
-
-            def log_start_execution(**kwargs):
-                logging.debug("Mock Step Functions start_execution called with: %s", kwargs)
-                return base_client.start_execution(**kwargs)
-
-            def log_describe_state_machine(**kwargs):
-                logging.debug("Mock Step Functions describe_state_machine called with: %s", kwargs)
-                return base_client.describe_state_machine(**kwargs)
-
-            def log_describe_execution(**kwargs):
-                logging.debug("Mock Step Functions describe_execution called with: %s", kwargs)
-                return base_client.describe_execution(**kwargs)
-
-            base_client.start_execution.side_effect = log_start_execution
-            base_client.describe_state_machine.side_effect = log_describe_state_machine
-            base_client.describe_execution.side_effect = log_describe_execution
-
-            mock_boto3.return_value = base_client
-        else:
-            mock_boto3.return_value = mock_step_functions_client()
-
-        # Set up Benchling mock
-        mock_benchling_class.return_value = mock_benchling_client()
-
-        # Create and run the Flask app
-        app = create_app()
-
-        print("✅ Server starting with mocked AWS and Benchling services")
-        print("📋 Available endpoints:")
-        print("   POST /event - Webhook receiver")
-        print("   GET  /health - Health check")
-        print("   GET  /health/ready - Readiness probe")
-        print("   GET  /health/live - Liveness probe")
-        print()
-
-        app.run(
-            host="0.0.0.0",
-            port=5001,
-            debug=verbose,
-            use_reloader=False,  # Disable reloader to avoid issues with patches
-        )
+    app.run(
+        host="0.0.0.0",
+        port=5001,
+        debug=verbose,
+        use_reloader=False,  # Disable reloader to avoid credential re-load issues
+    )
 
 
 def run_tests():
@@ -213,6 +226,13 @@ if __name__ == "__main__":
         print("🧪 Tests will run automatically and server will shutdown afterwards")
         print()
 
+        # Apply test-specific environment variables
+        test_env = get_test_env_vars()
+        for key, value in test_env.items():
+            os.environ[key] = str(value)
+        print("🔓 Webhook verification disabled for local testing")
+        print()
+
         # Set up minimal logging for test mode
         logging.basicConfig(level=logging.WARNING)
 
@@ -251,10 +271,10 @@ if __name__ == "__main__":
             logging.getLogger("urllib3").setLevel(logging.DEBUG)
             logging.getLogger("requests").setLevel(logging.DEBUG)
 
-            print("🚀 Starting Benchling webhook server with VERBOSE LOGGING and AWS mocking...")
+            print("🚀 Starting Benchling webhook server with VERBOSE LOGGING and real AWS credentials...")
             print(f"📋 Logs will be written to: {LOG_FILE}")
         else:
-            print("🚀 Starting Benchling webhook server with AWS mocking...")
+            print("🚀 Starting Benchling webhook server with real AWS credentials...")
 
         print("📍 This will run on http://localhost:5001")
         print("🔗 Use ngrok to expose: ngrok http 5001")

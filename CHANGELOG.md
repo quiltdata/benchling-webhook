@@ -3,6 +3,50 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2025-11-03 (Upcoming)
+
+### Added
+
+- **XDG Configuration Management** (#156)
+  - Centralized configuration in `~/.config/benchling-webhook/default.json`
+  - Interactive setup wizard (`npm run setup`) for first-time configuration
+  - Automatic Quilt catalog inference from `~/.quilt3/config.yml`
+  - Secrets sync to AWS Secrets Manager with validation
+  - Configuration health check (`npm run setup:health`)
+  - Eliminates `.env` files and environment variable pollution
+
+- **Unified Test Workflow**
+  - `npm run test` - Fast unit tests (lint + typecheck + mocked tests)
+  - `npm run test:local` - Local Docker integration with real Benchling
+  - `npm run test:remote` - Deploy dev stack and test via API Gateway
+  - Added `BENCHLING_TEST_MODE` to disable webhook verification for local testing
+
+- **npm Script Reorganization**
+  - Consistent naming: `setup:*`, `build:*`, `test:*`, `release:*`
+  - `npm run setup:infer` - Infer Quilt config from catalog
+  - `npm run setup:sync-secrets` - Sync secrets to AWS Secrets Manager
+  - `npm run release:tag` - Create and push version tag
+
+### Changed
+
+- **Configuration Model**
+  - XDG config is single source of truth (no more environment variables in scripts)
+  - Secrets stored in AWS Secrets Manager, referenced by ARN in XDG config
+  - Python CLI now reads from XDG config instead of environment variables
+  - Non-interactive mode no longer depends on environment variables
+
+- **Test Strategy**
+  - `test:remote` now tests deployed endpoint (not local ECR image)
+  - Integration tests use real credentials from Secrets Manager
+  - Local tests bypass webhook verification for faster iteration
+
+### Fixed
+
+- Interactive wizard now preserves existing secrets when pressing Enter
+- Test entry ID displays correctly on subsequent wizard runs
+- Setup script exits cleanly (no hanging from AWS SDK connection pools)
+- Removed environment variable dependency in non-interactive setup
+
 ## [0.5.4] - 2025-10-30
 
 ### Added
