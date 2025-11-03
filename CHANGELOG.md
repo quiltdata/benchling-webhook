@@ -3,7 +3,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.6.1] - 2025-01-03
+## [0.6.1] - 2025-11-03
 
 ### Added
 - **Canvas Footer** - Added version and deployment information footer to Benchling canvas
@@ -16,7 +16,7 @@ All notable changes to this project will be documented in this file.
 - Updated application version in health endpoint from 1.0.0 to 0.6.1
 - Enhanced canvas markdown formatting with footer section
 
-## [0.6.0] - 2025-11-03 (Upcoming)
+## [0.6.0] - 2025-11-03
 
 ### Added
 
