@@ -276,14 +276,20 @@ async function legacyMain(): Promise<void> {
 
     // Create stack - Secrets-only mode (v0.6.0+)
     const app = new cdk.App();
+
+    // Get parameters from environment (set by CLI deploy command)
+    // These take precedence over legacy config
+    const quiltStackArn = process.env.QUILT_STACK_ARN || config.QUILT_STACK_ARN;
+    const benchlingSecret = process.env.BENCHLING_SECRET || config.BENCHLING_SECRET;
+
     new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
         env: {
             account: config.CDK_DEFAULT_ACCOUNT,
             region: config.CDK_DEFAULT_REGION,
         },
         // Secrets-only mode parameters (v0.6.0+)
-        quiltStackArn: config.QUILT_STACK_ARN!,
-        benchlingSecret: config.BENCHLING_SECRET!,
+        quiltStackArn: quiltStackArn!,
+        benchlingSecret: benchlingSecret!,
         logLevel: config.LOG_LEVEL || "INFO",
         // ECR repository configuration
         createEcrRepository: config.CREATE_ECR_REPOSITORY === "true",
