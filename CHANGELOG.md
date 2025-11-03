@@ -3,46 +3,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.6.2] - 2025-01-03
+## [0.6.1] - 2025-01-03
 
 ### Added
 - **Canvas Footer** - Added version and deployment information footer to Benchling canvas
-  - Displays application version (0.6.2)
+  - Displays application version (0.6.1)
   - Shows Quilt catalog host
   - Shows S3 bucket name
   - Includes disclaimer text about canvas metadata
 
 ### Changed
-- Updated application version in health endpoint from 1.0.0 to 0.6.2
+- Updated application version in health endpoint from 1.0.0 to 0.6.1
 - Enhanced canvas markdown formatting with footer section
-
-## [0.6.1] - 2025-01-02
-
-### Added
-- **test:prod command** - New integration test command for production environment
-  - Tests existing production deployment without building or deploying
-  - Validates health endpoints and webhook functionality
-  - Automatically runs after `deploy:prod` (can be skipped with `--skip-test`)
-- **Shared integration testing module** (`bin/test-integration.js`)
-  - Refactored common testing logic used by both dev and prod tests
-  - Reduces code duplication and improves maintainability
-
-### Changed
-- **Renamed test:remote to test:dev** for clarity
-  - Better reflects that it tests the dev environment
-  - Updated all documentation references (README.md, CLAUDE.md)
-- **Enhanced deploy:prod workflow**
-  - Now includes automatic post-deployment integration tests
-  - Added `--skip-test` flag to bypass tests if needed
-  - Improved error handling and status reporting
-- **Refactored cdk-dev.js**
-  - Uses shared integration testing module
-  - Cleaner separation of deployment and testing phases
-  - Added `--deploy-only` and `--test-only` flags
-
-### Fixed
-- Improved consistency between dev and prod testing workflows
-- Better error messages for integration test failures
 
 ## [0.6.0] - 2025-11-03 (Upcoming)
 
