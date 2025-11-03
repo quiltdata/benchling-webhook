@@ -42,13 +42,39 @@ npm run release              # Promote to production (CI-only)
 
 ### Code Organization
 
-- **Infrastructure (CDK)**: `bin/` + `lib/` - TypeScript AWS deployment
+**Infrastructure & Build:**
+- **`lib/`** - CDK infrastructure constructs (TypeScript)
   - [lib/benchling-webhook-stack.ts](lib/benchling-webhook-stack.ts) - Main orchestration
   - [lib/fargate-service.ts](lib/fargate-service.ts) - ECS Fargate service
   - [lib/alb-api-gateway.ts](lib/alb-api-gateway.ts) - API Gateway + ALB
   - [lib/ecr-repository.ts](lib/ecr-repository.ts) - Docker registry
-- **Application (Python)**: `docker/` - Flask webhook processor
+  - [lib/xdg-config.ts](lib/xdg-config.ts) - XDG configuration management
+  - [lib/types/](lib/types/) - TypeScript type definitions
+
+**CLI & Automation:**
+- **`bin/`** - Executable CLI tools & automation scripts (JavaScript/TypeScript)
+  - [bin/cli.ts](bin/cli.ts) - Main CLI entry point (`benchling-webhook` command)
+  - [bin/version.js](bin/version.js) - Version management (`npm run version`)
+  - [bin/release.js](bin/release.js) - Release automation
+  - [bin/cdk-dev.js](bin/cdk-dev.js) - Dev deployment workflow
+  - [bin/check-logs.js](bin/check-logs.js) - CloudWatch log viewer
+  - [bin/send-event.js](bin/send-event.js) - Test event sender
+  - [bin/commands/](bin/commands/) - CLI command implementations
+
+**Setup & Configuration:**
+- **`scripts/`** - Interactive setup & configuration scripts (TypeScript, run via ts-node)
+  - [scripts/install-wizard.ts](scripts/install-wizard.ts) - Interactive setup wizard (`npm run setup`)
+  - [scripts/infer-quilt-config.ts](scripts/infer-quilt-config.ts) - Quilt catalog inference (`npm run setup:infer`)
+  - [scripts/sync-secrets.ts](scripts/sync-secrets.ts) - AWS Secrets Manager sync (`npm run setup:sync-secrets`)
+  - [scripts/config-health-check.ts](scripts/config-health-check.ts) - Configuration validation (`npm run setup:health`)
+
+**Application:**
+- **`docker/`** - Flask webhook processor (Python)
   - See [docker/README.md](docker/README.md) for details
+
+**Key Distinction:**
+- **`bin/`** → CLI tools & compiled scripts (production runtime, often `.js`)
+- **`scripts/`** → Development-time setup scripts (TypeScript, via ts-node)
 
 ### Coding Standards
 
