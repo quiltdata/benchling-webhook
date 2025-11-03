@@ -243,6 +243,57 @@ async function main() {
 
   run(`npm run cli -- --quilt-stack-arn ${quiltStackArn} --benchling-secret ${benchlingSecret} --image-tag ${imageTag} --yes`);
 
+  // 6. Get and store the deployment endpoint
+  console.log('');
+  console.log('Step 6: Retrieving deployment endpoint...');
+
+  try {
+    const { CloudFormationClient, DescribeStacksCommand } = require('@aws-sdk/client-cloudformation');
+    const os = require('os');
+
+    const cloudformation = new CloudFormationClient({ region: 'us-east-1' });
+    const command = new DescribeStacksCommand({ StackName: 'BenchlingWebhookStack' });
+    const response = await cloudformation.send(command);
+
+    if (response.Stacks && response.Stacks.length > 0) {
+      const stack = response.Stacks[0];
+      const endpointOutput = stack.Outputs?.find(o => o.OutputKey === 'WebhookEndpoint');
+      const webhookUrl = endpointOutput?.OutputValue || '';
+
+      if (webhookUrl) {
+        // Store endpoint in XDG config
+        const configDir = path.join(os.homedir(), '.config', 'benchling-webhook');
+        const deployJsonPath = path.join(configDir, 'deploy.json');
+
+        // Read existing deploy.json or create new one
+        let deployConfig = {};
+        if (fs.existsSync(deployJsonPath)) {
+          deployConfig = JSON.parse(fs.readFileSync(deployJsonPath, 'utf8'));
+        }
+
+        // Update dev section
+        deployConfig.dev = {
+          endpoint: webhookUrl,
+          imageTag: imageTag,
+          deployedAt: new Date().toISOString(),
+          stackName: 'BenchlingWebhookStack'
+        };
+
+        // Ensure config directory exists
+        if (!fs.existsSync(configDir)) {
+          fs.mkdirSync(configDir, { recursive: true });
+        }
+
+        // Write deploy.json
+        fs.writeFileSync(deployJsonPath, JSON.stringify(deployConfig, null, 2));
+        console.log(`✅ Stored deployment endpoint in ${deployJsonPath}`);
+        console.log(`   Endpoint: ${webhookUrl}`);
+      }
+    }
+  } catch (error) {
+    console.warn(`⚠️  Could not retrieve/store deployment endpoint: ${error.message}`);
+  }
+
   console.log('');
   console.log('✅ Development deployment complete!');
   console.log('');

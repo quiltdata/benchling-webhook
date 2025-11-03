@@ -13,7 +13,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, copyFileSync, unlinkSync, readdirSync } from "fs";
-import { resolve } from "path";
+import { resolve, dirname } from "path";
 import { homedir } from "os";
 import { tmpdir } from "os";
 import Ajv from "ajv";
@@ -88,7 +88,7 @@ const CONFIG_SCHEMA = {
                 deployedBy: { type: "string" },
                 stackName: { type: "string" },
             },
-            additionalProperties: false,
+            additionalProperties: true,
         },
     },
     additionalProperties: true,
@@ -295,8 +295,14 @@ export class XDGConfig {
 
         const configPath = this.getConfigPath(configType);
         const backupPath = this.getBackupPath(configType);
+        const configDir = dirname(configPath);
 
-        // Create backup if file exists
+        // Ensure config directory exists first
+        if (!existsSync(configDir)) {
+            mkdirSync(configDir, { recursive: true });
+        }
+
+        // Create backup only if file already exists
         if (existsSync(configPath)) {
             try {
                 copyFileSync(configPath, backupPath);
