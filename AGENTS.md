@@ -16,7 +16,7 @@ gh pr checks                  # Check CI status
 **Setup & Configuration:**
 
 ```bash
-npm run install              # Install deps + configure XDG + sync secrets
+npm run setup              # Install deps + configure XDG + sync secrets
 npm run config:infer         # Infer Quilt config from catalog
 npm run config:sync-secrets  # Sync secrets to AWS Secrets Manager
 npm run config:health        # Validate configuration
@@ -87,7 +87,7 @@ AWS CDK application deploying auto-scaling webhook processor:
 ```bash
 git clone https://github.com/quiltdata/benchling-webhook.git
 cd benchling-webhook
-npm run install  # Interactive wizard: deps + XDG config + secrets sync
+npm run setup  # Interactive wizard: deps + XDG config + secrets sync
 ```
 
 This command:
@@ -146,7 +146,7 @@ npm run lint                 # Linting and auto-fix
 **Local Development:**
 
 ```bash
-npm run install              # One-time setup (deps + config + secrets)
+npm run setup              # One-time setup (deps + config + secrets)
 npm run test                 # Fast unit tests (no Docker, no AWS)
 npm run test:local           # Integration test with local Docker
 ```
@@ -236,7 +236,7 @@ Define the optimal workflow for development, testing, and deployment of the Benc
 ### 3.1 One-Command Bootstrap
 
 ```bash
-npm run install
+npm run setup
 ```
 
 This command:
@@ -342,12 +342,12 @@ Version management:
 | Failure | Cause | Mitigation |
 |----------|--------|-------------|
 | Missing Quilt catalog | Quilt3 not configured | Prompt user to run `quilt3 config` and retry |
-| XDG config corrupted | Manual file edit | Validate JSON schema on read; re-run `npm run install` |
+| XDG config corrupted | Manual file edit | Validate JSON schema on read; re-run `npm run setup` |
 | AWS auth error | Invalid credentials | Check `AWS_PROFILE` and region before operations |
 | Docker build failure | Outdated base image | Auto-pull latest base before build |
 | Secrets not synced | Secrets Manager unreachable | Validate IAM permissions; retry sync with backoff |
 | CDK stack drift | Manual AWS changes | Run `cdk diff` preflight; warn on drift detection |
-| Missing secret variables | Incomplete `npm run install` | Schema validation before secrets sync |
+| Missing secret variables | Incomplete `npm run setup` | Schema validation before secrets sync |
 
 ---
 
@@ -355,7 +355,7 @@ Version management:
 
 - **Single Source of Truth:** XDG config defines the environment
 - **Fail Fast:** Validation before deployment prevents partial stacks
-- **Idempotence:** Re-running `npm run install` never breaks working setup
+- **Idempotence:** Re-running `npm run setup` never breaks working setup
 - **Observability:** Every stage logs explicit diagnostics to CloudWatch
 - **Separation of Concerns:** npm orchestrates, TypeScript/Python implement
 

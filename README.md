@@ -237,7 +237,7 @@ git clone https://github.com/quiltdata/benchling-webhook.git
 cd benchling-webhook
 
 # Install dependencies and configure (interactive)
-npm run install
+npm run setup
 
 # Build package
 npm run build
