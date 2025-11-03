@@ -99,7 +99,7 @@ describe("infer-quilt-config", () => {
                         Outputs: [
                             { OutputKey: "UserBucket", OutputValue: "my-bucket" },
                             { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123456789012:my-queue" },
-                            { OutputKey: "CatalogUrl", OutputValue: "https://catalog.example.com" },
+                            { OutputKey: "QuiltWebHost", OutputValue: "https://catalog.example.com" },
                         ],
                     },
                 ],
@@ -175,7 +175,7 @@ describe("infer-quilt-config", () => {
                             StackStatus: "CREATE_COMPLETE",
                             CreationTime: new Date(),
                             Outputs: [
-                                { OutputKey: "CatalogUrl", OutputValue: "https://staging.example.com" },
+                                { OutputKey: "QuiltWebHost", OutputValue: "https://staging.example.com" },
                                 { OutputKey: "UserBucket", OutputValue: "staging-bucket" },
                             ],
                         },
@@ -193,7 +193,7 @@ describe("infer-quilt-config", () => {
                             StackStatus: "CREATE_COMPLETE",
                             CreationTime: new Date(),
                             Outputs: [
-                                { OutputKey: "CatalogUrl", OutputValue: "https://nightly.quilttest.com" },
+                                { OutputKey: "QuiltWebHost", OutputValue: "https://nightly.quilttest.com" },
                                 { OutputKey: "UserBucket", OutputValue: "production-bucket" },
                             ],
                         },
@@ -229,7 +229,7 @@ describe("infer-quilt-config", () => {
                         StackName: "quilt-staging",
                         StackStatus: "CREATE_COMPLETE",
                         CreationTime: new Date(),
-                        Outputs: [{ OutputKey: "CatalogUrl", OutputValue: "https://staging.example.com" }],
+                        Outputs: [{ OutputKey: "QuiltWebHost", OutputValue: "https://staging.example.com" }],
                     },
                 ],
             });
@@ -259,7 +259,7 @@ describe("infer-quilt-config", () => {
                         StackStatus: "CREATE_COMPLETE",
                         CreationTime: new Date(),
                         Outputs: [
-                            { OutputKey: "CatalogUrl", OutputValue: "https://staging.example.com" },
+                            { OutputKey: "QuiltWebHost", OutputValue: "https://staging.example.com" },
                             { OutputKey: "UserBucket", OutputValue: "staging-bucket" },
                         ],
                     },

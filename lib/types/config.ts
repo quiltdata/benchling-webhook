@@ -71,6 +71,16 @@ export interface UserConfig {
     benchlingAppDefinitionId?: string;
 
     /**
+     * S3 bucket for Benchling package storage
+     */
+    benchlingPkgBucket?: string;
+
+    /**
+     * Benchling test entry ID (optional, for validation)
+     */
+    benchlingTestEntry?: string;
+
+    /**
      * AWS Secrets Manager secret name for Benchling credentials
      */
     benchlingSecrets?: string;

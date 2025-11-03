@@ -290,7 +290,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
     let derivedConfig: DerivedConfig;
     try {
         derivedConfig = xdgConfig.readProfileConfig("derived", profile) as DerivedConfig;
-    } catch (error) {
+    } catch {
         // Create new derived config if it doesn't exist
         derivedConfig = {
             _metadata: {

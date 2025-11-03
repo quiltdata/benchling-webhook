@@ -31,6 +31,7 @@ interface QuiltStackInfo {
     stackArn: string;
     region: string;
     bucket?: string;
+    database?: string;
     queueArn?: string;
     catalogUrl?: string;
 }
@@ -41,6 +42,7 @@ interface QuiltStackInfo {
 interface InferenceResult {
     catalogUrl?: string;
     quiltUserBucket?: string;
+    quiltDatabase?: string;
     quiltStackArn?: string;
     quiltRegion?: string;
     queueArn?: string;
@@ -64,7 +66,7 @@ function getQuilt3Catalog(): QuiltCliConfig | null {
         }
 
         return null;
-    } catch (error) {
+    } catch {
         // quilt3 command not available or failed
         return null;
     }
@@ -128,15 +130,17 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
 
                 // Extract outputs
                 for (const output of outputs) {
-                    const key = output.OutputKey?.toLowerCase() || "";
+                    const key = output.OutputKey || "";
                     const value = output.OutputValue || "";
 
-                    if (key.includes("bucket")) {
-                        stackInfo.bucket = value;
-                    } else if (key.includes("queue")) {
-                        stackInfo.queueArn = value;
-                    } else if (key.includes("catalog") || key.includes("url")) {
+                    if (key === "QuiltWebHost") {
                         stackInfo.catalogUrl = value;
+                    } else if (key.includes("ucket")) {
+                        stackInfo.bucket = value;
+                    } else if (key === "UserAthenaDatabaseName" || key.includes("Database")) {
+                        stackInfo.database = value;
+                    } else if (key.includes("Queue")) {
+                        stackInfo.queueArn = value;
                     }
                 }
 
@@ -232,7 +236,11 @@ export async function inferQuiltConfig(options: {
 
     // If we have a catalog URL from quilt3, try to find matching stack
     if (result.catalogUrl && stacks.length > 1) {
-        const matchingStack = stacks.find((s) => s.catalogUrl === result.catalogUrl);
+        // Normalize URLs for comparison (remove protocol and trailing slashes)
+        const normalizeUrl = (url: string): string => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+        const targetUrl = normalizeUrl(result.catalogUrl);
+
+        const matchingStack = stacks.find((s) => s.catalogUrl && normalizeUrl(s.catalogUrl) === targetUrl);
         if (matchingStack) {
             selectedStack = matchingStack;
             console.log(`Auto-selected stack matching catalog URL: ${selectedStack.stackName}`);

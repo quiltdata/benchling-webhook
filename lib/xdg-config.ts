@@ -56,6 +56,8 @@ const CONFIG_SCHEMA = {
         benchlingClientId: { type: "string" },
         benchlingClientSecret: { type: "string" },
         benchlingAppDefinitionId: { type: "string" },
+        benchlingPkgBucket: { type: "string" },
+        benchlingTestEntry: { type: "string" },
         benchlingSecret: { type: "string" },
         benchlingSecrets: { type: "string" },
         cdkAccount: { type: "string" },
@@ -82,6 +84,9 @@ const CONFIG_SCHEMA = {
                 source: { type: "string" },
                 version: { type: "string" },
                 inferredAt: { type: "string" },
+                inferredFrom: { type: "string" },
+                deployedBy: { type: "string" },
+                stackName: { type: "string" },
             },
             additionalProperties: false,
         },
@@ -310,7 +315,7 @@ export class XDGConfig {
             // Atomic rename (with fallback for cross-device on Windows)
             try {
                 renameSync(tempPath, configPath);
-            } catch (renameError) {
+            } catch {
                 // Fall back to copy+delete for cross-device scenarios (Windows)
                 copyFileSync(tempPath, configPath);
                 unlinkSync(tempPath);
@@ -550,7 +555,7 @@ export class XDGConfig {
             // Atomic rename (with fallback for cross-device on Windows)
             try {
                 renameSync(tempPath, configPath);
-            } catch (renameError) {
+            } catch {
                 // Fall back to copy+delete for cross-device scenarios (Windows)
                 copyFileSync(tempPath, configPath);
                 unlinkSync(tempPath);
@@ -577,7 +582,7 @@ export class XDGConfig {
         if (existsSync(paths.userConfig)) {
             try {
                 profile.user = this.readProfileConfig("user", profileName) as UserConfig;
-            } catch (error) {
+            } catch {
                 // User config is optional
             }
         }
@@ -586,7 +591,7 @@ export class XDGConfig {
         if (existsSync(paths.derivedConfig)) {
             try {
                 profile.derived = this.readProfileConfig("derived", profileName) as DerivedConfig;
-            } catch (error) {
+            } catch {
                 // Derived config is optional
             }
         }
@@ -595,7 +600,7 @@ export class XDGConfig {
         if (existsSync(paths.deployConfig)) {
             try {
                 profile.deploy = this.readProfileConfig("deploy", profileName) as DeploymentConfig;
-            } catch (error) {
+            } catch {
                 // Deploy config is optional
             }
         }
