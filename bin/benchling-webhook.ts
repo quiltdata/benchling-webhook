@@ -114,7 +114,7 @@ export async function inferConfiguration(catalogUrl: string): Promise<InferenceR
 
 /**
  * Create CDK app and stack (synthesis only, no deployment)
- * Pure function - returns app and stack objects
+ * Secrets-only mode (v0.6.0+) - requires QUILT_STACK_ARN and BENCHLING_SECRET
  */
 export function createStack(config: Config): DeploymentResult {
     const app = new cdk.App();
@@ -124,16 +124,9 @@ export function createStack(config: Config): DeploymentResult {
             account: config.cdkAccount,
             region: config.cdkRegion,
         },
-        bucketName: config.quiltUserBucket,
-        queueArn: config.queueArn,
-        environment: "production",
-        prefix: config.pkgPrefix || "benchling",
-        benchlingClientId: config.benchlingClientId,
-        benchlingClientSecret: config.benchlingClientSecret,
-        benchlingTenant: config.benchlingTenant,
-        quiltCatalog: config.quiltCatalog,
-        quiltDatabase: config.quiltDatabase,
-        webhookAllowList: config.webhookAllowList,
+        // Secrets-only mode parameters (v0.6.0+)
+        quiltStackArn: config.quiltStackArn!,
+        benchlingSecret: config.benchlingSecret!,
         logLevel: config.logLevel || "INFO",
         createEcrRepository: config.createEcrRepository === "true",
         ecrRepositoryName: config.ecrRepositoryName || "quiltdata/benchling",
@@ -281,23 +274,16 @@ async function legacyMain(): Promise<void> {
         console.log(`✓ CDK is bootstrapped (CDKToolkit stack: ${bootstrapStatus.status})\n`);
     }
 
-    // Create stack
+    // Create stack - Secrets-only mode (v0.6.0+)
     const app = new cdk.App();
     new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
         env: {
             account: config.CDK_DEFAULT_ACCOUNT,
             region: config.CDK_DEFAULT_REGION,
         },
-        bucketName: config.QUILT_USER_BUCKET!, // User's data bucket
-        queueArn: config.QUEUE_ARN!,
-        environment: "production",
-        prefix: config.PKG_PREFIX || "benchling",
-        benchlingClientId: config.BENCHLING_CLIENT_ID!,
-        benchlingClientSecret: config.BENCHLING_CLIENT_SECRET!,
-        benchlingTenant: config.BENCHLING_TENANT!,
-        quiltCatalog: config.QUILT_CATALOG!,
-        quiltDatabase: config.QUILT_DATABASE!,
-        webhookAllowList: config.WEBHOOK_ALLOW_LIST,
+        // Secrets-only mode parameters (v0.6.0+)
+        quiltStackArn: config.QUILT_STACK_ARN!,
+        benchlingSecret: config.BENCHLING_SECRET!,
         logLevel: config.LOG_LEVEL || "INFO",
         // ECR repository configuration
         createEcrRepository: config.CREATE_ECR_REPOSITORY === "true",

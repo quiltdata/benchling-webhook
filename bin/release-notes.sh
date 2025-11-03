@@ -69,5 +69,5 @@ cat << EOFRESOURCES
 - [Installation Guide](https://github.com/quiltdata/benchling-webhook#installation)
 - [Configuration Guide](https://github.com/quiltdata/benchling-webhook#configuration)
 - [Development Guide](https://github.com/quiltdata/benchling-webhook/tree/main/docker)
-- [Release Process](https://github.com/quiltdata/benchling-webhook/blob/main/doc/RELEASE.md)
+- [Release Process](https://github.com/quiltdata/benchling-webhook/blob/main/docs/RELEASE.md)
 EOFRESOURCES

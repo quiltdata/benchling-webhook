@@ -3,7 +3,7 @@
 ## GitHub Issue Reference
 
 **Issue**: #141 - UX improvements
-**Requirements**: `.scratch/141-ux-improvements/01-requirements.md`
+**Requirements**: `spec/141-ux-improvements/01-requirements.md`
 
 ## Executive Summary
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "benchling-quilt-integration"
-version = "0.5.4"
+version = "0.6.0"
 description = "Benchling-Quilt Integration Webhook Service"
 license = {text = "MIT"}
 authors = [
@@ -32,6 +32,8 @@ dependencies = [
     "tenacity>=9.1.2",
     "benchling-sdk>=1.23.1",
     "quilt3>=7.0.0",
+    "pydantic>=2.0.0",
+    "click>=8.1.0",
 ]
 
 [project.optional-dependencies]

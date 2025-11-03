@@ -23,19 +23,29 @@ program
 program
     .command("deploy", { isDefault: true })
     .description("Deploy the CDK stack to AWS")
-    .option("--catalog <url>", "Quilt catalog URL")
-    .option("--bucket <name>", "S3 bucket for data")
-    .option("--tenant <name>", "Benchling tenant")
-    .option("--client-id <id>", "Benchling OAuth client ID")
-    .option("--client-secret <secret>", "Benchling OAuth client secret")
-    .option("--app-id <id>", "Benchling app definition ID")
+    .option("--quilt-stack-arn <arn>", "ARN of Quilt CloudFormation stack")
+    .option("--benchling-secret <name>", "Name or ARN of Benchling secret in Secrets Manager (defaults to package name)", "@quiltdata/benchling-webhook")
     .option("--env-file <path>", "Path to .env file", ".env")
+    // Common options
     .option("--no-bootstrap-check", "Skip CDK bootstrap verification")
     .option("--require-approval <level>", "CDK approval level", "never")
     .option("--profile <name>", "AWS profile to use")
     .option("--region <region>", "AWS region to deploy to")
     .option("--image-tag <tag>", "Docker image tag to deploy (default: latest)")
     .option("--yes", "Skip confirmation prompts")
+    .addHelpText("after", `
+Examples:
+  Deploy with default secret name:
+    $ npx @quiltdata/benchling-webhook deploy \\
+        --quilt-stack-arn "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123"
+
+  Deploy with custom secret name:
+    $ npx @quiltdata/benchling-webhook deploy \\
+        --quilt-stack-arn "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123" \\
+        --benchling-secret "my-benchling-credentials"
+
+For more information: https://github.com/quiltdata/benchling-webhook#deployment
+`)
     .action(async (options) => {
         try {
             await deployCommand(options);

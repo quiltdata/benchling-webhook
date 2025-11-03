@@ -29,7 +29,8 @@
   },
   "include": [
     "bin/**/*",
-    "lib/**/*"
+    "lib/**/*",
+    "scripts/**/*"
   ],
   "exclude": [
     "node_modules",

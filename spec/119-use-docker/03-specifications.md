@@ -2,8 +2,8 @@
 
 ## Reference
 
-- **Requirements Document**: `.scratch/119-use-docker/01-requirements.md`
-- **Analysis Document**: `.scratch/119-use-docker/02-analysis.md`
+- **Requirements Document**: `spec/119-use-docker/01-requirements.md`
+- **Analysis Document**: `spec/119-use-docker/02-analysis.md`
 - **GitHub Issue**: #119 - "Get rid of the existing lambda, and completely switch the cdk deployment to use Fargate to run the `latest` docker image"
 
 ## Executive Summary

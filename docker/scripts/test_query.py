@@ -13,10 +13,11 @@ import sys
 
 import structlog
 
-# Add src directory to path so we can import from it
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+# Add parent directory to path so we can import from src
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.package_query import PackageQuery  # noqa: E402
+from src.xdg_config import XDGConfig  # noqa: E402
 
 # Configure structured logging
 structlog.configure(
@@ -80,8 +81,11 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Search by entry_id using default value from .env
+  # Search by entry_id using XDG configuration (default profile)
   %(prog)s --key entry_id
+
+  # Search using specific XDG profile
+  %(prog)s --key entry_id --profile dev
 
   # Search by entry_id with custom value
   %(prog)s --key entry_id --value etr_123
@@ -91,6 +95,11 @@ Examples:
 
   # Output as JSON
   %(prog)s --key entry_id --value etr_123 --json
+
+Configuration Priority:
+  1. CLI arguments (--bucket, --catalog, --database, --value)
+  2. Environment variables (QUILT_USER_BUCKET, QUILT_CATALOG, QUILT_DATABASE, BENCHLING_TEST_ENTRY)
+  3. XDG configuration (~/.config/benchling-webhook/default.json)
 
 Environment Variables:
   QUILT_DATABASE      - Athena database name (required)
@@ -138,49 +147,72 @@ Environment Variables:
         help="Output results as JSON",
     )
 
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default="default",
+        help="XDG configuration profile (default: default)",
+    )
+
     args = parser.parse_args()
 
-    # Get default value from BENCHLING_TEST_ENTRY if not provided
-    if not args.value:
-        args.value = os.getenv("BENCHLING_TEST_ENTRY")
-        if not args.value:
-            parser.error("Must provide --value or set BENCHLING_TEST_ENTRY env var")
+    # Load configuration with priority: CLI args > Environment variables > XDG config
+    value = args.value or os.getenv("BENCHLING_TEST_ENTRY")
+    bucket = args.bucket or os.getenv("QUILT_USER_BUCKET")
+    catalog_url = args.catalog or os.getenv("QUILT_CATALOG")
+    database = args.database or os.getenv("QUILT_DATABASE")
 
-    # Load configuration from environment variables
-    try:
-        bucket = args.bucket or os.getenv("QUILT_USER_BUCKET")
-        catalog_url = args.catalog or os.getenv("QUILT_CATALOG")
-        database = args.database or os.getenv("QUILT_DATABASE")
+    # If not provided via CLI or environment, try XDG config
+    if not (bucket and catalog_url and database):
+        try:
+            logger.info("Loading configuration from XDG", profile=args.profile)
+            xdg = XDGConfig(profile=args.profile)
+            config = xdg.load_complete_config()
 
-        if not bucket:
-            logger.error("No bucket specified and QUILT_USER_BUCKET not in environment")
-            sys.exit(1)
+            # Map XDG config fields to variables (only if not already set)
+            bucket = bucket or config.get("quiltUserBucket")
+            catalog_url = catalog_url or config.get("quiltCatalog")
+            database = database or config.get("quiltDatabase")
+            value = value or config.get("benchlingTestEntry")
 
-        if not catalog_url:
-            logger.error("No catalog URL specified and QUILT_CATALOG not in environment")
-            sys.exit(1)
+            logger.info("Loaded configuration from XDG", profile=args.profile)
+        except FileNotFoundError:
+            logger.warning("XDG configuration not found, using environment variables only")
+        except Exception as e:
+            logger.warning("Failed to load XDG configuration", error=str(e))
 
-        if not database:
-            logger.error("No database specified and QUILT_DATABASE not in environment")
-            sys.exit(1)
-
-        logger.info(
-            "Configuration loaded",
-            catalog=catalog_url,
-            bucket=bucket,
-            database=database,
+    # Get default value from fallback
+    if not value:
+        parser.error(
+            "Must provide --value, set BENCHLING_TEST_ENTRY env var, or configure benchlingTestEntry in XDG config"
         )
 
-    except Exception as e:
-        logger.error("Failed to load configuration", error=str(e))
+    # Validate required configuration
+    if not bucket:
+        logger.error("No bucket specified. Provide via --bucket, QUILT_USER_BUCKET env var, or XDG config")
         sys.exit(1)
+
+    if not catalog_url:
+        logger.error("No catalog URL specified. Provide via --catalog, QUILT_CATALOG env var, or XDG config")
+        sys.exit(1)
+
+    if not database:
+        logger.error("No database specified. Provide via --database, QUILT_DATABASE env var, or XDG config")
+        sys.exit(1)
+
+    logger.info(
+        "Configuration loaded",
+        catalog=catalog_url,
+        bucket=bucket,
+        database=database,
+    )
 
     # Create query client
     query = PackageQuery(bucket, catalog_url, database=database)
 
     try:
         # Perform query (returns dict with packages and results)
-        query_result = query.find_unique_packages(args.key, args.value)
+        query_result = query.find_unique_packages(args.key, value)
         packages = query_result["packages"]
         results = query_result["results"]
 

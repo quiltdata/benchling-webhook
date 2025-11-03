@@ -1,12 +1,12 @@
 # Benchling-Quilt Integration Makefile
 
--include ../.env
-.EXPORT_ALL_VARIABLES:
+# Configuration is now managed via XDG (~/.config/benchling-webhook/default.json)
+# and AWS Secrets Manager instead of .env files
 
 # Include deployment targets
 include make.deploy
 
-# Default log level if not set in .env
+# Default log level
 LOG_LEVEL ?= INFO
 
 # Port configuration
@@ -15,7 +15,7 @@ PORT_DOCKER_DEV := 5002
 PORT_DOCKER_PROD := 5003
 
 .PHONY: help build test clean install lint ngrok kill \
-        check-env check-ngrok run-local run-local-verbose run-dev run run-local-ngrok run-ecr \
+        check-xdg check-ngrok run-local run-local-verbose run-dev run run-local-ngrok run-ecr \
         test test-unit test-integration test-dev test-prod test-ecr test-local test-benchling test-query \
         health-local health-dev health logs-dev logs
 
@@ -24,12 +24,12 @@ help:
 	@echo "Benchling Integration Service - Development Commands"
 	@echo ""
 	@echo "Setup:"
-	@echo "  check-env             - Verify .env exists (auto-creates from template)"
+	@echo "  check-xdg             - Verify XDG config exists (~/.config/benchling-webhook/default.json)"
 	@echo "  check-ngrok           - Verify ngrok is configured (auto-adds authtoken if needed)"
 	@echo "  install               - Install dependencies with uv"
 	@echo ""
 	@echo "Development Servers:"
-	@echo "  run                   - Docker dev with hot-reload (needs AWS, port $(PORT_DOCKER_DEV))"
+	@echo "  run / run-dev         - Docker dev with hot-reload (needs AWS, port $(PORT_DOCKER_DEV))"
 	@echo "  run-ngrok             - Docker dev + ngrok tunnel (port $(PORT_DOCKER_DEV))"
 	@echo "  run-local             - Local Flask with mocked AWS (port $(PORT_LOCAL))"
 	@echo "  run-local-verbose     - Local Flask with debug logging (port $(PORT_LOCAL))"
@@ -75,12 +75,10 @@ help:
 # Setup
 # ==============================================================================
 
-# Verify .env exists (auto-create from template if missing)
-check-env:
-	@if [ ! -f ../.env ]; then \
-		cp ../env.template ../.env; \
-		echo "✅ Created .env from template in project root"; \
-		echo "⚠️  Edit .env with your Benchling/AWS configuration before running"; \
+# Verify XDG config exists
+check-xdg:
+	@if [ ! -f ~/.config/benchling-webhook/default.json ]; then \
+		echo "❌ XDG config not found. Run: npm run setup"; \
 		exit 1; \
 	fi
 
@@ -88,24 +86,24 @@ check-env:
 check-ngrok:
 	@if ! ngrok config check >/dev/null 2>&1; then \
 		if [ -z "$(NGROK_AUTHTOKEN)" ]; then \
-			echo "Error: ngrok not configured and NGROK_AUTHTOKEN not set in .env"; \
+			echo "Error: ngrok not configured and NGROK_AUTHTOKEN not set"; \
 			echo "Get authtoken: https://dashboard.ngrok.com/get-started/your-authtoken"; \
 			exit 1; \
 		fi; \
 		ngrok config add-authtoken $(NGROK_AUTHTOKEN); \
-		echo "✅ Configured ngrok with authtoken from .env"; \
+		echo "✅ Configured ngrok with authtoken"; \
 	fi
 
 # Install dependencies
 install:
 	uv sync --all-extras
 
-# Test Benchling OAuth credentials from .env
-test-benchling: check-env
+# Test Benchling OAuth credentials from AWS Secrets Manager
+test-benchling: check-xdg
 	uv run python scripts/test_benchling.py
 
-# Test Quilt package query via Athena database (uses BENCHLING_TEST_ENTRY from .env)
-test-query: check-env
+# Test Quilt package query via Athena database
+test-query: check-xdg
 	uv run python scripts/test_query.py
 
 # ==============================================================================
@@ -113,39 +111,42 @@ test-query: check-env
 # ==============================================================================
 
 # Docker development server with hot-reload (requires AWS credentials)
-run: build check-env
+run: build check-xdg
 	@echo "Starting dev server with hot-reload..."
 	@echo "💡 If you encounter issues, run 'make docker-clean' first"
 	docker-compose --profile dev up app-dev
+
+# Alias for run (for consistency with test-dev)
+run-dev: run
 
 run-ngrok:
 	@make run &
 	@make ngrok PORT=$(PORT_DOCKER_DEV) SLEEP=10
 
 # Docker production server (requires AWS credentials) - DEFAULT
-run-prod: build check-env
+run-prod: build check-xdg
 	docker-compose up -d
 	@echo "Waiting for application to start..."
 	@sleep 10
 	@make health-prod
 
 # Local Flask server with mocked AWS (no credentials needed)
-run-local: check-env
+run-local: check-xdg
 	uv run python scripts/run_local.py
 
 # Local Flask server with verbose logging
-run-local-verbose: check-env
+run-local-verbose: check-xdg
 	uv run python scripts/run_local.py --verbose
 
 # Local server + ngrok tunnel
-run-local-ngrok: check-env
+run-local-ngrok: check-xdg
 	@echo "Starting local server and ngrok tunnel..."
 	@echo "Press Ctrl+C to stop both ngrok and server"
 	@make run-local-verbose &
 	@make ngrok
 
 # Run ECR image locally (assumes image exists in ECR)
-run-ecr: check-env docker-ecr-login
+run-ecr: check-xdg docker-ecr-login
 	@echo "Pulling latest image from ECR..."
 	@AWS_ACCOUNT_ID=$$(aws sts get-caller-identity --query Account --output text 2>/dev/null) || \
 		{ echo "❌ Failed to get AWS account ID - check AWS credentials"; exit 1; }; \
@@ -155,7 +156,6 @@ run-ecr: check-env docker-ecr-login
 	echo "Starting container from ECR image..."; \
 	docker run -d --name benchling-ecr-test \
 		-p $(PORT_DOCKER_PROD):5000 \
-		--env-file .env \
 		-v ~/.aws:/home/appuser/.aws:ro \
 		$$ECR_IMAGE; \
 	echo "✅ Container started on port $(PORT_DOCKER_PROD)"; \
@@ -182,8 +182,8 @@ test-integration: test-benchling
 	@echo "Starting dev for integration tests..."
 	@ENABLE_WEBHOOK_VERIFICATION=false docker-compose --profile dev up -d app-dev
 	@if [ -z "$(BENCHLING_TEST_ENTRY)" ]; then \
-		echo "Error: BENCHLING_TEST_ENTRY not set in .env"; \
-		echo "Add a valid Benchling entry ID (e.g., BENCHLING_TEST_ENTRY=etr_fZ9XzOQV)"; \
+		echo "Error: BENCHLING_TEST_ENTRY not set"; \
+		echo "Set it in XDG config or as environment variable (e.g., BENCHLING_TEST_ENTRY=etr_fZ9XzOQV)"; \
 		exit 1; \
 	fi
 	@echo "Running integration tests against http://localhost:$(PORT_DOCKER_DEV)..."
@@ -193,14 +193,18 @@ test-integration: test-benchling
 		--wait-for-health
 
 # Test webhooks against local dev server (auto-starts and stops server)
-test-local: check-env health-local
+test-local: check-xdg health-local
 	@echo "Running local server tests (auto-start/stop)..."
 	uv run python scripts/run_local.py --test
 
-# Test webhooks against docker dev server
-test-dev: health-dev
+# Test webhooks against docker dev server (requires server running)
+test-dev:
+	@if ! curl -s http://localhost:$(PORT_DOCKER_DEV)/health >/dev/null 2>&1; then \
+		echo "❌ Dev server not running on port $(PORT_DOCKER_DEV)"; \
+		echo "Start it first with: make run-dev (or make run)"; \
+		exit 1; \
+	fi
 	@echo "Testing webhooks against http://localhost:$(PORT_DOCKER_DEV)"
-	@echo "Make sure 'make run-dev' is running first"
 	uv run python scripts/test_webhook.py http://localhost:$(PORT_DOCKER_DEV)
 
 # Test webhooks against docker production (auto-starts if not running)
@@ -209,7 +213,7 @@ test-prod: run-prod health-prod
 	uv run python scripts/test_webhook.py http://localhost:$(PORT_DOCKER_PROD)
 
 # Test ECR image (auto-starts, tests, and cleans up)
-test-ecr: check-env
+test-ecr: check-xdg
 	@echo "🧹 Cleaning up any existing ECR test container..."
 	@docker stop benchling-ecr-test 2>/dev/null || true
 	@docker rm benchling-ecr-test 2>/dev/null || true
@@ -232,6 +236,18 @@ test-ecr: check-env
 	@docker stop benchling-ecr-test
 	@docker rm benchling-ecr-test
 	@echo "✅ Done"
+
+# Test deployed dev stack via API Gateway endpoint
+test-deployed-dev: check-xdg
+	@echo "🧪 Testing deployed dev stack..."
+	@DEV_ENDPOINT=$$(jq -r '.dev.endpoint // empty' $(XDG_CONFIG)/deploy.json 2>/dev/null); \
+	if [ -z "$$DEV_ENDPOINT" ]; then \
+		echo "❌ No dev endpoint found in $(XDG_CONFIG)/deploy.json"; \
+		echo "💡 Run 'npm run release:dev' first to deploy the dev stack"; \
+		exit 1; \
+	fi; \
+	echo "📡 Testing endpoint: $$DEV_ENDPOINT"; \
+	uv run python scripts/test_webhook.py "$$DEV_ENDPOINT"
 
 # Auto-fix code formatting (black + isort)
 lint:

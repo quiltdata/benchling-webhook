@@ -60,7 +60,7 @@ jobs:
         run: uv run pytest -v -m "not local"
 
       - name: Run Node.js tests
-        run: npm run test-ci
+        run: npm run test:ci
 
       - name: Build package
         run: npm run build
@@ -222,7 +222,6 @@ jobs:
             echo "Publishing production release to npm with 'latest' tag"
             npm publish --provenance --access public --tag latest
           fi
-        continue-on-error: true
 
       - name: Summary
         run: |
