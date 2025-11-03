@@ -174,4 +174,97 @@ describe("XDGConfig", () => {
             expect(writtenConfig).toEqual(config);
         });
     });
+
+    describe("mergeConfigs", () => {
+        const testInstance = new XDGConfig(testConfigDir);
+
+        beforeEach(() => {
+            testInstance.ensureDirectories();
+        });
+
+        it("should merge configurations with correct precedence", () => {
+            const userConfig = {
+                quiltCatalog: "catalog.example.com",
+                benchlingTenant: "test-tenant",
+            };
+            const derivedConfig = {
+                cdkAccount: "123456789012",
+                cdkRegion: "us-east-1",
+            };
+            const deployConfig = {
+                webhookUrl: "https://api.example.com/webhook",
+                deploymentTimestamp: "2025-11-02T14:30:00Z",
+            };
+
+            const mergedConfig = testInstance.mergeConfigs({
+                user: userConfig,
+                derived: derivedConfig,
+                deploy: deployConfig,
+            });
+
+            expect(mergedConfig).toEqual({
+                quiltCatalog: "catalog.example.com",
+                benchlingTenant: "test-tenant",
+                cdkAccount: "123456789012",
+                cdkRegion: "us-east-1",
+                webhookUrl: "https://api.example.com/webhook",
+                deploymentTimestamp: "2025-11-02T14:30:00Z",
+            });
+        });
+
+        it("should override configurations in correct order", () => {
+            const configs = {
+                user: { logLevel: "INFO" },
+                derived: { logLevel: "DEBUG" },
+                deploy: { logLevel: "ERROR" },
+            };
+
+            const mergedConfig = testInstance.mergeConfigs(configs);
+            expect(mergedConfig.logLevel).toBe("ERROR");
+        });
+
+        it("should handle partial configurations", () => {
+            const configs = {
+                user: { benchlingTenant: "test" },
+                derived: {},
+                deploy: { cdkRegion: "us-east-1" },
+            };
+
+            const mergedConfig = testInstance.mergeConfigs(configs);
+            expect(mergedConfig).toEqual({
+                benchlingTenant: "test",
+                cdkRegion: "us-east-1",
+            });
+        });
+
+        it("should handle undefined config values", () => {
+            const configs = {
+                user: { quiltCatalog: "catalog.example.com" },
+                derived: undefined,
+                deploy: { cdkRegion: "us-west-2" },
+            };
+
+            const mergedConfig = testInstance.mergeConfigs(configs);
+            expect(mergedConfig).toEqual({
+                quiltCatalog: "catalog.example.com",
+                cdkRegion: "us-west-2",
+            });
+        });
+
+        it("should deep merge nested objects", () => {
+            const configs = {
+                user: { nested: { a: 1, b: 2 } },
+                derived: { nested: { b: 3, c: 4 } },
+                deploy: { nested: { c: 5, d: 6 } },
+            };
+
+            const mergedConfig = testInstance.mergeConfigs(configs);
+            expect(mergedConfig.nested).toEqual({
+                a: 1,
+                b: 3,
+                c: 5,
+                d: 6,
+            });
+        });
+    });
 });
