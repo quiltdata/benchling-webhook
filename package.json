@@ -41,7 +41,7 @@
     "release:dev": "npm run test && node bin/release.js dev",
     "test": "npm run typecheck && npm run test-ts && npm run test:python",
     "test-ci": "npm run typecheck && npm run test-ts",
-    "test-ts": "cross-env NODE_ENV=test node --max-old-space-size=4096 ./node_modules/.bin/jest",
+    "test-ts": "cross-env NODE_ENV=test jest --maxWorkers=50%",
     "test:python": "make -C docker test-unit",
     "test:local": "make -C docker build && make -C docker test-local",
     "test:remote": "npm run release:dev && make -C docker test-ecr",
