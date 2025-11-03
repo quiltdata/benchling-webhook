@@ -31,6 +31,7 @@ def test_environment_variable_names_are_documented():
     expected_env_vars = {
         "QuiltStackARN",  # CloudFormation stack ARN
         "BenchlingSecret",  # Secrets Manager secret name
+        "BENCHLING_TEST_MODE",  # Optional: disable webhook verification for local tests
     }
 
     # Verify all expected variables are present

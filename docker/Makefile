@@ -237,6 +237,18 @@ test-ecr: check-xdg
 	@docker rm benchling-ecr-test
 	@echo "✅ Done"
 
+# Test deployed dev stack via API Gateway endpoint
+test-deployed-dev: check-xdg
+	@echo "🧪 Testing deployed dev stack..."
+	@DEV_ENDPOINT=$$(jq -r '.dev.endpoint // empty' $(XDG_CONFIG)/deploy.json 2>/dev/null); \
+	if [ -z "$$DEV_ENDPOINT" ]; then \
+		echo "❌ No dev endpoint found in $(XDG_CONFIG)/deploy.json"; \
+		echo "💡 Run 'npm run release:dev' first to deploy the dev stack"; \
+		exit 1; \
+	fi; \
+	echo "📡 Testing endpoint: $$DEV_ENDPOINT"; \
+	uv run python scripts/test_webhook.py "$$DEV_ENDPOINT"
+
 # Auto-fix code formatting (black + isort)
 lint:
 	uv run black src/ tests/ scripts/
