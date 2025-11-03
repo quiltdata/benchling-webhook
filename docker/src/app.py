@@ -91,7 +91,7 @@ def create_app():
         response = {
             "status": "healthy",
             "service": "benchling-webhook",
-            "version": "1.0.0",
+            "version": "0.6.2",
             "config_source": config_source,
             "config_version": config_version,
         }
