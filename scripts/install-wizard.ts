@@ -585,16 +585,17 @@ export async function runInstallWizard(options: WizardOptions = {}): Promise<Use
             }
         }
     } else {
-        // Non-interactive mode: read from environment
-        config.benchlingTenant = process.env.BENCHLING_TENANT;
-        config.benchlingClientId = process.env.BENCHLING_CLIENT_ID;
-        config.benchlingClientSecret = process.env.BENCHLING_CLIENT_SECRET;
-        config.benchlingAppDefinitionId = process.env.BENCHLING_APP_DEFINITION_ID;
-
+        // Non-interactive mode: use existing config values
+        // Required fields must already be set in XDG config
         if (!config.benchlingTenant || !config.benchlingClientId || !config.benchlingClientSecret) {
             throw new Error(
-                "Non-interactive mode requires BENCHLING_TENANT, BENCHLING_CLIENT_ID, and BENCHLING_CLIENT_SECRET environment variables",
+                "Non-interactive mode requires benchlingTenant, benchlingClientId, and benchlingClientSecret to be already configured in XDG config. Run 'npm run setup' interactively first.",
             );
+        }
+
+        // Set default bucket if not specified
+        if (!config.benchlingPkgBucket) {
+            config.benchlingPkgBucket = config.quiltUserBucket;
         }
     }
 
@@ -642,7 +643,10 @@ export async function runInstallWizard(options: WizardOptions = {}): Promise<Use
             }
         }
     } else {
-        config.cdkRegion = config.quiltRegion || awsRegion;
+        // Non-interactive mode: use existing config or default region
+        if (!config.cdkRegion) {
+            config.cdkRegion = config.quiltRegion || awsRegion;
+        }
     }
 
     // Step 5: Optional configuration
@@ -684,10 +688,17 @@ export async function runInstallWizard(options: WizardOptions = {}): Promise<Use
             delete config.benchlingTestEntry;
         }
     } else {
-        config.pkgPrefix = config.pkgPrefix || "benchling";
-        config.pkgKey = config.pkgKey || "experiment_id";
-        config.logLevel = config.logLevel || "INFO";
-        config.benchlingTestEntry = process.env.BENCHLING_TEST_ENTRY;
+        // Non-interactive mode: use existing config or defaults
+        if (!config.pkgPrefix) {
+            config.pkgPrefix = "benchling";
+        }
+        if (!config.pkgKey) {
+            config.pkgKey = "experiment_id";
+        }
+        if (!config.logLevel) {
+            config.logLevel = "INFO";
+        }
+        // benchlingTestEntry is optional, keep existing value if present
     }
 
     // Step 6: Save configuration

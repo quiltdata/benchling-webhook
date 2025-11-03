@@ -549,14 +549,18 @@ class ConfigResolver:
 
     def _resolve_catalog_url(self, outputs: Dict[str, str]) -> str:
         """Resolve catalog URL from stack outputs."""
-        # Option 1: Direct from Catalog or CatalogDomain output
+        # Option 1: Direct from QuiltWebHost (preferred for Quilt stacks)
+        if "QuiltWebHost" in outputs:
+            return self._normalize_catalog_url(outputs["QuiltWebHost"])
+
+        # Option 2: Direct from Catalog or CatalogDomain output
         if "Catalog" in outputs:
             return self._normalize_catalog_url(outputs["Catalog"])
 
         if "CatalogDomain" in outputs:
             return self._normalize_catalog_url(outputs["CatalogDomain"])
 
-        # Option 2: Extract from API Gateway endpoint
+        # Option 3: Extract from API Gateway endpoint
         if "ApiGatewayEndpoint" in outputs:
             try:
                 parsed = urlparse(outputs["ApiGatewayEndpoint"])
@@ -565,7 +569,8 @@ class ConfigResolver:
                 pass  # Fall through to error
 
         raise ConfigResolverError(
-            "Cannot determine catalog URL", 'Stack must export "Catalog", "CatalogDomain", or "ApiGatewayEndpoint"'
+            "Cannot determine catalog URL",
+            'Stack must export "QuiltWebHost", "Catalog", "CatalogDomain", or "ApiGatewayEndpoint"',
         )
 
     def _normalize_catalog_url(self, url: str) -> str:
