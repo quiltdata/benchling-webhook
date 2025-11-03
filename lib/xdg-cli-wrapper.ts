@@ -31,7 +31,7 @@ export class XDGCLIError extends Error {
         message: string,
         public readonly command: string,
         public readonly exitCode: number,
-        public readonly stderr: string
+        public readonly stderr: string,
     ) {
         super(message);
         this.name = "XDGCLIError";
