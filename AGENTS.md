@@ -16,10 +16,10 @@ gh pr checks                  # Check CI status
 **Setup & Configuration:**
 
 ```bash
-npm run setup              # Install deps + configure XDG + sync secrets
-npm run config:infer         # Infer Quilt config from catalog
-npm run config:sync-secrets  # Sync secrets to AWS Secrets Manager
-npm run config:health        # Validate configuration
+npm run setup                # Install deps + configure XDG + sync secrets
+npm run setup:infer          # Infer Quilt config from catalog
+npm run setup:sync-secrets   # Sync secrets to AWS Secrets Manager
+npm run setup:health         # Validate configuration
 ```
 
 **Test & Build:**
@@ -28,7 +28,7 @@ npm run config:health        # Validate configuration
 npm run test                 # Unit tests (lint + typecheck + mocked tests)
 npm run test:local           # Local integration (Docker + real Benchling)
 npm run test:remote          # Remote integration (deploy dev stack + test)
-npm run typecheck            # TypeScript type checking only
+npm run build:typecheck      # TypeScript type checking only
 npm run lint                 # Linting and formatting
 npm run build                # Compile TypeScript
 ```
@@ -36,7 +36,7 @@ npm run build                # Compile TypeScript
 **Release:**
 
 ```bash
-npm run tag                  # Create version tag and push (triggers CI)
+npm run release:tag          # Create version tag and push (triggers CI)
 npm run release              # Promote to production (CI-only)
 ```
 
@@ -117,7 +117,7 @@ npm run release      # Promotes to production (after tests pass)
 
 ```bash
 # Configuration health check
-npm run config:health
+npm run setup:health
 
 # Check CloudWatch logs
 aws logs tail /ecs/benchling-webhook --follow
@@ -135,8 +135,8 @@ Entry → Insert Canvas → Quilt Integration → Create Package → Add Files �
 npm run test                 # Unit tests (lint + typecheck + TS + Python)
 npm run test:local           # Local integration (build Docker + real Benchling)
 npm run test:remote          # Remote integration (deploy dev + test via API Gateway)
-npm run typecheck            # TypeScript type checking only
-npm run test-ts              # Jest tests only
+npm run build:typecheck      # TypeScript type checking only
+npm run test:ts              # Jest tests only
 npm run test:python          # Python unit tests only
 npm run lint                 # Linting and auto-fix
 ```
@@ -154,7 +154,7 @@ npm run test:local           # Integration test with local Docker
 **CI/CD:**
 
 ```bash
-npm run test-ci              # Fast checks (typecheck + test-ts)
+npm run test:ci              # Fast checks (typecheck + test:ts)
 npm run test:remote          # Full remote integration (builds dev stack)
 npm run release              # Promotes to production (after tests pass)
 ```
@@ -280,8 +280,8 @@ Commits follow `type(scope): summary` and PRs must include:
 
 **Commands:**
 
-- All: `npm run test` (lint + typecheck + test-ts + test:python)
-- TypeScript: `npm run test-ts`
+- All: `npm run test` (lint + typecheck + test:ts + test:python)
+- TypeScript: `npm run test:ts`
 - Python: `npm run test:python`
 
 ### 4.2 Local Integration (`npm run test:local`)

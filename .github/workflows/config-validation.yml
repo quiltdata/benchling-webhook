@@ -37,7 +37,7 @@ jobs:
         run: npm ci
 
       - name: TypeScript compilation check
-        run: npm run typecheck
+        run: npm run build:typecheck
 
       - name: Validate XDG configuration types
         run: |
@@ -50,7 +50,7 @@ jobs:
           "
 
       - name: Run configuration tests
-        run: npm run test-ts -- --testPathPatterns="xdg-config" --passWithNoTests
+        run: npm run test:ts -- --testPathPatterns="xdg-config" --passWithNoTests
 
   validate-scripts:
     name: Validate Configuration Scripts
@@ -81,7 +81,7 @@ jobs:
           npx ts-node scripts/install-wizard.ts --help
 
       - name: Run script tests
-        run: npm run test-ts -- --testPathPatterns="scripts" --passWithNoTests
+        run: npm run test:ts -- --testPathPatterns="scripts" --passWithNoTests
 
   validate-cross-platform:
     name: Validate Cross-Platform Compatibility
@@ -104,7 +104,7 @@ jobs:
         run: npm ci
 
       - name: TypeScript compilation check
-        run: npm run typecheck
+        run: npm run build:typecheck
 
       - name: Test XDG path handling
         run: |
@@ -125,7 +125,7 @@ jobs:
           "
 
       - name: Run cross-platform tests
-        run: npm run test-ts
+        run: npm run test:ts
 
   validate-secrets-integration:
     name: Validate Secrets Integration
@@ -273,10 +273,10 @@ jobs:
         run: npm ci
 
       - name: Run full test suite
-        run: npm run test-ci
+        run: npm run test:ci
 
       - name: Generate test coverage report
-        run: npm run test-ts -- --coverage --coverageDirectory=coverage
+        run: npm run test:ts -- --coverage --coverageDirectory=coverage
 
       - name: Upload coverage to artifacts
         uses: actions/upload-artifact@v4
