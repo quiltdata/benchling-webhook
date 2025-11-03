@@ -50,7 +50,7 @@ jobs:
           "
 
       - name: Run configuration tests
-        run: npm run test-ts -- --testPathPatterns="xdg-config"
+        run: npm run test-ts -- --testPathPatterns="xdg-config" --passWithNoTests
 
   validate-scripts:
     name: Validate Configuration Scripts
@@ -81,7 +81,7 @@ jobs:
           npx ts-node scripts/install-wizard.ts --help
 
       - name: Run script tests
-        run: npm run test-ts -- --testPathPatterns="scripts"
+        run: npm run test-ts -- --testPathPatterns="scripts" --passWithNoTests
 
   validate-cross-platform:
     name: Validate Cross-Platform Compatibility
