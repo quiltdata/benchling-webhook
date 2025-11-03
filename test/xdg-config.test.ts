@@ -1,6 +1,6 @@
 import { existsSync, rmdirSync, mkdirSync, writeFileSync, unlinkSync } from "fs";
 import { resolve } from "path";
-import { XDGConfig } from "../lib/xdg-config";
+import { XDGConfig, BaseConfig } from "../lib/xdg-config";
 
 describe("XDGConfig", () => {
     const testConfigDir = resolve(__dirname, ".test-config");
@@ -257,9 +257,9 @@ describe("XDGConfig", () => {
 
         it("should deep merge nested objects", () => {
             const configs = {
-                user: { nested: { a: 1, b: 2 } },
-                derived: { nested: { b: 3, c: 4 } },
-                deploy: { nested: { c: 5, d: 6 } },
+                user: { nested: { a: 1, b: 2 } } as BaseConfig,
+                derived: { nested: { b: 3, c: 4 } } as BaseConfig,
+                deploy: { nested: { c: 5, d: 6 } } as BaseConfig,
             };
 
             const mergedConfig = testInstance.mergeConfigs(configs);
