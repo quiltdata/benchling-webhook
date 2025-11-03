@@ -159,7 +159,7 @@ export class ConfigHealthChecker {
             // Load derived config to get secret ARN
             const derivedConfig = this.xdgConfig.readProfileConfig("derived", this.profile) as DerivedConfig;
 
-            if (!derivedConfig.benchlingSecrets) {
+            if (!derivedConfig.benchlingSecretArn) {
                 return {
                     check: "secrets-access",
                     status: "warn",
@@ -184,7 +184,7 @@ export class ConfigHealthChecker {
                     status: "pass",
                     message: "Secrets accessible",
                     details: {
-                        secretArn: derivedConfig.benchlingSecrets,
+                        secretArn: derivedConfig.benchlingSecretArn,
                         profile: this.profile,
                     },
                 };
@@ -194,7 +194,7 @@ export class ConfigHealthChecker {
                     status: "fail",
                     message: "Secrets not accessible",
                     details: {
-                        secretArn: derivedConfig.benchlingSecrets,
+                        secretArn: derivedConfig.benchlingSecretArn,
                         profile: this.profile,
                         recommendation: "Check AWS credentials and IAM permissions",
                     },

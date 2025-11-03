@@ -64,7 +64,14 @@ def load_credentials_from_aws():
         raise ValueError("quiltStackArn not found in XDG config.\n" "Run 'make install' to configure Quilt stack.")
 
     # Extract region from ARN or config
-    aws_region = config.get("awsRegion") or config.get("region") or "us-west-2"
+    # Try multiple field names for backward compatibility
+    aws_region = (
+        config.get("awsRegion")
+        or config.get("cdkRegion")
+        or config.get("quiltRegion")
+        or config.get("region")
+        or "us-east-1"  # Default to us-east-1 (most common AWS region)
+    )
 
     print(f"🔐 Loading credentials from AWS Secrets Manager...")
     print(f"   Region: {aws_region}")

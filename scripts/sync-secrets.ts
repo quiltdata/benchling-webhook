@@ -169,22 +169,23 @@ async function getSecret(client: SecretsManagerClient, secretName: string): Prom
  * @returns Secret value as JSON string
  */
 function buildSecretValue(config: UserConfig): string {
+    // Use snake_case field names to match Python config_resolver expectations
     const secretData = {
-        BENCHLING_TENANT: config.benchlingTenant,
-        BENCHLING_CLIENT_ID: config.benchlingClientId,
-        BENCHLING_CLIENT_SECRET: config.benchlingClientSecret,
-        BENCHLING_APP_DEFINITION_ID: config.benchlingAppDefinitionId,
-        BENCHLING_PKG_BUCKET: config.quiltUserBucket,
-        BENCHLING_PKG_PREFIX: config.pkgPrefix || "benchling",
-        BENCHLING_PKG_KEY: config.pkgKey || "experiment_id",
-        BENCHLING_LOG_LEVEL: config.logLevel || "INFO",
-        BENCHLING_WEBHOOK_ALLOW_LIST: config.webhookAllowList || "",
-        BENCHLING_ENABLE_WEBHOOK_VERIFICATION: config.enableWebhookVerification || "true",
+        tenant: config.benchlingTenant,
+        client_id: config.benchlingClientId,
+        client_secret: config.benchlingClientSecret,
+        app_definition_id: config.benchlingAppDefinitionId,
+        user_bucket: config.benchlingPkgBucket || config.quiltUserBucket,
+        pkg_prefix: config.pkgPrefix || "benchling",
+        pkg_key: config.pkgKey || "experiment_id",
+        log_level: config.logLevel || "INFO",
+        webhook_allow_list: config.webhookAllowList || "",
+        enable_webhook_verification: config.enableWebhookVerification || "true",
     };
 
     // Add optional fields
     if (config.queueArn) {
-        Object.assign(secretData, { QUEUE_ARN: config.queueArn });
+        Object.assign(secretData, { queue_arn: config.queueArn });
     }
 
     return JSON.stringify(secretData, null, 2);
@@ -302,8 +303,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
     }
 
     // Update secret ARN
-    derivedConfig.benchlingSecrets = secretArn;
-    derivedConfig.benchlingSecrets= secretArn; // Backward compatibility
+    derivedConfig.benchlingSecretArn = secretArn;
 
     // Update metadata
     derivedConfig._metadata = {
@@ -337,7 +337,7 @@ export async function getSecretsFromAWS(options: {
     const xdgConfig = new XDGConfig();
     const derivedConfig = xdgConfig.readProfileConfig("derived", profile) as DerivedConfig;
 
-    if (!derivedConfig.benchlingSecrets) {
+    if (!derivedConfig.benchlingSecretArn) {
         throw new Error("No secret ARN found in configuration. Run sync-secrets first.");
     }
 
@@ -345,7 +345,7 @@ export async function getSecretsFromAWS(options: {
     const client = await getSecretsManagerClient(region, awsProfile);
 
     // Retrieve secret
-    const secretValue = await getSecret(client, derivedConfig.benchlingSecrets);
+    const secretValue = await getSecret(client, derivedConfig.benchlingSecretArn);
 
     // Parse and return
     return JSON.parse(secretValue);

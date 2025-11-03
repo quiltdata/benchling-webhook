@@ -16,7 +16,7 @@ export type ProfileName = string;
 /**
  * Configuration type identifier
  */
-export type ConfigType = "user" | "derived" | "deploy";
+export type ConfigType = "user" | "derived" | "deploy" | "complete";
 
 /**
  * User Configuration
@@ -81,9 +81,9 @@ export interface UserConfig {
     benchlingTestEntry?: string;
 
     /**
-     * AWS Secrets Manager secret name for Benchling credentials
+     * AWS Secrets Manager secret ARN for Benchling credentials
      */
-    benchlingSecrets?: string;
+    benchlingSecretArn?: string;
 
     /**
      * AWS account ID for CDK deployment
