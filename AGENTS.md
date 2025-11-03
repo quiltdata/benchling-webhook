@@ -226,11 +226,13 @@ Define the optimal workflow for development, testing, and deployment of the Benc
 ### 2.1 Configuration Model
 
 **XDG-Compliant Storage:**
+
 - User settings stored in `~/.config/benchling-webhook/default.json`
 - Avoids `.env` files and environment variable pollution
 - Single source of truth for credentials and deployment artifacts
 
 **Configuration Flow:**
+
 1. `make install` prompts for user settings → stores in XDG
 2. npm scripts read from XDG for CDK operations
 3. Secrets synced to AWS Secrets Manager
@@ -286,6 +288,7 @@ Commits follow `type(scope): summary` and PRs must include:
 - Validates code quality and local correctness
 
 **Commands:**
+
 - TypeScript: `npm run test:ts`
 - Python: `make -C docker test-unit`
 
@@ -299,6 +302,7 @@ Commits follow `type(scope): summary` and PRs must include:
 ### 4.3 Remote Integration (`make test-remote`)
 
 CI workflow:
+
 1. Build and push **dev** Docker image to ECR (not `latest`)
 2. CDK synthesizes and deploys **dev stack** (isolated)
 3. Execute remote integration tests: API Gateway → ALB → Fargate → S3/SQS
@@ -307,6 +311,7 @@ CI workflow:
 ### 4.4 Release (`make release`)
 
 Production promotion (CI-only):
+
 1. Called after successful `make test-remote`
 2. Promotes verified image + stack to **production**
 3. Generates `deploy.json` with endpoint, image URI, and stack outputs
@@ -314,6 +319,7 @@ Production promotion (CI-only):
 ### 4.5 Tagging (`make tag`)
 
 Version management:
+
 - Creates and pushes version tag (triggers release pipeline)
 - Tags Docker image and CDK stack: `benchling-webhook:vX.Y.Z`
 
