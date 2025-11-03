@@ -211,8 +211,8 @@ uv run python scripts/benchling-webhook-config read --type user
 uv run python scripts/benchling-webhook-config validate
 
 # Test from TypeScript (future)
-npm run config:read
-npm run config:validate
+npm run setup:read
+npm run setup:validate
 ```
 
 ## Files Created

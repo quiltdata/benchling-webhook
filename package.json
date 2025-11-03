@@ -18,6 +18,7 @@
     "build:clean": "rm -rf cdk.out dist */{*.js,*.d.ts}",
     "build:synth": "npx cdk synth",
     "build:typecheck": "tsc --noEmit",
+    "cli": "node dist/bin/cli.js",
     "lint": "eslint . --ext .ts --fix && make -C docker lint",
     "prebuild": "rm -rf dist",
     "prepublishOnly": "npm run build",
@@ -35,15 +36,7 @@
     "test:python": "make -C docker test-unit",
     "test:remote": "npm run release:dev && make -C docker test-deployed-dev",
     "test:ts": "cross-env NODE_ENV=test jest --maxWorkers=50%",
-    "clean": "npm run build:clean",
-    "config:health": "npm run setup:health",
-    "config:infer": "npm run setup:infer",
-    "config:sync-secrets": "npm run setup:sync-secrets",
-    "synth": "npm run build:synth",
-    "tag": "npm run release:tag",
-    "test-ci": "npm run test:ci",
-    "test-ts": "npm run test:ts",
-    "typecheck": "npm run build:typecheck"
+    "version": "node bin/version.js"
   },
   "keywords": [
     "benchling",

@@ -78,7 +78,7 @@ help:
 # Verify XDG config exists
 check-xdg:
 	@if [ ! -f ~/.config/benchling-webhook/default.json ]; then \
-		echo "❌ XDG config not found. Run: npm run config:install"; \
+		echo "❌ XDG config not found. Run: npm run setup"; \
 		exit 1; \
 	fi
 
