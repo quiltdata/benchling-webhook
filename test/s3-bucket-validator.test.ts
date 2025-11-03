@@ -1,15 +1,13 @@
 import { S3BucketValidator } from "../lib/s3-bucket-validator";
-import { S3Client, HeadBucketCommand, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client } from "@aws-sdk/client-s3";
+import { mockClient } from "aws-sdk-client-mock";
 
-// Mock AWS SDK S3 Client
-jest.mock("@aws-sdk/client-s3");
+// Create mock client
+const mockS3 = mockClient(S3Client);
 
 describe("S3BucketValidator", () => {
-    let mockS3Client: jest.Mocked<S3Client>;
-
     beforeEach(() => {
-        jest.clearAllMocks();
-        mockS3Client = new S3Client({}) as jest.Mocked<S3Client>;
+        mockS3.reset();
     });
 
     describe("validate", () => {
@@ -21,7 +19,7 @@ describe("S3BucketValidator", () => {
             };
 
             // Mock successful bucket access
-            mockS3Client.send = jest.fn().mockResolvedValue({});
+            mockS3.resolves({});
 
             // Act
             const result = await S3BucketValidator.validate(config);
@@ -39,9 +37,9 @@ describe("S3BucketValidator", () => {
             };
 
             // Mock permission denied
-            const error = new Error("Access Denied");
+            const error = new Error("Access Denied") as Error & { name: string };
             error.name = "AccessDenied";
-            mockS3Client.send = jest.fn().mockRejectedValue(error);
+            mockS3.rejects(error);
 
             // Act
             const result = await S3BucketValidator.validate(config);
@@ -59,9 +57,9 @@ describe("S3BucketValidator", () => {
             };
 
             // Mock bucket not found
-            const error = new Error("NoSuchBucket");
+            const error = new Error("NoSuchBucket") as Error & { name: string };
             error.name = "NoSuchBucket";
-            mockS3Client.send = jest.fn().mockRejectedValue(error);
+            mockS3.rejects(error);
 
             // Act
             const result = await S3BucketValidator.validate(config);
@@ -79,7 +77,7 @@ describe("S3BucketValidator", () => {
             };
 
             // Mock successful head bucket and test write
-            mockS3Client.send = jest.fn().mockResolvedValue({});
+            mockS3.resolves({});
 
             // Act
             const result = await S3BucketValidator.validate(config);
@@ -96,7 +94,7 @@ describe("S3BucketValidator", () => {
             };
 
             // Mock successful write
-            mockS3Client.send = jest.fn().mockResolvedValue({});
+            mockS3.resolves({});
 
             // Act
             const result = await S3BucketValidator.validate(config);
@@ -113,7 +111,7 @@ describe("S3BucketValidator", () => {
             };
 
             // Mock successful read
-            mockS3Client.send = jest.fn().mockResolvedValue({});
+            mockS3.resolves({});
 
             // Act
             const result = await S3BucketValidator.validate(config);
@@ -131,7 +129,7 @@ describe("S3BucketValidator", () => {
 
             // Mock network error
             const error = new Error("Network timeout");
-            mockS3Client.send = jest.fn().mockRejectedValue(error);
+            mockS3.rejects(error);
 
             // Act
             const result = await S3BucketValidator.validate(config);
@@ -164,7 +162,7 @@ describe("S3BucketValidator", () => {
     describe("checkBucketExists", () => {
         it("should check if bucket exists", async () => {
             // Mock successful head bucket
-            mockS3Client.send = jest.fn().mockResolvedValue({});
+            mockS3.resolves({});
 
             const exists = await S3BucketValidator.checkBucketExists("test-bucket", "us-west-2");
             expect(exists).toBe(true);
@@ -172,9 +170,9 @@ describe("S3BucketValidator", () => {
 
         it("should return false for nonexistent bucket", async () => {
             // Mock bucket not found
-            const error = new Error("NoSuchBucket");
+            const error = new Error("NoSuchBucket") as Error & { name: string };
             error.name = "NoSuchBucket";
-            mockS3Client.send = jest.fn().mockRejectedValue(error);
+            mockS3.rejects(error);
 
             const exists = await S3BucketValidator.checkBucketExists("nonexistent-bucket", "us-west-2");
             expect(exists).toBe(false);
