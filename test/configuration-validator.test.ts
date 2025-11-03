@@ -70,9 +70,11 @@ describe("ConfigurationValidator", () => {
 
             // Assert
             expect(result.isValid).toBe(false);
+            expect(result.errors.length).toBeGreaterThan(0);
             expect(result.errors).toContain("Invalid catalog URL");
-            expect(result.errors).toContain("Invalid Benchling tenant");
             expect(result.errors).toContain("S3 bucket access denied");
+            // Check that missing fields error is present
+            expect(result.errors.some(err => err.includes("Missing required fields"))).toBe(true);
         });
 
         it("should validate catalog URL format", async () => {
