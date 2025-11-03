@@ -3,91 +3,49 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.6.0] - 2025-10-31 (Upcoming)
+## [0.6.0] - 2025-11-03 (Upcoming)
 
 ### Added
 
-- **Unified Secrets Management** - Major improvement to secrets configuration (#156)
-  - New `--benchling-secrets` parameter consolidates all Benchling credentials into single configuration
-  - Support for three input formats:
-    - Inline JSON: `--benchling-secrets '{"client_id":"...","client_secret":"...","tenant":"..."}'`
-    - JSON file reference: `--benchling-secrets @secrets.json`
-    - AWS Secrets Manager ARN: `--benchling-secrets arn:aws:secretsmanager:...`
-  - Comprehensive validation framework with helpful error messages
-  - Automatic secret creation/update in AWS Secrets Manager
-  - Secret masking in all CLI output for security
-  - IAM-based access control with least-privilege policies
-  - CloudWatch and CloudTrail audit logging
+- **XDG Configuration Management** (#156)
+  - Centralized configuration in `~/.config/benchling-webhook/default.json`
+  - Interactive setup wizard (`npm run setup`) for first-time configuration
+  - Automatic Quilt catalog inference from `~/.quilt3/config.yml`
+  - Secrets sync to AWS Secrets Manager with validation
+  - Configuration health check (`npm run setup:health`)
+  - Eliminates `.env` files and environment variable pollution
 
-- **Secrets Configuration Documentation**
-  - Comprehensive [Secrets Configuration Guide](./docs/SECRETS_CONFIGURATION.md) with examples for all scenarios
-  - [Architecture Decision Record](./docs/ADR-001-SECRETS-MANAGEMENT.md) documenting design decisions
-  - Migration guide for transitioning from old parameters
-  - Troubleshooting guide for common issues
-  - Security best practices documentation
+- **Unified Test Workflow**
+  - `npm run test` - Fast unit tests (lint + typecheck + mocked tests)
+  - `npm run test:local` - Local Docker integration with real Benchling
+  - `npm run test:remote` - Deploy dev stack and test via API Gateway
+  - Added `BENCHLING_TEST_MODE` to disable webhook verification for local testing
 
-- **Validation Framework**
-  - Pre-deployment secret validation catches configuration errors early
-  - ARN format validation with detailed error messages
-  - JSON structure validation with field-level error reporting
-  - Tenant name format validation
-  - API URL validation for custom endpoints
-
-- **Enhanced Security**
-  - Secrets never exposed in CloudFormation templates (protected by `noEcho: true`)
-  - Secrets masked in CLI output (only last 4 characters shown)
-  - IAM policies grant minimum required permissions
-  - Support for AWS Secrets Manager encryption at rest
-  - CloudTrail audit trail for all secret access
+- **npm Script Reorganization**
+  - Consistent naming: `setup:*`, `build:*`, `test:*`, `release:*`
+  - `npm run setup:infer` - Infer Quilt config from catalog
+  - `npm run setup:sync-secrets` - Sync secrets to AWS Secrets Manager
+  - `npm run release:tag` - Create and push version tag
 
 ### Changed
 
-- **Secrets Configuration Method** - Simplified from 4 parameters to 1
-  - Before: `--tenant`, `--client-id`, `--client-secret`, `--app-id`
-  - After: `--benchling-secrets` (single parameter)
-  - Configuration priority: CLI flag > Environment variable > .env file > Legacy parameters
+- **Configuration Model**
+  - XDG config is single source of truth (no more environment variables in scripts)
+  - Secrets stored in AWS Secrets Manager, referenced by ARN in XDG config
+  - Python CLI now reads from XDG config instead of environment variables
+  - Non-interactive mode no longer depends on environment variables
 
-- **CloudFormation Stack** - Enhanced with new secrets parameter
-  - Added `BenchlingSecrets` parameter (primary configuration method)
-  - Maintained backward compatibility with individual parameters
-  - Conditional secret handling based on parameter format
-  - Improved parameter descriptions with deprecation notices
-
-- **README** - Comprehensive update with secrets configuration
-  - Added secrets configuration section with multiple examples
-  - Added troubleshooting section
-  - Added security best practices
-  - Added deprecation warnings for old parameters
-  - Linked to detailed documentation
-
-### Deprecated
-
-- **Individual Secret Parameters** - Will be removed in v1.0.0
-  - `--tenant` - Use `--benchling-secrets` instead
-  - `--client-id` - Use `--benchling-secrets` instead
-  - `--client-secret` - Use `--benchling-secrets` instead
-  - `--app-id` - Use `--benchling-secrets` instead
-  - Deprecation warnings displayed when old parameters used
-  - All functionality maintained during transition period
-  - See [Migration Guide](./docs/SECRETS_CONFIGURATION.md#migration-guide)
+- **Test Strategy**
+  - `test:remote` now tests deployed endpoint (not local ECR image)
+  - Integration tests use real credentials from Secrets Manager
+  - Local tests bypass webhook verification for faster iteration
 
 ### Fixed
 
-- Improved secret handling eliminates potential CloudFormation exposure
-- Better error messages guide users to correct configuration
-- Validation catches configuration errors before deployment starts
-
-### Migration Notes
-
-**Action Required for Existing Users**:
-- Current deployments continue to work with old parameters (with warnings)
-- Migrate to `--benchling-secrets` before v1.0.0 release
-- See [Migration Guide](./docs/SECRETS_CONFIGURATION.md#migration-guide) for step-by-step instructions
-
-**Migration Timeline**:
-- v0.6.x (current): New parameter available, old parameters deprecated
-- v0.7.x - v0.9.x: Deprecation warnings continue
-- v1.0.x: Old parameters removed (breaking change)
+- Interactive wizard now preserves existing secrets when pressing Enter
+- Test entry ID displays correctly on subsequent wizard runs
+- Setup script exits cleanly (no hanging from AWS SDK connection pools)
+- Removed environment variable dependency in non-interactive setup
 
 ## [0.5.4] - 2025-10-30
 
