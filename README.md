@@ -235,33 +235,42 @@ For local development and contributing:
 ```bash
 git clone https://github.com/quiltdata/benchling-webhook.git
 cd benchling-webhook
-npm install
 
-# Test CLI locally (note the -- separator for passing args)
-npm run cli -- --help
-npm run cli -- deploy
+# Install dependencies and configure (interactive)
+npm run install
 
-npm test        # Run tests
-npm run build   # Build package
+# Build package
+npm run build
 ```
 
-### Running Tests
+### Testing Workflow
 
 ```bash
-# Run all tests (TypeScript + Python)
-npm test
+# 1. Run unit tests (lint + typecheck + mocked tests)
+npm run test
 
-# Run TypeScript tests only
-npm run test:ts
+# 2. Run local integration tests (builds Docker, uses real Benchling payloads)
+npm run test:local
 
-# Run Python tests only
-npm run test:python
+# 3. Run remote integration tests (deploys dev stack, tests through API Gateway)
+npm run test:remote
 
-# Type checking
-npm run typecheck
+# Individual test commands
+npm run test-ts      # TypeScript tests only
+npm run test:python  # Python unit tests only
+npm run typecheck    # Type checking only
+npm run lint         # Linting only
+```
 
-# Linting
-npm run lint
+### Release Workflow
+
+```bash
+# Create and push version tag (triggers release pipeline)
+npm run tag
+
+# CI will run:
+# - npm run test:remote (builds dev image, deploys dev stack, tests)
+# - npm run release (promotes to production after tests pass)
 ```
 
 ## Troubleshooting

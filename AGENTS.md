@@ -13,28 +13,31 @@ gh pr view                    # View PR details
 gh pr checks                  # Check CI status
 ```
 
+**Setup & Configuration:**
+
+```bash
+npm run install              # Install deps + configure XDG + sync secrets
+npm run config:infer         # Infer Quilt config from catalog
+npm run config:sync-secrets  # Sync secrets to AWS Secrets Manager
+npm run config:health        # Validate configuration
+```
+
 **Test & Build:**
 
 ```bash
-npm run test                  # Full test suite (TS + Python)
+npm run test                 # Unit tests (lint + typecheck + mocked tests)
+npm run test:local           # Local integration (Docker + real Benchling)
+npm run test:remote          # Remote integration (deploy dev stack + test)
 npm run typecheck            # TypeScript type checking only
-make -C docker lint          # Auto-fix Python formatting
-make -C docker test-unit     # Python unit tests
-```
-
-**Local Development:**
-
-```bash
-make -C docker test-local    # Test with local Flask server
+npm run lint                 # Linting and formatting
 npm run build                # Compile TypeScript
-npm run lint                 # Apply ESLint
 ```
 
-**Deploy:**
+**Release:**
 
 ```bash
-npm run deploy               # Full deployment (test + deploy)
-npm run cdk:dev              # Dev deployment with timestamp
+npm run tag                  # Create version tag and push (triggers CI)
+npm run release              # Promote to production (CI-only)
 ```
 
 ### Code Organization
@@ -84,50 +87,39 @@ AWS CDK application deploying auto-scaling webhook processor:
 ```bash
 git clone https://github.com/quiltdata/benchling-webhook.git
 cd benchling-webhook
-npm install
+npm run install  # Interactive wizard: deps + XDG config + secrets sync
 ```
 
-### 2. Configure (Choose One)
+This command:
+- Installs Node.js and Python dependencies
+- Creates XDG-compliant folder (`~/.config/benchling-webhook/`)
+- Auto-infers Quilt catalog from `~/.quilt3/config.yml` (or prompts)
+- Prompts for Benchling credentials (tenant, client ID/secret, app definition ID)
+- Validates Benchling credentials and bucket access
+- Creates or syncs secrets to AWS Secrets Manager
+- Generates `~/.config/benchling-webhook/default.json` with QuiltStackArn and BenchlingSecretArn
 
-**Option A: Auto-infer from Quilt Catalog** (Recommended)
+### 2. Test Locally
 
 ```bash
-npm run get-env -- https://quilt-catalog.yourcompany.com --write
-cp env.inferred .env
-# Edit .env to add Benchling credentials
+npm run test        # Unit tests (lint + typecheck + mocked)
+npm run test:local  # Integration with local Docker + real Benchling
 ```
-
-**Option B: Manual**
-
-```bash
-cp env.template .env
-# Edit .env with all values
-```
-
-**Required Variables:** `QUILT_CATALOG`, `QUILT_USER_BUCKET`, `BENCHLING_TENANT`, `BENCHLING_CLIENT_ID`, `BENCHLING_CLIENT_SECRET`, `BENCHLING_APP_DEFINITION_ID`
-
-See [docs/PARAMETERS.md](docs/PARAMETERS.md) for complete reference.
 
 ### 3. Deploy
 
 ```bash
-source .env
-npx cdk bootstrap aws://$CDK_DEFAULT_ACCOUNT/$CDK_DEFAULT_REGION  # First time only
-npm run deploy  # Creates .env.deploy with webhook URL
+npm run test:remote  # Deploys dev stack, runs integration tests
+npm run release      # Promotes to production (after tests pass)
 ```
 
-### 4. Configure Benchling App
-
-1. Create app from `app-manifest.yaml`
-2. Set webhook URL from `.env.deploy`
-3. Copy credentials to `.env`
-4. Install and grant admin permissions
-
-### 5. Verify
+### 4. Verify
 
 ```bash
-source .env.deploy
-curl $WEBHOOK_ENDPOINT/health
+# Configuration health check
+npm run config:health
+
+# Check CloudWatch logs
 aws logs tail /ecs/benchling-webhook --follow
 ```
 
@@ -140,12 +132,13 @@ Entry → Insert Canvas → Quilt Integration → Create Package → Add Files �
 ### Quick Test Commands
 
 ```bash
-npm run test                  # Full suite (TS + Python)
-npm run typecheck            # TypeScript only
-npm run test:ts              # Jest tests
-make -C docker test-unit     # Python unit tests
-make -C docker test-local    # Integration with local server
-make -C docker test          # Full Python suite
+npm run test                 # Unit tests (lint + typecheck + TS + Python)
+npm run test:local           # Local integration (build Docker + real Benchling)
+npm run test:remote          # Remote integration (deploy dev + test via API Gateway)
+npm run typecheck            # TypeScript type checking only
+npm run test-ts              # Jest tests only
+npm run test:python          # Python unit tests only
+npm run lint                 # Linting and auto-fix
 ```
 
 ### Test Workflows
@@ -153,36 +146,34 @@ make -C docker test          # Full Python suite
 **Local Development:**
 
 ```bash
-make -C docker check-env && make -C docker install  # Setup
-make -C docker lint && npm run typecheck            # Code quality
-npm run test:ts && make -C docker test-unit         # Unit tests
-make -C docker test-local                           # Integration
+npm run install              # One-time setup (deps + config + secrets)
+npm run test                 # Fast unit tests (no Docker, no AWS)
+npm run test:local           # Integration test with local Docker
 ```
 
 **CI/CD:**
 
 ```bash
-npm run test-ci              # Fast TS checks
-make -C docker test-unit     # Python tests
-npm run docker-check         # Docker validation
-make -C docker test-integration  # Full integration
+npm run test-ci              # Fast checks (typecheck + test-ts)
+npm run test:remote          # Full remote integration (builds dev stack)
+npm run release              # Promotes to production (after tests pass)
 ```
 
 **Pre-deployment:**
 
 ```bash
-npm run test                 # All tests
-make -C docker test          # Python suite
-make -C docker test-ecr      # ECR image validation
+npm run test                 # Verify local changes
+npm run test:local           # Verify Docker + Benchling integration
+npm run test:remote          # Verify full stack deployment
 ```
 
 ### Additional Test Commands
 
-See [docker/README.md](docker/README.md) or `make -C docker help` for:
+See [docker/README.md](docker/README.md) or `make -C docker help` for low-level Docker commands:
 
-- Credential verification (`test-benchling`, `test-query`)
-- Health checks (`health-local`, `health-dev`, `health-prod`)
-- Environment-specific tests (`test-dev`, `test-prod`, `test-ecr`)
+- `make -C docker test-unit` - Python unit tests only
+- `make -C docker test-local` - Local Flask server integration
+- `make -C docker test-ecr` - ECR image validation
 
 ## Monitoring & Debugging
 
@@ -245,43 +236,43 @@ Define the optimal workflow for development, testing, and deployment of the Benc
 ### 3.1 One-Command Bootstrap
 
 ```bash
-make install
+npm run install
 ```
 
-This command must:
+This command:
 
-1. Install Node.js and Python dependencies
-2. Create XDG-compliant folder (`~/.config/benchling-webhook/`)
-3. Auto-infer Quilt catalog from `~/.quilt3/config.yml` (or prompt)
-4. Prompt interactively for Benchling credentials (tenant, client ID/secret, app definition ID)
-5. Validate Benchling credentials and bucket access
-6. Create or sync secrets to AWS Secrets Manager
-7. Generate `~/.config/benchling-webhook/default.json` with QuiltStackArn and BenchlingSecretArn
+1. Installs Node.js and Python dependencies
+2. Creates XDG-compliant folder (`~/.config/benchling-webhook/`)
+3. Auto-infers Quilt catalog from `~/.quilt3/config.yml` (or prompts)
+4. Prompts interactively for Benchling credentials (tenant, client ID/secret, app definition ID)
+5. Validates Benchling credentials and bucket access
+6. Creates or syncs secrets to AWS Secrets Manager
+7. Generates `~/.config/benchling-webhook/default.json` with QuiltStackArn and BenchlingSecretArn
 
 If any step fails validation, the script exits with explicit diagnostics (e.g., "Cannot find Quilt catalog in ~/.quilt3/config.yml").
 
 ### 3.2 Daily Development Loop
 
 ```bash
-make test
+npm run test
 ```
 
-- **Lint** → `npm run lint` + `make -C docker lint`
+- **Lint** → `npm run lint` (includes `make -C docker lint`)
 - **Typecheck** → Verifies TS interfaces
 - **Unit tests** → Mocked tests for TypeScript and Python
 - **Code quality** → Confirms local functional correctness
 
 Commits follow `type(scope): summary` and PRs must include:
 
-- Verified local tests (`make test`)
-- Integration test results (`make test-local`)
+- Verified local tests (`npm run test`)
+- Integration test results (`npm run test:local`)
 - Deployment notes or configuration deltas
 
 ---
 
 ## 4. Testing Tiers
 
-### 4.1 Unit Tests (`make test`)
+### 4.1 Unit Tests (`npm run test`)
 
 - Runs linters for TypeScript and Python
 - Executes mocked unit tests (no external dependencies)
@@ -289,34 +280,35 @@ Commits follow `type(scope): summary` and PRs must include:
 
 **Commands:**
 
-- TypeScript: `npm run test:ts`
-- Python: `make -C docker test-unit`
+- All: `npm run test` (lint + typecheck + test-ts + test:python)
+- TypeScript: `npm run test-ts`
+- Python: `npm run test:python`
 
-### 4.2 Local Integration (`make test-local`)
+### 4.2 Local Integration (`npm run test:local`)
 
 - Builds local Docker image (`make -C docker build`)
 - Pulls credentials from AWS Secrets Manager
 - Runs Flask webhook with **real Benchling payloads**
 - Tests end-to-end flow without cloud deployment
 
-### 4.3 Remote Integration (`make test-remote`)
+### 4.3 Remote Integration (`npm run test:remote`)
 
 CI workflow:
 
-1. Build and push **dev** Docker image to ECR (not `latest`)
+1. Builds and pushes **dev** Docker image to ECR (not `latest`)
 2. CDK synthesizes and deploys **dev stack** (isolated)
-3. Execute remote integration tests: API Gateway → ALB → Fargate → S3/SQS
-4. Validate secrets, IAM roles, and networking across deployed stack
+3. Executes remote integration tests: API Gateway → ALB → Fargate → S3/SQS
+4. Validates secrets, IAM roles, and networking across deployed stack
 
-### 4.4 Release (`make release`)
+### 4.4 Release (`npm run release`)
 
 Production promotion (CI-only):
 
-1. Called after successful `make test-remote`
+1. Called after successful `npm run test:remote`
 2. Promotes verified image + stack to **production**
 3. Generates `deploy.json` with endpoint, image URI, and stack outputs
 
-### 4.5 Tagging (`make tag`)
+### 4.5 Tagging (`npm run tag`)
 
 Version management:
 
@@ -350,12 +342,12 @@ Version management:
 | Failure | Cause | Mitigation |
 |----------|--------|-------------|
 | Missing Quilt catalog | Quilt3 not configured | Prompt user to run `quilt3 config` and retry |
-| XDG config corrupted | Manual file edit | Validate JSON schema on read; re-run `make install` |
+| XDG config corrupted | Manual file edit | Validate JSON schema on read; re-run `npm run install` |
 | AWS auth error | Invalid credentials | Check `AWS_PROFILE` and region before operations |
 | Docker build failure | Outdated base image | Auto-pull latest base before build |
 | Secrets not synced | Secrets Manager unreachable | Validate IAM permissions; retry sync with backoff |
 | CDK stack drift | Manual AWS changes | Run `cdk diff` preflight; warn on drift detection |
-| Missing secret variables | Incomplete `make install` | Schema validation before secrets sync |
+| Missing secret variables | Incomplete `npm run install` | Schema validation before secrets sync |
 
 ---
 
@@ -363,9 +355,9 @@ Version management:
 
 - **Single Source of Truth:** XDG config defines the environment
 - **Fail Fast:** Validation before deployment prevents partial stacks
-- **Idempotence:** Re-running `make install` never breaks working setup
+- **Idempotence:** Re-running `npm run install` never breaks working setup
 - **Observability:** Every stage logs explicit diagnostics to CloudWatch
-- **Separation of Concerns:** Makefile orchestrates, npm/Python implement
+- **Separation of Concerns:** npm orchestrates, TypeScript/Python implement
 
 ---
 
