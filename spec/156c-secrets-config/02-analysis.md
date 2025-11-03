@@ -38,7 +38,7 @@ The current system (v0.5.4 transitioning to v0.6.0) accepts configuration from *
    - Via `BENCHLING_SECRETS` or `BenchlingSecret` parameter
    - Currently used for Benchling credentials only
 
-**Gap vs. Requirements**: Requirements specify a single source of truth (XDG configuration at `~/.config/benchling-webhook/default.json`). Current implementation has no XDG support and maintains multiple configuration sources.
+**Gap vs. Requirements**: Requirements specify a single source of truth (XDG configuration split across three files: `~/.config/benchling-webhook/default.json` for user settings, `~/.config/benchling-webhook/config/default.json` for derived settings, and `~/.config/benchling-webhook/deploy/default.json` for deployment outputs). Current implementation has no XDG support and maintains multiple configuration sources.
 
 ### 1.2 Secrets Management Implementation
 
@@ -738,11 +738,9 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Design Considerations**:
 1. Should XDG config support multiple catalog profiles?
 2. Should catalog be specified per-project or globally?
-3. How to handle conflicts between `~/.quilt3/config.yml` and XDG config?
+3. How to handle conflicts between inference from `quilt3 config` CLI and XDG config?
 
-**Open Questions** (from requirements):
-- Support multiple catalogs or assume single default?
-- Profile-specific configuration or environment-specific?
+**Requirements Decision**: YES to multi-profile support. The default profile (default.json) is assumed; users can manually create alternate profiles for other catalogs (e.g., dev.json, staging.json), which should also include the relevant AWS_PROFILE.
 
 ### 6.3 Configuration Migration Strategy
 
@@ -750,18 +748,21 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 
 **Current Situation**:
 - `.env` files are widespread
-- No migration tooling exists
-- Breaking change in v1.0.0 scheduled
+- Breaking change in v0.6.0 (NOT v1.0.0)
 
-**Design Considerations**:
-1. Provide `make migrate` command to convert `.env` to XDG
-2. Support parallel operation during transition (v0.6.x - v0.9.x)
-3. Clear deprecation warnings when `.env` detected
-4. Backup `.env` files before migration
+**Requirements Decision**: NO automated migration support. This is a breaking change with no backward compatibility.
 
-**Migration Timeline Risk**:
-- Users may delay migration until v1.0.0 breaking change
-- Need strong incentives to migrate early (better DX, fewer bugs)
+**Migration Approach**:
+1. NO `make migrate` command provided
+2. NO parallel operation during transition
+3. `.env` files may work during development ONLY
+4. Users must manually run `make install` to create XDG configuration
+5. Clear documentation of breaking change in v0.6.0
+
+**Impact**:
+- Clean break simplifies implementation
+- Forces adoption of new architecture
+- Eliminates technical debt from supporting multiple configuration sources
 
 ### 6.4 AWS Profile Management
 
@@ -777,9 +778,7 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 2. Should configuration path include profile: `~/.config/benchling-webhook/{profile}/default.json`?
 3. How to handle profile switching?
 
-**Open Questions** (from requirements):
-- Profile-specific configuration or runtime parameter?
-- How to handle credential expiration?
+**Requirements Decision**: YES to profile-specific configuration. Users can manually create alternate profiles (e.g., default.json, staging.json, production.json) that include the relevant AWS_PROFILE setting. Profile switching is manual by specifying which profile file to use.
 
 ### 6.5 Secrets Synchronization
 
@@ -791,14 +790,18 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 - No automatic sync mechanism
 
 **Design Considerations**:
-1. XDG config stores secret ARN/name, not secret values
-2. `make install` creates/updates secret in AWS
-3. Secret rotation requires manual update or automation
-4. Validation should re-check secret accessibility
+1. User settings file (`default.json`) contains actual credentials for `make install` to use
+2. Derived settings file (`config/default.json`) stores secret ARNs, not secret values
+3. `make install` creates/updates secret in AWS Secrets Manager
+4. Secret rotation requires manual update
+5. Validation should re-check secret accessibility
+
+**Requirements Decision**: Secret rotation is MANUAL. No automatic credential rotation support.
 
 **Security Consideration**:
-- XDG config must never contain plaintext secrets
-- Only store references (ARNs) and non-sensitive metadata
+- User settings file contains credentials locally (user-managed, not encrypted per requirements)
+- Derived config stores only ARNs and references
+- Secrets synced to AWS Secrets Manager during `make install`
 
 ### 6.6 Testing with Real AWS Services
 
@@ -812,12 +815,15 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 **Design Considerations**:
 1. Provide test mode that uses dedicated test resources
 2. Clear separation between unit (mocked) and integration (real AWS)
-3. CI/CD must have test AWS account credentials
+3. CI/CD builds packages and images only (no deployment testing)
 4. Test cleanup must be reliable
+
+**Requirements Decision**: Offline mode support is NONE. No functionality available when AWS services are unreachable.
 
 **Risk**:
 - Integration tests can't run on contributor forks (no AWS credentials)
 - Must rely on core maintainer testing for integration coverage
+- Development requires AWS connectivity
 
 ## 7. Implementation Priorities by User Story
 
@@ -898,50 +904,73 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 
 ### 8.2 XDG Configuration Schema
 
-**Question**: What should the JSON schema for `~/.config/benchling-webhook/default.json` contain?
+**Question**: What should the JSON schema for XDG configuration files contain?
 
-**Proposed Schema**:
+**Requirements Decision**: Configuration split into three files with distinct purposes.
+
+**Proposed Schemas**:
+
+1. **`~/.config/benchling-webhook/default.json`** (User Settings):
 ```json
 {
-  "version": "1.0",
-  "quiltStackArn": "arn:aws:cloudformation:...",
-  "benchlingSecretArn": "arn:aws:secretsmanager:...",
-  "awsProfile": "default",
-  "awsRegion": "us-east-1",
-  "awsAccount": "123456789012",
-  "deploymentOutputs": {
-    "webhookEndpoint": "https://...",
-    "stackName": "BenchlingWebhookStack",
-    "lastDeployment": "2025-11-02T12:00:00Z"
-  }
+  "quiltCatalog": "https://quilt-catalog.example.com",
+  "benchlingTenant": "company",
+  "benchlingClientId": "...",
+  "benchlingClientSecret": "...",
+  "benchlingAppDefinitionId": "...",
+  "benchlingPkgBucket": "s3://bucket-name",
+  "awsProfile": "default"
 }
 ```
 
-**Validation**: JSON Schema v7 for strict validation
+2. **`~/.config/benchling-webhook/config/default.json`** (Derived Settings):
+```json
+{
+  "quiltStackArn": "arn:aws:cloudformation:...",
+  "benchlingSecretArn": "arn:aws:secretsmanager:...",
+  "awsRegion": "us-east-1",
+  "awsAccount": "123456789012"
+}
+```
+
+3. **`~/.config/benchling-webhook/deploy/default.json`** (Deployment Outputs):
+```json
+{
+  "webhookEndpoint": "https://...",
+  "stackName": "BenchlingWebhookStack",
+  "lastDeployment": "2025-11-02T12:00:00Z"
+}
+```
+
+**Validation**: JSON Schema v7 for strict validation, no version field required per requirements
 
 ### 8.3 Backward Compatibility Strategy
 
 **Question**: How long to maintain `.env` file support?
 
-**Recommendation**:
-- v0.6.x: Parallel support, deprecation warnings
-- v0.7.x - v0.9.x: Continue parallel support, stronger warnings
-- v1.0.x: Remove `.env` support, XDG only
+**Requirements Decision**: NONE. v0.6.0 is a breaking change with no backward compatibility.
 
 **Migration Path**:
-- `make migrate` command to convert `.env` to XDG
-- Automatic detection and warning when `.env` found
-- Documentation with clear migration guide
+- v0.6.0: XDG configuration required, `.env` files NOT supported
+- Existing `.env` files may be used during development only
+- Legacy environment variables NOT SUPPORTED in production
+- No automated migration tooling provided
+- Users must manually create XDG configuration via `make install`
+
+**Rationale**: Clean break allows for simpler implementation and clearer architecture without technical debt from supporting multiple configuration sources.
 
 ### 8.4 CI/CD Configuration Source
 
 **Question**: How should CI/CD pipelines provide configuration without XDG directories?
 
+**Requirements Decision**: CI/CD only creates packages and Docker containers. Users push information from XDG to their stack directly.
+
 **Recommendation**:
-- CI/CD uses environment variables as override mechanism
-- GitHub Secrets → Environment Variables → Override XDG (if exists)
-- XDG optional in CI/CD, required for local development
-- Document CI/CD patterns clearly
+- CI/CD builds and packages artifacts (npm packages, Docker images)
+- CI/CD does NOT perform deployments
+- Developers use local XDG configuration to deploy to their own stacks
+- No XDG configuration needed in CI/CD environment
+- Document this pattern clearly in deployment guide
 
 ## 9. Refactoring Opportunities
 
@@ -955,10 +984,12 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 
 **Opportunity**: Consolidate into cohesive module with clear responsibilities:
 - `lib/utils/config/index.ts` - Public API
-- `lib/utils/config/xdg.ts` - XDG storage operations
-- `lib/utils/config/inference.ts` - Automatic inference
-- `lib/utils/config/validation.ts` - Validation logic
+- `lib/utils/config/xdg.ts` - XDG storage operations (3 file types: default.json, config/default.json, deploy/default.json)
+- `lib/utils/config/inference.ts` - Automatic inference from `quilt3 config` CLI
+- `lib/utils/config/validation.ts` - Validation logic (Benchling auth, S3 bucket access)
 - `lib/utils/config/schema.ts` - JSON schema definitions
+
+**Note**: Prefer npm scripts over Python for new configuration utilities unless Python is dramatically easier.
 
 **Benefits**:
 - Clear separation of concerns
@@ -1079,9 +1110,20 @@ The implementation will be successful when:
 ### Risk Mitigation
 
 Key risks include:
-- Backward compatibility breakage → Mitigation: Parallel support during transition
-- CI/CD configuration complexity → Mitigation: Clear documentation and examples
+- Backward compatibility breakage → Mitigation: NONE. v0.6.0 is a breaking change. Clear communication and documentation required.
+- CI/CD configuration complexity → Mitigation: CI/CD only builds artifacts; users deploy from local XDG config
 - Quilt Stack output variability → Mitigation: Graceful degradation with manual overrides
-- User resistance to migration → Mitigation: Clear benefits and smooth migration path
+- User resistance to migration → Mitigation: Clean architecture and improved developer experience justify breaking change
+
+### Breaking Change Summary (v0.6.0)
+
+1. Configuration moved from `.env` to XDG structure (`~/.config/benchling-webhook/`)
+2. Three-file configuration model: user settings, derived settings, deployment outputs
+3. NO backward compatibility with `.env` files in production
+4. Environment variable-based configuration REMOVED
+5. `make install` required before first use
+6. Manual secret rotation only
+7. No offline mode support
+8. Multi-profile support via manual profile creation
 
 This analysis provides the foundation for detailed design and implementation planning in subsequent phases.

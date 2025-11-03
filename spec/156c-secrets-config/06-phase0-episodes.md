@@ -3,7 +3,7 @@
 **Specification**: `spec/156c-secrets-config/03-specifications.md`
 **Phases Plan**: `spec/156c-secrets-config/04-phases.md`
 **Design**: `spec/156c-secrets-config/05-phase0-design.md`
-**Phase**: Phase 0 - Pre-factoring
+**Phase**: Phase 0 - Configuration Refactoring
 **Status**: Episodes Definition
 **Last Updated**: 2025-11-02
 
@@ -11,7 +11,7 @@
 
 ## Overview
 
-This document defines atomic change units (episodes) for Phase 0 implementation. Each episode represents a single, testable, committable change that can be independently validated and pushed.
+This document defines atomic change units (episodes) for Phase 0 implementation. Each episode represents a single, testable, committable change focused on XDG-compliant configuration management.
 
 ### Episode Principles
 
@@ -25,165 +25,67 @@ This document defines atomic change units (episodes) for Phase 0 implementation.
 
 Phase 0 has three main deliverables, each broken into atomic episodes:
 
-- **0.1**: Extract Configuration Reading Logic (TypeScript) - 6 episodes
-- **0.2**: Consolidate Makefile Variables - 4 episodes
-- **0.3**: Python Configuration Module Enhancement - 4 episodes
+- **0.1**: XDG Configuration File Management (npm/TypeScript) - 4 episodes
+- **0.2**: CLI Configuration Inference - 3 episodes
+- **0.3**: Authentication and Validation - 3 episodes
 
-**Total**: 14 atomic episodes
+**Total**: 10 atomic episodes
 
 ---
 
-## Deliverable 0.1: Extract Configuration Reading Logic
+## Deliverable 0.1: XDG Configuration File Management
 
-**Goal**: Centralize TypeScript environment variable access to enable future XDG migration.
+**Goal**: Implement three-file XDG configuration model with clear separation of user, derived, and deployment configurations.
 
-### Episode 0.1.1: Create ConfigReader Module Structure
+### Episode 0.1.1: Create XDG Configuration Structure
 
 **Status**: Pending
-**Duration**: 15 minutes
+**Duration**: 20 minutes
 **Dependencies**: None
 
 #### Description
 
-Create the basic structure for `lib/config-reader.ts` with enums and interfaces only. No implementation logic yet.
+Define the configuration file structure for XDG-compliant configuration management.
 
 #### TDD Cycle
 
 **Red** (Failing Tests):
 ```typescript
-// test/config-reader.test.ts
-describe("ConfigReader", () => {
-    it("should define ConfigSource enum", () => {
-        expect(ConfigSource.Environment).toBe("environment");
+describe("XDGConfig", () => {
+    it("should define configuration file paths", () => {
+        const paths = XDGConfig.getPaths();
+        expect(paths).toEqual({
+            userConfig: expandHomeDir("~/.config/benchling-webhook/default.json"),
+            derivedConfig: expandHomeDir("~/.config/benchling-webhook/config/default.json"),
+            deployConfig: expandHomeDir("~/.config/benchling-webhook/deploy/default.json")
+        });
     });
 
-    it("should define ConfigData interface with required fields", () => {
-        const config: ConfigData = {
-            quiltStackArn: "test",
-            benchlingSecret: "test",
-            source: ConfigSource.Environment,
-        };
-        expect(config).toBeDefined();
-    });
-});
-```
-
-**Green** (Implementation):
-- Create `lib/config-reader.ts`
-- Define `ConfigSource` enum
-- Define `ConfigData` interface
-- Export both types
-
-**Refactor**:
-- Add JSDoc comments
-- Organize imports
-- Verify TypeScript compilation
-
-#### Success Criteria
-
-- [ ] File `lib/config-reader.ts` exists
-- [ ] `ConfigSource` enum defined with `Environment` value
-- [ ] `ConfigData` interface includes all fields from design
-- [ ] Tests pass: `npm run test:ts -- config-reader.test.ts`
-- [ ] TypeScript compilation succeeds: `npm run typecheck`
-- [ ] No linting errors: `npm run lint`
-
-#### Validation Commands
-
-```bash
-npm run typecheck
-npm run test:ts -- config-reader.test.ts
-npm run lint
-```
-
-#### Commit Message
-
-```
-feat(config): add ConfigReader type definitions
-
-- Add ConfigSource enum for configuration source tracking
-- Add ConfigData interface matching environment variable model
-- Support secrets-only mode (v0.6.0+) with required fields
-- Add optional override fields for flexibility
-
-Ref: spec/156c-secrets-config/05-phase0-design.md
-Issue: #156
-```
-
----
-
-### Episode 0.1.2: Implement readFromEnvironment Method
-
-**Status**: Pending
-**Duration**: 20 minutes
-**Dependencies**: Episode 0.1.1
-
-#### Description
-
-Implement `ConfigReader.readFromEnvironment()` method that reads all configuration from environment variables without validation.
-
-#### TDD Cycle
-
-**Red** (Failing Tests):
-```typescript
-describe("ConfigReader.readFromEnvironment", () => {
-    beforeEach(() => {
-        // Clear environment
-        delete process.env.QUILT_STACK_ARN;
-        delete process.env.BENCHLING_SECRET;
-        delete process.env.LOG_LEVEL;
-    });
-
-    it("should read QUILT_STACK_ARN from environment", () => {
-        process.env.QUILT_STACK_ARN = "arn:aws:cloudformation:us-east-1:123:stack/test";
-        const config = ConfigReader.readFromEnvironment();
-        expect(config.quiltStackArn).toBe("arn:aws:cloudformation:us-east-1:123:stack/test");
-    });
-
-    it("should return undefined for missing variables", () => {
-        const config = ConfigReader.readFromEnvironment();
-        expect(config.quiltStackArn).toBeUndefined();
-        expect(config.benchlingSecret).toBeUndefined();
-    });
-
-    it("should handle LOG_LEVEL fallback to BENCHLING_LOG_LEVEL", () => {
-        process.env.LOG_LEVEL = "DEBUG";
-        const config = ConfigReader.readFromEnvironment();
-        expect(config.logLevel).toBe("DEBUG");
-    });
-
-    it("should mark source as Environment", () => {
-        const config = ConfigReader.readFromEnvironment();
-        expect(config.source).toBe(ConfigSource.Environment);
-    });
-
-    it("should read AWS context variables", () => {
-        process.env.CDK_DEFAULT_ACCOUNT = "123456789012";
-        process.env.CDK_DEFAULT_REGION = "us-east-1";
-        const config = ConfigReader.readFromEnvironment();
-        expect(config.cdkAccount).toBe("123456789012");
-        expect(config.cdkRegion).toBe("us-east-1");
+    it("should create config directory if not exists", () => {
+        const configDir = expandHomeDir("~/.config/benchling-webhook");
+        expect(() => XDGConfig.ensureDirectories()).not.toThrow();
+        expect(fs.existsSync(configDir)).toBe(true);
     });
 });
 ```
 
 **Green** (Implementation):
-- Add `ConfigReader` class to `lib/config-reader.ts`
-- Implement `readFromEnvironment()` static method
-- Read all environment variables per design spec
-- Return `ConfigData` with source marked as `Environment`
+- Create `lib/xdg-config.ts`
+- Implement `XDGConfig` class with configuration paths
+- Add methods to ensure directories exist
+- Use `fs` and `path` for path resolution
 
 **Refactor**:
-- Add JSDoc comments for method
-- Ensure consistent formatting
-- Verify edge cases (empty strings vs undefined)
+- Add error handling
+- Ensure cross-platform compatibility
+- Add comprehensive documentation
 
 #### Success Criteria
 
-- [ ] `readFromEnvironment()` method reads all environment variables
-- [ ] Method returns `ConfigData` with correct source
-- [ ] Handles missing variables gracefully (undefined)
-- [ ] Supports LOG_LEVEL fallback to BENCHLING_LOG_LEVEL
+- [ ] `XDGConfig` class with configuration paths defined
+- [ ] Methods to create configuration directories
+- [ ] Supports expanding home directory
+- [ ] Works across different platforms
 - [ ] All tests pass
 - [ ] TypeScript compilation succeeds
 - [ ] No linting errors
@@ -191,7 +93,7 @@ describe("ConfigReader.readFromEnvironment", () => {
 #### Validation Commands
 
 ```bash
-npm run test:ts -- config-reader.test.ts
+npm run test:ts -- xdg-config.test.ts
 npm run typecheck
 npm run lint
 ```
@@ -199,13 +101,12 @@ npm run lint
 #### Commit Message
 
 ```
-feat(config): implement readFromEnvironment method
+feat(config): implement XDG configuration file structure
 
-- Read configuration from environment variables
-- Support secrets-only mode required fields
-- Handle optional overrides and AWS context
-- Return undefined for missing variables (no validation)
-- Mark source as Environment for future XDG integration
+- Define configuration file paths for user, derived, and deployment configs
+- Support cross-platform home directory expansion
+- Ensure configuration directories exist
+- Prepare for three-file configuration model
 
 Ref: spec/156c-secrets-config/05-phase0-design.md
 Issue: #156
@@ -213,7 +114,85 @@ Issue: #156
 
 ---
 
-### Episode 0.1.3: Implement validateSecretsOnlyMode Method
+### Episode 0.1.2: Implement Configuration File Reading
+
+**Status**: Pending
+**Duration**: 25 minutes
+**Dependencies**: Episode 0.1.1
+
+#### Description
+
+Implement methods to read and parse configuration files with type safety and error handling.
+
+#### TDD Cycle
+
+**Red** (Failing Tests):
+```typescript
+describe("XDGConfig.readConfig", () => {
+    it("should read user configuration file", () => {
+        const config = XDGConfig.readConfig("user");
+        expect(config).toMatchSchema(ConfigSchema);
+    });
+
+    it("should handle missing user configuration file", () => {
+        // Temporarily remove user config
+        expect(() => XDGConfig.readConfig("user")).toThrow("Configuration file not found");
+    });
+
+    it("should validate configuration schema", () => {
+        const invalidConfig = { /* incomplete config */ };
+        expect(() => XDGConfig.readConfig("user", invalidConfig))
+            .toThrow("Invalid configuration schema");
+    });
+});
+```
+
+**Green** (Implementation):
+- Add `readConfig` method to `XDGConfig`
+- Implement JSON parsing with schema validation
+- Support reading user, derived, and deployment configs
+- Add error handling for missing or invalid files
+
+**Refactor**:
+- Use `ajv` for JSON schema validation
+- Improve error messages
+- Add logging for configuration reads
+
+#### Success Criteria
+
+- [ ] Read configuration from different config types
+- [ ] Validate configuration against schema
+- [ ] Handle missing configuration files
+- [ ] Descriptive error messages
+- [ ] All tests pass
+- [ ] TypeScript compilation succeeds
+- [ ] No linting errors
+
+#### Validation Commands
+
+```bash
+npm run test:ts -- xdg-config.test.ts
+npm run typecheck
+npm run lint
+```
+
+#### Commit Message
+
+```
+feat(config): implement configuration file reading
+
+- Add methods to read XDG configuration files
+- Support user, derived, and deployment configs
+- Implement JSON schema validation
+- Improve error handling for missing/invalid configs
+
+Ref: spec/156c-secrets-config/05-phase0-design.md
+Issue: #156
+```
+
+---
+
+### Episode 0.1.3: Implement Configuration Writing
 
 **Status**: Pending
 **Duration**: 20 minutes
@@ -221,84 +200,63 @@ Issue: #156
 
 #### Description
 
-Implement validation method for secrets-only mode that checks required fields and throws descriptive errors.
+Implement methods to write configuration files with atomic write and backup.
 
 #### TDD Cycle
 
 **Red** (Failing Tests):
 ```typescript
-describe("ConfigReader.validateSecretsOnlyMode", () => {
-    it("should pass validation with all required fields", () => {
-        const config: ConfigData = {
-            quiltStackArn: "arn:aws:cloudformation:us-east-1:123:stack/test",
-            benchlingSecret: "benchling-webhook-secret",
-            source: ConfigSource.Environment,
-        };
-        expect(() => ConfigReader.validateSecretsOnlyMode(config)).not.toThrow();
+describe("XDGConfig.writeConfig", () => {
+    it("should write configuration file atomically", () => {
+        const config = { /* valid config */ };
+        XDGConfig.writeConfig("user", config);
+        const writtenConfig = XDGConfig.readConfig("user");
+        expect(writtenConfig).toEqual(config);
     });
 
-    it("should throw error for missing QUILT_STACK_ARN", () => {
-        const config: ConfigData = {
-            benchlingSecret: "secret",
-            source: ConfigSource.Environment,
-        };
-        expect(() => ConfigReader.validateSecretsOnlyMode(config))
-            .toThrow("QUILT_STACK_ARN is required");
+    it("should create backup before overwriting", () => {
+        const originalConfig = XDGConfig.readConfig("user");
+        const newConfig = { /* modified config */ };
+        XDGConfig.writeConfig("user", newConfig);
+
+        const backupPath = XDGConfig.getBackupPath("user");
+        expect(fs.existsSync(backupPath)).toBe(true);
+        expect(XDGConfig.readConfig("user")).toEqual(newConfig);
     });
 
-    it("should throw error for missing BENCHLING_SECRET", () => {
-        const config: ConfigData = {
-            quiltStackArn: "arn:aws:cloudformation:us-east-1:123:stack/test",
-            source: ConfigSource.Environment,
-        };
-        expect(() => ConfigReader.validateSecretsOnlyMode(config))
-            .toThrow("BENCHLING_SECRET is required");
-    });
-
-    it("should throw error with multiple missing fields", () => {
-        const config: ConfigData = {
-            source: ConfigSource.Environment,
-        };
-        expect(() => ConfigReader.validateSecretsOnlyMode(config))
-            .toThrow(/QUILT_STACK_ARN.*BENCHLING_SECRET/s);
-    });
-
-    it("should include reference URL in error message", () => {
-        const config: ConfigData = {
-            source: ConfigSource.Environment,
-        };
-        expect(() => ConfigReader.validateSecretsOnlyMode(config))
-            .toThrow(/github\.com\/quiltdata\/benchling-webhook\/issues\/156/);
+    it("should prevent writing invalid configuration", () => {
+        const invalidConfig = { /* invalid config */ };
+        expect(() => XDGConfig.writeConfig("user", invalidConfig))
+            .toThrow("Invalid configuration schema");
     });
 });
 ```
 
 **Green** (Implementation):
-- Add `validateSecretsOnlyMode()` static method
-- Check `quiltStackArn` and `benchlingSecret` are present
-- Build error array for missing fields
-- Throw descriptive error with remediation guidance
-- Include GitHub issue reference
+- Add `writeConfig` method to `XDGConfig`
+- Implement atomic write with backup
+- Add schema validation before writing
+- Support writing to user, derived, and deployment configs
 
 **Refactor**:
-- Extract error message formatting to helper
-- Add JSDoc with examples
-- Ensure error messages are actionable
+- Use temporary file and rename for atomic write
+- Improve backup management
+- Add logging for configuration writes
 
 #### Success Criteria
 
-- [ ] Method validates required fields for secrets-only mode
-- [ ] Throws descriptive error for missing QUILT_STACK_ARN
-- [ ] Throws descriptive error for missing BENCHLING_SECRET
-- [ ] Error message includes multiple missing fields
-- [ ] Error message includes GitHub issue reference
+- [ ] Write configuration files atomically
+- [ ] Create backups before overwriting
+- [ ] Validate configuration before writing
+- [ ] Support different config types
 - [ ] All tests pass
 - [ ] TypeScript compilation succeeds
+- [ ] No linting errors
 
 #### Validation Commands
 
 ```bash
-npm run test:ts -- config-reader.test.ts
+npm run test:ts -- xdg-config.test.ts
 npm run typecheck
 npm run lint
 ```
@@ -306,13 +264,12 @@ npm run lint
 #### Commit Message
 
 ```
-feat(config): add secrets-only mode validation
+feat(config): implement atomic configuration file writing
 
-- Implement validateSecretsOnlyMode method
-- Validate QUILT_STACK_ARN and BENCHLING_SECRET presence
-- Throw descriptive errors with remediation guidance
-- Include GitHub issue reference for troubleshooting
-- Support multiple missing field error reporting
+- Add methods to write XDG configuration files
+- Support atomic write with backup
+- Implement schema validation before writing
+- Improve configuration file management
 
 Ref: spec/156c-secrets-config/05-phase0-design.md
 Issue: #156
@@ -320,77 +277,89 @@ Issue: #156
 
 ---
 
-### Episode 0.1.4: Implement getValidatedConfig Method
+### Episode 0.1.4: Merge Configuration Sources
 
 **Status**: Pending
-**Duration**: 15 minutes
+**Duration**: 25 minutes
 **Dependencies**: Episode 0.1.3
 
 #### Description
 
-Implement convenience method that reads from environment and validates in one call.
+Implement configuration merging logic to combine user, derived, and deployment configurations.
 
 #### TDD Cycle
 
 **Red** (Failing Tests):
 ```typescript
-describe("ConfigReader.getValidatedConfig", () => {
-    beforeEach(() => {
-        delete process.env.QUILT_STACK_ARN;
-        delete process.env.BENCHLING_SECRET;
+describe("XDGConfig.mergeConfigs", () => {
+    it("should merge configurations with correct precedence", () => {
+        const userConfig = { /* user settings */ };
+        const derivedConfig = { /* derived settings */ };
+        const deployConfig = { /* deployment settings */ };
+
+        const mergedConfig = XDGConfig.mergeConfigs({
+            user: userConfig,
+            derived: derivedConfig,
+            deploy: deployConfig
+        });
+
+        expect(mergedConfig).toEqual({
+            // Expected merged configuration
+        });
     });
 
-    it("should return validated config when all fields present", () => {
-        process.env.QUILT_STACK_ARN = "arn:aws:cloudformation:us-east-1:123:stack/test";
-        process.env.BENCHLING_SECRET = "benchling-webhook-secret";
+    it("should override configurations in correct order", () => {
+        const configs = {
+            user: { logLevel: "INFO" },
+            derived: { logLevel: "DEBUG" },
+            deploy: { logLevel: "ERROR" }
+        };
 
-        const config = ConfigReader.getValidatedConfig();
-        expect(config.quiltStackArn).toBe("arn:aws:cloudformation:us-east-1:123:stack/test");
-        expect(config.benchlingSecret).toBe("benchling-webhook-secret");
-        expect(config.source).toBe(ConfigSource.Environment);
+        const mergedConfig = XDGConfig.mergeConfigs(configs);
+        expect(mergedConfig.logLevel).toBe("ERROR");
     });
 
-    it("should throw error when validation fails", () => {
-        expect(() => ConfigReader.getValidatedConfig())
-            .toThrow("Configuration validation failed");
-    });
+    it("should handle partial configurations", () => {
+        const configs = {
+            user: { tenant: "test" },
+            derived: {},
+            deploy: { region: "us-east-1" }
+        };
 
-    it("should include all optional fields when present", () => {
-        process.env.QUILT_STACK_ARN = "arn:aws:cloudformation:us-east-1:123:stack/test";
-        process.env.BENCHLING_SECRET = "benchling-webhook-secret";
-        process.env.LOG_LEVEL = "DEBUG";
-        process.env.IMAGE_TAG = "v1.0.0";
-
-        const config = ConfigReader.getValidatedConfig();
-        expect(config.logLevel).toBe("DEBUG");
-        expect(config.imageTag).toBe("v1.0.0");
+        const mergedConfig = XDGConfig.mergeConfigs(configs);
+        expect(mergedConfig).toEqual({
+            tenant: "test",
+            region: "us-east-1"
+        });
     });
 });
 ```
 
 **Green** (Implementation):
-- Add `getValidatedConfig()` static method
-- Call `readFromEnvironment()` internally
-- Call `validateSecretsOnlyMode()` on result
-- Return validated config
+- Add `mergeConfigs` method to `XDGConfig`
+- Implement deep merge with priority order
+- Handle partial configurations
+- Validate merged configuration schema
 
 **Refactor**:
-- Add JSDoc with usage examples
-- Ensure error messages propagate correctly
+- Use lodash for deep merge
+- Add comprehensive type definitions
+- Improve merge algorithm
 
 #### Success Criteria
 
-- [ ] Method combines reading and validation
-- [ ] Returns validated config when successful
-- [ ] Throws validation errors when fields missing
-- [ ] Includes optional fields when present
+- [ ] Merge configurations from different sources
+- [ ] Respect configuration precedence
+- [ ] Handle partial configurations
+- [ ] Validate merged configuration
 - [ ] All tests pass
 - [ ] TypeScript compilation succeeds
+- [ ] No linting errors
 
 #### Validation Commands
 
 ```bash
-npm run test:ts -- config-reader.test.ts
+npm run test:ts -- xdg-config.test.ts
 npm run typecheck
 npm run lint
 ```
@@ -398,100 +367,12 @@ npm run lint
 #### Commit Message
 
 ```
-feat(config): add getValidatedConfig convenience method
+feat(config): implement configuration merging logic
 
-- Combine environment reading and validation in single call
-- Return validated ConfigData when successful
-- Propagate validation errors with clear messages
-- Simplify CDK stack initialization code path
-
-Ref: spec/156c-secrets-config/05-phase0-design.md
-Issue: #156
-```
-
----
-
-### Episode 0.1.5: Integrate ConfigReader with bin/benchling-webhook.ts
-
-**Status**: Pending
-**Duration**: 20 minutes
-**Dependencies**: Episode 0.1.4
-
-#### Description
-
-Replace direct `process.env` access in CDK app entry point with `ConfigReader`.
-
-#### TDD Cycle
-
-**Red** (Integration Tests):
-```typescript
-// test/integration/cdk-app.test.ts
-describe("CDK App Configuration", () => {
-    beforeEach(() => {
-        delete process.env.QUILT_STACK_ARN;
-        delete process.env.BENCHLING_SECRET;
-    });
-
-    it("should fail with descriptive error when config missing", () => {
-        expect(() => {
-            // Attempt to synthesize stack without config
-            require("../../bin/benchling-webhook");
-        }).toThrow("QUILT_STACK_ARN is required");
-    });
-
-    it("should initialize stack with valid configuration", () => {
-        process.env.QUILT_STACK_ARN = "arn:aws:cloudformation:us-east-1:123:stack/test";
-        process.env.BENCHLING_SECRET = "benchling-webhook-secret";
-        process.env.CDK_DEFAULT_ACCOUNT = "123456789012";
-        process.env.CDK_DEFAULT_REGION = "us-east-1";
-
-        expect(() => {
-            require("../../bin/benchling-webhook");
-        }).not.toThrow();
-    });
-});
-```
-
-**Green** (Implementation):
-- Update `bin/benchling-webhook.ts`
-- Import `ConfigReader` and `ConfigData`
-- Replace `process.env` access with `ConfigReader.getValidatedConfig()`
-- Pass config to stack constructor
-
-**Refactor**:
-- Remove now-unused environment variable reads
-- Update comments to reference ConfigReader
-- Ensure error handling is clear
-
-#### Success Criteria
-
-- [ ] `bin/benchling-webhook.ts` uses `ConfigReader`
-- [ ] No direct `process.env` access in file
-- [ ] Stack initialization uses validated config
-- [ ] Error messages are descriptive when config missing
-- [ ] Integration tests pass
-- [ ] CDK synthesis works: `npx cdk synth`
-
-#### Validation Commands
-
-```bash
-npm run test:ts
-npm run typecheck
-npx cdk synth --quiet
-npm run lint
-```
-
-#### Commit Message
-
-```
-refactor(cdk): integrate ConfigReader in CDK app entry point
-
-- Replace process.env access with ConfigReader.getValidatedConfig()
-- Use centralized configuration reading for CDK stack
-- Maintain backward compatibility with environment variables
-- Improve error messages for missing configuration
-
-No behavior change - same environment variables required.
+- Add method to merge user, derived, and deployment configs
+- Implement configuration precedence rules
+- Support partial configuration merging
+- Validate merged configuration schema
 
 Ref: spec/156c-secrets-config/05-phase0-design.md
 Issue: #156
@@ -499,7 +380,11 @@ Issue: #156
 
 ---
 
-### Episode 0.1.6: Integrate ConfigReader with bin/commands/deploy.ts
+## Deliverable 0.2: CLI Configuration Inference
+
+**Goal**: Use Quilt3 CLI to infer configuration details with minimal user interaction.
+
+### Episode 0.2.1: Implement Quilt Catalog Configuration Inference
 
 **Status**: Pending
 **Duration**: 20 minutes
@@ -507,59 +392,63 @@ Issue: #156
 
 #### Description
 
-Update deploy command to use `ConfigReader` as fallback for CLI options.
+Use `quilt3 config` command to automatically infer catalog and S3 configuration.
 
 #### TDD Cycle
 
-**Red** (CLI Tests):
+**Red** (Failing Tests):
 ```typescript
-// test/cli/deploy.test.ts
-describe("Deploy Command", () => {
-    it("should use ConfigReader as fallback for missing CLI options", () => {
-        process.env.QUILT_STACK_ARN = "arn:aws:cloudformation:us-east-1:123:stack/test";
-        process.env.BENCHLING_SECRET = "benchling-webhook-secret";
-
-        // Deploy command without explicit options
-        const result = executeDeployCommand([]);
-        expect(result.config.quiltStackArn).toBe("arn:aws:cloudformation:us-east-1:123:stack/test");
+describe("QuiltConfigResolver", () => {
+    it("should infer configuration from quilt3 CLI", async () => {
+        const result = await QuiltConfigResolver.resolve();
+        expect(result).toEqual({
+            catalogUrl: "https://quilt.example.com",
+            userBucket: "my-user-bucket",
+            defaultRegion: "us-west-2"
+        });
     });
 
-    it("should prefer CLI options over environment variables", () => {
-        process.env.QUILT_STACK_ARN = "arn:aws:cloudformation:us-east-1:123:stack/env";
+    it("should throw error if quilt3 config is not available", async () => {
+        // Simulate missing quilt3 configuration
+        await expect(QuiltConfigResolver.resolve())
+            .rejects.toThrow("Quilt configuration not found");
+    });
 
-        const result = executeDeployCommand([
-            "--quilt-stack-arn", "arn:aws:cloudformation:us-east-1:123:stack/cli"
-        ]);
-        expect(result.config.quiltStackArn).toBe("arn:aws:cloudformation:us-east-1:123:stack/cli");
+    it("should support manual override of inferred configuration", async () => {
+        const manualConfig = {
+            catalogUrl: "https://custom.quilt.com",
+            userBucket: "override-bucket"
+        };
+        const result = await QuiltConfigResolver.resolve(manualConfig);
+        expect(result.catalogUrl).toBe("https://custom.quilt.com");
     });
 });
 ```
 
 **Green** (Implementation):
-- Update `bin/commands/deploy.ts`
-- Import `ConfigReader`
-- Use `ConfigReader.readFromEnvironment()` for fallback values
-- Maintain CLI option priority over environment variables
+- Create `QuiltConfigResolver` class
+- Implement CLI command execution
+- Parse Quilt configuration
+- Add manual configuration override support
 
 **Refactor**:
-- Simplify fallback logic with ConfigReader
-- Update comments to document precedence
-- Ensure CLI help text is accurate
+- Use `execa` for CLI command execution
+- Add robust error handling
+- Improve type definitions
 
 #### Success Criteria
 
-- [ ] Deploy command uses ConfigReader for fallback
-- [ ] CLI options override environment variables
-- [ ] Environment variables work when CLI options absent
-- [ ] CLI tests pass
-- [ ] Command help documentation is accurate
+- [ ] Infer configuration from Quilt3 CLI
+- [ ] Support manual configuration override
+- [ ] Handle missing configuration
+- [ ] All tests pass
 - [ ] TypeScript compilation succeeds
+- [ ] No linting errors
 
 #### Validation Commands
 
 ```bash
-npm run test:ts
-npx ts-node bin/cli.ts deploy --help
+npm run test:ts -- quilt-config-resolver.test.ts
 npm run typecheck
 npm run lint
 ```
@@ -567,14 +456,12 @@ npm run lint
 #### Commit Message
 
 ```
-refactor(cli): integrate ConfigReader in deploy command
+feat(config): implement Quilt configuration inference
 
-- Use ConfigReader.readFromEnvironment() as fallback for CLI options
-- Maintain CLI option precedence over environment variables
-- Simplify configuration resolution logic
-- Improve consistency with CDK app configuration
-
-No behavior change - same CLI options and environment variables work.
+- Add QuiltConfigResolver to infer configuration via quilt3 CLI
+- Support automatic catalog and S3 bucket detection
+- Allow manual configuration override
+- Improve configuration discovery process
 
 Ref: spec/156c-secrets-config/05-phase0-design.md
 Issue: #156
@@ -582,75 +469,7 @@ Issue: #156
 
 ---
 
-## Deliverable 0.2: Consolidate Makefile Variables
-
-**Goal**: Standardize Makefile variable naming and improve documentation.
-
-### Episode 0.2.1: Add Makefile Header and Variable Documentation
-
-**Status**: Pending
-**Duration**: 15 minutes
-**Dependencies**: None
-
-#### Description
-
-Add comprehensive header to `docker/Makefile` with variable documentation and configuration section.
-
-#### TDD Cycle
-
-**Red** (Manual Test):
-```bash
-# Verify help output includes new documentation
-make -C docker help | grep "Configuration Variables"
-```
-
-**Green** (Implementation):
-- Add file header with purpose description
-- Create "Configuration Variables" section
-- Document each variable with purpose and default
-- Add inline comments explaining variable precedence
-
-**Refactor**:
-- Organize variables by category (Logging, Ports, Docker, AWS)
-- Ensure consistent formatting
-- Add examples where helpful
-
-#### Success Criteria
-
-- [ ] Makefile has clear header comment
-- [ ] Configuration Variables section exists
-- [ ] All variables documented with purpose
-- [ ] Inline comments explain complex logic
-- [ ] `make -C docker help` shows documentation
-- [ ] No behavior changes to existing targets
-
-#### Validation Commands
-
-```bash
-make -C docker help
-make -C docker check-env
-```
-
-#### Commit Message
-
-```
-docs(makefile): add comprehensive variable documentation
-
-- Add file header describing Makefile purpose
-- Create Configuration Variables section
-- Document all variables with purpose and defaults
-- Add inline comments for complex logic
-- Organize variables by category for clarity
-
-No behavior change - documentation only.
-
-Ref: spec/156c-secrets-config/05-phase0-design.md
-Issue: #156
-```
-
----
-
-### Episode 0.2.2: Standardize Variable Names with BW_ Prefix
+### Episode 0.2.2: Interactive Configuration Completion
 
 **Status**: Pending
 **Duration**: 25 minutes
@@ -658,79 +477,69 @@ Issue: #156
 
 #### Description
 
-Rename internal Makefile variables to use `BW_` (Benchling Webhook) prefix for consistency.
+Create interactive CLI prompts to complete missing configuration details.
 
 #### TDD Cycle
 
-**Red** (Validation Script):
-```bash
-# scripts/test-makefile.sh
-#!/bin/bash
-set -e
+**Red** (Integration Tests):
+```typescript
+describe("ConfigurationWizard", () => {
+    it("should prompt for missing Benchling credentials", async () => {
+        const result = await ConfigurationWizard.run({
+            partialConfig: { catalogUrl: "https://quilt.example.com" }
+        });
+        expect(result).toEqual({
+            benchlingTenant: "expected-tenant",
+            benchlingClientId: "expected-client-id"
+        });
+    });
 
-echo "Testing Makefile variable standardization..."
-
-# Test PORT_LOCAL renamed to BW_PORT_LOCAL
-PORT=$(make -C docker -n run-local | grep -o "5001" | head -1)
-if [ "$PORT" != "5001" ]; then
-    echo "Error: BW_PORT_LOCAL not set correctly"
-    exit 1
-fi
-
-# Test LOG_LEVEL fallback to BW_LOG_LEVEL
-LOG_LEVEL_OUTPUT=$(make -C docker -n run | grep "LOG_LEVEL" || echo "")
-if [ -z "$LOG_LEVEL_OUTPUT" ]; then
-    echo "Error: BW_LOG_LEVEL not working"
-    exit 1
-fi
-
-echo "✅ Makefile variable tests passed"
+    it("should validate Benchling authentication during wizard", async () => {
+        await expect(ConfigurationWizard.run({
+            partialConfig: { benchlingClientSecret: "invalid-secret" }
+        })).rejects.toThrow("Benchling authentication failed");
+    });
+});
 ```
 
 **Green** (Implementation):
-- Rename `PORT_LOCAL` → `BW_PORT_LOCAL`
-- Rename `PORT_DEV` → `BW_PORT_DEV`
-- Rename `PORT_PROD` → `BW_PORT_PROD`
-- Add `BW_IMAGE_NAME` constant
-- Add `BW_ECR_REPO` constant
-- Add `BW_LOG_LEVEL` with fallback to `LOG_LEVEL`
-- Update all usages throughout Makefile
+- Create `ConfigurationWizard` class
+- Implement interactive prompts using `inquirer`
+- Add Benchling authentication validation
+- Support partial configuration completion
 
 **Refactor**:
-- Ensure consistent variable naming convention
-- Group related variables together
-- Verify no hardcoded values remain
+- Improve validation logic
+- Add comprehensive error handling
+- Create reusable validation methods
 
 #### Success Criteria
 
-- [ ] All internal variables use `BW_` prefix
-- [ ] Fallback to non-prefixed environment variables preserved
-- [ ] All existing targets work identically
-- [ ] Validation script passes
-- [ ] No hardcoded ports or names remain
-- [ ] `make -C docker build` succeeds
-- [ ] `make -C docker test-unit` succeeds
+- [ ] Interactive configuration wizard
+- [ ] Complete partial configurations
+- [ ] Validate Benchling credentials
+- [ ] Handle authentication failures
+- [ ] All tests pass
+- [ ] TypeScript compilation succeeds
+- [ ] No linting errors
 
 #### Validation Commands
 
 ```bash
-bash scripts/test-makefile.sh
-make -C docker build
-make -C docker test-unit
+npm run test:ts -- configuration-wizard.test.ts
+npm run typecheck
+npm run lint
 ```
 
 #### Commit Message
 
 ```
-refactor(makefile): standardize variable names with BW_ prefix
+feat(config): add interactive configuration wizard
 
-- Rename PORT_LOCAL → BW_PORT_LOCAL (etc.)
-- Add BW_IMAGE_NAME and BW_ECR_REPO constants
-- Add BW_LOG_LEVEL with fallback to LOG_LEVEL
-- Update all usages throughout Makefile
-- Maintain backward compatibility with environment variables
-
-No behavior change - same functionality with clearer naming.
+- Implement ConfigurationWizard for completing partial configs
+- Add interactive CLI prompts for missing details
+- Validate Benchling authentication during configuration
+- Improve user experience for configuration setup
 
 Ref: spec/156c-secrets-config/05-phase0-design.md
 Issue: #156
@@ -738,64 +547,81 @@ Issue: #156
 
 ---
 
-### Episode 0.2.3: Expand .PHONY Declarations
+### Episode 0.2.3: Save Inferred Configuration
 
 **Status**: Pending
-**Duration**: 10 minutes
+**Duration**: 15 minutes
 **Dependencies**: Episode 0.2.2
 
 #### Description
 
-Add comprehensive `.PHONY` declarations for all targets in the Makefile.
+Save inferred and completed configuration to XDG files.
 
 #### TDD Cycle
 
-**Red** (Manual Validation):
-```bash
-# Verify all targets are marked .PHONY
-make -C docker -p | grep "^[a-z]" | cut -d: -f1 | sort > /tmp/targets.txt
-grep "^.PHONY:" docker/Makefile | tr ' ' '\n' | tail -n +2 | sort > /tmp/phony.txt
-diff /tmp/targets.txt /tmp/phony.txt
+**Red** (Integration Tests):
+```typescript
+describe("ConfigurationSaver", () => {
+    it("should save complete configuration to user config", async () => {
+        const config = await ConfigurationSaver.save({
+            catalogUrl: "https://quilt.example.com",
+            benchlingTenant: "test-tenant",
+            benchlingClientId: "client-id"
+        });
+
+        const savedConfig = XDGConfig.readConfig("user");
+        expect(savedConfig).toEqual(config);
+    });
+
+    it("should update derived configuration with inferred values", async () => {
+        const config = await ConfigurationSaver.save({
+            // Partial configuration
+        });
+
+        const derivedConfig = XDGConfig.readConfig("derived");
+        expect(derivedConfig).toHaveProperty("inferredAt");
+    });
+});
 ```
 
 **Green** (Implementation):
-- Add complete `.PHONY` declarations at top of file
-- Group related targets on same line
-- Document purpose of `.PHONY` in comments
+- Create `ConfigurationSaver` class
+- Implement save methods for user and derived configs
+- Add timestamp and source tracking
+- Ensure configuration validation
 
 **Refactor**:
-- Organize declarations by category
-- Ensure alphabetical order within categories
-- Verify no targets are missing
+- Improve error handling
+- Add logging for configuration saves
+- Create comprehensive validation
 
 #### Success Criteria
 
-- [ ] All targets declared as `.PHONY`
-- [ ] Targets grouped logically
-- [ ] Comment explains `.PHONY` purpose
-- [ ] No missing targets in declaration
-- [ ] `make -C docker help` works
-- [ ] All targets execute correctly
+- [ ] Save complete configuration
+- [ ] Update derived configuration
+- [ ] Track configuration source and timestamp
+- [ ] Validate before saving
+- [ ] All tests pass
+- [ ] TypeScript compilation succeeds
+- [ ] No linting errors
 
 #### Validation Commands
 
 ```bash
-make -C docker help
-make -C docker build
-make -C docker test-unit
+npm run test:ts -- configuration-saver.test.ts
+npm run typecheck
+npm run lint
 ```
 
 #### Commit Message
 
 ```
-refactor(makefile): add comprehensive .PHONY declarations
+feat(config): implement configuration persistence
 
-- Declare all targets as .PHONY to prevent file conflicts
-- Group related targets for better organization
-- Add comment explaining .PHONY purpose
-- Ensure consistency across all targets
-
-No behavior change - prevents edge cases with file name conflicts.
+- Add ConfigurationSaver to save inferred configurations
+- Update user and derived configuration files
+- Track configuration source and timestamp
+- Ensure configuration validation before saving
 
 Ref: spec/156c-secrets-config/05-phase0-design.md
 Issue: #156
@@ -803,64 +629,92 @@ Issue: #156
 
 ---
 
-### Episode 0.2.4: Enhance help Target with Categories
+## Deliverable 0.3: Authentication and Validation
+
+**Goal**: Implement robust configuration validation and authentication checks.
+
+### Episode 0.3.1: Benchling Authentication Validation
 
 **Status**: Pending
-**Duration**: 20 minutes
+**Duration**: 25 minutes
 **Dependencies**: Episode 0.2.3
 
 #### Description
 
-Improve `help` target output with clear categories and better descriptions.
+Implement Benchling authentication validation with comprehensive checks.
 
 #### TDD Cycle
 
-**Red** (Validation):
-```bash
-# Verify help output includes categories
-make -C docker help | grep "Configuration:"
-make -C docker help | grep "Development:"
-make -C docker help | grep "Testing:"
-make -C docker help | grep "Deployment:"
+**Red** (Validation Tests):
+```typescript
+describe("BenchlingAuthValidator", () => {
+    it("should validate Benchling credentials successfully", async () => {
+        const result = await BenchlingAuthValidator.validate({
+            tenant: "test-tenant",
+            clientId: "valid-client-id",
+            clientSecret: "valid-secret"
+        });
+        expect(result.isValid).toBe(true);
+    });
+
+    it("should detect invalid Benchling credentials", async () => {
+        const result = await BenchlingAuthValidator.validate({
+            tenant: "test-tenant",
+            clientId: "invalid-client-id",
+            clientSecret: "wrong-secret"
+        });
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain("Invalid client credentials");
+    });
+
+    it("should validate tenant and app permissions", async () => {
+        const result = await BenchlingAuthValidator.validate({
+            tenant: "test-tenant",
+            clientId: "limited-permissions-client"
+        });
+        expect(result.hasRequiredPermissions).toBe(false);
+    });
+});
 ```
 
 **Green** (Implementation):
-- Update `help` target to show categories
-- Group targets by purpose (Configuration, Development, Testing, Deployment)
-- Improve target descriptions
-- Add usage examples
+- Create `BenchlingAuthValidator` class
+- Implement Benchling API token validation
+- Check tenant and app-level permissions
+- Provide detailed validation results
 
 **Refactor**:
-- Align descriptions for readability
-- Add color coding if supported
-- Ensure consistent formatting
+- Use official Benchling API client
+- Improve error message generation
+- Add comprehensive permission checks
 
 #### Success Criteria
 
-- [ ] Help output shows clear categories
-- [ ] Target descriptions are helpful
-- [ ] Examples provided for common workflows
-- [ ] Output is well-formatted and readable
-- [ ] `make -C docker help` displays categories
-- [ ] Documentation matches actual targets
+- [ ] Validate Benchling credentials
+- [ ] Check tenant and app permissions
+- [ ] Provide detailed validation results
+- [ ] Handle various error scenarios
+- [ ] All tests pass
+- [ ] TypeScript compilation succeeds
+- [ ] No linting errors
 
 #### Validation Commands
 
 ```bash
-make -C docker help
+npm run test:ts -- benchling-auth-validator.test.ts
+npm run typecheck
+npm run lint
 ```
 
 #### Commit Message
 
 ```
-docs(makefile): enhance help target with categories
+feat(auth): implement Benchling authentication validation
 
-- Group targets by purpose (Configuration, Development, Testing, Deployment)
-- Improve target descriptions with clear explanations
-- Add usage examples for common workflows
-- Format output for better readability
-
-No behavior change - documentation improvement only.
+- Add BenchlingAuthValidator for credential verification
+- Check tenant and app-level permissions
+- Provide comprehensive authentication validation
+- Improve security and configuration integrity
 
 Ref: spec/156c-secrets-config/05-phase0-design.md
 Issue: #156
@@ -868,285 +722,86 @@ Issue: #156
 
 ---
 
-## Deliverable 0.3: Python Configuration Module Enhancement
-
-**Goal**: Improve Python configuration validation and error reporting.
-
-### Episode 0.3.1: Add Configuration Validation Helper Methods
-
-**Status**: Pending
-**Duration**: 25 minutes
-**Dependencies**: None
-
-#### Description
-
-Add `validate_benchling_config()` and `validate_s3_config()` methods to Python Config class.
-
-#### TDD Cycle
-
-**Red** (Failing Tests):
-```python
-# docker/tests/test_config.py
-def test_validate_benchling_config_success(config):
-    """Test successful Benchling configuration validation."""
-    config.benchling_tenant = "test"
-    config.benchling_client_id = "client-id"
-    config.benchling_client_secret = "secret"
-
-    # Should not raise
-    config.validate_benchling_config()
-
-
-def test_validate_benchling_config_missing_tenant(config):
-    """Test validation fails for missing tenant."""
-    config.benchling_tenant = ""
-    config.benchling_client_id = "client-id"
-    config.benchling_client_secret = "secret"
-
-    with pytest.raises(ValueError, match="benchling_tenant is required"):
-        config.validate_benchling_config()
-
-
-def test_validate_benchling_config_multiple_errors(config):
-    """Test validation reports multiple missing fields."""
-    config.benchling_tenant = ""
-    config.benchling_client_id = ""
-
-    with pytest.raises(ValueError) as exc_info:
-        config.validate_benchling_config()
-
-    error_msg = str(exc_info.value)
-    assert "benchling_tenant is required" in error_msg
-    assert "benchling_client_id is required" in error_msg
-
-
-def test_validate_s3_config_success(config):
-    """Test successful S3 configuration validation."""
-    config.s3_bucket_name = "test-bucket"
-    config.aws_region = "us-east-1"
-
-    # Should not raise
-    config.validate_s3_config()
-
-
-def test_validate_s3_config_missing_bucket(config):
-    """Test validation fails for missing bucket."""
-    config.s3_bucket_name = ""
-    config.aws_region = "us-east-1"
-
-    with pytest.raises(ValueError, match="s3_bucket_name is required"):
-        config.validate_s3_config()
-```
-
-**Green** (Implementation):
-- Add `validate_benchling_config()` method to `docker/src/config.py`
-- Add `validate_s3_config()` method
-- Implement validation logic per design spec
-- Build error arrays for missing fields
-- Raise descriptive errors
-
-**Refactor**:
-- Extract error formatting helper
-- Add type hints
-- Add docstrings with examples
-
-#### Success Criteria
-
-- [ ] `validate_benchling_config()` method exists
-- [ ] `validate_s3_config()` method exists
-- [ ] Methods check required fields
-- [ ] Multiple errors reported together
-- [ ] Clear error messages with field names
-- [ ] All tests pass: `make -C docker test-unit`
-- [ ] Python type checking passes: `make -C docker lint`
-
-#### Validation Commands
-
-```bash
-make -C docker test-unit
-make -C docker lint
-```
-
-#### Commit Message
-
-```
-feat(config): add configuration validation helper methods
-
-- Add validate_benchling_config() to check Benchling fields
-- Add validate_s3_config() to check S3 configuration
-- Report multiple validation errors together
-- Provide clear, actionable error messages
-
-Ref: spec/156c-secrets-config/05-phase0-design.md
-Issue: #156
-```
-
----
-
-### Episode 0.3.2: Add Configuration Dump Methods
+### Episode 0.3.2: S3 Bucket Access Validation
 
 **Status**: Pending
 **Duration**: 20 minutes
-**Dependencies**: None (can run parallel with 0.3.1)
-
-#### Description
-
-Add `to_dict()` and `dump()` methods for configuration debugging with secret masking.
-
-#### TDD Cycle
-
-**Red** (Failing Tests):
-```python
-def test_config_to_dict_masks_secrets(config):
-    """Test that to_dict masks sensitive fields by default."""
-    config.benchling_client_secret = "super-secret-value"
-    config.benchling_client_id = "client-id"
-
-    data = config.to_dict(mask_secrets=True)
-    assert data["benchling_client_secret"] == "***MASKED***"
-    assert data["benchling_client_id"] == "***MASKED***"
-
-
-def test_config_to_dict_no_masking(config):
-    """Test that to_dict can skip masking when requested."""
-    config.benchling_client_secret = "super-secret-value"
-
-    data = config.to_dict(mask_secrets=False)
-    assert data["benchling_client_secret"] == "super-secret-value"
-
-
-def test_config_dump_formats_correctly(config):
-    """Test configuration dump formatting."""
-    config.benchling_tenant = "test-tenant"
-    config.aws_region = "us-east-1"
-    config.s3_bucket_name = "test-bucket"
-
-    dump = config.dump()
-    assert "Configuration:" in dump
-    assert "AWS:" in dump
-    assert "Benchling:" in dump
-    assert "benchling_tenant: test-tenant" in dump
-    assert "aws_region: us-east-1" in dump
-
-
-def test_config_dump_masks_secrets(config):
-    """Test that dump masks secrets by default."""
-    config.benchling_client_secret = "super-secret"
-
-    dump = config.dump(mask_secrets=True)
-    assert "***MASKED***" in dump
-    assert "super-secret" not in dump
-```
-
-**Green** (Implementation):
-- Add `to_dict()` method using `dataclasses.asdict()`
-- Implement secret masking for sensitive fields
-- Add `dump()` method with category grouping
-- Format output for readability
-
-**Refactor**:
-- Define sensitive fields list as class constant
-- Add clear docstrings with examples
-- Ensure consistent formatting
-
-#### Success Criteria
-
-- [ ] `to_dict()` method converts config to dictionary
-- [ ] Method masks sensitive fields by default
-- [ ] `dump()` method formats config for debugging
-- [ ] Output grouped by category (AWS, Quilt, Benchling, Application)
-- [ ] Secrets masked in dump output
-- [ ] All tests pass: `make -C docker test-unit`
-- [ ] Python type checking passes
-
-#### Validation Commands
-
-```bash
-make -C docker test-unit
-make -C docker lint
-```
-
-#### Commit Message
-
-```
-feat(config): add configuration dump methods for debugging
-
-- Add to_dict() method to convert config to dictionary
-- Add dump() method for human-readable output
-- Mask sensitive fields (secrets, credentials) by default
-- Group output by category for better readability
-- Support opt-in raw output for troubleshooting
-
-Ref: spec/156c-secrets-config/05-phase0-design.md
-Issue: #156
-```
-
----
-
-### Episode 0.3.3: Refactor Error Message Formatting
-
-**Status**: Pending
-**Duration**: 15 minutes
 **Dependencies**: Episode 0.3.1
 
 #### Description
 
-Extract error message formatting into helper method and improve consistency.
+Validate S3 bucket access and configuration with comprehensive checks.
 
 #### TDD Cycle
 
-**Red** (Failing Tests):
-```python
-def test_format_missing_env_error():
-    """Test error message formatting for missing environment variables."""
-    config = Config.__new__(Config)  # Create without __post_init__
-    error_msg = config._format_missing_env_error()
+**Red** (Validation Tests):
+```typescript
+describe("S3BucketValidator", () => {
+    it("should validate S3 bucket access successfully", async () => {
+        const result = await S3BucketValidator.validate({
+            bucketName: "valid-test-bucket",
+            region: "us-west-2"
+        });
+        expect(result.hasAccess).toBe(true);
+    });
 
-    assert "Missing required environment variables" in error_msg
-    assert "QuiltStackARN" in error_msg
-    assert "BenchlingSecret" in error_msg
-    assert "CloudFormation stack ARN" in error_msg
-    assert "Secrets Manager secret name" in error_msg
+    it("should detect insufficient S3 bucket permissions", async () => {
+        const result = await S3BucketValidator.validate({
+            bucketName: "restricted-bucket",
+            region: "us-east-1"
+        });
+        expect(result.hasAccess).toBe(false);
+        expect(result.errors).toContain("Insufficient write permissions");
+    });
+
+    it("should validate bucket configuration", async () => {
+        const result = await S3BucketValidator.validate({
+            bucketName: "misconfigured-bucket"
+        });
+        expect(result.isConfigured).toBe(false);
+        expect(result.errors).toContain("Missing lifecycle configuration");
+    });
+});
 ```
 
 **Green** (Implementation):
-- Add `_format_missing_env_error()` private method
-- Move error message formatting from `__post_init__`
-- Ensure consistent formatting across all error messages
-- Include examples in error messages
+- Create `S3BucketValidator` class
+- Implement S3 access and permission checks
+- Validate bucket configuration
+- Provide detailed validation results
 
 **Refactor**:
-- Use method for consistent error formatting
-- Add type hints
-- Improve error message clarity
+- Use AWS SDK for comprehensive checks
+- Improve error message generation
+- Add nuanced permission validation
 
 #### Success Criteria
 
-- [ ] `_format_missing_env_error()` method exists
-- [ ] Method returns formatted error message
-- [ ] Error message includes remediation guidance
-- [ ] Consistent formatting with validation errors
-- [ ] All tests pass: `make -C docker test-unit`
-- [ ] Python type checking passes
+- [ ] Validate S3 bucket access
+- [ ] Check bucket permissions
+- [ ] Validate bucket configuration
+- [ ] Provide detailed validation results
+- [ ] All tests pass
+- [ ] TypeScript compilation succeeds
+- [ ] No linting errors
 
 #### Validation Commands
 
 ```bash
-make -C docker test-unit
-make -C docker lint
+npm run test:ts -- s3-bucket-validator.test.ts
+npm run typecheck
+npm run lint
 ```
 
 #### Commit Message
 
 ```
-refactor(config): extract error message formatting
+feat(config): implement S3 bucket access validation
 
-- Add _format_missing_env_error() helper method
-- Improve error message consistency
-- Include remediation guidance in all errors
-- Add examples for required values
-
-No behavior change - improves code organization only.
+- Add S3BucketValidator for bucket access checks
+- Validate S3 bucket permissions and configuration
+- Provide comprehensive access validation
+- Improve configuration reliability
 
 Ref: spec/156c-secrets-config/05-phase0-design.md
 Issue: #156
@@ -1154,80 +809,98 @@ Issue: #156
 
 ---
 
-### Episode 0.3.4: Add Configuration Resolution Helper
+### Episode 0.3.3: Comprehensive Configuration Validation
 
 **Status**: Pending
 **Duration**: 20 minutes
-**Dependencies**: None (can run parallel with others)
+**Dependencies**: Episode 0.3.2
 
 #### Description
 
-Extract configuration field mapping into `_apply_resolved_config()` helper method.
+Create a comprehensive configuration validation process that combines all validation checks.
 
 #### TDD Cycle
 
-**Red** (Failing Tests):
-```python
-def test_apply_resolved_config(config):
-    """Test configuration field mapping from resolver."""
-    from unittest.mock import MagicMock
+**Red** (Integration Tests):
+```typescript
+describe("ConfigurationValidator", () => {
+    it("should validate complete configuration", async () => {
+        const config = {
+            catalogUrl: "https://quilt.example.com",
+            benchling: {
+                tenant: "test-tenant",
+                clientId: "valid-client-id"
+            },
+            s3: {
+                bucketName: "test-bucket",
+                region: "us-west-2"
+            }
+        };
 
-    # Create mock resolved config
-    resolved = MagicMock()
-    resolved.aws_region = "us-west-2"
-    resolved.user_bucket = "test-bucket"
-    resolved.pkg_prefix = "benchling"
-    resolved.benchling_tenant = "test-tenant"
-    resolved.log_level = "DEBUG"
+        const result = await ConfigurationValidator.validate(config);
+        expect(result.isValid).toBe(true);
+    });
 
-    # Apply to config
-    config._apply_resolved_config(resolved)
+    it("should fail validation with multiple errors", async () => {
+        const config = {
+            catalogUrl: null,
+            benchling: {
+                tenant: "",
+                clientId: "invalid-client"
+            },
+            s3: {
+                bucketName: "inaccessible-bucket"
+            }
+        };
 
-    # Verify mapping
-    assert config.aws_region == "us-west-2"
-    assert config.s3_bucket_name == "test-bucket"
-    assert config.s3_prefix == "benchling"
-    assert config.benchling_tenant == "test-tenant"
-    assert config.log_level == "DEBUG"
+        const result = await ConfigurationValidator.validate(config);
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toHaveLength(3);
+        expect(result.errors).toContain("Invalid catalog URL");
+        expect(result.errors).toContain("Invalid Benchling tenant");
+        expect(result.errors).toContain("S3 bucket access denied");
+    });
+});
 ```
 
 **Green** (Implementation):
-- Add `_apply_resolved_config()` method to Config class
-- Move field mapping logic from `__post_init__`
-- Map all resolved fields to Config attributes
+- Create `ConfigurationValidator` class
+- Combine Benchling and S3 validation checks
+- Provide comprehensive configuration validation
+- Generate detailed error reports
 
 **Refactor**:
-- Add docstring explaining field mapping
-- Ensure consistent field naming
-- Add type hints for resolved parameter
+- Improve error aggregation
+- Create modular validation approach
+- Add configuration-level sanity checks
 
 #### Success Criteria
 
-- [ ] `_apply_resolved_config()` method exists
-- [ ] Method maps all resolved fields correctly
-- [ ] `__post_init__` uses helper method
-- [ ] Configuration initialization works identically
-- [ ] All tests pass: `make -C docker test-unit`
-- [ ] Python type checking passes
+- [ ] Validate entire configuration
+- [ ] Combine multiple validation checks
+- [ ] Generate comprehensive error reports
+- [ ] Support partial configuration validation
+- [ ] All tests pass
+- [ ] TypeScript compilation succeeds
+- [ ] No linting errors
 
 #### Validation Commands
 
 ```bash
-make -C docker test-unit
-make -C docker lint
+npm run test:ts -- configuration-validator.test.ts
+npm run typecheck
+npm run lint
 ```
 
 #### Commit Message
 
 ```
-refactor(config): extract resolved config mapping
+feat(config): implement comprehensive configuration validation
 
-- Add _apply_resolved_config() helper method
-- Move field mapping logic for better organization
-- Improve testability of configuration resolution
-- Maintain identical initialization behavior
-
-No behavior change - improves code structure only.
+- Add ConfigurationValidator to validate entire configuration
+- Combine Benchling and S3 validation checks
+- Generate detailed error reports
+- Improve configuration integrity and reliability
 
 Ref: spec/156c-secrets-config/05-phase0-design.md
 Issue: #156
@@ -1239,66 +912,56 @@ Issue: #156
 
 ### Parallel Execution Opportunities
 
-Some episodes can be executed in parallel since they have no dependencies:
+Some episodes can be executed in parallel:
 
 **Parallel Group 1** (can start immediately):
-- Episode 0.1.1: ConfigReader structure
-- Episode 0.2.1: Makefile documentation
-- Episode 0.3.2: Python dump methods
+- Episode 0.1.1: XDG Configuration Structure
+- Episode 0.2.1: Quilt Catalog Configuration Inference
 
 **Parallel Group 2** (after Group 1):
-- Episode 0.3.1: Python validation methods
-- Episode 0.3.4: Python resolution helper
+- Episode 0.1.2: Configuration File Reading
+- Episode 0.2.2: Interactive Configuration Completion
 
 **Sequential Path** (must be sequential):
-- 0.1.1 → 0.1.2 → 0.1.3 → 0.1.4 → 0.1.5/0.1.6
-- 0.2.1 → 0.2.2 → 0.2.3 → 0.2.4
+- 0.1.1 → 0.1.2 → 0.1.3 → 0.1.4
+- 0.2.1 → 0.2.2 → 0.2.3
+- 0.3.1 → 0.3.2 → 0.3.3
 
 ### Recommended Execution Order
 
-For single developer working sequentially:
+For a single developer working sequentially:
 
 1. **Week 1 - Core Infrastructure**:
-   - Day 1: Episodes 0.1.1, 0.1.2, 0.1.3
-   - Day 2: Episodes 0.1.4, 0.1.5, 0.1.6
-   - Day 3: Episodes 0.2.1, 0.2.2
+   - Day 1-2: Deliverable 0.1 (XDG Configuration Management)
+   - Day 3: Deliverable 0.2 (CLI Configuration Inference)
 
-2. **Week 2 - Documentation and Validation**:
-   - Day 4: Episodes 0.2.3, 0.2.4
-   - Day 5: Episodes 0.3.1, 0.3.2
-   - Day 6: Episodes 0.3.3, 0.3.4
+2. **Week 2 - Validation and Testing**:
+   - Day 4-5: Deliverable 0.3 (Authentication and Validation)
+   - Day 6: Full integration testing and documentation
 
-3. **Week 2 - Integration Testing**:
-   - Day 7: Full integration testing, bug fixes, documentation updates
+### Integration Testing Strategy
 
----
+**After Each Deliverable**:
 
-## Integration Testing Strategy
-
-### After Each Deliverable
-
-**After 0.1 (TypeScript ConfigReader)**:
+**After 0.1 (XDG Configuration Management)**:
 ```bash
 npm run test
 npm run typecheck
 npm run lint
-npx cdk synth --quiet
-npx ts-node bin/cli.ts deploy --help
 ```
 
-**After 0.2 (Makefile Consolidation)**:
+**After 0.2 (CLI Configuration Inference)**:
 ```bash
-make -C docker help
-make -C docker build
-make -C docker test-unit
-bash scripts/test-makefile.sh
+npm run test
+npm run lint
+npx ts-node bin/cli.ts config --help
 ```
 
-**After 0.3 (Python Config Enhancement)**:
+**After 0.3 (Authentication and Validation)**:
 ```bash
-make -C docker test-unit
-make -C docker lint
-make -C docker test-local  # If environment available
+npm run test
+npm run typecheck
+npm run lint
 ```
 
 ### Full Phase 0 Integration Test
@@ -1311,25 +974,15 @@ npm run test
 npm run typecheck
 npm run lint
 
-# Python tests
-make -C docker test-unit
-make -C docker lint
-
-# Integration tests
-npx cdk synth --quiet
-make -C docker build
-make -C docker test-local  # If environment available
+# CLI validation
+npx ts-node bin/cli.ts config --help
+npx ts-node bin/cli.ts config validate
 
 # Verification
-bash scripts/test-makefile.sh
 git diff main --stat  # Review changes
 ```
 
----
-
-## Rollback Strategy
-
-### Per-Episode Rollback
+### Rollback Strategy
 
 Each episode is independently revertible:
 
@@ -1341,49 +994,7 @@ git revert HEAD
 git revert <commit-hash>
 ```
 
-### Per-Deliverable Rollback
-
-If entire deliverable needs rollback:
-
-```bash
-# Revert all episodes for deliverable 0.1
-git revert <episode-0.1.6-hash>^..<episode-0.1.1-hash>
-
-# Or reset to before deliverable (if not pushed)
-git reset --hard <commit-before-0.1.1>
-```
-
-### Safety Checks
-
-Before each commit:
-- [ ] All tests pass
-- [ ] TypeScript compiles
-- [ ] Python linting succeeds
-- [ ] No IDE diagnostics
-- [ ] Commit message follows convention
-
----
-
-## Episode Metrics
-
-### Success Tracking
-
-For each episode, track:
-- **Duration**: Actual time vs. estimated
-- **Test Coverage**: Lines covered by new tests
-- **Issues Found**: Bugs discovered during implementation
-- **Refactoring**: Additional improvements made
-
-### Phase 0 Goals
-
-- **Total Episodes**: 14
-- **Total Estimated Time**: ~4.5 hours
-- **Target Test Coverage**: 100% for new code
-- **Target Success Rate**: All episodes complete without rollback
-
----
-
-## Next Steps
+### Next Steps
 
 After Phase 0 episodes complete:
 
@@ -1397,9 +1008,9 @@ After Phase 0 episodes complete:
 
 ## Document Control
 
-**Version**: 1.0
-**Author**: Python Expert Agent
-**Status**: Episodes Definition
+**Version**: 1.1
+**Author**: Business Analyst Agent
+**Status**: Episodes Definition (Revised)
 **Next Document**: `07-phase0-checklist.md`
 **Implementation**: Ready to begin
-**Estimated Duration**: 4.5 hours (14 episodes)
+**Estimated Duration**: 4 hours (10 episodes)
