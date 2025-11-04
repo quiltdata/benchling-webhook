@@ -197,9 +197,6 @@ class CanvasManager:
             sync_url=self.sync_uri(),
         )
 
-        # Async notice
-        content += fmt.format_notice()
-
         # Linked packages
         try:
             search_result = self._package_query.find_unique_packages(

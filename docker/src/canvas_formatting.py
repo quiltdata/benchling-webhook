@@ -286,11 +286,11 @@ def format_canvas_footer(version: str, quilt_host: str, bucket: str) -> str:
         bucket: S3 bucket name
 
     Returns:
-        Formatted markdown string with footer information
+        Formatted markdown string with footer information including async notice
     """
     return f"""
 ---
-*Version: {version} | Quilt Host: {quilt_host} | Bucket: {bucket}*
+> **NOTE**: *Package will be created/updated asynchronously*
 
-> **Note**: This canvas displays integration metadata. For full package details and data access, visit the Quilt catalog.
+*Version: {version} | Quilt Host: {quilt_host} | Bucket: {bucket}*
 """
