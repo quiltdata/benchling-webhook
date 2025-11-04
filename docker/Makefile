@@ -279,7 +279,7 @@ test-deployed-dev: check-xdg
 		if [ "$$NEEDS_DEPLOY" = "1" ]; then \
 			echo "🚀 Auto-deploying dev stack..."; \
 			echo "   (Set SKIP_AUTO_DEPLOY=1 to disable auto-deployment)"; \
-			cd .. && npm run deploy:dev || exit 1; \
+			cd .. && npm run deploy:dev -- $(DEPLOY_FLAGS) || exit 1; \
 		else \
 			echo "✅ Dev deployment is up-to-date"; \
 		fi; \

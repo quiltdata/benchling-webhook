@@ -40,7 +40,7 @@ interface EnvironmentConfig {
  * Uses atomic write pattern to prevent corruption
  */
 function storeDeploymentConfig(
-    environment: "dev" | "prod",
+    stage: "dev" | "prod",
     config: EnvironmentConfig,
 ): void {
     const configDir = join(homedir(), ".config", "benchling-webhook");
@@ -53,8 +53,8 @@ function storeDeploymentConfig(
         deployConfig = JSON.parse(content);
     }
 
-    // Update environment section
-    deployConfig[environment] = config;
+    // Update stage section
+    deployConfig[stage] = config;
 
     // Ensure config directory exists
     if (!existsSync(configDir)) {
@@ -84,7 +84,7 @@ function storeDeploymentConfig(
     }
 
     console.log(`✅ Stored deployment config in ${deployJsonPath}`);
-    console.log(`   Environment: ${environment}`);
+    console.log(`   Stage: ${stage}`);
     console.log(`   Endpoint: ${config.endpoint}`);
 }
 
@@ -92,8 +92,8 @@ export async function deployCommand(options: {
     yes?: boolean;
     bootstrapCheck?: boolean;
     requireApproval?: string;
-    profile?: string;           // NEW: Profile name
-    environment?: "dev" | "prod";  // NEW: Target environment
+    profile?: string;           // Profile name
+    stage?: "dev" | "prod";     // API Gateway stage
     quiltStackArn?: string;
     benchlingSecret?: string;
     imageTag?: string;
@@ -109,18 +109,18 @@ export async function deployCommand(options: {
     );
     console.log();
 
-    // Determine profile: CLI option > environment default > "default"
+    // Determine profile: CLI option > stage default > "default"
     const profileName = options.profile ||
-                       (options.environment === "dev" ? "dev" : "default");
+                       (options.stage === "dev" ? "dev" : "default");
 
-    // Validate profile/environment mismatch
-    if (options.environment === "prod" && options.profile === "dev") {
+    // Validate profile/stage mismatch
+    if (options.stage === "prod" && options.profile === "dev") {
         console.error(chalk.red.bold("❌ Invalid Configuration\n"));
-        console.error(chalk.red("  Cannot deploy prod environment with dev profile"));
+        console.error(chalk.red("  Cannot deploy prod stage with dev profile"));
         console.log();
         console.log(chalk.yellow("Suggestions:"));
         console.log("  • Use default profile for production: --profile default");
-        console.log("  • Or deploy dev environment: --environment dev");
+        console.log("  • Or deploy to dev stage: --stage dev");
         console.log();
         process.exit(1);
     }
@@ -130,20 +130,32 @@ export async function deployCommand(options: {
     let xdgConfig: Record<string, unknown> | null = null;
 
     try {
+        // First, try to load default profile as base
+        let defaultConfig: Record<string, unknown> | null = null;
+        const defaultPath = xdg.getPaths().userConfig;
+        if (existsSync(defaultPath)) {
+            try {
+                defaultConfig = xdg.readConfig("user");
+            } catch {
+                // Default config is optional
+            }
+        }
+
         if (xdg.profileExists(profileName)) {
             xdgConfig = xdg.readProfileConfig("user", profileName);
             console.log(chalk.dim(`✓ Loaded configuration from profile: ${profileName}\n`));
+
+            // Merge with default profile if it exists (profile overrides default)
+            if (profileName !== "default" && defaultConfig) {
+                xdgConfig = { ...defaultConfig, ...xdgConfig };
+                console.log(chalk.dim("  (Merged with default profile values)\n"));
+            }
         } else if (profileName !== "default") {
             console.log(chalk.yellow(`⚠  Profile '${profileName}' not found`));
-            console.log(chalk.dim("  Attempting to use default profile\n"));
-
-            if (xdg.profileExists("default")) {
-                xdgConfig = xdg.readProfileConfig("user", "default");
-                console.log(chalk.dim("✓ Loaded configuration from default profile\n"));
-            }
-        } else if (existsSync(xdg.getPaths().userConfig)) {
-            xdgConfig = xdg.readConfig("user");
-            console.log(chalk.dim("✓ Loaded configuration from XDG config\n"));
+            console.log(chalk.dim("  Using default profile\n"));
+            xdgConfig = defaultConfig;
+        } else {
+            xdgConfig = defaultConfig;
         }
     } catch (error) {
         console.log(chalk.yellow(`⚠  Could not load XDG config: ${(error as Error).message}`));
@@ -222,7 +234,7 @@ async function deploy(
         yes?: boolean;
         bootstrapCheck?: boolean;
         requireApproval?: string;
-        environment?: "dev" | "prod";
+        stage?: "dev" | "prod";
         profileName?: string;
         imageTag?: string;
         region?: string;
@@ -319,8 +331,8 @@ async function deploy(
     console.log(`  ${chalk.bold("Stack:")}                     BenchlingWebhookStack`);
     console.log(`  ${chalk.bold("Account:")}                   ${deployAccount}`);
     console.log(`  ${chalk.bold("Region:")}                    ${deployRegion}`);
-    if (options.environment) {
-        console.log(`  ${chalk.bold("Environment:")}               ${options.environment}`);
+    if (options.stage) {
+        console.log(`  ${chalk.bold("Stage:")}                     ${options.stage}`);
     }
     if (options.profileName && options.profileName !== "default") {
         console.log(`  ${chalk.bold("Profile:")}                   ${options.profileName}`);
@@ -404,11 +416,11 @@ async function deploy(
                     // Remove trailing slash to avoid double slashes in test URLs
                     const cleanEndpoint = webhookUrl.replace(/\/$/, "");
 
-                    // FIX CRITICAL GAP: Determine environment from options (default to prod)
-                    const env = options.environment || "prod";
+                    // Determine stage from options (default to prod)
+                    const stage = options.stage || "prod";
 
-                    // Store deployment config for correct environment
-                    storeDeploymentConfig(env, {
+                    // Store deployment config for correct stage
+                    storeDeploymentConfig(stage, {
                         endpoint: cleanEndpoint,
                         imageTag: imageTag,
                         deployedAt: new Date().toISOString(),
@@ -416,20 +428,20 @@ async function deploy(
                         region: deployRegion,
                     });
 
-                    // Run environment-specific tests
+                    // Run stage-specific tests
                     console.log();
-                    console.log(`Running ${env} integration tests...`);
+                    console.log(`Running ${stage} integration tests...`);
                     try {
-                        const testCommand = env === "dev" ? "npm run test:dev" : "npm run test:prod";
+                        const testCommand = stage === "dev" ? "npm run test:dev" : "npm run test:prod";
                         execSync(testCommand, {
                             stdio: "inherit",
                             cwd: process.cwd(),
                         });
                         console.log();
-                        console.log(`✅ ${env.charAt(0).toUpperCase() + env.slice(1)} deployment and tests completed successfully!`);
+                        console.log(`✅ ${stage.charAt(0).toUpperCase() + stage.slice(1)} deployment and tests completed successfully!`);
                     } catch {
                         console.error();
-                        console.error(`❌ ${env.charAt(0).toUpperCase() + env.slice(1)} tests failed!`);
+                        console.error(`❌ ${stage.charAt(0).toUpperCase() + stage.slice(1)} tests failed!`);
                         console.error("   Deployment completed but tests did not pass.");
                         console.error("   Review test output above for details.");
                         process.exit(1);

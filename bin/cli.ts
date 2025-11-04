@@ -31,6 +31,7 @@ program
     .option("--no-bootstrap-check", "Skip CDK bootstrap verification")
     .option("--require-approval <level>", "CDK approval level", "never")
     .option("--profile <name>", "AWS profile to use")
+    .option("--stage <name>", "API Gateway stage (dev or prod)")
     .option("--region <region>", "AWS region to deploy to")
     .option("--image-tag <tag>", "Docker image tag to deploy (default: latest)")
     .option("--yes", "Skip confirmation prompts")
