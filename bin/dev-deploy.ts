@@ -135,7 +135,7 @@ async function waitForWorkflow(commitSha: string, timeoutMinutes: number = 15): 
                 if (status === "completed") {
                     console.log("\n");
                     if (conclusion === "success") {
-                        console.log(`✅ CI workflow completed successfully!`);
+                        console.log("✅ CI workflow completed successfully!");
                         console.log(`   Run: ${workflowUrl}`);
                         return true;
                     } else {
@@ -166,10 +166,10 @@ async function waitForWorkflow(commitSha: string, timeoutMinutes: number = 15): 
     if (workflowUrl) {
         console.error(`   Check status at: ${workflowUrl}`);
     } else {
-        console.error(`   Check status at: https://github.com/quiltdata/benchling-webhook/actions`);
+        console.error("   Check status at: https://github.com/quiltdata/benchling-webhook/actions");
     }
     console.error("\n   Once the workflow completes, you can deploy manually with:");
-    console.error(`   npm run cli -- --image-tag <version> --yes`);
+    console.error("   npm run cli -- --image-tag <version> --yes");
     process.exit(1);
 }
 
@@ -257,7 +257,7 @@ async function main(): Promise<void> {
 
         // 3. Push tag to origin (triggers CI)
         console.log("");
-        console.log(`Step 3: Pushing tag to origin (this triggers CI/CD)...`);
+        console.log("Step 3: Pushing tag to origin (this triggers CI/CD)...");
         run(`git push origin ${devTag}`);
         console.log(`✅ Pushed tag ${devTag} to origin`);
         console.log("   CI will now build Docker image for x86_64 (AWS-compatible)");
@@ -265,7 +265,7 @@ async function main(): Promise<void> {
 
     // 4. Wait for CI to complete
     console.log("");
-    console.log(`Step 4: Waiting for CI to build Docker image...`);
+    console.log("Step 4: Waiting for CI to build Docker image...");
 
     // Get the commit SHA for the tag (use ^{commit} to dereference annotated tags)
     const commitShaOutput = run(`git rev-parse ${devTag}^{commit}`, { silent: true });
@@ -279,7 +279,7 @@ async function main(): Promise<void> {
 
     // 5. Deploy CDK stack with CI-built image tag using secrets-only mode
     console.log("");
-    console.log(`Step 5: Deploying CDK stack with CI-built image (secrets-only mode)...`);
+    console.log("Step 5: Deploying CDK stack with CI-built image (secrets-only mode)...");
     process.chdir(join(__dirname, ".."));
     // Use the full version with timestamp (without 'v' prefix)
     const imageTag = devTag.replace(/^v/, "");
