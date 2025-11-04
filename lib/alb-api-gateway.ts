@@ -8,25 +8,17 @@ import { Construct } from "constructs";
 export interface AlbApiGatewayProps {
     readonly loadBalancer: elbv2.ApplicationLoadBalancer;
     readonly webhookAllowList?: string;
-    readonly environments: Array<{
-        stageName: string;           // "dev" or "prod"
-        targetGroup: elbv2.ApplicationTargetGroup;
-    }>;
 }
 
 export class AlbApiGateway {
     public readonly api: apigateway.RestApi;
     public readonly logGroup: logs.ILogGroup;
-    public readonly stages: Map<string, apigateway.Stage>;
-    private readonly loadBalancer: elbv2.ApplicationLoadBalancer;
 
     constructor(
         scope: Construct,
         id: string,
         props: AlbApiGatewayProps,
     ) {
-        this.loadBalancer = props.loadBalancer;
-
         this.logGroup = new logs.LogGroup(scope, "ApiGatewayAccessLogs", {
             logGroupName: "/aws/apigateway/benchling-webhook",
             retention: logs.RetentionDays.ONE_WEEK,
@@ -58,57 +50,33 @@ export class AlbApiGateway {
         // Only create policy if we have IPs and they're not from an empty parameter
         const policyDocument = this.createResourcePolicy(allowedIps, props.webhookAllowList);
 
-        // Create API Gateway without default deployment
-        // We'll create explicit stages below to route to different target groups
         this.api = new apigateway.RestApi(scope, "BenchlingWebhookAPI", {
             restApiName: "BenchlingWebhookAPI",
             policy: policyDocument,
-            deploy: false,  // Manual stage deployment for multi-environment support
+            deployOptions: {
+                stageName: "prod",
+                accessLogDestination: new apigateway.LogGroupLogDestination(this.logGroup),
+                methodOptions: {
+                    "/*/*": {
+                        loggingLevel: apigateway.MethodLoggingLevel.INFO,
+                        dataTraceEnabled: true,
+                    },
+                },
+            },
         });
 
-        // Create webhook endpoints with HTTP integrations
-        // Each stage will route to the ALB (all stages share the same integration for now)
-        this.addWebhookEndpoints();
+        this.addWebhookEndpoints(props.loadBalancer);
 
-        // Create stages for each environment
-        // Each stage has its own deployment and routes to the appropriate target group
-        // In Phase 1a, all stages route to the same backend for demonstration purposes
-        // In Phase 1b, ALB listener rules will route to different target groups per stage
-        this.stages = new Map();
-        for (const env of props.environments) {
-            const deployment = new apigateway.Deployment(scope, `${env.stageName}Deployment`, {
-                api: this.api,
-                // Add description to force new deployment on changes
-                description: `Deployment for ${env.stageName} environment`,
-            });
-
-            const stage = new apigateway.Stage(scope, `${env.stageName}Stage`, {
-                deployment,
-                stageName: env.stageName,
-                accessLogDestination: new apigateway.LogGroupLogDestination(this.logGroup),
-                loggingLevel: apigateway.MethodLoggingLevel.INFO,
-                dataTraceEnabled: true,
-            });
-
-            this.stages.set(env.stageName, stage);
-
-            // Output stage-specific endpoint URL
-            new cdk.CfnOutput(scope, `${env.stageName}WebhookEndpoint`, {
-                value: stage.urlForPath("/"),
-                description: `Webhook endpoint URL for ${env.stageName} environment`,
-            });
-
-            // Output stage-specific execution log group
-            new cdk.CfnOutput(scope, `${env.stageName}ExecutionLogGroup`, {
-                value: `API-Gateway-Execution-Logs_${this.api.restApiId}/${env.stageName}`,
-                description: `API Gateway execution log group for ${env.stageName} environment`,
-            });
-        }
-
-        // Output API Gateway ID for reference
+        // Output API Gateway ID for execution logs
         new cdk.CfnOutput(scope, "ApiGatewayId", {
             value: this.api.restApiId,
             description: "API Gateway REST API ID",
+        });
+
+        // Output execution log group name
+        new cdk.CfnOutput(scope, "ApiGatewayExecutionLogGroup", {
+            value: `API-Gateway-Execution-Logs_${this.api.restApiId}/prod`,
+            description: "API Gateway execution log group for detailed request/response logs",
         });
 
         // Output ALB DNS for direct testing
@@ -175,13 +143,12 @@ export class AlbApiGateway {
         return cloudWatchRole;
     }
 
-    private addWebhookEndpoints(): void {
-        // Create HTTP integration for proxy path
-        // This routes all requests directly to the ALB via public DNS
-        // For Phase 1a, all stages route to the same ALB backend
-        // In Phase 1b, ALB listener rules will differentiate based on stage headers
+    private addWebhookEndpoints(
+        loadBalancer: elbv2.ApplicationLoadBalancer,
+    ): void {
+        // Create HTTP integration to ALB
         const albIntegration = new apigateway.HttpIntegration(
-            `http://${this.loadBalancer.loadBalancerDnsName}/{proxy}`,
+            `http://${loadBalancer.loadBalancerDnsName}/{proxy}`,
             {
                 httpMethod: "ANY",
                 options: {
@@ -189,7 +156,9 @@ export class AlbApiGateway {
                         "integration.request.path.proxy": "method.request.path.proxy",
                     },
                     integrationResponses: [
-                        { statusCode: "200" },
+                        {
+                            statusCode: "200",
+                        },
                         {
                             statusCode: "400",
                             selectionPattern: "4\\d{2}",
@@ -218,7 +187,7 @@ export class AlbApiGateway {
 
         // Also handle root path
         this.api.root.addMethod("ANY", new apigateway.HttpIntegration(
-            `http://${this.loadBalancer.loadBalancerDnsName}/`,
+            `http://${loadBalancer.loadBalancerDnsName}/`,
             {
                 httpMethod: "ANY",
                 options: {

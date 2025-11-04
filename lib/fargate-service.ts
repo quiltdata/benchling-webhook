@@ -48,7 +48,6 @@ export class FargateService extends Construct {
     public readonly loadBalancer: elbv2.ApplicationLoadBalancer;
     public readonly cluster: ecs.Cluster;
     public readonly logGroup: logs.ILogGroup;
-    public readonly targetGroup: elbv2.ApplicationTargetGroup;
 
     constructor(scope: Construct, id: string, props: FargateServiceProps) {
         super(scope, id);
@@ -397,7 +396,7 @@ export class FargateService extends Construct {
         this.loadBalancer.logAccessLogs(albLogsBucket, "alb-access-logs");
 
         // Create ALB Target Group
-        this.targetGroup = new elbv2.ApplicationTargetGroup(this, "TargetGroup", {
+        const targetGroup = new elbv2.ApplicationTargetGroup(this, "TargetGroup", {
             vpc: props.vpc,
             port: 5000,
             protocol: elbv2.ApplicationProtocol.HTTP,
@@ -417,7 +416,7 @@ export class FargateService extends Construct {
         this.loadBalancer.addListener("HttpListener", {
             port: 80,
             protocol: elbv2.ApplicationProtocol.HTTP,
-            defaultAction: elbv2.ListenerAction.forward([this.targetGroup]),
+            defaultAction: elbv2.ListenerAction.forward([targetGroup]),
         });
 
         // Create Security Group for Fargate tasks
@@ -451,7 +450,7 @@ export class FargateService extends Construct {
         });
 
         // Attach the service to the target group
-        this.service.attachToApplicationTargetGroup(this.targetGroup);
+        this.service.attachToApplicationTargetGroup(targetGroup);
 
         // Configure auto-scaling
         const scaling = this.service.autoScaleTaskCount({
