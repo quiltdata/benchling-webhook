@@ -88,7 +88,18 @@ function storeDeploymentConfig(
     console.log(`   Endpoint: ${config.endpoint}`);
 }
 
-export async function deployCommand(options: { yes?: boolean; bootstrapCheck?: boolean; requireApproval?: string; quiltStackArn?: string; benchlingSecret?: string; imageTag?: string; region?: string; envFile?: string }): Promise<void> {
+export async function deployCommand(options: {
+    yes?: boolean;
+    bootstrapCheck?: boolean;
+    requireApproval?: string;
+    profile?: string;           // NEW: Profile name
+    environment?: "dev" | "prod";  // NEW: Target environment
+    quiltStackArn?: string;
+    benchlingSecret?: string;
+    imageTag?: string;
+    region?: string;
+    envFile?: string;
+}): Promise<void> {
     console.log(
         boxen(chalk.bold("Benchling Webhook Deployment"), {
             padding: 1,
@@ -98,12 +109,39 @@ export async function deployCommand(options: { yes?: boolean; bootstrapCheck?: b
     );
     console.log();
 
-    // Try to read from XDG config first
+    // Determine profile: CLI option > environment default > "default"
+    const profileName = options.profile ||
+                       (options.environment === "dev" ? "dev" : "default");
+
+    // Validate profile/environment mismatch
+    if (options.environment === "prod" && options.profile === "dev") {
+        console.error(chalk.red.bold("❌ Invalid Configuration\n"));
+        console.error(chalk.red("  Cannot deploy prod environment with dev profile"));
+        console.log();
+        console.log(chalk.yellow("Suggestions:"));
+        console.log("  • Use default profile for production: --profile default");
+        console.log("  • Or deploy dev environment: --environment dev");
+        console.log();
+        process.exit(1);
+    }
+
+    // Try to read from XDG config profile
     const xdg = new XDGConfig();
     let xdgConfig: Record<string, unknown> | null = null;
 
     try {
-        if (existsSync(xdg.getPaths().userConfig)) {
+        if (xdg.profileExists(profileName)) {
+            xdgConfig = xdg.readProfileConfig("user", profileName);
+            console.log(chalk.dim(`✓ Loaded configuration from profile: ${profileName}\n`));
+        } else if (profileName !== "default") {
+            console.log(chalk.yellow(`⚠  Profile '${profileName}' not found`));
+            console.log(chalk.dim("  Attempting to use default profile\n"));
+
+            if (xdg.profileExists("default")) {
+                xdgConfig = xdg.readProfileConfig("user", "default");
+                console.log(chalk.dim("✓ Loaded configuration from default profile\n"));
+            }
+        } else if (existsSync(xdg.getPaths().userConfig)) {
             xdgConfig = xdg.readConfig("user");
             console.log(chalk.dim("✓ Loaded configuration from XDG config\n"));
         }
@@ -120,7 +158,7 @@ export async function deployCommand(options: { yes?: boolean; bootstrapCheck?: b
     // Generate secret name from XDG config if available
     let xdgSecretName: string | undefined;
     if (xdgConfig) {
-        const profile = (xdgConfig.profile as string) || "default";
+        const profile = (xdgConfig.profile as string) || profileName;
         const tenant = xdgConfig.benchlingTenant as string;
         if (tenant) {
             xdgSecretName = generateSecretName(profile, tenant);
@@ -171,7 +209,7 @@ export async function deployCommand(options: { yes?: boolean; bootstrapCheck?: b
     }
 
     // Deploy (both parameters validated above)
-    return await deploy(quiltStackArn!, benchlingSecret!, { ...options, imageTag });
+    return await deploy(quiltStackArn!, benchlingSecret!, { ...options, imageTag, profileName });
 }
 
 /**
@@ -180,7 +218,16 @@ export async function deployCommand(options: { yes?: boolean; bootstrapCheck?: b
 async function deploy(
     quiltStackArn: string,
     benchlingSecret: string,
-    options: { yes?: boolean; bootstrapCheck?: boolean; requireApproval?: string; imageTag?: string; region?: string; envFile?: string },
+    options: {
+        yes?: boolean;
+        bootstrapCheck?: boolean;
+        requireApproval?: string;
+        environment?: "dev" | "prod";
+        profileName?: string;
+        imageTag?: string;
+        region?: string;
+        envFile?: string;
+    },
 ): Promise<void> {
     const spinner = ora("Validating parameters...").start();
 
@@ -272,6 +319,12 @@ async function deploy(
     console.log(`  ${chalk.bold("Stack:")}                     BenchlingWebhookStack`);
     console.log(`  ${chalk.bold("Account:")}                   ${deployAccount}`);
     console.log(`  ${chalk.bold("Region:")}                    ${deployRegion}`);
+    if (options.environment) {
+        console.log(`  ${chalk.bold("Environment:")}               ${options.environment}`);
+    }
+    if (options.profileName && options.profileName !== "default") {
+        console.log(`  ${chalk.bold("Profile:")}                   ${options.profileName}`);
+    }
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
     console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(quiltStackArn)}`);
@@ -351,8 +404,11 @@ async function deploy(
                     // Remove trailing slash to avoid double slashes in test URLs
                     const cleanEndpoint = webhookUrl.replace(/\/$/, "");
 
-                    // Store prod deployment config
-                    storeDeploymentConfig("prod", {
+                    // FIX CRITICAL GAP: Determine environment from options (default to prod)
+                    const env = options.environment || "prod";
+
+                    // Store deployment config for correct environment
+                    storeDeploymentConfig(env, {
                         endpoint: cleanEndpoint,
                         imageTag: imageTag,
                         deployedAt: new Date().toISOString(),
@@ -360,19 +416,20 @@ async function deploy(
                         region: deployRegion,
                     });
 
-                    // Run production tests
+                    // Run environment-specific tests
                     console.log();
-                    console.log("Running production integration tests...");
+                    console.log(`Running ${env} integration tests...`);
                     try {
-                        execSync("npm run test:prod", {
+                        const testCommand = env === "dev" ? "npm run test:dev" : "npm run test:prod";
+                        execSync(testCommand, {
                             stdio: "inherit",
                             cwd: process.cwd(),
                         });
                         console.log();
-                        console.log("✅ Production deployment and tests completed successfully!");
-                    } catch (testError) {
+                        console.log(`✅ ${env.charAt(0).toUpperCase() + env.slice(1)} deployment and tests completed successfully!`);
+                    } catch {
                         console.error();
-                        console.error("❌ Production tests failed!");
+                        console.error(`❌ ${env.charAt(0).toUpperCase() + env.slice(1)} tests failed!`);
                         console.error("   Deployment completed but tests did not pass.");
                         console.error("   Review test output above for details.");
                         process.exit(1);
@@ -385,6 +442,7 @@ async function deploy(
                             `${chalk.green.bold("✓ Deployment and Testing Complete!")}\n\n` +
                             `Stack:  ${chalk.cyan("BenchlingWebhookStack")}\n` +
                             `Region: ${chalk.cyan(deployRegion)}\n` +
+                            `Environment: ${chalk.cyan(env)}\n` +
                             `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` +
                             `${chalk.bold("Next steps:")}\n` +
                             "  1. Set the webhook URL in your Benchling app settings:\n" +
