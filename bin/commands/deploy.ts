@@ -9,6 +9,9 @@ import {
     ConfigResolverError,
 } from "../../lib/utils/config-resolver";
 import { checkCdkBootstrap } from "../benchling-webhook";
+import { XDGConfig } from "../../lib/xdg-config";
+import { generateSecretName } from "../../lib/utils/secrets";
+import { existsSync } from "fs";
 
 export async function deployCommand(options: { yes?: boolean; bootstrapCheck?: boolean; requireApproval?: string; quiltStackArn?: string; benchlingSecret?: string; imageTag?: string; region?: string; envFile?: string }): Promise<void> {
     console.log(
@@ -20,28 +23,80 @@ export async function deployCommand(options: { yes?: boolean; bootstrapCheck?: b
     );
     console.log();
 
-    // Get required parameters
-    const quiltStackArn = options.quiltStackArn || process.env.QUILT_STACK_ARN;
-    // Use default secret name if not provided
-    const benchlingSecret = options.benchlingSecret || process.env.BENCHLING_SECRET || "@quiltdata/benchling-webhook";
+    // Try to read from XDG config first
+    const xdg = new XDGConfig();
+    let xdgConfig: Record<string, unknown> | null = null;
 
-    // Validate required parameter
-    if (!quiltStackArn) {
-        console.error(chalk.red.bold("❌ Missing Required Parameter\n"));
-        console.error(chalk.red("  --quilt-stack-arn is required"));
+    try {
+        if (existsSync(xdg.getPaths().userConfig)) {
+            xdgConfig = xdg.readConfig("user");
+            console.log(chalk.dim("✓ Loaded configuration from XDG config\n"));
+        }
+    } catch (error) {
+        console.log(chalk.yellow(`⚠  Could not load XDG config: ${(error as Error).message}`));
+        console.log(chalk.dim("  Falling back to CLI options and environment variables\n"));
+    }
+
+    // Get required parameters with priority: CLI options > XDG config > environment variables
+    const quiltStackArn = options.quiltStackArn ||
+                         (xdgConfig?.quiltStackArn as string) ||
+                         process.env.QUILT_STACK_ARN;
+
+    // Generate secret name from XDG config if available
+    let xdgSecretName: string | undefined;
+    if (xdgConfig) {
+        const profile = (xdgConfig.profile as string) || "default";
+        const tenant = xdgConfig.benchlingTenant as string;
+        if (tenant) {
+            xdgSecretName = generateSecretName(profile, tenant);
+            console.log(chalk.dim(`  Generated secret name: ${xdgSecretName}\n`));
+        } else {
+            console.log(chalk.yellow("  ⚠  XDG config missing benchlingTenant field"));
+            console.log(chalk.dim("    Secret name will use default or CLI option\n"));
+        }
+    }
+
+    // Resolve secret name from various sources
+    const benchlingSecret = options.benchlingSecret ||
+                           xdgSecretName ||
+                           (xdgConfig?.benchlingSecret as string) ||
+                           process.env.BENCHLING_SECRET;
+
+    // Get image tag from options or XDG config
+    const imageTag = options.imageTag ||
+                    (xdgConfig?.imageTag as string) ||
+                    "latest";
+
+    // Validate required parameters
+    const missingParams: string[] = [];
+    if (!quiltStackArn) missingParams.push("--quilt-stack-arn");
+    if (!benchlingSecret) missingParams.push("--benchling-secret");
+
+    if (missingParams.length > 0) {
+        console.error(chalk.red.bold("❌ Missing Required Parameters\n"));
+        missingParams.forEach(param => {
+            console.error(chalk.red(`  ${param} is required`));
+        });
         console.log();
-        console.log(chalk.yellow("Usage:"));
-        console.log(chalk.cyan("  npx @quiltdata/benchling-webhook deploy --quilt-stack-arn <arn>"));
+        console.log(chalk.yellow("Options:"));
+        console.log("  1. Provide via CLI:");
+        console.log(chalk.cyan("     npx @quiltdata/benchling-webhook deploy \\"));
+        console.log(chalk.cyan("       --quilt-stack-arn <arn> \\"));
+        console.log(chalk.cyan("       --benchling-secret <name>"));
+        console.log();
+        console.log("  2. Set in XDG config:");
+        console.log(chalk.cyan("     npm run setup"));
         console.log();
         console.log(chalk.yellow("Example:"));
         console.log(chalk.cyan("  npx @quiltdata/benchling-webhook deploy \\"));
-        console.log(chalk.cyan("    --quilt-stack-arn \"arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123\""));
+        console.log(chalk.cyan("    --quilt-stack-arn \"arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123\" \\"));
+        console.log(chalk.cyan("    --benchling-secret \"quiltdata/benchling-webhook/default/my-tenant\""));
         console.log();
         process.exit(1);
     }
 
-    // Deploy
-    return await deploy(quiltStackArn, benchlingSecret, options);
+    // Deploy (both parameters validated above)
+    return await deploy(quiltStackArn!, benchlingSecret!, { ...options, imageTag });
 }
 
 /**
