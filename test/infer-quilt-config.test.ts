@@ -2,7 +2,7 @@ import { jest } from "@jest/globals";
 import { execSync } from "child_process";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { mockClient } from "aws-sdk-client-mock";
-import { inferQuiltConfig, inferenceResultToDerivedConfig } from "../scripts/infer-quilt-config";
+import { inferQuiltConfig, inferenceResultToDerivedConfig } from "../bin/commands/infer-quilt-config";
 
 // Mock child_process
 jest.mock("child_process");

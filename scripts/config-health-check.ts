@@ -14,7 +14,7 @@
 import { XDGConfig } from "../lib/xdg-config";
 import { UserConfig, DerivedConfig, DeploymentConfig, ProfileName } from "../lib/types/config";
 import { existsSync, statSync } from "fs";
-import { validateSecretsAccess } from "./sync-secrets";
+import { validateSecretsAccess } from "../bin/commands/sync-secrets";
 import { ConfigLogger, LogLevel } from "../lib/config-logger";
 import * as https from "https";
 import { SecretsManagerClient, DescribeSecretCommand } from "@aws-sdk/client-secrets-manager";
