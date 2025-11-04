@@ -275,3 +275,22 @@ def dict_to_markdown_list(data: Dict[str, Any], indent_level: int = 0) -> str:
             md += f"{indent}- **{key}**: {value}\n"
 
     return md
+
+
+def format_canvas_footer(version: str, quilt_host: str, bucket: str) -> str:
+    """Format canvas footer with version and deployment information.
+
+    Args:
+        version: Application version
+        quilt_host: Quilt catalog host
+        bucket: S3 bucket name
+
+    Returns:
+        Formatted markdown string with footer information
+    """
+    return f"""
+---
+*Version: {version} | Quilt Host: {quilt_host} | Bucket: {bucket}*
+
+> **Note**: This canvas displays integration metadata. For full package details and data access, visit the Quilt catalog.
+"""
