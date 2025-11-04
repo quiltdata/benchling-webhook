@@ -286,7 +286,7 @@ export class ConfigHealthChecker {
     }
 
     /**
-     * Checks Quilt catalog connectivity
+     * Checks Quilt catalog configuration
      *
      * @returns Health check result
      */
@@ -294,7 +294,7 @@ export class ConfigHealthChecker {
         try {
             const userConfig = this.xdgConfig.readProfileConfig("user", this.profile) as UserConfig;
 
-            const catalogUrl = userConfig.quiltCatalog || userConfig.quiltCatalog;
+            const catalogUrl = userConfig.quiltCatalog;
 
             if (!catalogUrl) {
                 return {
@@ -303,51 +303,45 @@ export class ConfigHealthChecker {
                     message: "No Quilt catalog configured",
                     details: {
                         profile: this.profile,
-                        recommendation: "Run infer-quilt-config or install-wizard",
+                        recommendation: "Run npm run setup:infer or npm run setup",
                     },
                 };
             }
 
-            // Test catalog API endpoint
-            const apiUrl = `${catalogUrl}/api/config`;
+            // Verify required Quilt configuration fields are present
+            const missingFields: string[] = [];
 
-            return new Promise((resolve) => {
-                https
-                    .get(apiUrl, { timeout: 5000 }, (res) => {
-                        if (res.statusCode === 200) {
-                            resolve({
-                                check: "quilt-catalog",
-                                status: "pass",
-                                message: "Quilt catalog accessible",
-                                details: {
-                                    catalogUrl,
-                                    apiUrl,
-                                },
-                            });
-                        } else {
-                            resolve({
-                                check: "quilt-catalog",
-                                status: "warn",
-                                message: `Catalog API returned status ${res.statusCode}`,
-                                details: {
-                                    catalogUrl,
-                                    statusCode: res.statusCode,
-                                },
-                            });
-                        }
-                    })
-                    .on("error", (error) => {
-                        resolve({
-                            check: "quilt-catalog",
-                            status: "fail",
-                            message: `Catalog not accessible: ${error.message}`,
-                            details: {
-                                catalogUrl,
-                                error: error.message,
-                            },
-                        });
-                    });
-            });
+            if (!userConfig.quiltStackArn) {
+                missingFields.push("quiltStackArn");
+            }
+
+            if (!userConfig.benchlingPkgBucket && !userConfig.quiltUserBucket) {
+                missingFields.push("benchlingPkgBucket or quiltUserBucket");
+            }
+
+            if (missingFields.length > 0) {
+                return {
+                    check: "quilt-catalog",
+                    status: "warn",
+                    message: `Incomplete Quilt configuration: missing ${missingFields.join(", ")}`,
+                    details: {
+                        catalogUrl,
+                        missingFields,
+                        recommendation: "Run npm run setup:infer to complete configuration",
+                    },
+                };
+            }
+
+            return {
+                check: "quilt-catalog",
+                status: "pass",
+                message: "Quilt catalog configured",
+                details: {
+                    catalogUrl,
+                    stackArn: userConfig.quiltStackArn,
+                    bucket: userConfig.benchlingPkgBucket || userConfig.quiltUserBucket,
+                },
+            };
         } catch (error) {
             return {
                 check: "quilt-catalog",
