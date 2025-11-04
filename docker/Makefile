@@ -6,6 +6,9 @@
 # Include deployment targets
 include make.deploy
 
+# XDG configuration directory
+XDG_CONFIG ?= $(HOME)/.config/benchling-webhook
+
 # Default log level
 LOG_LEVEL ?= INFO
 

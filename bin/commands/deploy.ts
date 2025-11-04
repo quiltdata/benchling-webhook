@@ -348,9 +348,12 @@ async function deploy(
                     // Determine image tag
                     const imageTag = options.imageTag || "latest";
 
+                    // Remove trailing slash to avoid double slashes in test URLs
+                    const cleanEndpoint = webhookUrl.replace(/\/$/, "");
+
                     // Store prod deployment config
                     storeDeploymentConfig("prod", {
-                        endpoint: webhookUrl,
+                        endpoint: cleanEndpoint,
                         imageTag: imageTag,
                         deployedAt: new Date().toISOString(),
                         stackName: stackName,
