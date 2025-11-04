@@ -1,9 +1,8 @@
-import { execSync, spawnSync } from "child_process";
+import { execSync } from "child_process";
 import chalk from "chalk";
 import ora from "ora";
 import boxen from "boxen";
 import { prompt } from "enquirer";
-import { SecretsManagerClient, DescribeSecretCommand } from "@aws-sdk/client-secrets-manager";
 import { maskArn } from "../../lib/utils/config";
 import {
     parseStackArn,
@@ -46,52 +45,6 @@ export async function deployCommand(options: { yes?: boolean; bootstrapCheck?: b
 }
 
 /**
- * Check if a secret exists in AWS Secrets Manager
- */
-async function checkSecretExists(secretName: string, region: string): Promise<boolean> {
-    try {
-        const client = new SecretsManagerClient({ region });
-        await client.send(new DescribeSecretCommand({ SecretId: secretName }));
-        return true;
-    } catch (error: unknown) {
-        if (error && typeof error === "object" && "name" in error && error.name === "ResourceNotFoundException") {
-            return false;
-        }
-        // For other errors (e.g., permission issues), throw them
-        throw error;
-    }
-}
-
-/**
- * Run npm run config to create the secret
- */
-function runConfigCommand(secretName: string, region: string, envFile: string = ".env"): boolean {
-    console.log();
-    console.log(chalk.yellow("📝 Secret not found. Running configuration setup..."));
-    console.log();
-
-    const result = spawnSync(
-        "npm",
-        ["run", "config", "--", "--secret-name", secretName, "--region", region, "--env-file", envFile],
-        {
-            stdio: "inherit",
-            shell: true,
-        },
-    );
-
-    if (result.status !== 0) {
-        console.log();
-        console.log(chalk.red("❌ Failed to create secret. Please run:"));
-        console.log(chalk.cyan(`   npm run config -- --secret-name ${secretName} --region ${region}`));
-        console.log();
-        return false;
-    }
-
-    console.log();
-    return true;
-}
-
-/**
  * Deploy the Benchling webhook stack
  */
 async function deploy(
@@ -127,42 +80,29 @@ async function deploy(
     const deployRegion = options.region || parsed.region;
     const deployAccount = parsed.account;
 
-    // Check if secret exists, create if needed
-    spinner.start("Checking if Benchling secret exists...");
+    // Sync secrets to ensure they're up-to-date (force update)
+    spinner.start("Syncing Benchling secrets to AWS Secrets Manager...");
     try {
-        const secretExists = await checkSecretExists(benchlingSecret, deployRegion);
+        // Run sync-secrets with --force to ensure secrets are up-to-date
+        execSync("npm run setup:sync-secrets -- --force", {
+            stdio: "pipe",
+            encoding: "utf-8",
+            env: {
+                ...process.env,
+                AWS_REGION: deployRegion,
+            },
+        });
 
-        if (!secretExists) {
-            spinner.info(`Secret '${benchlingSecret}' not found`);
-
-            // Ask user if they want to create it
-            const response: { createSecret: boolean } = await prompt({
-                type: "confirm",
-                name: "createSecret",
-                message: `Would you like to create the secret '${benchlingSecret}' now using your .env file?`,
-                initial: true,
-            });
-
-            if (response.createSecret) {
-                const created = runConfigCommand(benchlingSecret, deployRegion, options.envFile || ".env");
-                if (!created) {
-                    process.exit(1);
-                }
-                spinner.succeed(`Secret '${benchlingSecret}' created successfully`);
-            } else {
-                spinner.fail("Secret is required for deployment");
-                console.log();
-                console.log(chalk.yellow("To create the secret manually, run:"));
-                console.log(chalk.cyan(`  npm run config -- --secret-name ${benchlingSecret} --region ${deployRegion}`));
-                console.log();
-                process.exit(1);
-            }
-        } else {
-            spinner.succeed(`Secret '${benchlingSecret}' exists`);
-        }
+        spinner.succeed(`Secrets synced to '${benchlingSecret}'`);
     } catch (error) {
-        spinner.warn("Could not verify secret existence (will attempt deployment anyway)");
-        console.log(chalk.dim(`  ${(error as Error).message}`));
+        spinner.fail("Failed to sync secrets");
+        console.log();
+        console.error(chalk.red((error as Error).message));
+        console.log();
+        console.log(chalk.yellow("To sync secrets manually, run:"));
+        console.log(chalk.cyan(`  npm run setup:sync-secrets -- --force --region ${deployRegion}`));
+        console.log();
+        process.exit(1);
     }
 
     // Check CDK bootstrap
