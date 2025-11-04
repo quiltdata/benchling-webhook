@@ -21,12 +21,11 @@
     "deploy:dev": "npm run test && ts-node bin/dev-deploy.ts",
     "deploy:prod": "ts-node bin/cli.ts deploy",
     "deploy:logs": "ts-node bin/check-logs.ts",
+    "deploy:notes": "bash bin/release-notes.sh",
     "lint": "eslint . --ext .ts --fix && make -C docker lint",
     "postbuild": "chmod +x dist/bin/cli.js",
     "prebuild": "rm -rf dist",
     "prepublishOnly": "npm run build",
-    "release:notes": "bash bin/release-notes.sh",
-    "release:tag": "ts-node bin/release.ts",
     "setup": "ts-node scripts/install-wizard.ts",
     "setup:health": "ts-node scripts/config-health-check.ts",
     "setup:infer": "ts-node scripts/infer-quilt-config.ts",
@@ -38,7 +37,9 @@
     "test:prod": "make -C docker test-deployed-prod",
     "test:python": "make -C docker test-unit",
     "test:ts": "cross-env NODE_ENV=test jest --maxWorkers=50%",
-    "version": "ts-node bin/version.ts"
+    "version": "ts-node bin/version.ts",
+    "version:tag": "ts-node bin/release.ts",
+    "version:tag:dev": "ts-node bin/release.ts dev"
   },
   "keywords": [
     "benchling",

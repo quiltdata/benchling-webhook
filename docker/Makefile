@@ -16,7 +16,7 @@ PORT_DOCKER_PROD := 5003
 
 .PHONY: help build test clean install lint ngrok kill \
         check-xdg check-ngrok run-local run-local-verbose run-dev run run-local-ngrok run-ecr \
-        test test-unit test-integration test-dev test-docker-prod test-deployed-dev test-deployed-prod test-ecr test-local test-benchling test-query \
+        test test-unit test-integration test-dev test-docker-prod test-deployed-dev test-deployed-dev-direct test-deployed-prod test-ecr test-local test-benchling test-query \
         health-local health-dev health logs-dev logs
 
 # Default target
@@ -42,7 +42,7 @@ help:
 	@echo "  test-local            - Test webhooks with auto-managed local server"
 	@echo "  test-dev              - Test webhooks against docker dev (port $(PORT_DOCKER_DEV))"
 	@echo "  test-docker-prod      - Test local docker prod container (port $(PORT_DOCKER_PROD))"
-	@echo "  test-deployed-dev     - Test dev stack via API Gateway endpoint"
+	@echo "  test-deployed-dev     - Test dev stack via API Gateway (auto-deploys if needed)"
 	@echo "  test-deployed-prod    - Test prod stack via API Gateway endpoint"
 	@echo "  test-ecr              - Test webhooks against ECR image (port $(PORT_DOCKER_PROD))"
 	@echo "  test-benchling        - Test Benchling OAuth credentials"
@@ -239,8 +239,52 @@ test-ecr: check-xdg
 	@docker rm benchling-ecr-test
 	@echo "✅ Done"
 
-# Test deployed dev stack via API Gateway endpoint
+# Test deployed dev stack via API Gateway endpoint (auto-deploys if needed)
 test-deployed-dev: check-xdg
+	@if [ -n "$(SKIP_AUTO_DEPLOY)" ]; then \
+		echo "⏭️  Auto-deploy disabled (SKIP_AUTO_DEPLOY=1)"; \
+		$(MAKE) -f Makefile test-deployed-dev-direct; \
+	else \
+		echo "🔍 Checking if dev deployment is needed..."; \
+		DEPLOY_JSON=$(XDG_CONFIG)/deploy.json; \
+		NEEDS_DEPLOY=0; \
+		if [ ! -f "$$DEPLOY_JSON" ]; then \
+			echo "📦 No deploy.json found - deployment needed"; \
+			NEEDS_DEPLOY=1; \
+		elif ! jq -e '.dev' "$$DEPLOY_JSON" >/dev/null 2>&1; then \
+			echo "📦 No dev deployment found - deployment needed"; \
+			NEEDS_DEPLOY=1; \
+		else \
+			DEPLOYED_AT=$$(jq -r '.dev.deployedAt // empty' "$$DEPLOY_JSON"); \
+			if [ -z "$$DEPLOYED_AT" ]; then \
+				echo "📦 No deployment timestamp found - deployment needed"; \
+				NEEDS_DEPLOY=1; \
+			else \
+				if [ "$$(uname)" = "Darwin" ]; then \
+					DEPLOYED_EPOCH=$$(date -j -f "%Y-%m-%dT%H:%M:%S" "$${DEPLOYED_AT%.*}" +%s 2>/dev/null || echo 0); \
+					NEWEST_PY=$$(find . -path ./docker -prune -o -name "*.py" -type f -exec stat -f %m {} \; 2>/dev/null | sort -rn | head -1); \
+				else \
+					DEPLOYED_EPOCH=$$(date -d "$${DEPLOYED_AT%.*}" +%s 2>/dev/null || echo 0); \
+					NEWEST_PY=$$(find . -path ./docker -prune -o -name "*.py" -type f -exec stat -c %Y {} \; 2>/dev/null | sort -rn | head -1); \
+				fi; \
+				if [ -n "$$NEWEST_PY" ] && [ "$$NEWEST_PY" -gt "$$DEPLOYED_EPOCH" ]; then \
+					echo "📦 Python sources newer than deployment - deployment needed"; \
+					NEEDS_DEPLOY=1; \
+				fi; \
+			fi; \
+		fi; \
+		if [ "$$NEEDS_DEPLOY" = "1" ]; then \
+			echo "🚀 Auto-deploying dev stack..."; \
+			echo "   (Set SKIP_AUTO_DEPLOY=1 to disable auto-deployment)"; \
+			cd .. && npm run deploy:dev || exit 1; \
+		else \
+			echo "✅ Dev deployment is up-to-date"; \
+		fi; \
+		$(MAKE) -f Makefile test-deployed-dev-direct; \
+	fi
+
+# Test deployed dev stack (direct, no auto-deploy check)
+test-deployed-dev-direct: check-xdg
 	@echo "🧪 Testing deployed dev stack..."
 	@DEV_ENDPOINT=$$(jq -r '.dev.endpoint // empty' $(XDG_CONFIG)/deploy.json 2>/dev/null); \
 	if [ -z "$$DEV_ENDPOINT" ]; then \

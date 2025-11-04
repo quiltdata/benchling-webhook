@@ -181,7 +181,7 @@ jobs:
           IS_PRERELEASE="${{ needs.docker.outputs.is_prerelease }}"
           PACKAGE_NAME=$(jq -r '.name' package.json)
 
-          npm run release:notes -- "$VERSION" "$IMAGE_URI" "$IS_PRERELEASE" "$PACKAGE_NAME" > /tmp/release_notes.md
+          npm run deploy:notes -- "$VERSION" "$IMAGE_URI" "$IS_PRERELEASE" "$PACKAGE_NAME" > /tmp/release_notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

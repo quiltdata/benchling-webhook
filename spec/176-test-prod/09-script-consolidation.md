@@ -36,15 +36,26 @@ This violates the principle of **implementation isolation** - callers should use
 | `bin/check-logs.ts` | CloudWatch log viewer | `npm run deploy:logs` | ✅ Keep |
 | `bin/send-event.js` | Test event sender | Direct calls only | ⚠️ Consider npm task |
 
-### NPM Scripts (Before)
+### NPM Scripts
 
+**Before:**
 ```json
 {
-  "release": "npm run test && ts-node bin/release.ts && make -C docker push-ci",  // ❌ Remove (broken)
-  "release:tag": "ts-node bin/release.ts",                                         // 🔄 Change to version.ts
-  "release:notes": "bash bin/release-notes.sh",                                    // ✅ Keep (new)
-  "test:remote": "npm run deploy:dev && make -C docker test-deployed-dev",        // ❌ Remove (redundant)
+  "release": "npm run test && ts-node bin/release.ts && make -C docker push-ci",  // ❌ Removed (broken)
+  "release:tag": "ts-node bin/release.ts",                                         // ❌ Removed
+  "release:notes": "bash bin/release-notes.sh",                                    // ❌ Removed
+  "test:remote": "npm run deploy:dev && make -C docker test-deployed-dev",        // ❌ Removed (redundant)
   "version": "ts-node bin/version.ts"                                              // ✅ Keep
+}
+```
+
+**After (improved naming):**
+```json
+{
+  "deploy:notes": "bash bin/release-notes.sh",      // ✅ Renamed from release:notes (better semantics)
+  "version": "ts-node bin/version.ts",              // ✅ Keep
+  "version:tag": "ts-node bin/release.ts",          // ✅ Renamed from release:tag (clearer hierarchy)
+  "version:tag:dev": "ts-node bin/release.ts dev"   // ✅ New (explicit dev tagging)
 }
 ```
 
@@ -52,15 +63,15 @@ This violates the principle of **implementation isolation** - callers should use
 
 #### `.github/workflows/ci.yaml:184`
 ```yaml
-npm run release:notes -- "$VERSION" "$IMAGE_URI" "$IS_PRERELEASE" "$PACKAGE_NAME" > /tmp/release_notes.md
+npm run deploy:notes -- "$VERSION" "$IMAGE_URI" "$IS_PRERELEASE" "$PACKAGE_NAME" > /tmp/release_notes.md
 ```
-✅ **Already fixed** - Now uses `npm run release:notes`
+✅ **Fixed** - Now uses `npm run deploy:notes` (renamed from `release:notes`)
 
 #### `bin/version.ts:147`
 ```typescript
-console.log("To create a release tag, use: npm run release or npm run release:dev");
+console.log("To create a release tag, use: npm run version:tag");
 ```
-⚠️ **Needs update** - Should reference `npm run version tag`
+⚠️ **Needs update** - Should reference `npm run version:tag` or `npm run version:tag:dev`
 
 ## Proposed Changes
 
@@ -102,13 +113,14 @@ npm run version tag --no-push # Create tag but don't push
 
 ### 3. Update NPM Scripts
 
-**After:**
+**Completed (with improved naming):**
 
 ```json
 {
-  "release:notes": "bash bin/release-notes.sh",
-  "release:tag": "ts-node bin/version.ts tag",
-  "version": "ts-node bin/version.ts"
+  "deploy:notes": "bash bin/release-notes.sh",           // Renamed from release:notes
+  "version": "ts-node bin/version.ts",
+  "version:tag": "ts-node bin/release.ts",               // Renamed from release:tag
+  "version:tag:dev": "ts-node bin/release.ts dev"        // New explicit dev task
 }
 ```
 
@@ -149,9 +161,12 @@ npm run version tag --no-push # Create tag but don't push
 ### Phase 1: Consolidate Scripts ✅
 1. [x] Remove `npm run release` from package.json
 2. [x] Remove `npm run test:remote` from package.json
-3. [x] Add `npm run release:notes` to package.json
-4. [x] Update CI to use `npm run release:notes`
-5. [x] Update CLAUDE.md to remove redundant sections
+3. [x] Add `npm run deploy:notes` to package.json (renamed from `release:notes`)
+4. [x] Add `npm run version:tag` to package.json (renamed from `release:tag`)
+5. [x] Add `npm run version:tag:dev` to package.json (new)
+6. [x] Update CI to use `npm run deploy:notes`
+7. [x] Update CLAUDE.md to remove redundant sections
+8. [x] Update CLAUDE.md to use `npm run version:tag`
 
 ### Phase 2: Merge release.ts into version.ts
 1. [ ] Add `tag` command to version.ts
