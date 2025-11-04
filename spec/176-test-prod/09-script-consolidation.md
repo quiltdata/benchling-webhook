@@ -168,19 +168,19 @@ npm run version tag --no-push # Create tag but don't push
 7. [x] Update CLAUDE.md to remove redundant sections
 8. [x] Update CLAUDE.md to use `npm run version:tag`
 
-### Phase 2: Merge release.ts into version.ts
-1. [ ] Add `tag` command to version.ts
-2. [ ] Copy `createGitTag()` from release.ts to version.ts
-3. [ ] Update help text in version.ts
-4. [ ] Test all tag scenarios (production, dev, --no-push)
-5. [ ] Update `release:tag` in package.json to point to `version.ts tag`
-6. [ ] Delete `bin/release.ts`
+### Phase 2: Merge release.ts into version.ts ✅
+1. [x] Add `tag` command to version.ts
+2. [x] Copy `createGitTag()` from release.ts to version.ts
+3. [x] Update help text in version.ts
+4. [x] Update `version:tag` in package.json to point to `version.ts tag`
+5. [x] Update `version:tag:dev` in package.json to point to `version.ts tag dev`
+6. [x] Delete `bin/release.ts`
+7. [ ] Test all tag scenarios (production, dev, --no-push)
 
-### Phase 3: Documentation Updates
-1. [ ] Update CLAUDE.md version management section
-2. [ ] Update AGENTS.md bin/ section
-3. [ ] Update bin/version.ts help text
-4. [ ] Update any remaining references to `release.ts`
+### Phase 3: Documentation Updates ✅
+1. [x] Update CLAUDE.md bin/ section (removed release.ts reference)
+2. [x] Update bin/version.ts help text
+3. [ ] Update any remaining references to `release.ts` in docs
 
 ### Phase 4: Verification
 1. [ ] Run `npm run version` - should show versions

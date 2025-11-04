@@ -81,10 +81,9 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 #### `bin/` — Executable CLI tools & automation scripts (JavaScript/TypeScript)
 
 - [bin/cli.ts](bin/cli.ts) - Main CLI entry point (`benchling-webhook` command)
-- [bin/version.js](bin/version.js) - Version management (`npm run version`)
-- [bin/release.js](bin/release.js) - Release automation
+- [bin/version.ts](bin/version.ts) - Version management and release tagging (`npm run version`)
 - [bin/dev-deploy.ts](bin/dev-deploy.ts) - Dev deployment workflow
-- [bin/check-logs.js](bin/check-logs.js) - CloudWatch log viewer
+- [bin/check-logs.ts](bin/check-logs.ts) - CloudWatch log viewer
 - [bin/send-event.js](bin/send-event.js) - Test event sender
 - [bin/commands/](bin/commands/) - CLI command implementations
 
