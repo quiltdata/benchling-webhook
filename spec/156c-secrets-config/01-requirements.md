@@ -287,7 +287,7 @@ The implementation will create a unified configuration model that eliminates env
 
 - **AWS Secrets Manager**: Core service for encrypted credential storage
 - **AWS CloudFormation**: Source of Quilt Stack configuration via stack outputs
-- **Quilt3 Python Library**: Source of Quilt catalog configuration at `~/.quilt3/config.yml`
+- **Quilt3 Python Library**: Source of Quilt catalog configuration at `quilt3 config`
 - **XDG Base Directory Specification**: Standard for user configuration storage
 - **Make**: Build automation tool for orchestration
 - **Docker**: Containerization platform for application packaging
