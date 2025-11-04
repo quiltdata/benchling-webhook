@@ -31,7 +31,7 @@
 
 #### `bin/commands/helpers/infer-quilt.ts`
 
-- [ ] Read `~/.quilt3/config.yml`
+- [ ] Read `quilt3 config`
 - [ ] Parse YAML to extract catalog URL
 - [ ] Query CloudFormation for matching stack
 - [ ] Extract stack outputs (bucket, region, queue ARN)

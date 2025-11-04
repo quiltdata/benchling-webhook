@@ -23,7 +23,7 @@ All notable changes to this project will be documented in this file.
 - **XDG Configuration Management** (#156)
   - Centralized configuration in `~/.config/benchling-webhook/default.json`
   - Interactive setup wizard (`npm run setup`) for first-time configuration
-  - Automatic Quilt catalog inference from `~/.quilt3/config.yml`
+  - Automatic Quilt catalog inference from `quilt3 config`
   - Secrets sync to AWS Secrets Manager with validation
   - Configuration health check (`npm run setup:health`)
   - Eliminates `.env` files and environment variable pollution

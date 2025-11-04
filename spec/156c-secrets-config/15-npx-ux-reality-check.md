@@ -73,7 +73,7 @@ User in Benchling:
 ### ✅ CAN Automate
 
 1. Generate manifest file
-2. Infer Quilt configuration from `~/.quilt3/config.yml`
+2. Infer Quilt configuration from `quilt3 config`
 3. Validate Benchling OAuth credentials (test token endpoint)
 4. Verify S3 bucket access
 5. Create AWS Secrets Manager secret

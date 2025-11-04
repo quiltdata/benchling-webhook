@@ -58,13 +58,13 @@ Complete technical specification for all commands:
 
 #### Helper Modules
 
-- `bin/commands/helpers/infer-quilt.ts` - Auto-detect Quilt config from `~/.quilt3/config.yml`
+- `bin/commands/helpers/infer-quilt.ts` - Auto-detect Quilt config from `quilt3 config`
 - `bin/commands/helpers/validate-benchling.ts` - Validate OAuth credentials via API
 - `bin/commands/helpers/webhook-test.ts` - Detect webhook events in CloudWatch
 
 #### Key Features
 
-- **Quilt Config Inference**: Read `~/.quilt3/config.yml` → Find matching CloudFormation stack
+- **Quilt Config Inference**: Read `quilt3 config` → Find matching CloudFormation stack
 - **Credential Validation**: Test OAuth before deploying (prevent bad deployments)
 - **Manual Step Guidance**: Clear, boxed instructions with links and examples
 - **Clipboard Integration**: Copy webhook URL automatically

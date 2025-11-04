@@ -19,7 +19,7 @@ This document summarizes the implementation of Phases 2, 3, and 4 of the configu
 **File**: `/Users/ernest/GitHub/benchling-webhook/scripts/infer-quilt-config.ts`
 
 **Features Implemented:**
-- Automatic detection of Quilt configuration from `~/.quilt3/config.yml`
+- Automatic detection of Quilt configuration from `quilt3 config`
 - CloudFormation stack discovery and analysis
 - Multi-catalog support with interactive selection
 - AWS profile integration

@@ -573,7 +573,7 @@ export async function logsCommand(options: LogsOptions): Promise<void> {
 
 ### `bin/commands/helpers/infer-quilt.ts`
 
-**Purpose**: Auto-detect Quilt configuration from `~/.quilt3/config.yml` and CloudFormation
+**Purpose**: Auto-detect Quilt configuration from `quilt3 config` and CloudFormation
 
 ```typescript
 export interface QuiltConfig {
@@ -590,7 +590,7 @@ export interface QuiltConfig {
 
 export async function inferQuiltConfig(): Promise<QuiltConfig> {
     try {
-        // 1. Read ~/.quilt3/config.yml
+        // 1. Read quilt3 config
         const configPath = path.join(os.homedir(), ".quilt3", "config.yml");
         if (!fs.existsSync(configPath)) {
             return { success: false, error: "Quilt config not found. Run: quilt3 config" };
@@ -777,7 +777,7 @@ export async function waitForWebhookEvents(options: {
 ```typescript
 // test/commands/infer-quilt.test.ts
 describe("inferQuiltConfig", () => {
-    it("should detect Quilt config from ~/.quilt3/config.yml");
+    it("should detect Quilt config from quilt3 config");
     it("should find matching CloudFormation stack");
     it("should extract stack outputs");
     it("should handle missing config gracefully");
