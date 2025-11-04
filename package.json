@@ -27,6 +27,7 @@
     "prebuild": "rm -rf dist",
     "prepublishOnly": "npm run build",
     "setup": "ts-node scripts/install-wizard.ts",
+    "setup:dev": "ts-node scripts/install-wizard.ts --profile dev",
     "setup:health": "ts-node scripts/config-health-check.ts",
     "setup:infer": "ts-node scripts/infer-quilt-config.ts",
     "setup:profile": "ts-node bin/cli.ts setup-profile",
