@@ -8,7 +8,7 @@
  * - Quilt API connectivity testing
  * - AWS Secrets Manager integration
  *
- * Supports both interactive and non-interactive (CI/CD) modes.
+ * Supports both interactive and --yes (non-interactive) modes.
  *
  * @module scripts/install-wizard
  */
@@ -585,11 +585,12 @@ export async function runInstallWizard(options: WizardOptions = {}): Promise<Use
             }
         }
     } else {
-        // Non-interactive mode: use existing config values
-        // Required fields must already be set in XDG config
+        // --yes mode: use existing config values
+        // Required fields must already be set in profile config
         if (!config.benchlingTenant || !config.benchlingClientId || !config.benchlingClientSecret) {
+            const profileMsg = profile !== "default" ? ` --profile ${profile}` : "";
             throw new Error(
-                "Non-interactive mode requires benchlingTenant, benchlingClientId, and benchlingClientSecret to be already configured in XDG config. Run 'npm run setup' interactively first.",
+                `--yes mode requires benchlingTenant, benchlingClientId, and benchlingClientSecret to be already configured. Run 'npm run setup${profileMsg === " --profile dev" ? ":dev" : profileMsg}' interactively first.`,
             );
         }
 
@@ -750,7 +751,7 @@ async function main(): Promise<void> {
         if (args[i] === "--profile" && i + 1 < args.length) {
             options.profile = args[i + 1];
             i++;
-        } else if (args[i] === "--non-interactive") {
+        } else if (args[i] === "--yes" || args[i] === "--non-interactive") {
             options.nonInteractive = true;
         } else if (args[i] === "--skip-validation") {
             options.skipValidation = true;
@@ -764,7 +765,7 @@ async function main(): Promise<void> {
             console.log("Usage: install-wizard [options]");
             console.log("\nOptions:");
             console.log("  --profile <name>          Configuration profile name (default: default)");
-            console.log("  --non-interactive         Run in non-interactive mode (CI/CD)");
+            console.log("  --yes                     Use stored defaults without prompting");
             console.log("  --skip-validation         Skip validation checks");
             console.log("  --aws-profile <profile>   AWS profile to use");
             console.log("  --aws-region <region>     AWS region (default: us-east-1)");
