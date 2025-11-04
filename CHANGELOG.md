@@ -12,13 +12,18 @@ All notable changes to this project will be documented in this file.
   - Guides through configuration, validation, and deployment preparation
   - Maintains backward compatibility - all existing commands work identically
 
-- **Canvas Footer** - Version and deployment information now displayed in Benchling canvas
-  - Shows application version, Quilt catalog host, and S3 bucket name
+- **Canvas Footer** - Added version and deployment information footer to Benchling canvas
+  - Displays application version (0.6.1)
+  - Shows Quilt catalog host
+  - Shows S3 bucket name
+  - Includes disclaimer text about canvas metadata
 
 ### Changed
 
 - **CLI Default Behavior** - Running npx without arguments now starts setup wizard instead of showing help
 - **Health Check** - Configuration validation now checks Quilt config fields instead of API access
+- Updated application version in health endpoint from 1.0.0 to 0.6.1
+- Enhanced canvas markdown formatting with footer section
 
 ## [0.6.0] - 2025-11-03
 
