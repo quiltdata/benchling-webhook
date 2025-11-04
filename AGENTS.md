@@ -31,7 +31,7 @@ npm run test:dev             # Verify dev deployment works
 #### Release (maintainers only)
 
 ```bash
-npm run release:tag          # Create version tag (triggers CI)
+npm run version:tag          # Create version tag (triggers CI)
 # Wait for CI to build and test
 npm run deploy:prod --quilt-stack-arn <arn> --benchling-secret <name> --yes
 # Production tests run automatically after deploy:prod completes
@@ -168,9 +168,19 @@ make -C docker test-ecr      # ECR image validation
 - **Daily development**: `npm run test` (fast, no external deps)
 - **Before committing**: `npm run test` + verify changes work
 - **Before PR**: `npm run test:local` (ensure integration works)
-- **CI/CD**: `npm run test:dev` (dev deployment test)
+- **CI/CD**: `npm run test:dev` (auto-deploys dev stack if needed, then tests)
 - **After production deploy**: `npm run test:prod` (runs automatically via deploy:prod)
 - **Debugging only**: Individual test commands or Docker make targets
+
+### Auto-Deployment (v0.6.3+)
+
+`npm run test:dev` now automatically deploys when:
+
+- No `deploy.json` exists
+- No `dev` section in `deploy.json`
+- Python source files are newer than deployment timestamp
+
+Disable with `SKIP_AUTO_DEPLOY=1 npm run test:dev`
 
 ---
 
@@ -240,7 +250,7 @@ This runs:
 #### Step 1: Tag and trigger CI
 
 ```bash
-npm run release:tag          # Creates version tag, pushes to GitHub
+npm run version:tag          # Creates version tag, pushes to GitHub
 ```
 
 This triggers CI to:
