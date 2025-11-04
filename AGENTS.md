@@ -25,7 +25,7 @@ npm run test:local           # Local Docker integration (when needed)
 npm run test:local           # Verify integration works
 git commit -m "type(scope): description"
 gh pr create
-npm run test:remote           # Verify deployment works
+npm run test:dev             # Verify dev deployment works
 ```
 
 #### Release (maintainers only)
@@ -34,6 +34,7 @@ npm run test:remote           # Verify deployment works
 npm run release:tag          # Create version tag (triggers CI)
 # Wait for CI to build and test
 npm run deploy:prod --quilt-stack-arn <arn> --benchling-secret <name> --yes
+# Production tests run automatically after deploy:prod completes
 ```
 
 ### Git & GitHub (via `gh` CLI)
@@ -147,7 +148,9 @@ npm run test:local           # Local Docker + real Benchling (2 minutes)
 # Primary workflow
 npm run test                 # All unit tests (lint + typecheck + TS + Python)
 npm run test:local           # Local integration (Docker + real Benchling)
-npm run test:remote          # Remote integration (deploy dev + test API Gateway)
+npm run test:dev             # Dev deployment integration (via API Gateway)
+npm run test:prod            # Production deployment integration (via API Gateway)
+npm run test:remote          # Alias for test:dev (backward compatibility)
 
 # Individual components (for debugging)
 npm run build:typecheck      # TypeScript type checking only
@@ -166,7 +169,8 @@ make -C docker test-ecr      # ECR image validation
 - **Daily development**: `npm run test` (fast, no external deps)
 - **Before committing**: `npm run test` + verify changes work
 - **Before PR**: `npm run test:local` (ensure integration works)
-- **CI/CD**: `npm run test:remote` (full deployment test)
+- **CI/CD**: `npm run test:dev` (dev deployment test)
+- **After production deploy**: `npm run test:prod` (runs automatically via deploy:prod)
 - **Debugging only**: Individual test commands or Docker make targets
 
 ---
