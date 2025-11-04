@@ -150,7 +150,6 @@ npm run test                 # All unit tests (lint + typecheck + TS + Python)
 npm run test:local           # Local integration (Docker + real Benchling)
 npm run test:dev             # Dev deployment integration (via API Gateway)
 npm run test:prod            # Production deployment integration (via API Gateway)
-npm run test:remote          # Alias for test:dev (backward compatibility)
 
 # Individual components (for debugging)
 npm run build:typecheck      # TypeScript type checking only
@@ -261,18 +260,6 @@ npm run deploy:prod -- \
   --image-tag <version> \
   --yes
 ```
-
-### Local Release (Alternative)
-
-```bash
-npm run release              # Test + tag + Docker push (local only)
-```
-
-This runs:
-
-1. `npm run test` - All unit tests
-2. `node bin/release.js` - Create git tag
-3. `make -C docker push-ci` - Build and push Docker image
 
 ---
 

@@ -25,7 +25,7 @@
     "postbuild": "chmod +x dist/bin/cli.js",
     "prebuild": "rm -rf dist",
     "prepublishOnly": "npm run build",
-    "release": "npm run test && ts-node bin/release.ts && make -C docker push-ci",
+    "release:notes": "bash bin/release-notes.sh",
     "release:tag": "ts-node bin/release.ts",
     "setup": "ts-node scripts/install-wizard.ts",
     "setup:health": "ts-node scripts/config-health-check.ts",
@@ -37,7 +37,6 @@
     "test:local": "make -C docker build && make -C docker test-local",
     "test:prod": "make -C docker test-deployed-prod",
     "test:python": "make -C docker test-unit",
-    "test:remote": "npm run deploy:dev && make -C docker test-deployed-dev",
     "test:ts": "cross-env NODE_ENV=test jest --maxWorkers=50%",
     "version": "ts-node bin/version.ts"
   },
