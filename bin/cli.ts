@@ -25,7 +25,7 @@ program
     .command("deploy", { isDefault: true })
     .description("Deploy the CDK stack to AWS")
     .option("--quilt-stack-arn <arn>", "ARN of Quilt CloudFormation stack")
-    .option("--benchling-secret <name>", "Name or ARN of Benchling secret in Secrets Manager (defaults to package name)", "@quiltdata/benchling-webhook")
+    .option("--benchling-secret <name>", "Name or ARN of Benchling secret in Secrets Manager")
     .option("--env-file <path>", "Path to .env file", ".env")
     // Common options
     .option("--no-bootstrap-check", "Skip CDK bootstrap verification")

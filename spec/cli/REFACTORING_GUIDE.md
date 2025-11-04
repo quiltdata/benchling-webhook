@@ -391,7 +391,7 @@ import { BenchlingWebhookStack } from '../lib/benchling-webhook-stack';
 import { execSync } from 'child_process';
 import type { Config } from '../lib/utils/config';
 
-const { inferStackConfig } = require('./get-env.js');
+const { inferStackConfig } = require('./get-env.ts');
 
 /**
  * Result of CDK bootstrap check
