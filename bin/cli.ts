@@ -7,6 +7,7 @@ import { validateCommand } from "./commands/validate";
 import { testCommand } from "./commands/test";
 import { manifestCommand } from "./commands/manifest";
 import { setupWizardCommand } from "./commands/setup-wizard";
+import { setupProfileCommand } from "./commands/setup-profile";
 
 // Load package.json for version
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -110,6 +111,33 @@ program
     .action(async (options) => {
         try {
             await manifestCommand(options);
+        } catch (error) {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        }
+    });
+
+// Setup profile command
+program
+    .command("setup-profile <name>")
+    .description("Create a new profile for multi-environment deployment")
+    .addHelpText("after", `
+Examples:
+  Create a dev profile:
+    $ benchling-webhook setup-profile dev
+
+  Create a production profile:
+    $ benchling-webhook setup-profile prod
+
+  Create a staging profile:
+    $ benchling-webhook setup-profile staging
+
+Profiles enable separate configurations for different environments,
+each with its own App Definition ID, image tag, and secret name.
+`)
+    .action(async (name: string) => {
+        try {
+            await setupProfileCommand(name);
         } catch (error) {
             console.error(chalk.red((error as Error).message));
             process.exit(1);
