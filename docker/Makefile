@@ -16,7 +16,7 @@ PORT_DOCKER_PROD := 5003
 
 .PHONY: help build test clean install lint ngrok kill \
         check-xdg check-ngrok run-local run-local-verbose run-dev run run-local-ngrok run-ecr \
-        test test-unit test-integration test-dev test-prod test-ecr test-local test-benchling test-query \
+        test test-unit test-integration test-dev test-docker-prod test-deployed-dev test-deployed-prod test-ecr test-local test-benchling test-query \
         health-local health-dev health logs-dev logs
 
 # Default target
@@ -41,7 +41,9 @@ help:
 	@echo "  test-unit             - Run unit tests (pytest)"
 	@echo "  test-local            - Test webhooks with auto-managed local server"
 	@echo "  test-dev              - Test webhooks against docker dev (port $(PORT_DOCKER_DEV))"
-	@echo "  test-prod             - Test webhooks against docker prod (port $(PORT_DOCKER_PROD))"
+	@echo "  test-docker-prod      - Test local docker prod container (port $(PORT_DOCKER_PROD))"
+	@echo "  test-deployed-dev     - Test dev stack via API Gateway endpoint"
+	@echo "  test-deployed-prod    - Test prod stack via API Gateway endpoint"
 	@echo "  test-ecr              - Test webhooks against ECR image (port $(PORT_DOCKER_PROD))"
 	@echo "  test-benchling        - Test Benchling OAuth credentials"
 	@echo "  test-query            - Test Quilt package query (defaults to BENCHLING_TEST_ENTRY)"
@@ -207,8 +209,8 @@ test-dev:
 	@echo "Testing webhooks against http://localhost:$(PORT_DOCKER_DEV)"
 	uv run python scripts/test_webhook.py http://localhost:$(PORT_DOCKER_DEV)
 
-# Test webhooks against docker production (auto-starts if not running)
-test-prod: run-prod health-prod
+# Test webhooks against local docker production container (auto-starts if not running)
+test-docker-prod: run-prod health-prod
 	@echo "Running webhook tests against http://localhost:$(PORT_DOCKER_PROD)"
 	uv run python scripts/test_webhook.py http://localhost:$(PORT_DOCKER_PROD)
 
@@ -243,11 +245,23 @@ test-deployed-dev: check-xdg
 	@DEV_ENDPOINT=$$(jq -r '.dev.endpoint // empty' $(XDG_CONFIG)/deploy.json 2>/dev/null); \
 	if [ -z "$$DEV_ENDPOINT" ]; then \
 		echo "❌ No dev endpoint found in $(XDG_CONFIG)/deploy.json"; \
-		echo "💡 Run 'npm run release:dev' first to deploy the dev stack"; \
+		echo "💡 Run 'npm run deploy:dev' first to deploy the dev stack"; \
 		exit 1; \
 	fi; \
 	echo "📡 Testing endpoint: $$DEV_ENDPOINT"; \
 	uv run python scripts/test_webhook.py "$$DEV_ENDPOINT"
+
+# Test deployed prod stack via API Gateway endpoint
+test-deployed-prod: check-xdg
+	@echo "🧪 Testing deployed prod stack..."
+	@PROD_ENDPOINT=$$(jq -r '.prod.endpoint // empty' $(XDG_CONFIG)/deploy.json 2>/dev/null); \
+	if [ -z "$$PROD_ENDPOINT" ]; then \
+		echo "❌ No prod endpoint found in $(XDG_CONFIG)/deploy.json"; \
+		echo "💡 Run 'npm run deploy:prod' first to deploy the prod stack"; \
+		exit 1; \
+	fi; \
+	echo "📡 Testing endpoint: $$PROD_ENDPOINT"; \
+	uv run python scripts/test_webhook.py "$$PROD_ENDPOINT"
 
 # Auto-fix code formatting (black + isort)
 lint:
@@ -346,4 +360,4 @@ docker-clean:
 	@echo "Pruning Docker system (containers, networks, build cache)..."
 	docker system prune -af --volumes
 	@echo "✅ Docker cleanup complete. You can now run 'make run-dev'"
-	
+

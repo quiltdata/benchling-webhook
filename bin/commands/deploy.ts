@@ -11,7 +11,82 @@ import {
 import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
 import { generateSecretName } from "../../lib/utils/secrets";
-import { existsSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
+import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
+
+/**
+ * Deployment configuration stored in ~/.config/benchling-webhook/deploy.json
+ */
+interface DeploymentConfig {
+    dev?: EnvironmentConfig;
+    prod?: EnvironmentConfig;
+}
+
+/**
+ * Environment-specific deployment details
+ */
+interface EnvironmentConfig {
+    endpoint: string;       // API Gateway webhook URL
+    imageTag: string;       // Docker image tag deployed
+    deployedAt: string;     // ISO 8601 timestamp
+    stackName: string;      // CloudFormation stack name
+    region?: string;        // AWS region (default: us-east-1)
+}
+
+/**
+ * Store deployment configuration in XDG config directory
+ * Uses atomic write pattern to prevent corruption
+ */
+function storeDeploymentConfig(
+    environment: 'dev' | 'prod',
+    config: EnvironmentConfig
+): void {
+    const configDir = join(homedir(), ".config", "benchling-webhook");
+    const deployJsonPath = join(configDir, "deploy.json");
+
+    // Read existing deploy.json or create new one
+    let deployConfig: DeploymentConfig = {};
+    if (existsSync(deployJsonPath)) {
+        const content = readFileSync(deployJsonPath, "utf8");
+        deployConfig = JSON.parse(content);
+    }
+
+    // Update environment section
+    deployConfig[environment] = config;
+
+    // Ensure config directory exists
+    if (!existsSync(configDir)) {
+        mkdirSync(configDir, { recursive: true });
+    }
+
+    // Write deploy.json atomically
+    const tempPath = `${deployJsonPath}.tmp`;
+    writeFileSync(tempPath, JSON.stringify(deployConfig, null, 2));
+
+    // Atomic rename (platform-specific)
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs');
+    if (process.platform === 'win32') {
+        // Windows: create backup before rename
+        if (existsSync(deployJsonPath)) {
+            const backupPath = `${deployJsonPath}.backup`;
+            if (existsSync(backupPath)) {
+                fs.unlinkSync(backupPath);
+            }
+            fs.renameSync(deployJsonPath, backupPath);
+        }
+        fs.renameSync(tempPath, deployJsonPath);
+    } else {
+        // Unix: atomic rename with overwrite
+        fs.renameSync(tempPath, deployJsonPath);
+    }
+
+    console.log(`✅ Stored deployment config in ${deployJsonPath}`);
+    console.log(`   Environment: ${environment}`);
+    console.log(`   Endpoint: ${config.endpoint}`);
+}
 
 export async function deployCommand(options: { yes?: boolean; bootstrapCheck?: boolean; requireApproval?: string; quiltStackArn?: string; benchlingSecret?: string; imageTag?: string; region?: string; envFile?: string }): Promise<void> {
     console.log(
@@ -253,67 +328,78 @@ async function deploy(
         console.log();
         spinner.succeed("Stack deployed successfully");
 
-        // Get stack outputs
-        spinner.start("Retrieving stack outputs...");
-        let webhookUrl = "";
-        try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const { CloudFormationClient, DescribeStacksCommand } = require("@aws-sdk/client-cloudformation");
-            const cloudformation = new CloudFormationClient({
-                region: deployRegion,
-            });
+        // After successful deployment, store endpoint and run tests
+        console.log();
+        console.log("Retrieving deployment endpoint...");
 
-            const command = new DescribeStacksCommand({
-                StackName: "BenchlingWebhookStack",
-            });
+        try {
+            const cloudformation = new CloudFormationClient({ region: deployRegion });
+            const stackName = "BenchlingWebhookStack";
+
+            const command = new DescribeStacksCommand({ StackName: stackName });
             const response = await cloudformation.send(command);
 
             if (response.Stacks && response.Stacks.length > 0) {
                 const stack = response.Stacks[0];
-                const output = stack.Outputs?.find((o: { OutputKey?: string }) => o.OutputKey === "WebhookEndpoint");
-                webhookUrl = output?.OutputValue || "";
-            }
-            spinner.succeed("Stack outputs retrieved");
-        } catch {
-            spinner.warn("Could not retrieve stack outputs");
-        }
+                const endpointOutput = stack.Outputs?.find((o) => o.OutputKey === "WebhookEndpoint");
+                const webhookUrl = endpointOutput?.OutputValue || "";
 
-        // Test the webhook endpoint
-        if (webhookUrl) {
-            console.log();
-            spinner.start("Testing webhook endpoint...");
-            try {
-                const testCmd = `curl -s -w "\\n%{http_code}" "${webhookUrl}/health"`;
-                const testResult = execSync(testCmd, { encoding: "utf-8", timeout: 10000 });
-                const lines = testResult.trim().split("\n");
-                const statusCode = lines[lines.length - 1];
+                if (webhookUrl) {
+                    // Determine image tag
+                    const imageTag = options.imageTag || "latest";
 
-                if (statusCode === "200") {
-                    spinner.succeed("Webhook health check passed");
+                    // Store prod deployment config
+                    storeDeploymentConfig('prod', {
+                        endpoint: webhookUrl,
+                        imageTag: imageTag,
+                        deployedAt: new Date().toISOString(),
+                        stackName: stackName,
+                        region: deployRegion,
+                    });
+
+                    // Run production tests
+                    console.log();
+                    console.log("Running production integration tests...");
+                    try {
+                        execSync("npm run test:prod", {
+                            stdio: "inherit",
+                            cwd: process.cwd()
+                        });
+                        console.log();
+                        console.log("✅ Production deployment and tests completed successfully!");
+                    } catch (testError) {
+                        console.error();
+                        console.error("❌ Production tests failed!");
+                        console.error("   Deployment completed but tests did not pass.");
+                        console.error("   Review test output above for details.");
+                        process.exit(1);
+                    }
+
+                    // Success message with webhook URL
+                    console.log();
+                    console.log(
+                        boxen(
+                            `${chalk.green.bold("✓ Deployment and Testing Complete!")}\n\n` +
+                            `Stack:  ${chalk.cyan("BenchlingWebhookStack")}\n` +
+                            `Region: ${chalk.cyan(deployRegion)}\n` +
+                            `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` +
+                            `${chalk.bold("Next steps:")}\n` +
+                            "  1. Set the webhook URL in your Benchling app settings:\n" +
+                            `     ${chalk.cyan(webhookUrl)}\n\n` +
+                            "  2. Test the integration by creating a Quilt package in Benchling\n\n" +
+                            `${chalk.dim("For more info: https://github.com/quiltdata/benchling-webhook#readme")}`,
+                            { padding: 1, borderColor: "green", borderStyle: "round" },
+                        ),
+                    );
                 } else {
-                    spinner.warn(`Webhook returned HTTP ${statusCode}`);
+                    console.warn("⚠️  Could not retrieve WebhookEndpoint from stack outputs");
+                    console.warn("   Skipping test execution");
                 }
-            } catch {
-                spinner.warn("Could not test webhook endpoint");
             }
+        } catch (error) {
+            console.warn(`⚠️  Could not retrieve/test deployment endpoint: ${(error as Error).message}`);
+            console.warn("   Deployment succeeded but tests were skipped");
         }
-
-        // Success message
-        console.log();
-        console.log(
-            boxen(
-                `${chalk.green.bold("✓ Deployment completed successfully!")}\n\n` +
-                `Stack:  ${chalk.cyan("BenchlingWebhookStack")}\n` +
-                `Region: ${chalk.cyan(deployRegion)}\n` +
-                (webhookUrl ? `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` : "\n") +
-                `${chalk.bold("Next steps:")}\n` +
-                "  1. Set the webhook URL in your Benchling app settings:\n" +
-                `     ${chalk.cyan(webhookUrl || "<WEBHOOK_URL>")}\n\n` +
-                "  2. Test the integration by creating a Quilt package in Benchling\n\n" +
-                `${chalk.dim("For more info: https://github.com/quiltdata/benchling-webhook#readme")}`,
-                { padding: 1, borderColor: "green", borderStyle: "round" },
-            ),
-        );
     } catch (error) {
         spinner.fail("Deployment failed");
         console.error();
