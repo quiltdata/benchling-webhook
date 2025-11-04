@@ -3,7 +3,20 @@
 **Created**: 2025-11-03
 **Branch**: `npx-ux`
 **Target Version**: v0.7.0
-**Status**: Ready for Implementation
+**Status**: CORRECTED - Ready for Implementation
+
+---
+
+## CRITICAL: Read Document 18 First
+
+**[18-CORRECTED-npx-ux-spec.md](./18-CORRECTED-npx-ux-spec.md)** contains CRITICAL CORRECTIONS to this specification.
+
+**Four Critical Fixes**:
+
+1. ✅ Use `quilt3 config` CLI (NOT `~/.quilt3/config.yml` file)
+2. ✅ Default behavior: `npx @quiltdata/benchling-webhook` runs setup
+3. ✅ README focuses ONLY on end-user simple experience
+4. ✅ Target audience: End users ONLY (no power users, no CI/CD)
 
 ---
 
@@ -13,17 +26,32 @@ This specification addresses the **critical gap** between the excellent wizard/t
 
 **The Core Problem**: Previous documentation recommended `npx setup` as "one command does everything," but this IGNORED the reality that several essential Benchling steps MUST be done manually in their web UI.
 
-**The Solution**: Accept reality. Build a hybrid system that:
+**The Solution**: Accept reality. Build a simple guided wizard that:
 1. **Automates what we can** (AWS deployment, credential validation, config inference)
 2. **Guides users clearly through what must be manual** (Benchling app creation, webhook URL config, app installation)
 3. **Validates before deploying** (catch errors early)
-4. **Provides both guided and granular workflows** (wizard for beginners, individual commands for power users)
+4. **Makes it dead simple** (one command: `npx @quiltdata/benchling-webhook`)
 
 ---
 
 ## Documents in This Spec
 
-### 1. [15-npx-ux-reality-check.md](./15-npx-ux-reality-check.md) ⭐ **START HERE**
+### 0. [18-CORRECTED-npx-ux-spec.md](./18-CORRECTED-npx-ux-spec.md) ⭐⭐⭐ READ THIS FIRST
+
+#### The Critical Corrections
+
+- Use `quilt3 config` CLI (NOT YAML file)
+- Default behavior runs setup wizard
+- README is ultra-simple (end users only)
+- Corrected helper module implementation
+- Corrected CLI entry point
+- Simplified README example
+
+**Why This Matters**: Documents 15-17 have outdated assumptions. This doc corrects them all.
+
+---
+
+### 1. [15-npx-ux-reality-check.md](./15-npx-ux-reality-check.md) ⭐ **Context**
 
 **The Wake-Up Call**
 
@@ -40,31 +68,37 @@ This specification addresses the **critical gap** between the excellent wizard/t
 
 ---
 
-### 2. [16-npx-ux-implementation-spec.md](./16-npx-ux-implementation-spec.md) ⭐ **DETAILED SPEC**
+### 2. [16-npx-ux-implementation-spec.md](./16-npx-ux-implementation-spec.md) ⭐ Blueprint (See Doc 18 for corrections)
 
-**The Blueprint**
+#### The Technical Specification
 
-Complete technical specification for all commands:
+Complete technical specification for all commands (with corrections from Doc 18):
 
-#### Commands to Implement
+#### Primary Command
 
-| Command | Purpose | Interactive | Status |
-|---------|---------|-------------|--------|
-| `setup` | Full guided wizard with pauses | Yes | New |
-| `init` | Generate manifest + show instructions | No | Enhanced |
-| `deploy` | Deploy/update stack | Yes (prompts) | Enhanced |
-| `test` | Verify webhook health | No | New |
-| `logs` | Stream CloudWatch logs | No | New |
+| Command | Purpose | Users |
+|---------|---------|-------|
+| `(default)` | Full guided wizard = setup | 99% of users |
+| `setup` | Alias for default | Same |
+
+#### Internal Commands (used by setup, not in README)
+
+| Command | Purpose | Used By |
+|---------|---------|---------|
+| `init` | Generate manifest | setup wizard |
+| `deploy` | Deploy stack | setup wizard |
+| `test` | Verify webhook | setup wizard |
+| `logs` | Stream logs | debugging only |
 
 #### Helper Modules
 
-- `bin/commands/helpers/infer-quilt.ts` - Auto-detect Quilt config from `quilt3 config`
+- `bin/commands/helpers/infer-quilt.ts` - Auto-detect Quilt config via `quilt3 config` CLI
 - `bin/commands/helpers/validate-benchling.ts` - Validate OAuth credentials via API
 - `bin/commands/helpers/webhook-test.ts` - Detect webhook events in CloudWatch
 
 #### Key Features
 
-- **Quilt Config Inference**: Read `quilt3 config` → Find matching CloudFormation stack
+- **Quilt Config Inference**: Execute `quilt3 config` → Find matching CloudFormation stack
 - **Credential Validation**: Test OAuth before deploying (prevent bad deployments)
 - **Manual Step Guidance**: Clear, boxed instructions with links and examples
 - **Clipboard Integration**: Copy webhook URL automatically
@@ -73,11 +107,11 @@ Complete technical specification for all commands:
 
 ---
 
-### 3. [17-implementation-checklist.md](./17-implementation-checklist.md) ⭐ **ACTION PLAN**
+### 3. [17-implementation-checklist.md](./17-implementation-checklist.md) ⭐ Roadmap (Apply Doc 18 corrections)
 
-**The Roadmap**
+#### The Implementation Plan
 
-Detailed 3-week implementation plan with daily tasks:
+Detailed 3-week implementation plan with daily tasks (apply Doc 18 corrections):
 
 **Week 1**: Core commands and helpers
 - Day 1: Project structure
