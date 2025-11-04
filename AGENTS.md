@@ -148,7 +148,7 @@ npm run test:local           # Local Docker + real Benchling (2 minutes)
 # Primary workflow
 npm run test                 # All unit tests (lint + typecheck + TS + Python)
 npm run test:local           # Local integration (Docker + real Benchling)
-npm run test:dev             # Dev deployment integration (via API Gateway)
+npm run test:dev             # Dev deployment integration (auto-deploys if needed)
 npm run test:prod            # Production deployment integration (via API Gateway)
 
 # Individual components (for debugging)
