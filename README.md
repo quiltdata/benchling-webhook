@@ -14,7 +14,7 @@ Connects Benchling lab notebook entries to Quilt data packages via webhooks.
 ### 1. Create Benchling App
 
 ```bash
-npx @quiltdata/benchling-webhook manifest
+npx @quiltdata/benchling-webhook@latest manifest
 ```
 
 Follow the displayed instructions to [upload the manifest](https://docs.benchling.com/docs/getting-started-benchling-apps#creating-an-app-from-a-manifest) to Benchling and get your App Definition ID.
@@ -42,12 +42,13 @@ aws secretsmanager create-secret \
 **Recommended: Secrets-Only Mode** - Minimal configuration, all settings resolved from AWS:
 
 ```bash
-npx @quiltdata/benchling-webhook deploy \
+npx @quiltdata/benchling-webhook@latest deploy \
   --quilt-stack-arn "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123" \
   --benchling-secret "benchling-webhook-credentials"
 ```
 
 That's it! The deployment automatically resolves:
+
 - Quilt catalog URL from your stack
 - S3 bucket configuration
 - Athena database name
@@ -57,7 +58,7 @@ That's it! The deployment automatically resolves:
 **Alternative: Legacy Mode** - For existing deployments or manual configuration:
 
 ```bash
-npx @quiltdata/benchling-webhook deploy \
+npx @quiltdata/benchling-webhook@latest deploy \
   --benchling-secrets @benchling-secrets.json \
   --catalog your-catalog.quiltdata.com
 ```
@@ -81,12 +82,13 @@ In Benchling: Create entry → Insert Canvas → "Quilt Integration" → Create/
 The simplest deployment method - just provide two parameters:
 
 ```bash
-npx @quiltdata/benchling-webhook deploy \
+npx @quiltdata/benchling-webhook@latest deploy \
   --quilt-stack-arn "arn:aws:cloudformation:region:account:stack/QuiltStack/id" \
   --benchling-secret "my-secret-name"
 ```
 
 **Benefits**:
+
 - ✅ Minimal configuration - only 2 parameters needed
 - ✅ Centralized secrets in AWS Secrets Manager
 - ✅ Automatic configuration resolution from CloudFormation
@@ -94,6 +96,7 @@ npx @quiltdata/benchling-webhook deploy \
 - ✅ Better security - no secrets in CI/CD pipelines
 
 **How to find your Quilt Stack ARN**:
+
 ```bash
 # List your CloudFormation stacks
 aws cloudformation describe-stacks --query 'Stacks[?contains(StackName, `Quilt`)].StackId'
@@ -107,17 +110,17 @@ For existing deployments or manual configuration:
 
 ```bash
 # Option 1: Inline JSON
-npx @quiltdata/benchling-webhook deploy \
+npx @quiltdata/benchling-webhook@latest deploy \
   --benchling-secrets '{"client_id":"xxx","client_secret":"yyy","tenant":"company"}' \
   --catalog your-catalog.quiltdata.com
 
 # Option 2: JSON File
-npx @quiltdata/benchling-webhook deploy \
+npx @quiltdata/benchling-webhook@latest deploy \
   --benchling-secrets @benchling-secrets.json \
   --catalog your-catalog.quiltdata.com
 
 # Option 3: AWS Secrets Manager ARN
-npx @quiltdata/benchling-webhook deploy \
+npx @quiltdata/benchling-webhook@latest deploy \
   --benchling-secrets "arn:aws:secretsmanager:region:account:secret:name" \
   --catalog your-catalog.quiltdata.com
 ```
@@ -128,15 +131,18 @@ npx @quiltdata/benchling-webhook deploy \
 ### Secret Format
 
 **Required fields**:
+
 - `client_id`: Benchling OAuth client ID
 - `client_secret`: Benchling OAuth client secret
 - `tenant`: Benchling tenant name (e.g., "company" for company.benchling.com)
 
 **Optional fields**:
+
 - `app_definition_id`: Benchling app definition ID
 - `api_url`: Custom Benchling API URL
 
 **Example**:
+
 ```json
 {
   "client_id": "abc123",
@@ -151,6 +157,7 @@ npx @quiltdata/benchling-webhook deploy \
 To update Benchling credentials after deployment:
 
 **Method 1: Update in AWS Secrets Manager (Recommended)**
+
 ```bash
 aws secretsmanager update-secret \
   --secret-id benchling-webhook/credentials \
@@ -164,8 +171,9 @@ aws ecs update-service \
 ```
 
 **Method 2: Redeploy Stack**
+
 ```bash
-npx @quiltdata/benchling-webhook deploy \
+npx @quiltdata/benchling-webhook@latest deploy \
   --benchling-secrets @updated-secrets.json
 ```
 
@@ -174,7 +182,7 @@ npx @quiltdata/benchling-webhook deploy \
 For all available commands, run:
 
 ```bash
-npx @quiltdata/benchling-webhook --help
+npx @quiltdata/benchling-webhook@latest --help
 ```
 
 ### Commands
@@ -188,24 +196,28 @@ npx @quiltdata/benchling-webhook --help
 ### Deploy Options
 
 ```bash
-npx @quiltdata/benchling-webhook deploy [options]
+npx @quiltdata/benchling-webhook@latest deploy [options]
 ```
 
 **Secrets-Only Mode (v0.6.0+ - Recommended)**:
+
 - `--quilt-stack-arn <arn>` - ARN of Quilt CloudFormation stack
 - `--benchling-secret <name>` - Name or ARN of Benchling secret in Secrets Manager
 
 **Legacy Mode Configuration**:
+
 - `--benchling-secrets <value>` - Benchling secrets (ARN, JSON, or @file)
 - `--catalog <url>` - Quilt catalog URL
 - `--bucket <name>` - S3 bucket for data
 
 **AWS Configuration**:
+
 - `--profile <name>` - AWS profile to use
 - `--region <region>` - AWS region to deploy to (auto-detected in secrets-only mode)
 - `--image-tag <tag>` - Docker image tag to deploy (default: latest)
 
 **Deployment Options**:
+
 - `--env-file <path>` - Path to .env file (default: .env)
 - `--yes` - Skip confirmation prompts
 - `--no-bootstrap-check` - Skip CDK bootstrap verification
@@ -278,14 +290,17 @@ npm run release:tag
 ### Common Issues
 
 **Error: "Invalid secret ARN format"**
+
 - Verify ARN format: `arn:aws:secretsmanager:region:account:secret:name`
 - See [Troubleshooting Guide](./docs/SECRETS_CONFIGURATION.md#troubleshooting)
 
 **Error: "Missing required field: client_id"**
+
 - Check secret JSON includes all required fields: `client_id`, `client_secret`, `tenant`
 - Validate JSON syntax: `echo '{"client_id":"..."}' | jq .`
 
 **Deprecation Warning**
+
 - Migrate to `--benchling-secrets` parameter
 - See [Migration Guide](./docs/SECRETS_CONFIGURATION.md#migration-guide)
 
@@ -300,6 +315,7 @@ npm run release:tag
 - CloudTrail logs all secret access for audit
 
 **Best Practices**:
+
 - Never commit secrets to version control
 - Use AWS Secrets Manager for production deployments
 - Rotate secrets regularly
@@ -310,7 +326,7 @@ npm run release:tag
 ## Support
 
 - 🐛 [Report Issues](https://github.com/quiltdata/benchling-webhook/issues)
-- 📧 Security vulnerabilities: security@quiltdata.com
+- 📧 Security vulnerabilities: <security@quiltdata.com>
 - 📖 [Documentation](./docs/)
 - 💬 [Discussions](https://github.com/quiltdata/benchling-webhook/discussions)
 
@@ -320,6 +336,10 @@ Apache-2.0
 
 ## Version
 
-Current version: 0.5.4 (see [CHANGELOG.md](./CHANGELOG.md))
+See [CHANGELOG.md](./CHANGELOG.md) for version history.
 
-Next version: 0.6.0 (secrets management integration)
+**Important:** Always use `@latest` with npx to avoid caching issues:
+
+```bash
+npx @quiltdata/benchling-webhook@latest --help
+```

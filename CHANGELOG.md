@@ -3,7 +3,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.6.0] - 2025-11-03 (Upcoming)
+## [0.6.1] - 2025-11-03
+
+### Added
+- **Canvas Footer** - Added version and deployment information footer to Benchling canvas
+  - Displays application version (0.6.1)
+  - Shows Quilt catalog host
+  - Shows S3 bucket name
+  - Includes disclaimer text about canvas metadata
+
+### Changed
+- Updated application version in health endpoint from 1.0.0 to 0.6.1
+- Enhanced canvas markdown formatting with footer section
+
+## [0.6.0] - 2025-11-03
 
 ### Added
 

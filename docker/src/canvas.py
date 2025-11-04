@@ -226,6 +226,13 @@ class CanvasManager:
         # Error notifications (at the bottom)
         content += fmt.format_error_notification(self._errors)
 
+        # Footer with version and deployment info
+        content += fmt.format_canvas_footer(
+            version="0.6.1",
+            quilt_host=self.config.quilt_catalog,
+            bucket=self.config.s3_bucket_name,
+        )
+
         return content
 
     def _make_blocks(self) -> list:
