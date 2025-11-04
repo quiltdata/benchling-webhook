@@ -67,7 +67,7 @@ gh pr checks                 # Check CI status
 - [bin/cli.ts](bin/cli.ts) - Main CLI entry point (`benchling-webhook` command)
 - [bin/version.js](bin/version.js) - Version management (`npm run version`)
 - [bin/release.js](bin/release.js) - Release automation
-- [bin/cdk-dev.js](bin/cdk-dev.js) - Dev deployment workflow
+- [bin/dev-deploy.ts](bin/dev-deploy.ts) - Dev deployment workflow
 - [bin/check-logs.js](bin/check-logs.js) - CloudWatch log viewer
 - [bin/send-event.js](bin/send-event.js) - Test event sender
 - [bin/commands/](bin/commands/) - CLI command implementations

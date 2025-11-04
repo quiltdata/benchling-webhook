@@ -57,6 +57,26 @@
  */
 
 /**
+ * Generate standardized secret name for AWS Secrets Manager
+ *
+ * Format: quiltdata/benchling-webhook/{profile}/{tenant}
+ *
+ * @param profile - Profile name (e.g., "default", "staging", "prod")
+ * @param tenant - Benchling tenant name (e.g., "quilt-dtt")
+ * @returns Standardized secret name
+ *
+ * @example
+ * generateSecretName("default", "quilt-dtt") // "quiltdata/benchling-webhook/default/quilt-dtt"
+ * generateSecretName("staging", "acme-corp") // "quiltdata/benchling-webhook/staging/acme-corp"
+ */
+export function generateSecretName(profile: string, tenant: string): string {
+    const sanitizedTenant = tenant.replace(/[^a-zA-Z0-9-_]/g, "-");
+    const sanitizedProfile = profile.replace(/[^a-zA-Z0-9-_]/g, "-");
+
+    return `quiltdata/benchling-webhook/${sanitizedProfile}/${sanitizedTenant}`;
+}
+
+/**
  * Benchling secret structure stored in AWS Secrets Manager
  */
 export interface BenchlingSecretData {

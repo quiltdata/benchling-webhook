@@ -43,7 +43,7 @@ But the Python `resolve_benchling_secrets()` function expects ALL of these as pl
    arn:aws:cloudformation:us-east-1:712023778557:stack/quilt-staging/e51b0c10-10c9-11ee-9b41-12fda87498a3
    ```
 
-3. **Updated `bin/cdk-dev.js`** to use secrets-only mode:
+3. **Updated `bin/dev-deploy.ts`** to use secrets-only mode:
    ```javascript
    // Secrets-only mode parameters
    const quiltStackArn = 'arn:aws:cloudformation:us-east-1:712023778557:stack/quilt-staging/e51b0c10-10c9-11ee-9b41-12fda87498a3';

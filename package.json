@@ -18,7 +18,7 @@
     "build:clean": "rm -rf cdk.out dist */{*.js,*.d.ts}",
     "build:synth": "npx cdk synth",
     "build:typecheck": "tsc --noEmit",
-    "deploy:dev": "npm run test && node bin/cdk-dev.js",
+    "deploy:dev": "npm run test && ts-node bin/dev-deploy.ts",
     "deploy:prod": "ts-node bin/cli.ts deploy",
     "deploy:logs": "node bin/check-logs.js",
     "lint": "eslint . --ext .ts --fix && make -C docker lint",

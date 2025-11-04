@@ -48,7 +48,7 @@ The application successfully implements secrets-only mode deployment:
 **✅ CDK Deployment**:
 - `npm run cdk:dev` successfully deploys with secrets-only mode
 - Passes `QuiltStackARN` and `BenchlingSecret` as environment variables
-- File: `/Users/ernest/GitHub/benchling-webhook/bin/cdk-dev.js` (lines 240-244)
+- File: `/Users/ernest/GitHub/benchling-webhook/bin/dev-deploy.ts` (lines 240-244)
 
 **✅ Test Infrastructure**:
 - Tests use mocked `ConfigResolver` (same code path as production)
@@ -624,7 +624,7 @@ taskRole.addToPolicy(new iam.PolicyStatement({
 
 ### 4.5 Deployment Workflow Dependencies
 
-**Current Workflow** (cdk-dev.js lines 240-244):
+**Current Workflow** (dev-deploy.ts lines 240-244):
 ```javascript
 const quiltStackArn = 'arn:aws:cloudformation:us-east-1:712023778557:stack/quilt-staging/...';
 const benchlingSecret = 'benchling-webhook-dev';
