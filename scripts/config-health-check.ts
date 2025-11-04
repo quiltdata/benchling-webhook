@@ -13,10 +13,11 @@
 
 import { XDGConfig } from "../lib/xdg-config";
 import { UserConfig, DerivedConfig, DeploymentConfig, ProfileName } from "../lib/types/config";
-import { existsSync } from "fs";
+import { existsSync, statSync } from "fs";
 import { validateSecretsAccess } from "./sync-secrets";
 import { ConfigLogger, LogLevel } from "../lib/config-logger";
 import * as https from "https";
+import { SecretsManagerClient, DescribeSecretCommand } from "@aws-sdk/client-secrets-manager";
 
 /**
  * Health check result
@@ -360,6 +361,126 @@ export class ConfigHealthChecker {
     }
 
     /**
+     * Checks if local config and remote secrets are in sync
+     *
+     * @returns Health check result
+     */
+    public async checkSecretsSync(): Promise<HealthCheckResult> {
+        try {
+            const paths = this.xdgConfig.getProfilePaths(this.profile);
+
+            // Check if user config exists
+            if (!existsSync(paths.userConfig)) {
+                return {
+                    check: "secrets-sync",
+                    status: "warn",
+                    message: "No user configuration found",
+                    details: {
+                        profile: this.profile,
+                    },
+                };
+            }
+
+            // Load derived config to get secret ARN
+            const derivedConfig = this.xdgConfig.readProfileConfig("derived", this.profile) as DerivedConfig;
+
+            if (!derivedConfig.benchlingSecretArn) {
+                return {
+                    check: "secrets-sync",
+                    status: "warn",
+                    message: "No secrets configured",
+                    details: {
+                        profile: this.profile,
+                        recommendation: "Run npm run setup:sync-secrets to sync secrets",
+                    },
+                };
+            }
+
+            // Get local config modification time
+            const userConfigStats = statSync(paths.userConfig);
+            const localModifiedAt = userConfigStats.mtime;
+
+            // Get remote secret modification time
+            const region = derivedConfig.cdkRegion || "us-east-1";
+            const clientConfig: { region: string; credentials?: any } = { region };
+
+            if (derivedConfig.awsProfile) {
+                const { fromIni } = await import("@aws-sdk/credential-providers");
+                clientConfig.credentials = fromIni({ profile: derivedConfig.awsProfile });
+            }
+
+            const client = new SecretsManagerClient(clientConfig);
+            const command = new DescribeSecretCommand({ SecretId: derivedConfig.benchlingSecretArn });
+            const secretMetadata = await client.send(command);
+
+            if (!secretMetadata.LastChangedDate) {
+                return {
+                    check: "secrets-sync",
+                    status: "warn",
+                    message: "Cannot determine secret modification time",
+                    details: {
+                        secretArn: derivedConfig.benchlingSecretArn,
+                    },
+                };
+            }
+
+            const remoteModifiedAt = secretMetadata.LastChangedDate;
+
+            // Compare times (allow 1 second tolerance for filesystem precision)
+            const timeDiffMs = Math.abs(localModifiedAt.getTime() - remoteModifiedAt.getTime());
+            const timeDiffSeconds = Math.floor(timeDiffMs / 1000);
+
+            if (localModifiedAt > remoteModifiedAt && timeDiffMs > 1000) {
+                // Local is newer - secrets need to be synced
+                const ageMinutes = Math.floor(timeDiffMs / (1000 * 60));
+                const ageHours = Math.floor(ageMinutes / 60);
+                const ageDays = Math.floor(ageHours / 24);
+
+                let ageDescription;
+                if (ageDays > 0) {
+                    ageDescription = `${ageDays} day${ageDays > 1 ? "s" : ""}`;
+                } else if (ageHours > 0) {
+                    ageDescription = `${ageHours} hour${ageHours > 1 ? "s" : ""}`;
+                } else {
+                    ageDescription = `${ageMinutes} minute${ageMinutes > 1 ? "s" : ""}`;
+                }
+
+                return {
+                    check: "secrets-sync",
+                    status: "warn",
+                    message: `Local config is ${ageDescription} newer than remote secrets`,
+                    details: {
+                        localModifiedAt: localModifiedAt.toISOString(),
+                        remoteModifiedAt: remoteModifiedAt.toISOString(),
+                        timeDiffSeconds,
+                        recommendation: "Run npm run setup:sync-secrets --force to sync changes",
+                    },
+                };
+            }
+
+            return {
+                check: "secrets-sync",
+                status: "pass",
+                message: "Local config and remote secrets are in sync",
+                details: {
+                    localModifiedAt: localModifiedAt.toISOString(),
+                    remoteModifiedAt: remoteModifiedAt.toISOString(),
+                    timeDiffSeconds,
+                },
+            };
+        } catch (error) {
+            return {
+                check: "secrets-sync",
+                status: "fail",
+                message: `Sync check failed: ${(error as Error).message}`,
+                details: {
+                    error: (error as Error).message,
+                },
+            };
+        }
+    }
+
+    /**
      * Checks deployment configuration
      *
      * @returns Health check result
@@ -449,6 +570,7 @@ export class ConfigHealthChecker {
         const results = await Promise.all([
             this.checkXDGIntegrity(),
             this.checkSecretsAccess(),
+            this.checkSecretsSync(),
             this.checkBenchlingCredentials(),
             this.checkQuiltCatalog(),
             this.checkDeploymentConfig(),
