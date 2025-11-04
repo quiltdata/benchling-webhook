@@ -6,6 +6,7 @@ import { initCommand } from "./commands/init";
 import { validateCommand } from "./commands/validate";
 import { testCommand } from "./commands/test";
 import { manifestCommand } from "./commands/manifest";
+import { setupWizardCommand } from "./commands/setup-wizard";
 
 // Load package.json for version
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -115,9 +116,14 @@ program
         }
     });
 
-// Show help when no command provided
+// Run setup wizard when no command provided
 if (!process.argv.slice(2).length) {
-    program.outputHelp();
+    setupWizardCommand()
+        .then(() => process.exit(0))
+        .catch((error) => {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        });
+} else {
+    program.parse();
 }
-
-program.parse();

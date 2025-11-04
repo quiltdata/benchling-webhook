@@ -61,7 +61,7 @@ secretValue = JSON.stringify({
 
 ### Why It Happened
 
-1. **Legacy Code Path**: The CLI deployment (`npm run cdk:dev` → `bin/cdk-dev.js` → `bin/cli.ts`) does NOT use the new `--benchling-secrets` parameter
+1. **Legacy Code Path**: The CLI deployment (`npm run cdk:dev` → `bin/dev-deploy.ts` → `bin/cli.ts`) does NOT use the new `--benchling-secrets` parameter
 2. **Fallback to Old Parameters**: It falls back to individual parameters (`BENCHLING_TENANT`, `BENCHLING_CLIENT_ID`, `BENCHLING_CLIENT_SECRET`)
 3. **Incomplete Secret Creation**: The `fargate-service.ts` code builds the secret JSON with only 3 fields when using the old path
 4. **CloudFormation Overwrites**: Every deployment updates the secret, overwriting any manual fixes
@@ -294,7 +294,7 @@ secretValue = JSON.stringify({
 **Issue**: `npm run cdk:dev` doesn't use new `--benchling-secrets` parameter
 
 **Recommendation**:
-1. Update `bin/cdk-dev.js` to construct and use `--benchling-secrets` parameter
+1. Update `bin/dev-deploy.ts` to construct and use `--benchling-secrets` parameter
 2. Alternative: Add integration test that specifically tests the legacy path
 3. Document which paths are tested and which are not
 

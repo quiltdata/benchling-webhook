@@ -56,14 +56,14 @@ class UserConfig(BaseModel):
     quilt_catalog: Optional[str] = Field(None, alias="quiltCatalog", description="Quilt catalog URL")
     quilt_user_bucket: Optional[str] = Field(None, alias="quiltUserBucket", description="Quilt user bucket name")
     quilt_database: Optional[str] = Field(None, alias="quiltDatabase", description="Quilt database identifier")
-    quilt_stack_arn: Optional[str] = Field(
-        None, alias="quiltStackArn", description="Quilt CloudFormation stack ARN"
-    )
+    quilt_stack_arn: Optional[str] = Field(None, alias="quiltStackArn", description="Quilt CloudFormation stack ARN")
     quilt_region: Optional[str] = Field(None, alias="quiltRegion", description="AWS region for Quilt resources")
 
     # Benchling Configuration
     benchling_tenant: Optional[str] = Field(None, alias="benchlingTenant", description="Benchling tenant identifier")
-    benchling_client_id: Optional[str] = Field(None, alias="benchlingClientId", description="Benchling OAuth client ID")
+    benchling_client_id: Optional[str] = Field(
+        None, alias="benchlingClientId", description="Benchling OAuth client ID"
+    )
     benchling_client_secret: Optional[str] = Field(
         None, alias="benchlingClientSecret", description="Benchling OAuth client secret"
     )
@@ -96,9 +96,7 @@ class UserConfig(BaseModel):
 
     # Operational Configuration
     log_level: Optional[str] = Field("INFO", alias="logLevel", description="Logging level")
-    webhook_allow_list: Optional[str] = Field(
-        "", alias="webhookAllowList", description="Comma-separated IP allowlist"
-    )
+    webhook_allow_list: Optional[str] = Field("", alias="webhookAllowList", description="Comma-separated IP allowlist")
     enable_webhook_verification: Optional[str] = Field(
         "true", alias="enableWebhookVerification", description="Enable webhook signature verification"
     )
@@ -157,9 +155,7 @@ class DeploymentConfig(DerivedConfig):
         None, alias="webhookUrl", description="Deployed webhook URL (alias for webhookEndpoint)"
     )
     stack_arn: Optional[str] = Field(None, alias="stackArn", description="CloudFormation stack ARN")
-    deployment_timestamp: Optional[str] = Field(
-        None, alias="deploymentTimestamp", description="Deployment timestamp"
-    )
+    deployment_timestamp: Optional[str] = Field(None, alias="deploymentTimestamp", description="Deployment timestamp")
     deployed_at: Optional[str] = Field(None, alias="deployedAt", description="ISO timestamp of deployment")
 
     class Config:

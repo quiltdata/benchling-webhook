@@ -98,7 +98,11 @@ npx @quiltdata/benchling-webhook@latest setup
 ```
 
 This will:
+<<<<<<< HEAD
+1. ✓ Auto-detect your Quilt configuration from `quilt3 config`
+=======
 1. ✓ Auto-detect your Quilt configuration from `~/.quilt3/config.yml`
+>>>>>>> origin/main
 2. ✓ Prompt for Benchling credentials (tenant, client ID, secret, app definition ID)
 3. ✓ Validate Benchling OAuth credentials
 4. ✓ Verify S3 bucket access
@@ -277,7 +281,11 @@ export async function setupCommand(options: { save?: boolean; deploy?: boolean }
 // Extract inference logic from scripts/infer-quilt-config.ts
 // Simplify for npx use (no XDG dependencies)
 export async function inferQuiltConfig(): Promise<InferenceResult> {
+<<<<<<< HEAD
+    // 1. Try to read quilt3 config
+=======
     // 1. Try to read ~/.quilt3/config.yml
+>>>>>>> origin/main
     // 2. Extract catalog URL
     // 3. Find CloudFormation stack with matching catalog
     // 4. Extract stack outputs (bucket, queue, etc.)

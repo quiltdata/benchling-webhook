@@ -3,10 +3,10 @@
  * Send a test event to the deployed Benchling webhook endpoint
  */
 
-require("dotenv/config");
-const { execSync } = require("child_process");
-const fs = require("fs");
-const path = require("path");
+import "dotenv/config";
+import { execSync } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
 
 const STACK_NAME = "BenchlingWebhookStack";
 
@@ -17,23 +17,41 @@ if (!process.env.CDK_DEFAULT_REGION) {
     process.exit(1);
 }
 
-const AWS_REGION = process.env.CDK_DEFAULT_REGION;
+const AWS_REGION: string = process.env.CDK_DEFAULT_REGION;
 
-function getStackOutputs() {
+interface StackOutput {
+    OutputKey: string;
+    OutputValue: string;
+    Description?: string;
+    ExportName?: string;
+}
+
+interface EventMessage {
+    type?: string;
+}
+
+interface TestEvent {
+    message?: EventMessage;
+}
+
+function getStackOutputs(): StackOutput[] {
     try {
         const output = execSync(
             `aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${AWS_REGION} --query 'Stacks[0].Outputs' --output json`,
             { encoding: "utf-8" },
         );
-        return JSON.parse(output);
-    } catch (error) {
+        return JSON.parse(output) as StackOutput[];
+    } catch (error: unknown) {
         console.error(`Error: Could not get stack outputs for ${STACK_NAME}`);
         console.error("Make sure the stack is deployed and AWS credentials are configured.");
+        if (error instanceof Error) {
+            console.error(`Details: ${error.message}`);
+        }
         process.exit(1);
     }
 }
 
-function getWebhookEndpoint(outputs) {
+function getWebhookEndpoint(outputs: StackOutput[]): string {
     const endpoint = outputs.find((o) => o.OutputKey === "WebhookEndpoint");
     if (!endpoint) {
         console.error("Error: Could not find WebhookEndpoint in stack outputs");
@@ -42,25 +60,26 @@ function getWebhookEndpoint(outputs) {
     return endpoint.OutputValue;
 }
 
-function listTestEvents() {
+function listTestEvents(): void {
     const eventsDir = path.join(__dirname, "..", "test-events");
-    const files = fs.readdirSync(eventsDir).filter(f => f.endsWith(".json"));
+    const files = fs.readdirSync(eventsDir).filter((f: string) => f.endsWith(".json"));
 
     console.log("Available test events:");
-    files.forEach(file => {
+    files.forEach((file: string) => {
         console.log(`  - ${file.replace(".json", "")}`);
     });
 }
 
-function loadTestEvent(eventName) {
+function loadTestEvent(eventName: string): string {
     const eventsDir = path.join(__dirname, "..", "test-events");
 
     // Add .json extension if not present
-    if (!eventName.endsWith(".json")) {
-        eventName = `${eventName}.json`;
+    let eventFileName = eventName;
+    if (!eventFileName.endsWith(".json")) {
+        eventFileName = `${eventFileName}.json`;
     }
 
-    const eventPath = path.join(eventsDir, eventName);
+    const eventPath = path.join(eventsDir, eventFileName);
 
     if (!fs.existsSync(eventPath)) {
         console.error(`Error: Test event file not found: ${eventPath}`);
@@ -72,23 +91,23 @@ function loadTestEvent(eventName) {
     return fs.readFileSync(eventPath, "utf-8");
 }
 
-function sendEvent(endpoint, eventData, eventName, dryRun = false) {
+function sendEvent(endpoint: string, eventData: string, eventName: string, dryRun: boolean = false): void {
     // Determine the endpoint path based on event type
-    const event = JSON.parse(eventData);
-    let path = "/";
+    const event = JSON.parse(eventData) as TestEvent;
+    let urlPath = "/";
 
     if (event.message?.type) {
         const type = event.message.type;
         if (type.includes("canvas")) {
-            path = "/canvas";
+            urlPath = "/canvas";
         } else if (type.includes("entry")) {
-            path = "/entry";
+            urlPath = "/entry";
         } else if (type.includes("app")) {
-            path = "/app";
+            urlPath = "/app";
         }
     }
 
-    const url = endpoint.replace(/\/$/, "") + path;
+    const url = endpoint.replace(/\/$/, "") + urlPath;
 
     console.log("=".repeat(80));
     console.log("Sending Test Event");
@@ -127,8 +146,9 @@ function sendEvent(endpoint, eventData, eventName, dryRun = false) {
         console.log("Event sent successfully!");
         console.log("Check logs with: npm run logs");
         console.log("=".repeat(80));
-    } catch (error) {
-        console.error("\nError sending event:", error.message);
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error("\nError sending event:", errorMessage);
         process.exit(1);
     } finally {
         // Clean up temp file
@@ -138,7 +158,7 @@ function sendEvent(endpoint, eventData, eventName, dryRun = false) {
     }
 }
 
-function printHelp() {
+function printHelp(): void {
     console.log("Usage: npm run event [event-name] [options]");
     console.log("");
     console.log("Arguments:");
@@ -161,7 +181,7 @@ function printHelp() {
     console.log("  npm run logs");
 }
 
-function main() {
+function main(): void {
     const args = process.argv.slice(2);
 
     if (args.includes("--help") || args.includes("-h")) {
@@ -175,10 +195,10 @@ function main() {
     }
 
     const dryRun = args.includes("--dry-run") || args.includes("-d");
-    const eventName = args.find(arg => !arg.startsWith("-")) || "canvas-created";
+    const eventName = args.find((arg: string) => !arg.startsWith("-")) || "canvas-created";
 
     // If using default event, notify the user
-    if (!args.find(arg => !arg.startsWith("-"))) {
+    if (!args.find((arg: string) => !arg.startsWith("-"))) {
         console.log("No event specified, using default: canvas-created\n");
     }
 
@@ -196,8 +216,9 @@ function main() {
 if (require.main === module) {
     try {
         main();
-    } catch (error) {
-        console.error("Error:", error.message);
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error("Error:", errorMessage);
         process.exit(1);
     }
 }
