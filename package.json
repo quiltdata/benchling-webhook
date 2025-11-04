@@ -20,13 +20,13 @@
     "build:typecheck": "tsc --noEmit",
     "deploy:dev": "npm run test && ts-node bin/dev-deploy.ts",
     "deploy:prod": "ts-node bin/cli.ts deploy",
-    "deploy:logs": "node bin/check-logs.js",
+    "deploy:logs": "ts-node bin/check-logs.ts",
     "lint": "eslint . --ext .ts --fix && make -C docker lint",
-    "postbuild": "chmod +x dist/bin/cli.js && cp bin/*.js dist/bin/ 2>/dev/null || true",
+    "postbuild": "chmod +x dist/bin/cli.js",
     "prebuild": "rm -rf dist",
     "prepublishOnly": "npm run build",
-    "release": "npm run test && node bin/release.js && make -C docker push-ci",
-    "release:tag": "node bin/version.js && git push --tags",
+    "release": "npm run test && ts-node bin/release.ts && make -C docker push-ci",
+    "release:tag": "ts-node bin/version.ts && git push --tags",
     "setup": "ts-node scripts/install-wizard.ts",
     "setup:health": "ts-node scripts/config-health-check.ts",
     "setup:infer": "ts-node scripts/infer-quilt-config.ts",
@@ -37,7 +37,7 @@
     "test:python": "make -C docker test-unit",
     "test:remote": "npm run deploy:dev && make -C docker test-deployed-dev",
     "test:ts": "cross-env NODE_ENV=test jest --maxWorkers=50%",
-    "version": "node bin/version.js"
+    "version": "ts-node bin/version.ts"
   },
   "keywords": [
     "benchling",
