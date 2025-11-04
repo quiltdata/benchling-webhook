@@ -3,6 +3,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.3] - 2025-11-04
+
+### Added
+
+- **Production Testing Command** (#176) - New `npm run test:prod` to test production deployments
+  - Tests deployed production stack via API Gateway endpoint
+  - Automatically runs after `deploy:prod` completes
+  - Deployment fails if production tests fail
+
+- **Development Testing Command** - New `npm run test:dev` to test development deployments
+  - Renamed from `test:remote` for clarity
+  - `test:remote` remains as backward-compatible alias
+
+- **Deployment Configuration Tracking** - Deployment endpoints now stored in `~/.config/benchling-webhook/deploy.json`
+  - Separate `dev` and `prod` environment configs
+  - Tracks endpoint, image tag, deployment timestamp, stack name, and region
+  - Enables test commands to automatically discover deployment endpoints
+
+### Changed
+
+- **Docker Makefile** - Renamed `test-prod` target to `test-docker-prod` for clarity
+  - `test-docker-prod` - Tests local Docker production container
+  - `test-deployed-prod` - Tests deployed production stack via API Gateway
+  - `test-deployed-dev` - Tests deployed development stack via API Gateway
+
+### Fixed
+
+- Production deployments now automatically validated before completion
+- Clearer error messages when deployment endpoints not found
+
 ## [0.6.2] - 2025-11-03
 
 ### Changed
