@@ -454,7 +454,7 @@ async function deploy(
                             `${chalk.green.bold("✓ Deployment and Testing Complete!")}\n\n` +
                             `Stack:  ${chalk.cyan("BenchlingWebhookStack")}\n` +
                             `Region: ${chalk.cyan(deployRegion)}\n` +
-                            `Environment: ${chalk.cyan(env)}\n` +
+                            `Stage: ${chalk.cyan(stage)}\n` +
                             `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` +
                             `${chalk.bold("Next steps:")}\n` +
                             "  1. Set the webhook URL in your Benchling app settings:\n" +
