@@ -17,7 +17,7 @@ scripts/
 ├── release-notes.sh           # Shell script, compound name
 ├── send-event.ts              # "send-" prefix
 ├── sync-secrets.ts            # "sync-" prefix
-├── test-invalid-signature.ts  # "test-" prefix, compound name
+├── check-webhook-verification.ts  # "check-" prefix, compound name
 └── version.ts                 # Simple name
 ```
 
@@ -25,7 +25,7 @@ scripts/
 1. **Inconsistent naming**: 6 different verb prefixes (check, config, dev, infer, send, sync, test, version)
 2. **Mixed purposes**: Release management, testing, setup utilities, deployment workflows
 3. **No clear grouping**: Related scripts (config validation, secrets sync, Quilt inference) are mixed with unrelated ones
-4. **Compound names**: `config-health-check`, `infer-quilt-config`, `test-invalid-signature` are verbose
+4. **Compound names**: `config-health-check`, `infer-quilt-config`, `check-webhook-verification` are verbose
 5. **Legacy script**: `dev-deploy.ts` is superseded by CLI but kept for backward compatibility
 
 ## Goals
@@ -48,7 +48,7 @@ scripts/
 | `sync-secrets.ts` | `npm run setup:sync-secrets` | Setup | Occasionally |
 | `release-notes.sh` | `npm run deploy:notes` | Release | CI only |
 | `send-event.ts` | Direct call | Testing | Manual |
-| `test-invalid-signature.ts` | Direct call | Testing | Manual |
+| `check-webhook-verification.ts` | Direct call | Testing | Manual |
 | `dev-deploy.ts` | Legacy | Deployment | Deprecated |
 
 ### By Imports
@@ -73,7 +73,7 @@ scripts/
 #### **Monitoring & Debugging** (dev tools)
 - `check-logs.ts` - CloudWatch log viewer (250 lines)
 - `send-event.ts` - Test event sender (225 lines)
-- `test-invalid-signature.ts` - Signature validation tests (155 lines)
+- `check-webhook-verification.ts` - Signature validation tests (155 lines)
 
 #### **Legacy** (to be removed)
 - `dev-deploy.ts` - Old dev deployment workflow (356 lines)
@@ -91,7 +91,7 @@ scripts/
 ├── setup-sync-secrets.ts       # Renamed from sync-secrets.ts
 ├── logs-viewer.ts              # Renamed from check-logs.ts
 ├── test-send-event.ts          # Renamed from send-event.ts
-├── test-invalid-signature.ts   # No change (already consistent)
+├── check-webhook-verification.ts   # Renamed for clarity
 ├── release-version.ts          # Renamed from version.ts
 └── release-notes.sh            # No change (already clear)
 ```
@@ -117,7 +117,7 @@ scripts/
 │   └── sync-secrets.ts         # No rename needed
 ├── testing/
 │   ├── send-event.ts           # No rename needed
-│   └── invalid-signature.ts    # From test-invalid-signature.ts
+│   └── invalid-signature.ts    # From check-webhook-verification.ts
 ├── monitoring/
 │   └── logs-viewer.ts          # From check-logs.ts
 └── release/
@@ -147,7 +147,7 @@ scripts/
 │   └── sync-secrets.ts         # No rename needed
 ├── logs.ts                     # From check-logs.ts (executable)
 ├── send-event.ts               # No change (executable)
-├── test-signature.ts           # From test-invalid-signature.ts (executable)
+├── test-signature.ts           # From check-webhook-verification.ts (executable)
 ├── version.ts                  # No change (executable)
 └── release-notes.sh            # No change (executable)
 ```
@@ -178,7 +178,7 @@ scripts/
 | `sync-secrets.ts` | `setup-sync-secrets.ts` | Matches `setup:*` npm script pattern |
 | `check-logs.ts` | `logs-viewer.ts` | Clearer purpose (viewer vs. checker) |
 | `send-event.ts` | `test-send-event.ts` | Matches testing purpose |
-| `test-invalid-signature.ts` | No change | Already well-named |
+| `check-webhook-verification.ts` | No change | Already well-named |
 | `version.ts` | `release-version.ts` | Matches `release` category |
 | `release-notes.sh` | No change | Already well-named |
 | `dev-deploy.ts` | **DELETE** | Legacy, replaced by CLI |

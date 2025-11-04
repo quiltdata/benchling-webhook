@@ -42,7 +42,7 @@ The consolidation mistakenly treated **ALL** scripts as "dev-only tools" when in
 | `config-health-check.ts` | **Library** | Exports class, has main() | ⚠️ HYBRID |
 | `check-logs.ts` | **Executable** | npm script only | ❌ NO |
 | `send-event.ts` | **Executable** | npm script only | ❌ NO |
-| `test-invalid-signature.ts` | **Executable** | npm script only | ❌ NO |
+| `check-webhook-verification.ts` | **Executable** | npm script only | ❌ NO |
 | `version.ts` | **Executable** | npm script only | ❌ NO |
 | `release-notes.sh` | **Executable** | npm script only | ❌ NO |
 | `dev-deploy.ts` | **Executable** | npm script only (legacy) | ❌ NO |
@@ -109,7 +109,7 @@ lib/
 scripts/
 ├── check-logs.ts               # Pure executable
 ├── send-event.ts               # Pure executable
-├── test-invalid-signature.ts   # Pure executable
+├── check-webhook-verification.ts   # Pure executable
 ├── version.ts                  # Pure executable
 └── release-notes.sh            # Pure executable
 ```
@@ -200,7 +200,7 @@ Then selectively include in `.npmignore`:
 # .npmignore
 scripts/check-logs.ts
 scripts/send-event.ts
-scripts/test-invalid-signature.ts
+scripts/check-webhook-verification.ts
 scripts/version.ts
 scripts/release-notes.sh
 scripts/dev-deploy.ts
