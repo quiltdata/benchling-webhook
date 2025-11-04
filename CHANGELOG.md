@@ -3,6 +3,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.2] - 2025-11-03
+
+### Changed
+
+- **Streamlined Setup Wizard** - The setup wizard now optionally deploys to AWS automatically
+  - After configuration completes, wizard prompts: "Would you like to deploy to AWS now?"
+  - Default is "yes" for one-command deployment experience
+  - Users can decline and deploy later with `npx @quiltdata/benchling-webhook deploy`
+
+- **Simplified README** - Drastically reduced documentation to focus on the golden path
+  - Removed verbose deployment mode explanations
+  - Removed legacy mode documentation from main README
+  - Removed manual AWS Secrets Manager commands
+  - Removed deprecated parameters section
+  - All advanced topics moved to dedicated documentation files
+  - README now clearly communicates: one command to setup and deploy
+
 ## [0.6.1] - 2025-11-03
 
 ### Added
