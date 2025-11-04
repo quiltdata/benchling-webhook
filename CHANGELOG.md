@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 ## [0.6.1] - 2025-11-03
 
 ### Added
+
+- **NPX Setup Wizard** (#182) - One-command setup experience
+  - Running `npx @quiltdata/benchling-webhook` now launches interactive setup wizard
+  - Guides through configuration, validation, and deployment preparation
+  - Maintains backward compatibility - all existing commands work identically
+
 - **Canvas Footer** - Added version and deployment information footer to Benchling canvas
   - Displays application version (0.6.1)
   - Shows Quilt catalog host
@@ -13,6 +19,9 @@ All notable changes to this project will be documented in this file.
   - Includes disclaimer text about canvas metadata
 
 ### Changed
+
+- **CLI Default Behavior** - Running npx without arguments now starts setup wizard instead of showing help
+- **Health Check** - Configuration validation now checks Quilt config fields instead of API access
 - Updated application version in health endpoint from 1.0.0 to 0.6.1
 - Enhanced canvas markdown formatting with footer section
 
@@ -23,7 +32,7 @@ All notable changes to this project will be documented in this file.
 - **XDG Configuration Management** (#156)
   - Centralized configuration in `~/.config/benchling-webhook/default.json`
   - Interactive setup wizard (`npm run setup`) for first-time configuration
-  - Automatic Quilt catalog inference from `~/.quilt3/config.yml`
+  - Automatic Quilt catalog inference from `quilt3 config`
   - Secrets sync to AWS Secrets Manager with validation
   - Configuration health check (`npm run setup:health`)
   - Eliminates `.env` files and environment variable pollution

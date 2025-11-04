@@ -26,7 +26,7 @@ The current system (v0.5.4 transitioning to v0.6.0) accepts configuration from *
    - Manual creation and maintenance required
    - No schema validation
 
-4. **Quilt3 CLI Config** (`~/.quilt3/config.yml`):
+4. **Quilt3 CLI Config** (`quilt3 config`):
    - Catalog URL inference only
    - Accessed via `lib/utils/config.ts:getQuilt3Catalog()`
 
@@ -802,7 +802,7 @@ CLI Options > Environment Variables > XDG Configuration > Defaults
 
 **Current Situation**:
 
-- `~/.quilt3/config.yml` stores single default catalog
+- `quilt3 config` stores single default catalog
 - No mechanism to specify catalog per project
 - Inference tool assumes single catalog
 

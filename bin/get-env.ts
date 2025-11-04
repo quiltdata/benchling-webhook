@@ -13,14 +13,18 @@
  *   node bin/get-env.js https://quilt-catalog.yourcompany.com --write
  */
 
-const fs = require("fs");
-const path = require("path");
+import * as fs from "fs";
+import * as path from "path";
 
 // Import utility functions from lib/utils
-const { inferStackConfig } = require("../lib/utils/stack-inference");
+import { inferStackConfig } from "../lib/utils/stack-inference";
 
 // Parse command line arguments (only when run directly)
-let args, catalogUrl, outputFile, writeFile;
+let args: string[];
+let catalogUrl: string | undefined;
+let outputFile: string | undefined;
+let writeFile: boolean;
+
 if (require.main === module) {
     args = process.argv.slice(2);
     catalogUrl = args.find((arg) => !arg.startsWith("--"));
@@ -39,8 +43,8 @@ if (require.main === module) {
 /**
  * Format environment variables for output
  */
-function formatEnvVars(vars) {
-    const lines = [];
+function formatEnvVars(vars: Record<string, string>): string {
+    const lines: string[] = [];
 
     lines.push("# ==============================================================================");
     lines.push("# INFERRED CONFIGURATION");
@@ -82,7 +86,7 @@ function formatEnvVars(vars) {
 /**
  * Print help
  */
-function printHelp() {
+function printHelp(): void {
     console.log("Usage: node bin/get-env.js <catalog-url> [options]");
     console.log("");
     console.log("Arguments:");
@@ -115,7 +119,11 @@ function printHelp() {
 /**
  * Main execution
  */
-async function main() {
+async function main(): Promise<void> {
+    if (!catalogUrl) {
+        throw new Error("Catalog URL is required");
+    }
+
     try {
         const result = await inferStackConfig(catalogUrl);
 
@@ -167,7 +175,8 @@ async function main() {
         }
 
     } catch (error) {
-        console.error("Error:", error.message);
+        const err = error as Error;
+        console.error("Error:", err.message);
         process.exit(1);
     }
 }
@@ -177,4 +186,4 @@ if (require.main === module) {
 }
 
 // For backward compatibility, re-export from the new location
-module.exports = require("../lib/utils/stack-inference");
+export * from "../lib/utils/stack-inference";

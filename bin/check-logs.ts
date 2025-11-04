@@ -4,8 +4,8 @@
  * Uses CloudFormation stack outputs to find the correct log group
  */
 
-require("dotenv/config");
-const { execSync } = require("child_process");
+import "dotenv/config";
+import { execSync } from "child_process";
 
 const STACK_NAME = "BenchlingWebhookStack";
 
@@ -18,28 +18,43 @@ if (!process.env.CDK_DEFAULT_REGION) {
 
 const AWS_REGION = process.env.CDK_DEFAULT_REGION;
 
-function getStackOutputs() {
+interface StackOutput {
+    OutputKey: string;
+    OutputValue: string;
+    Description?: string;
+    ExportName?: string;
+}
+
+interface LogGroupDefinition {
+    type: string;
+    group: string | undefined;
+}
+
+function getStackOutputs(): StackOutput[] {
     try {
         const output = execSync(
             `aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${AWS_REGION} --query 'Stacks[0].Outputs' --output json`,
             { encoding: "utf-8" },
         );
-        return JSON.parse(output);
-    } catch (error) {
+        return JSON.parse(output) as StackOutput[];
+    } catch (_error: unknown) {
         console.error(`Error: Could not get stack outputs for ${STACK_NAME}`);
         console.error("Make sure the stack is deployed and AWS credentials are configured.");
         process.exit(1);
     }
 }
 
-function getLogGroupFromOutputs(outputs, logType) {
-    let outputKey;
+function getLogGroupFromOutputs(outputs: StackOutput[], logType: string): string {
+    let outputKey: string;
     if (logType === "ecs") {
         outputKey = "EcsLogGroup";
     } else if (logType === "api") {
         outputKey = "ApiGatewayLogGroup";
     } else if (logType === "api-exec") {
         outputKey = "ApiGatewayExecutionLogGroup";
+    } else {
+        console.error(`Error: Invalid log type '${logType}'`);
+        process.exit(1);
     }
 
     const logGroupOutput = outputs.find((o) => o.OutputKey === outputKey);
@@ -53,7 +68,7 @@ function getLogGroupFromOutputs(outputs, logType) {
     return logGroupOutput.OutputValue;
 }
 
-function printStackInfo(outputs, logGroup, logType) {
+function printStackInfo(outputs: StackOutput[], logGroup: string | null, logType: string): void {
     console.log("=".repeat(80));
     console.log("Benchling Webhook Stack Information");
     console.log("=".repeat(80));
@@ -83,7 +98,7 @@ function printStackInfo(outputs, logGroup, logType) {
     console.log("");
 }
 
-function main() {
+function main(): void {
     const args = process.argv.slice(2);
     const logType = args.find((arg) => arg.startsWith("--type="))?.split("=")[1] || "all";
     const filterPattern = args.find((arg) => arg.startsWith("--filter="))?.split("=")[1];
@@ -105,7 +120,7 @@ function main() {
         printStackInfo(outputs, null, "all");
         console.log("Showing logs from all sources (most recent first):\n");
 
-        const logGroupDefs = [
+        const logGroupDefs: LogGroupDefinition[] = [
             { type: "ECS", group: outputs.find((o) => o.OutputKey === "EcsLogGroup")?.OutputValue },
             { type: "API-Access", group: outputs.find((o) => o.OutputKey === "ApiGatewayLogGroup")?.OutputValue },
             { type: "API-Exec", group: outputs.find((o) => o.OutputKey === "ApiGatewayExecutionLogGroup")?.OutputValue },
@@ -131,7 +146,7 @@ function main() {
             let command = `aws logs tail "${group}"`;
             command += ` --region ${AWS_REGION}`;
             command += ` --since ${since}`;
-            command += ` --format short`;
+            command += " --format short";
             if (filterPattern) {
                 command += ` --filter-pattern "${filterPattern}"`;
             }
@@ -144,8 +159,9 @@ function main() {
                 } else {
                     console.log(`(No logs in the last ${since})`);
                 }
-            } catch (error) {
-                console.log(`Error reading ${type} logs: ${error.message}`);
+            } catch (error: unknown) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                console.log(`Error reading ${type} logs: ${errorMessage}`);
             }
         }
         return;
@@ -158,7 +174,7 @@ function main() {
     let command = `aws logs tail ${logGroup}`;
     command += ` --region ${AWS_REGION}`;
     command += ` --since ${since}`;
-    command += ` --format short`;
+    command += " --format short";
 
     if (filterPattern) {
         command += ` --filter-pattern "${filterPattern}"`;
@@ -175,8 +191,9 @@ function main() {
     // Execute logs command
     try {
         execSync(command, { stdio: "inherit" });
-    } catch (error) {
-        if (error.status !== 130) {
+    } catch (error: unknown) {
+        const hasStatus = error && typeof error === "object" && "status" in error;
+        if (hasStatus && (error as { status: number }).status !== 130) {
             // Ignore Ctrl+C exit (status 130)
             console.error("\nError fetching logs. Make sure:");
             console.error("1. The stack is deployed");
@@ -187,7 +204,7 @@ function main() {
     }
 }
 
-function printHelp() {
+function printHelp(): void {
     console.log("Usage: npm run logs [options]");
     console.log("");
     console.log("Options:");
@@ -224,8 +241,9 @@ if (require.main === module) {
 
     try {
         main();
-    } catch (error) {
-        console.error("Error:", error.message);
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error("Error:", errorMessage);
         process.exit(1);
     }
 }

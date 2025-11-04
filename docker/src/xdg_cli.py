@@ -37,14 +37,7 @@ from typing import Any, Dict, Optional
 import click
 from pydantic import ValidationError
 
-from .config_schema import (
-    BenchlingSecret,
-    ConfigType,
-    DeploymentConfig,
-    DerivedConfig,
-    UserConfig,
-    get_config_model,
-)
+from .config_schema import BenchlingSecret, ConfigType, DeploymentConfig, DerivedConfig, UserConfig, get_config_model
 from .xdg_config import XDGConfig
 
 
@@ -142,7 +135,9 @@ def read(profile: str, config_type: str, pretty: bool, validate: bool, verbose: 
     help="Configuration type to write",
     show_default=True,
 )
-@click.option("--validate/--no-validate", default=True, help="Validate against schema before writing", show_default=True)
+@click.option(
+    "--validate/--no-validate", default=True, help="Validate against schema before writing", show_default=True
+)
 @click.option("--backup/--no-backup", default=True, help="Create backup before writing", show_default=True)
 @click.option("--verbose", "-v", is_flag=True, help="Verbose error output")
 def write(json_data: str, profile: str, config_type: str, validate: bool, backup: bool, verbose: bool):
@@ -208,9 +203,7 @@ def write(json_data: str, profile: str, config_type: str, validate: bool, backup
 
 @cli.command()
 @click.argument("json_data", type=str)
-@click.option(
-    "--profile", "-p", default="default", help="Configuration profile to merge into", show_default=True
-)
+@click.option("--profile", "-p", default="default", help="Configuration profile to merge into", show_default=True)
 @click.option(
     "--type",
     "-t",
@@ -285,9 +278,7 @@ def merge(json_data: str, profile: str, config_type: str, validate: bool, backup
 
 
 @cli.command()
-@click.option(
-    "--profile", "-p", default="default", help="Configuration profile to validate", show_default=True
-)
+@click.option("--profile", "-p", default="default", help="Configuration profile to validate", show_default=True)
 @click.option(
     "--type",
     "-t",
@@ -373,9 +364,7 @@ def list_profiles(verbose: bool):
 
 
 @cli.command()
-@click.option(
-    "--profile", "-p", default="default", help="Configuration profile to export", show_default=True
-)
+@click.option("--profile", "-p", default="default", help="Configuration profile to export", show_default=True)
 @click.option(
     "--type",
     "-t",
@@ -418,9 +407,7 @@ def export(profile: str, config_type: str, pretty: bool, verbose: bool):
 
 @cli.command()
 @click.argument("key", type=str)
-@click.option(
-    "--profile", "-p", default="default", help="Configuration profile to read from", show_default=True
-)
+@click.option("--profile", "-p", default="default", help="Configuration profile to read from", show_default=True)
 @click.option(
     "--type",
     "-t",
@@ -483,9 +470,7 @@ def get(key: str, profile: str, config_type: str, default: Optional[str], verbos
 @cli.command()
 @click.argument("key", type=str)
 @click.argument("value", type=str)
-@click.option(
-    "--profile", "-p", default="default", help="Configuration profile to write to", show_default=True
-)
+@click.option("--profile", "-p", default="default", help="Configuration profile to write to", show_default=True)
 @click.option(
     "--type",
     "-t",

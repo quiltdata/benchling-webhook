@@ -59,9 +59,10 @@ function executeCLI(args: string[], options: { captureStdout?: boolean; verbose?
             maxBuffer: 10 * 1024 * 1024, // 10MB buffer
         });
         return result;
-    } catch (error: any) {
-        const stderr = error.stderr?.toString() || error.message;
-        const exitCode = error.status || 1;
+    } catch (error: unknown) {
+        const err = error as { stderr?: Buffer | string; message?: string; status?: number };
+        const stderr = err.stderr?.toString() || err.message || "Unknown error";
+        const exitCode = err.status || 1;
 
         throw new XDGCLIError(`XDG CLI command failed: ${command}`, command, exitCode, stderr);
     }
@@ -103,7 +104,7 @@ export class XDGCLIWrapper {
      * @param data - Configuration data to write
      * @param options - Write options
      */
-    static write(data: any, options: CLIOptions = {}): void {
+    static write(data: Record<string, unknown>, options: CLIOptions = {}): void {
         const args = ["write", JSON.stringify(data)];
 
         if (options.profile) {
@@ -128,7 +129,7 @@ export class XDGCLIWrapper {
      * @param data - Data to merge
      * @param options - Merge options
      */
-    static merge(data: any, options: CLIOptions = {}): void {
+    static merge(data: Record<string, unknown>, options: CLIOptions = {}): void {
         const args = ["merge", JSON.stringify(data)];
 
         if (options.profile) {
@@ -214,7 +215,7 @@ export class XDGCLIWrapper {
      * @param options - Get options
      * @returns Field value
      */
-    static get(key: string, options: CLIOptions & { default?: string } = {}): any {
+    static get(key: string, options: CLIOptions & { default?: string } = {}): unknown {
         const args = ["get", key];
 
         if (options.profile) {
@@ -244,7 +245,7 @@ export class XDGCLIWrapper {
      * @param value - Value to set
      * @param options - Set options
      */
-    static set(key: string, value: any, options: CLIOptions = {}): void {
+    static set(key: string, value: unknown, options: CLIOptions = {}): void {
         const isObject = typeof value === "object";
         const args = ["set", key, isObject ? JSON.stringify(value) : String(value)];
 
