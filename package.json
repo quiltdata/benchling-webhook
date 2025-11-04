@@ -26,7 +26,7 @@
     "prebuild": "rm -rf dist",
     "prepublishOnly": "npm run build",
     "release": "npm run test && ts-node bin/release.ts && make -C docker push-ci",
-    "release:tag": "ts-node bin/version.ts && git push --tags",
+    "release:tag": "ts-node bin/release.ts",
     "setup": "ts-node scripts/install-wizard.ts",
     "setup:health": "ts-node scripts/config-health-check.ts",
     "setup:infer": "ts-node scripts/infer-quilt-config.ts",
