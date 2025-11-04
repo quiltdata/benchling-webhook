@@ -28,6 +28,10 @@ All notable changes to this project will be documented in this file.
   - `test-deployed-prod` - Tests deployed production stack via API Gateway
   - `test-deployed-dev` - Tests deployed development stack via API Gateway
 
+- **Canvas Footer Layout** - Consolidated async notice into unified footer
+  - Merged async processing notice with version/deployment info
+  - Reduces visual weight with single footer section instead of two
+
 ### Fixed
 
 - Production deployments now automatically validated before completion
