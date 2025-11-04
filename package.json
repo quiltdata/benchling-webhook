@@ -28,7 +28,7 @@
     "prepublishOnly": "npm run build",
     "setup": "ts-node bin/cli.ts",
     "setup:dev": "ts-node bin/cli.ts --profile dev",
-    "setup:health": "ts-node scripts/config-health-check.ts",
+    "setup:health": "ts-node bin/cli.ts health-check",
     "setup:infer": "ts-node bin/commands/infer-quilt-config.ts",
     "setup:profile": "ts-node bin/cli.ts setup-profile",
     "setup:sync-secrets": "ts-node bin/commands/sync-secrets.ts",

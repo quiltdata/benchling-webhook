@@ -767,6 +767,30 @@ export async function setupWizardCommand(): Promise<void> {
 
     console.log(chalk.green.bold("\n✓ Setup complete!\n"));
 
+    // Run post-setup health check
+    console.log(chalk.cyan("Running post-setup health check...\n"));
+    const { runHealthChecks } = await import("./health-check");
+    const healthStatus = await runHealthChecks();
+
+    // Display health check results
+    const healthIcon =
+        healthStatus.overall === "healthy" ? chalk.green("✓") : healthStatus.overall === "degraded" ? chalk.yellow("⚠") : chalk.red("❌");
+    console.log(`${healthIcon} Configuration health: ${healthStatus.overall}`);
+
+    // Show any warnings or failures
+    const issues = healthStatus.checks.filter((c) => c.status !== "pass");
+    if (issues.length > 0) {
+        console.log(chalk.yellow("\nConfiguration issues detected:"));
+        for (const issue of issues) {
+            const icon = issue.status === "warn" ? chalk.yellow("⚠") : chalk.red("❌");
+            console.log(`  ${icon} ${issue.message}`);
+            if (issue.details?.recommendation) {
+                console.log(chalk.dim(`     → ${issue.details.recommendation}`));
+            }
+        }
+        console.log("");
+    }
+
     // Ask if user wants to deploy now
     const { shouldDeploy } = await inquirer.prompt([
         {
