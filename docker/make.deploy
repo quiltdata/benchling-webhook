@@ -24,7 +24,7 @@ export DOCKER_IMAGE_NAME ?= $(DOCKER_IMAGE_BASE)
 AWS_REGION ?= us-east-1
 
 .PHONY: deploy-help docker-build-local push-local push-ci \
-        docker-tools docker-ecr-setup docker-ecr-login docker-validate deploy-clean \
+        docker-tools docker-ecr-login docker-validate deploy-clean \
         docker-ecr-create
 
 # ==============================================================================
@@ -51,9 +51,9 @@ deploy-help:
 	@echo ""
 	@echo "Docker Tools & Setup:"
 	@echo "  docker-tools          - Verify Docker is installed and running"
-	@echo "  docker-ecr-setup      - Create ECR repository if it doesn't exist"
+	@echo "  docker-ecr-create     - Create ECR repos with public read access"
+	@echo "                          (Creates both arch-specific and generic repos)"
 	@echo "  docker-ecr-login      - Login to ECR registry"
-	@echo "  docker-ecr-create     - Manually create both arch-specific and generic ECR repos"
 	@echo "  docker-validate       - Validate pushed Docker images in registry"
 	@echo ""
 	@echo "Maintenance:"
@@ -86,23 +86,11 @@ docker-ecr-login: docker-tools
 		docker login --username AWS --password-stdin $$AWS_ACCOUNT_ID.dkr.ecr.$(AWS_REGION).amazonaws.com
 	@echo "✅ ECR login successful"
 
-docker-ecr-setup: docker-tools
-	@echo "🔍 Checking ECR repository..."
-	@AWS_ACCOUNT_ID=$$(aws sts get-caller-identity --query Account --output text 2>/dev/null) || \
-		{ echo "❌ Failed to get AWS account ID - check AWS credentials"; exit 1; }; \
-	echo "📦 AWS Account: $$AWS_ACCOUNT_ID (region: $(AWS_REGION))"; \
-	aws ecr describe-repositories --repository-names $(DOCKER_IMAGE_NAME) --region $(AWS_REGION) >/dev/null 2>&1 || \
-		{ echo "📦 Creating ECR repository..."; \
-		  aws ecr create-repository --repository-name $(DOCKER_IMAGE_NAME) --region $(AWS_REGION) >/dev/null; }; \
-	echo "✅ ECR repository ready"
-
-# Create both architecture-specific and generic ECR repositories
-# Use this before running push-local for the first time
-# Creates:
-#   1. Architecture-specific repo (e.g., quiltdata/benchling-arm64)
-#   2. Generic repo (e.g., quiltdata/benchling)
+# Create ECR repositories with public read access
+# Creates both architecture-specific (e.g., quiltdata/benchling-arm64) and generic (quiltdata/benchling) repos
+# Applies public read policy to allow unauthenticated pulls (required for CI)
 docker-ecr-create: docker-tools
-	@echo "📦 Creating ECR repositories..."
+	@echo "📦 Creating ECR repositories with public read access..."
 	@AWS_ACCOUNT_ID=$$(aws sts get-caller-identity --query Account --output text 2>/dev/null) || \
 		{ echo "❌ Failed to get AWS account ID - check AWS credentials"; exit 1; }; \
 	echo "Account: $$AWS_ACCOUNT_ID"; \
@@ -110,21 +98,27 @@ docker-ecr-create: docker-tools
 	echo ""; \
 	ARCH_REPO=$(DOCKER_IMAGE_BASE)-$(ARCH); \
 	GENERIC_REPO=$(DOCKER_IMAGE_BASE); \
-	echo "Creating architecture-specific repository: $$ARCH_REPO"; \
-	if aws ecr describe-repositories --repository-names $$ARCH_REPO --region $(AWS_REGION) >/dev/null 2>&1; then \
-		echo "✅ Repository already exists: $$ARCH_REPO"; \
-	else \
-		aws ecr create-repository --repository-name $$ARCH_REPO --region $(AWS_REGION) >/dev/null; \
-		echo "✅ Successfully created repository: $$ARCH_REPO"; \
-	fi; \
-	echo ""; \
-	echo "Creating generic repository: $$GENERIC_REPO"; \
-	if aws ecr describe-repositories --repository-names $$GENERIC_REPO --region $(AWS_REGION) >/dev/null 2>&1; then \
-		echo "✅ Repository already exists: $$GENERIC_REPO"; \
-	else \
-		aws ecr create-repository --repository-name $$GENERIC_REPO --region $(AWS_REGION) >/dev/null; \
-		echo "✅ Successfully created repository: $$GENERIC_REPO"; \
-	fi
+	for REPO in $$ARCH_REPO $$GENERIC_REPO; do \
+		echo "Processing repository: $$REPO"; \
+		if aws ecr describe-repositories --repository-names $$REPO --region $(AWS_REGION) >/dev/null 2>&1; then \
+			echo "  ✅ Repository already exists: $$REPO"; \
+		else \
+			aws ecr create-repository --repository-name $$REPO --region $(AWS_REGION) >/dev/null; \
+			echo "  ✅ Successfully created repository: $$REPO"; \
+		fi; \
+		echo "  🔓 Setting public read policy..."; \
+		POLICY_FILE="/tmp/ecr-policy-$$(echo $$REPO | tr '/' '-').json"; \
+		echo '{"Version":"2012-10-17","Statement":[{"Sid":"PublicReadAccess","Effect":"Allow","Principal":"*","Action":["ecr:GetDownloadUrlForLayer","ecr:BatchGetImage","ecr:BatchCheckLayerAvailability"]}]}' > $$POLICY_FILE; \
+		aws ecr set-repository-policy \
+			--repository-name $$REPO \
+			--policy-text file://$$POLICY_FILE \
+			--region $(AWS_REGION) >/dev/null 2>&1 && \
+			echo "  ✅ Public read policy applied to $$REPO" || \
+			echo "  ⚠️  Failed to apply public read policy to $$REPO"; \
+		rm -f $$POLICY_FILE; \
+		echo ""; \
+	done; \
+	echo "✅ ECR repository setup complete"
 
 # ==============================================================================
 # Docker Build Operations
