@@ -4,11 +4,11 @@
  * Version management script - bumps version numbers across all files
  *
  * Usage:
- *   node bin/version.js          # Show all three version files
- *   node bin/version.js patch    # 0.4.7 -> 0.4.8
- *   node bin/version.js minor    # 0.4.7 -> 0.5.0
- *   node bin/version.js major    # 0.4.7 -> 1.0.0
- *   node bin/version.js sync     # Force TOML and YAML to match JSON version
+ *   node bin/version.ts          # Show all three version files
+ *   node bin/version.ts patch    # 0.4.7 -> 0.4.8
+ *   node bin/version.ts minor    # 0.4.7 -> 0.5.0
+ *   node bin/version.ts major    # 0.4.7 -> 1.0.0
+ *   node bin/version.ts sync     # Force TOML and YAML to match JSON version
  */
 
 import * as fs from "fs";
@@ -121,7 +121,7 @@ function main(): void {
         if (jsonVersion === tomlVersion && jsonVersion === yamlVersion) {
             console.log("\n✅ All versions are in sync");
         } else {
-            console.log("\n⚠️  Versions are out of sync! Run \"node bin/version.js sync\" to fix.");
+            console.log("\n⚠️  Versions are out of sync! Run \"node bin/version.ts sync\" to fix.");
         }
         process.exit(0);
     }
@@ -130,7 +130,7 @@ function main(): void {
     if (args.includes("--help") || args.includes("-h")) {
         console.log("Current version:", pkg.version);
         console.log("");
-        console.log("Usage: node bin/version.js [command]");
+        console.log("Usage: node bin/version.ts [command]");
         console.log("");
         console.log("Commands:");
         console.log("  (no args)  - Display all three version files");

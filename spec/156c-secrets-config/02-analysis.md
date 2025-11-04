@@ -222,7 +222,7 @@ class Config:
 
 #### Configuration Inference
 
-**Stack Inference Tool** (`bin/get-env.js`):
+**Stack Inference Tool** (`bin/get-env.ts`):
 
 ```javascript
 // Fetches config.json from catalog
@@ -233,7 +233,7 @@ class Config:
 **Usage**:
 
 ```bash
-node bin/get-env.js https://catalog.example.com --write
+node bin/get-env.ts https://catalog.example.com --write
 # Creates env.inferred file (not .env to avoid overwriting)
 ```
 
@@ -581,7 +581,7 @@ catch (error: unknown) {
 - No `make install` command exists
 - Manual `.env` file creation required
 - Manual secret creation via `npm run config`
-- Manual catalog inference via `node bin/get-env.js`
+- Manual catalog inference via `node bin/get-env.ts`
 
 **Gap Summary**:
 
@@ -598,7 +598,7 @@ catch (error: unknown) {
 
 **Current State**:
 
-- Inference tool exists (`bin/get-env.js`) but is standalone
+- Inference tool exists (`bin/get-env.ts`) but is standalone
 - Inference happens at deployment time, not installation time
 - Results written to file, not persisted to XDG config
 - No integration with deployment workflow

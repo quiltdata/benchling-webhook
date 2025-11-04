@@ -493,7 +493,7 @@ benchling-webhook/
 ├── bin/
 │   ├── cli.ts                    # CLI entry point
 │   ├── benchling-webhook.ts      # Core deployment logic
-│   ├── get-env.js                # Config inference
+│   ├── get-env.ts                # Config inference
 │   └── commands/
 │       ├── deploy.ts             # Deploy command
 │       ├── init.ts               # Init command

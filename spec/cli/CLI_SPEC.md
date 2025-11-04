@@ -37,7 +37,7 @@ benchling-webhook/
 ├── bin/
 │   ├── cli.ts                    # NEW: Main CLI entry point
 │   ├── benchling-webhook.ts      # REFACTORED: Core deployment logic (no CLI)
-│   ├── get-env.js                # TBD: Should this move to lib/utils?
+│   ├── get-env.ts                # TBD: Should this move to lib/utils?
 │   └── commands/                 # NEW: CLI command implementations
 │       ├── deploy.ts
 │       ├── init.ts
@@ -135,7 +135,7 @@ Options:
 
 1. Load `.env` file if present (or file specified by `--env-file`)
 2. Merge CLI options (CLI options override .env values)
-3. Attempt to infer missing values from catalog (via `get-env.js` logic)
+3. Attempt to infer missing values from catalog (via `get-env.ts` logic)
 4. Validate required parameters
 5. Display deployment plan
 6. Prompt for confirmation (unless `--yes`)
