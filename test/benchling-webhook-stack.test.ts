@@ -1,8 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
-import * as fs from "fs";
-import * as path from "path";
 
 describe("BenchlingWebhookStack", () => {
     let template: Template;
@@ -156,13 +154,10 @@ describe("BenchlingWebhookStack", () => {
         expect(foundSQSPolicy).toBe(true);
     });
 
-    test.skip("creates Secrets Manager secret for Benchling credentials [LEGACY TEST - secrets-only mode uses external secret]", () => {
-        // SKIP: In secrets-only mode, we reference an existing Secrets Manager secret
-        // We don't create one in the stack
-        template.hasResourceProperties("AWS::SecretsManager::Secret", {
-            Name: "benchling-webhook/credentials",
-            Description: "Benchling API credentials for webhook processor",
-        });
+    test("does not create Secrets Manager secret (uses external secret)", () => {
+        // In secrets-only mode, we reference an existing Secrets Manager secret
+        // We don't create one in the stack - it's managed externally
+        template.resourceCountIs("AWS::SecretsManager::Secret", 0);
     });
 
     test("creates task definition with correct container configuration", () => {
@@ -205,39 +200,11 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
-    test.skip("environment variables match Flask config expectations (LEGACY TEST - secrets-only mode uses ConfigResolver)", () => {
-        // SKIP: This test is for legacy mode with individual environment variables
+    test("container does not receive legacy environment variables", () => {
         // In secrets-only mode, we only use 2 env vars: QuiltStackARN and BenchlingSecret
-        // All runtime parameters come from the Benchling secret via ConfigResolver
-
-        // Read the Python config files to extract expected environment variable names
-        const configPath = path.join(__dirname, "../docker/src/config.py");
-        const secretsResolverPath = path.join(__dirname, "../docker/src/secrets_resolver.py");
-        const configContent = fs.readFileSync(configPath, "utf-8");
-        const secretsResolverContent = fs.readFileSync(secretsResolverPath, "utf-8");
-
-        // Extract environment variable names from both files using regex
-        // Pattern: os.getenv("VAR_NAME", ...)
-        const envVarPattern = /os\.getenv\("([^"]+)"/g;
-        const expectedEnvVars = new Set<string>();
-        let match;
-
-        // Extract from config.py
-        while ((match = envVarPattern.exec(configContent)) !== null) {
-            expectedEnvVars.add(match[1]);
-        }
-
-        // Extract from secrets_resolver.py
-        envVarPattern.lastIndex = 0; // Reset regex
-        while ((match = envVarPattern.exec(secretsResolverContent)) !== null) {
-            expectedEnvVars.add(match[1]);
-        }
-
-        // Get the container definition from the synthesized template
+        // All runtime parameters come from AWS at runtime via ConfigResolver
         const taskDefs = template.findResources("AWS::ECS::TaskDefinition");
         const taskDefKeys = Object.keys(taskDefs);
-        expect(taskDefKeys.length).toBeGreaterThan(0);
-
         const taskDef = taskDefs[taskDefKeys[0]];
         const containerDef = taskDef.Properties.ContainerDefinitions[0];
         const environment = containerDef.Environment || [];
@@ -252,31 +219,30 @@ describe("BenchlingWebhookStack", () => {
             actualEnvVars.add(secret.Name);
         });
 
-        // Critical environment variables that must match between CDK and Flask
-        const criticalMappings: Record<string, string> = {
-            QUEUE_ARN: "queue_arn",
-            QUILT_USER_BUCKET: "s3_bucket_name",
-            PKG_PREFIX: "s3_prefix",
-            PKG_KEY: "package_key",
-            QUILT_CATALOG: "quilt_catalog",
-            QUILT_DATABASE: "quilt_database",
-            BENCHLING_TENANT: "benchling_tenant",
-            BENCHLING_CLIENT_ID: "benchling_client_id",
-            BENCHLING_CLIENT_SECRET: "benchling_client_secret",
-            LOG_LEVEL: "log_level",
-            AWS_REGION: "aws_region",
-            ENABLE_WEBHOOK_VERIFICATION: "enable_webhook_verification",
-        };
+        // Legacy variables that should NOT be present
+        const legacyVars = [
+            "QUEUE_ARN",
+            "QUILT_USER_BUCKET",
+            "PKG_PREFIX",
+            "PKG_KEY",
+            "QUILT_CATALOG",
+            "QUILT_DATABASE",
+            "BENCHLING_TENANT",
+            "BENCHLING_CLIENT_ID",
+            "BENCHLING_CLIENT_SECRET",
+        ];
 
-        // Verify all critical environment variables are present in CDK stack
-        Object.keys(criticalMappings).forEach((envVar) => {
-            expect(actualEnvVars.has(envVar)).toBe(true);
+        // Verify none of the legacy variables are present
+        legacyVars.forEach((legacyVar) => {
+            expect(actualEnvVars.has(legacyVar)).toBe(false);
         });
 
-        // Verify the Flask config expects these exact variable names
-        Object.keys(criticalMappings).forEach((envVar) => {
-            expect(expectedEnvVars.has(envVar)).toBe(true);
-        });
+        // Verify only secrets-only mode variables are present (plus common vars)
+        expect(actualEnvVars.has("QuiltStackARN")).toBe(true);
+        expect(actualEnvVars.has("BenchlingSecret")).toBe(true);
+        expect(actualEnvVars.has("LOG_LEVEL")).toBe(true);
+        expect(actualEnvVars.has("AWS_REGION")).toBe(true);
+        expect(actualEnvVars.has("ENABLE_WEBHOOK_VERIFICATION")).toBe(true);
     });
 
     // ===================================================================
