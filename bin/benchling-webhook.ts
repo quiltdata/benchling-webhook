@@ -7,7 +7,7 @@ import type { Config } from "../lib/utils/config";
 
 // Import get-env for library usage
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { inferStackConfig } = require("./get-env.js");
+const { inferStackConfig } = require("./get-env");
 
 /**
  * Result of CDK bootstrap check

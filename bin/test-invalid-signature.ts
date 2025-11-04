@@ -6,8 +6,8 @@ import { execSync } from "child_process";
 // Parse command line arguments
 const args: string[] = process.argv.slice(2);
 if (args.length === 0) {
-    console.error("Usage: test-invalid-signature.js <webhook-url>");
-    console.error("Example: test-invalid-signature.js https://example.com/prod/lifecycle");
+    console.error("Usage: test-invalid-signature.ts <webhook-url>");
+    console.error("Example: test-invalid-signature.ts https://example.com/prod/lifecycle");
     process.exit(1);
 }
 

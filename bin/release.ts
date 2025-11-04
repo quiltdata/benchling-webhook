@@ -4,9 +4,9 @@
  * Release management script - creates and pushes git tags
  *
  * Usage:
- *   node bin/release.js         # Create production release from current version
- *   node bin/release.js dev     # Create dev release with timestamp from current version
- *   node bin/release.js --no-push  # Create tag but don't push
+ *   node bin/release.ts         # Create production release from current version
+ *   node bin/release.ts dev     # Create dev release with timestamp from current version
+ *   node bin/release.ts --no-push  # Create tag but don't push
  */
 
 import * as fs from "fs";
@@ -93,7 +93,7 @@ function main(): void {
     if (args.includes("--help") || args.includes("-h")) {
         console.log("Current version:", version);
         console.log("");
-        console.log("Usage: node bin/release.js [dev] [--no-push]");
+        console.log("Usage: node bin/release.ts [dev] [--no-push]");
         console.log("");
         console.log("Commands:");
         console.log("  (no args)  - Create production release tag and push");
@@ -103,9 +103,9 @@ function main(): void {
         console.log("  --no-push  - Create tag but do not push to origin");
         console.log("");
         console.log("Examples:");
-        console.log("  node bin/release.js              # Create v0.4.12 and push");
-        console.log("  node bin/release.js dev          # Create v0.4.12-20251027T123456Z and push");
-        console.log("  node bin/release.js --no-push    # Create tag but don't push");
+        console.log("  node bin/release.ts              # Create v0.4.12 and push");
+        console.log("  node bin/release.ts dev          # Create v0.4.12-20251027T123456Z and push");
+        console.log("  node bin/release.ts --no-push    # Create tag but don't push");
         process.exit(0);
     }
 
