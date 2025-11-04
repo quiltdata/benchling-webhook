@@ -139,13 +139,26 @@ export class BenchlingWebhookStack extends cdk.Stack {
         });
 
         // Create API Gateway that routes to the ALB
+        // For Phase 1a, we create a single "prod" environment
+        // In Phase 1b, we'll add "dev" environment when multiple services are implemented
         this.api = new AlbApiGateway(this, "ApiGateway", {
             loadBalancer: this.fargateService.loadBalancer,
             webhookAllowList: "", // Empty allow list = allow all IPs
+            environments: [
+                {
+                    stageName: "prod",
+                    targetGroup: this.fargateService.targetGroup,
+                },
+            ],
         });
 
         // Store webhook endpoint for easy access
-        this.webhookEndpoint = this.api.api.url;
+        // Use the prod stage URL
+        const prodStage = this.api.stages.get("prod");
+        if (!prodStage) {
+            throw new Error("Expected prod stage to exist in API Gateway");
+        }
+        this.webhookEndpoint = prodStage.urlForPath("/");
 
         // Export webhook endpoint as a stack output
         new cdk.CfnOutput(this, "WebhookEndpoint", {
