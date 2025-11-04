@@ -20,6 +20,7 @@
     "build:typecheck": "tsc --noEmit",
     "deploy:dev": "npm run test && node bin/cdk-dev.js",
     "deploy:prod": "node dist/bin/cli.js deploy",
+    "deploy:logs": "node bin/check-logs.js",
     "lint": "eslint . --ext .ts --fix && make -C docker lint",
     "postbuild": "chmod +x dist/bin/cli.js && cp bin/*.js dist/bin/ 2>/dev/null || true",
     "prebuild": "rm -rf dist",
