@@ -7,24 +7,18 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **NPX Setup Wizard** (#182) - One-command setup experience for end users
+- **NPX Setup Wizard** (#182) - One-command setup experience
   - Running `npx @quiltdata/benchling-webhook` now launches interactive setup wizard
-  - Guides users through configuration, validation, and deployment preparation
-  - Wraps existing install-wizard with user-friendly messaging
+  - Guides through configuration, validation, and deployment preparation
   - Maintains backward compatibility - all existing commands work identically
-  - See comprehensive planning docs in `spec/npx-ux/` for design details
 
-- **Canvas Footer** - Added version and deployment information footer to Benchling canvas
-  - Displays application version (0.6.1)
-  - Shows Quilt catalog host
-  - Shows S3 bucket name
-  - Includes disclaimer text about canvas metadata
+- **Canvas Footer** - Version and deployment information now displayed in Benchling canvas
+  - Shows application version, Quilt catalog host, and S3 bucket name
 
 ### Changed
 
 - **CLI Default Behavior** - Running npx without arguments now starts setup wizard instead of showing help
-- Updated application version in health endpoint from 1.0.0 to 0.6.1
-- Enhanced canvas markdown formatting with footer section
+- **Health Check** - Configuration validation now checks Quilt config fields instead of API access
 
 ## [0.6.0] - 2025-11-03
 

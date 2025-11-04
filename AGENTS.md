@@ -43,6 +43,21 @@ gh pr create                 # Create pull request
 gh pr list                   # List your PRs
 gh pr view                   # View PR details
 gh pr checks                 # Check CI status
+
+gh issue create -t "TITLE" -b "BODY"                     # Create an issue
+gh issue list --label "bug"                              # List issues (filterable)
+gh issue view <number>                                   # View issue details
+gh issue comment <number> -b "COMMENT"                   # Add a comment to an issue
+gh issue close <number>                                  # Close an issue
+
+gh workflow list                                          # List GitHub Actions workflows
+gh workflow view <workflow.yml>                          # Show workflow details
+gh workflow run <workflow.yml> --ref main                # Trigger a workflow run
+gh run list --workflow=<workflow.yml> --branch main      # List recent runs for a workflow
+gh run view <run-id>                                     # View run status and logs
+gh run rerun <run-id>                                    # Rerun a workflow run
+gh run watch <run-id>                                    # Stream run logs
+gh run download <run-id> --dir ./artifacts               # Download run artifacts
 ```
 
 ---
