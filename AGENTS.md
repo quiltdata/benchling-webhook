@@ -4,7 +4,7 @@
 
 ### Essential Commands
 
-**Setup (one-time):**
+#### Setup (one-time)
 
 ```bash
 git clone https://github.com/quiltdata/benchling-webhook.git
@@ -12,22 +12,23 @@ cd benchling-webhook
 npm run setup                # Interactive wizard: deps + XDG config + secrets
 ```
 
-**Daily development:**
+#### Daily development
 
 ```bash
 npm run test                 # Fast unit tests (lint + typecheck + mocked tests)
 npm run test:local           # Local Docker integration (when needed)
 ```
 
-**Before creating PR:**
+#### Before creating PR
 
 ```bash
 npm run test:local           # Verify integration works
 git commit -m "type(scope): description"
 gh pr create
+npm run test:remote           # Verify deployment works
 ```
 
-**Release (maintainers only):**
+#### Release (maintainers only)
 
 ```bash
 npm run release:tag          # Create version tag (triggers CI)
@@ -50,42 +51,47 @@ gh pr checks                 # Check CI status
 
 ### Infrastructure & Build
 
-- **`lib/`** - CDK infrastructure constructs (TypeScript)
-  - [lib/benchling-webhook-stack.ts](lib/benchling-webhook-stack.ts) - Main orchestration
-  - [lib/fargate-service.ts](lib/fargate-service.ts) - ECS Fargate service
-  - [lib/alb-api-gateway.ts](lib/alb-api-gateway.ts) - API Gateway + ALB
-  - [lib/ecr-repository.ts](lib/ecr-repository.ts) - Docker registry
-  - [lib/xdg-config.ts](lib/xdg-config.ts) - XDG configuration management
-  - [lib/types/](lib/types/) - TypeScript type definitions
+#### `lib/` — CDK infrastructure constructs (TypeScript)
+
+- [lib/benchling-webhook-stack.ts](lib/benchling-webhook-stack.ts) - Main orchestration
+- [lib/fargate-service.ts](lib/fargate-service.ts) - ECS Fargate service
+- [lib/alb-api-gateway.ts](lib/alb-api-gateway.ts) - API Gateway + ALB
+- [lib/ecr-repository.ts](lib/ecr-repository.ts) - Docker registry
+- [lib/xdg-config.ts](lib/xdg-config.ts) - XDG configuration management
+- [lib/types/](lib/types/) - TypeScript type definitions
 
 ### CLI & Automation
 
-- **`bin/`** - Executable CLI tools & automation scripts (JavaScript/TypeScript)
-  - [bin/cli.ts](bin/cli.ts) - Main CLI entry point (`benchling-webhook` command)
-  - [bin/version.js](bin/version.js) - Version management (`npm run version`)
-  - [bin/release.js](bin/release.js) - Release automation
-  - [bin/cdk-dev.js](bin/cdk-dev.js) - Dev deployment workflow
-  - [bin/check-logs.js](bin/check-logs.js) - CloudWatch log viewer
-  - [bin/send-event.js](bin/send-event.js) - Test event sender
-  - [bin/commands/](bin/commands/) - CLI command implementations
+#### `bin/` — Executable CLI tools & automation scripts (JavaScript/TypeScript)
+
+- [bin/cli.ts](bin/cli.ts) - Main CLI entry point (`benchling-webhook` command)
+- [bin/version.js](bin/version.js) - Version management (`npm run version`)
+- [bin/release.js](bin/release.js) - Release automation
+- [bin/cdk-dev.js](bin/cdk-dev.js) - Dev deployment workflow
+- [bin/check-logs.js](bin/check-logs.js) - CloudWatch log viewer
+- [bin/send-event.js](bin/send-event.js) - Test event sender
+- [bin/commands/](bin/commands/) - CLI command implementations
 
 ### Setup & Configuration
 
-- **`scripts/`** - Interactive setup & configuration scripts (TypeScript, run via ts-node)
-  - [scripts/install-wizard.ts](scripts/install-wizard.ts) - Interactive setup wizard (`npm run setup`)
-  - [scripts/infer-quilt-config.ts](scripts/infer-quilt-config.ts) - Quilt catalog inference (`npm run setup:infer`)
-  - [scripts/sync-secrets.ts](scripts/sync-secrets.ts) - AWS Secrets Manager sync (`npm run setup:sync-secrets`)
-  - [scripts/config-health-check.ts](scripts/config-health-check.ts) - Configuration validation (`npm run setup:health`)
+#### `scripts/` — Interactive setup & configuration scripts (TypeScript, run via ts-node)
+
+- [scripts/install-wizard.ts](scripts/install-wizard.ts) - Interactive setup wizard (`npm run setup`)
+- [scripts/infer-quilt-config.ts](scripts/infer-quilt-config.ts) - Quilt catalog inference (`npm run setup:infer`)
+- [scripts/sync-secrets.ts](scripts/sync-secrets.ts) - AWS Secrets Manager sync (`npm run setup:sync-secrets`)
+- [scripts/config-health-check.ts](scripts/config-health-check.ts) - Configuration validation (`npm run setup:health`)
 
 ### Application
 
-- **`docker/`** - Flask webhook processor (Python)
-  - See [docker/README.md](docker/README.md) for details
+#### `docker/` — Flask webhook processor (Python)
 
-**Key Distinction:**
+- See [docker/README.md](docker/README.md) for details
 
-- **`bin/`** → CLI tools & compiled scripts (production runtime, often `.js`)
-- **`scripts/`** → Development-time setup scripts (TypeScript, via ts-node)
+#### Key Distinction
+
+##### `bin/` — CLI tools & compiled scripts (production runtime, often `.js`)
+
+##### `scripts/` — Development-time setup scripts (TypeScript, via ts-node)
 
 ---
 
@@ -154,13 +160,13 @@ make -C docker test-ecr      # ECR image validation
 
 ### XDG Configuration Model
 
-**Single Source of Truth:**
+#### Single Source of Truth
 
 - User settings stored in `~/.config/benchling-webhook/default.json`
 - Avoids `.env` files and environment variable pollution
 - Secrets synced to AWS Secrets Manager
 
-**Configuration Flow:**
+#### Configuration Flow
 
 1. `npm run setup` prompts for settings → stores in XDG
 2. npm scripts read from XDG for CDK operations
@@ -213,7 +219,7 @@ This runs:
 
 ### Production Release
 
-**Step 1: Tag and trigger CI**
+#### Step 1: Tag and trigger CI
 
 ```bash
 npm run release:tag          # Creates version tag, pushes to GitHub
@@ -227,7 +233,7 @@ This triggers CI to:
 - Publish to npm
 - Create GitHub release
 
-**Step 2: Deploy to production**
+#### Step 2: Deploy to production
 
 ```bash
 npm run deploy:prod -- \
@@ -253,21 +259,21 @@ This runs:
 
 ## Monitoring & Debugging
 
-**Logs:**
+### Logs
 
 ```bash
 aws logs tail /ecs/benchling-webhook --follow
 ```
 
-**Health Checks:**
+### Health Checks
 
 - `/health` - General health
 - `/health/ready` - Readiness probe
 
-**Metrics:**
+### Metrics
 
 - CloudWatch: ECS tasks, API Gateway, ALB health
-- Deployment outputs: `.env.deploy` file
+- Deployment outputs: `<XDG>/deploy/default.json` file
 
 ---
 
