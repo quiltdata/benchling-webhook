@@ -88,6 +88,34 @@ export async function deployCommand(options: {
 
 **Impact**: Deploy command now supports multi-environment workflows
 
+#### `scripts/install-wizard.ts`
+**Purpose**: Interactive configuration wizard with multi-profile support
+
+**Key Enhancement**: Profile fallback to default
+```typescript
+// Lines 346-359: Non-default profiles inherit from default
+if (profile !== "default") {
+    const defaultConfig = xdgConfig.readProfileConfig("user", "default");
+    existingConfig = { ...defaultConfig, ...existingConfig };
+}
+```
+
+**Usage**:
+```bash
+# Interactive setup for dev profile
+npm run setup:dev
+
+# Non-interactive (uses stored defaults)
+npm run setup:dev -- --yes
+```
+
+**Behavior**:
+- `--yes` mode: Reads from profile, falls back to default for missing values
+- Required secrets (`benchlingClientSecret`, etc.) automatically inherited
+- Profile-specific values (like `benchlingTenant`) can override defaults
+
+**Impact**: Enables seamless multi-environment configuration without re-entering secrets
+
 #### `bin/commands/setup-profile.ts` (NEW)
 **Purpose**: Interactive profile creation
 
