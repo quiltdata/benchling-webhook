@@ -40,8 +40,8 @@ interface EnvironmentConfig {
  * Uses atomic write pattern to prevent corruption
  */
 function storeDeploymentConfig(
-    environment: 'dev' | 'prod',
-    config: EnvironmentConfig
+    environment: "dev" | "prod",
+    config: EnvironmentConfig,
 ): void {
     const configDir = join(homedir(), ".config", "benchling-webhook");
     const deployJsonPath = join(configDir, "deploy.json");
@@ -67,8 +67,8 @@ function storeDeploymentConfig(
 
     // Atomic rename (platform-specific)
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require('fs');
-    if (process.platform === 'win32') {
+    const fs = require("fs");
+    if (process.platform === "win32") {
         // Windows: create backup before rename
         if (existsSync(deployJsonPath)) {
             const backupPath = `${deployJsonPath}.backup`;
@@ -349,7 +349,7 @@ async function deploy(
                     const imageTag = options.imageTag || "latest";
 
                     // Store prod deployment config
-                    storeDeploymentConfig('prod', {
+                    storeDeploymentConfig("prod", {
                         endpoint: webhookUrl,
                         imageTag: imageTag,
                         deployedAt: new Date().toISOString(),
@@ -363,7 +363,7 @@ async function deploy(
                     try {
                         execSync("npm run test:prod", {
                             stdio: "inherit",
-                            cwd: process.cwd()
+                            cwd: process.cwd(),
                         });
                         console.log();
                         console.log("✅ Production deployment and tests completed successfully!");
