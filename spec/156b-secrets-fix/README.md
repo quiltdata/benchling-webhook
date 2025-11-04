@@ -26,7 +26,7 @@ Error: ECS Deployment Circuit Breaker was triggered
 
 ### Root Cause
 
-The deployment script `bin/cdk-dev.js` was deploying using **legacy mode** (10+ individual environment variables) instead of **secrets-only mode** (2 AWS parameters).
+The deployment script `bin/dev-deploy.ts` was deploying using **legacy mode** (10+ individual environment variables) instead of **secrets-only mode** (2 AWS parameters).
 
 **Key Problem**: We were testing secrets-only mode with mocked AWS, but deploying legacy mode with real AWS - two completely different code paths. Production and tests were divergent.
 

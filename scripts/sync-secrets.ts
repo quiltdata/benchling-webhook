@@ -22,6 +22,7 @@ import {
 import { XDGConfig, BaseConfig } from "../lib/xdg-config";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { UserConfig, DerivedConfig, ProfileName } from "../lib/types/config";
+import { generateSecretName } from "../lib/utils/secrets";
 
 /**
  * Secrets sync options
@@ -51,24 +52,6 @@ interface SyncResult {
     secretArn: string;
     action: "created" | "updated" | "skipped";
     message: string;
-}
-
-/**
- * Generates standardized secret name
- *
- * @param profile - Profile name
- * @param tenant - Benchling tenant
- * @returns Secret name
- */
-function generateSecretName(profile: ProfileName, tenant: string): string {
-    const sanitizedTenant = tenant.replace(/[^a-zA-Z0-9-_]/g, "-");
-    const sanitizedProfile = profile.replace(/[^a-zA-Z0-9-_]/g, "-");
-
-    if (profile === "default") {
-        return `benchling-webhook/${sanitizedTenant}`;
-    }
-
-    return `benchling-webhook/${sanitizedProfile}/${sanitizedTenant}`;
 }
 
 /**
