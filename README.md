@@ -39,17 +39,10 @@ npx @quiltdata/benchling-webhook@latest test      # Test integration
 npx @quiltdata/benchling-webhook@latest manifest  # Generate app manifest
 ```
 
-## Documentation
+## Resources
 
-- [Development Guide](./CLAUDE.md) - For contributors and local development
-- [Secrets Configuration](./docs/SECRETS_CONFIGURATION.md) - Advanced configuration options
 - [Changelog](./CHANGELOG.md) - Version history
-
-## Support
-
 - [Report Issues](https://github.com/quiltdata/benchling-webhook/issues)
-- [Discussions](https://github.com/quiltdata/benchling-webhook/discussions)
-- Security: <security@quiltdata.com>
 
 ## License
 
