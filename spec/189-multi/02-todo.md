@@ -146,7 +146,7 @@ git commit -m "refactor(wizard): modularize install wizard for v0.7.0"
 
 ### Parallel Group 4B: Update Test Scripts
 
-- [ ] Update test helpers in [__tests__/](lib/__tests__/)
+- [ ] Update test helpers in [**tests**/](lib/__tests__/)
   - [ ] Update deployment lookup logic
   - [ ] Support new config structure in mocks
 - [ ] Update [package.json](package.json) test scripts
@@ -242,20 +242,13 @@ git commit -m "test: add comprehensive tests for v0.7.0 config architecture"
   - [ ] Document new XDG configuration model
   - [ ] Update configuration flow section
   - [ ] Update setup commands section
-- [ ] Create [MIGRATION.md](MIGRATION.md)
-  - [ ] Step-by-step upgrade guide from v0.6.x
-  - [ ] List all breaking changes
-  - [ ] Provide config mapping table (old → new)
 
 ### Parallel Group 7B: Release Documentation
 
 - [ ] Update [CHANGELOG.md](CHANGELOG.md)
-  - [ ] Document all breaking changes
+  - [ ] Document all user-facing changes concisely
   - [ ] Add v0.7.0 entry with migration notes
-- [ ] Create GitHub release notes template
-  - [ ] Highlight BREAKING CHANGE
-  - [ ] Link to migration guide
-  - [ ] Provide support contact info
+- [ ] Update PR description (for a squash commit)
 
 ### Checkpoint: Lint + Commit
 
@@ -287,18 +280,6 @@ git commit -m "docs: update for v0.7.0 breaking changes"
   - [ ] Verify deployment tracking in `deployments.json`
   - [ ] Test profile inheritance scenarios
 
-- [ ] **Task 8.3**: Verify v0.6.x detection
-  - [ ] Create test machine with v0.6.x config
-  - [ ] Install v0.7.0
-  - [ ] Verify helpful error message appears
-  - [ ] Follow migration guide and verify success
-
-- [ ] **Task 8.4**: Version bump and release prep
-  - [ ] Bump version to 0.7.0 in [package.json](package.json)
-  - [ ] Update [package-lock.json](package-lock.json)
-  - [ ] Final review of CHANGELOG.md
-  - [ ] Tag release: `npm run version:tag`
-
 ### Checkpoint: Final Commit
 
 ```bash
@@ -318,18 +299,16 @@ npm run version:tag
 - [ ] Documentation is complete and accurate
 - [ ] Migration guide is clear and tested
 - [ ] CHANGELOG.md documents all breaking changes
-- [ ] GitHub release notes prepared
+- [ ] PR description/title consistent
 - [ ] CI/CD pipeline configured for v0.7.0
 - [ ] npm publish dry-run successful
-- [ ] **PUBLISH**: `npm publish`
-- [ ] Create GitHub release with migration guide link
-- [ ] Announce breaking change in relevant channels
 
 ---
 
 ## Parallel Execution Strategy
 
 ### Can Run in Parallel
+
 - **Phase 1**: Groups 1A and 1B can run simultaneously
 - **Phase 3**: Group 3A (all three module extractions) can run simultaneously
 - **Phase 4**: Groups 4A and 4B can run simultaneously
@@ -338,11 +317,13 @@ npm run version:tag
 - **Phase 7**: Groups 7A and 7B can run simultaneously
 
 ### Must Run Sequentially
+
 - **Phase 2**: All tasks must run in order (2.1 → 2.2 → 2.3 → 2.4 → 2.5 → 2.6)
 - **Phase 3**: Task 3.2 depends on Group 3A completion
 - **Phase 8**: All tasks must run in order
 
 ### Suggested Workflow
+
 1. Complete Phase 1 (types + fixtures)
 2. Complete Phase 2 (XDGConfig rewrite) - **BLOCKING**
 3. Complete Phases 3-7 with maximum parallelism
