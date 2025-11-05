@@ -7,109 +7,31 @@ All notable changes to this project will be documented in this file.
 
 ### BREAKING CHANGES
 
-This release introduces a complete redesign of the configuration architecture. **NO backward compatibility** with v0.6.x configuration files. Manual reconfiguration required.
+**Configuration architecture redesigned - manual reconfiguration required.** See [MIGRATION.md](./MIGRATION.md).
 
-**Migration Required**: See [MIGRATION.md](./MIGRATION.md) for detailed upgrade instructions.
+**What changed:**
 
-### Changed
+- Config moved: `default.json` → `default/config.json`
+- Deployment tracking: Shared `deploy.json` → per-profile `{profile}/deployments.json`
+- Profile/stage are now independent (deploy any profile to any stage)
 
-- **Configuration Architecture (BREAKING)** (#176, #189) - Complete redesign of XDG configuration system
-  - Configuration moved from `~/.config/benchling-webhook/default.json` to `~/.config/benchling-webhook/default/config.json`
-  - Each profile now has its own directory: `~/.config/benchling-webhook/{profile}/`
-  - Profiles moved from `profiles/{name}/default.json` to `{name}/config.json`
-  - Single `config.json` per profile replaces three-tier system (user/derived/deploy)
-  - Nested configuration structure for better organization (quilt, benchling, packages, deployment sections)
+**Migration:**
 
-- **Deployment Tracking (BREAKING)** - Per-profile deployment tracking replaces shared `deploy.json`
-  - Each profile has its own `deployments.json` file
-  - Tracks deployment history with rollback capability
-  - Multiple stages can be deployed per profile
-  - Changed from `~/.config/benchling-webhook/deploy.json` to `~/.config/benchling-webhook/{profile}/deployments.json`
-
-- **Profile/Stage Independence** - Profiles and stages are now independent concepts
-  - Profile: Named set of configuration values (default, dev, prod, staging)
-  - Stage: API Gateway deployment target (dev, prod, staging)
-  - Can deploy any profile to any stage (e.g., dev profile to prod stage for testing)
-
-- **XDGConfig API (BREAKING)** - Simplified, profile-first API
-  - Removed `ConfigType` enum (user/derived/deploy)
-  - New methods: `readProfile()`, `writeProfile()`, `deleteProfile()`, `listProfiles()`
-  - New deployment tracking: `getDeployments()`, `recordDeployment()`, `getActiveDeployment()`
-  - New inheritance support: `readProfileWithInheritance()`
-  - Removed: `readConfig()`, `writeConfig()`, `readProfileConfig()`, `writeProfileConfig()`
-
-- **Install Wizard Modularization** - Refactored into focused modules
-  - Extracted `scripts/config/wizard.ts` - Interactive prompts only
-  - Extracted `scripts/config/validator.ts` - Configuration validation only
-  - Main wizard now orchestrates, doesn't implement
-  - Reduced complexity from 805 lines to modular structure
+1. Backup: `cat ~/.config/benchling-webhook/default.json > ~/benchling-backup.json`
+2. Upgrade: `npm install @quiltdata/benchling-webhook@latest`
+3. Setup: `npm run setup` (re-enter configuration)
+4. Deploy: `npm run deploy -- --profile default --stage prod`
 
 ### Added
 
-- **Profile Inheritance** - Profiles can inherit from other profiles
-  - Use `_inherits` field in config.json to inherit from another profile
-  - Deep merge with overrides taking precedence
-  - Reduces duplication for multi-environment setups
-  - Example: `{"_inherits": "default", "benchling": {"appDefinitionId": "app_dev_123"}}`
+- **Profile inheritance** - Use `_inherits` field to reduce duplication
+- **Deployment history** - Full history per profile with rollback capability
+- **Profile management** - Commands: `setup`, `setup-profile <name>`, `setup-profile <name> --inherit`
 
-- **Deployment History** - Track deployment history per profile
-  - Full deployment history in `deployments.json`
-  - Active deployments by stage
-  - Metadata: timestamp, image tag, endpoint, stack name, region, deployed by, commit
+### Changed
 
-- **Configuration Metadata** - Track configuration provenance
-  - `_metadata` field in config.json
-  - Schema version, creation/update timestamps, source (wizard/manual/cli)
-
-- **Profile Management Commands**
-  - `setup` - Create default profile
-  - `setup-profile <name>` - Create named profile
-  - `setup-profile <name> --inherit` - Create profile inheriting from default
-  - `deleteProfile()` - Delete a profile
-
-- **Legacy Config Detection** - Helpful error messages when old config detected
-  - Detects v0.6.x configuration files
-  - Displays migration instructions
-  - Points to MIGRATION.md guide
-
-### Removed
-
-- **Legacy Configuration Support (BREAKING)** - Removed all v0.6.x configuration handling
-  - No longer reads `~/.config/benchling-webhook/default.json`
-  - No longer reads `~/.config/benchling-webhook/deploy.json`
-  - No longer reads `~/.config/benchling-webhook/profiles/{name}/default.json`
-  - No longer reads `~/.config/benchling-webhook/config/default.json`
-  - No automatic migration from v0.6.x to v0.7.0
-
-- **ConfigType Enum** - Removed three-tier configuration system
-  - No more "user", "derived", "deploy" config types
-  - Single unified `config.json` per profile
-
-- **Manual Profile Fallback Logic** - Removed from install wizard
-  - Profile inheritance now handled by XDGConfig internally
-  - Explicit via `_inherits` field
-
-### Fixed
-
-- Configuration structure now aligns with actual usage patterns
-- Profile/stage confusion resolved with clear separation
-- Deployment tracking isolated per profile (no cross-profile conflicts)
-
-### Migration Notes
-
-**Before upgrading:**
-1. Backup your configuration: `cat ~/.config/benchling-webhook/default.json > ~/benchling-v0.6-backup.json`
-2. Note your deployment endpoints from `deploy.json`
-3. Document any profile-specific settings
-
-**After upgrading:**
-1. Run setup wizard: `npx @quiltdata/benchling-webhook@latest setup`
-2. Re-enter your configuration (reference backup file)
-3. For multi-environment: `npx @quiltdata/benchling-webhook@latest setup-profile dev --inherit`
-4. Deploy: `npx @quiltdata/benchling-webhook@latest deploy --profile default --stage prod`
-5. Test: `npx @quiltdata/benchling-webhook@latest test --profile default`
-
-See [MIGRATION.md](./MIGRATION.md) for complete step-by-step instructions.
+- Simplified config structure - single `config.json` per profile (no more user/derived/deploy split)
+- Per-profile deployment tracking eliminates cross-profile conflicts
 
 ---
 
