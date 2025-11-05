@@ -208,7 +208,7 @@ def resolve_benchling_secrets(aws_region: str) -> BenchlingSecrets:
             "\n"
             "Supported formats:\n"
             "  1. ARN: arn:aws:secretsmanager:region:account:secret:name\n"
-            "  2. JSON: {\"tenant\": \"...\", \"clientId\": \"...\", \"clientSecret\": \"...\"}\n"
+            '  2. JSON: {"tenant": "...", "clientId": "...", "clientSecret": "..."}\n'
             "\n"
             "Legacy mode with individual environment variables (BENCHLING_TENANT, etc.) "
             "is no longer supported in v0.6.0+."

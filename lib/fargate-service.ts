@@ -7,25 +7,27 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
+import { ProfileConfig } from "./types/config";
 
 /**
- * Properties for FargateService construct
- * Secrets-only mode (v0.6.0+) - All configuration resolved at runtime from CloudFormation and Secrets Manager
+ * Properties for FargateService construct (v0.7.0+)
+ *
+ * Uses ProfileConfig for structured configuration access.
+ * Runtime-configurable parameters (quiltStackArn, benchlingSecret, logLevel)
+ * can be overridden via CloudFormation parameters.
  */
 export interface FargateServiceProps {
     readonly vpc: ec2.IVpc;
     readonly bucket: s3.IBucket;
-    readonly region: string;
-    readonly account: string;
+    readonly config: ProfileConfig;
     readonly ecrRepository: ecr.IRepository;
     readonly imageTag?: string;
     readonly stackVersion?: string;
-    readonly logLevel?: string;
-    readonly enableWebhookVerification?: string;
 
-    // Secrets-only mode parameters (v0.6.0+)
+    // Runtime-configurable parameters (from CloudFormation)
     readonly quiltStackArn: string;
     readonly benchlingSecret: string;
+    readonly logLevel?: string;
 }
 
 export class FargateService extends Construct {
@@ -36,6 +38,8 @@ export class FargateService extends Construct {
 
     constructor(scope: Construct, id: string, props: FargateServiceProps) {
         super(scope, id);
+
+        const { config } = props;
 
         // Create ECS Cluster
         this.cluster = new ecs.Cluster(this, "BenchlingWebhookCluster", {
@@ -75,7 +79,6 @@ export class FargateService extends Construct {
             assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
         });
 
-        // Secrets-only mode: Grant permissions for CloudFormation and Secrets Manager
         // Grant CloudFormation read access (to query stack outputs)
         taskRole.addToPolicy(
             new iam.PolicyStatement({
@@ -88,6 +91,8 @@ export class FargateService extends Construct {
         );
 
         // Grant Secrets Manager read access (to fetch Benchling credentials)
+        // Use both config.benchling.secretArn and runtime parameter
+        const secretArn = config.benchling.secretArn || props.benchlingSecret;
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
@@ -95,12 +100,14 @@ export class FargateService extends Construct {
                     "secretsmanager:DescribeSecret",
                 ],
                 resources: [
-                    `arn:aws:secretsmanager:${props.region}:${props.account}:secret:${props.benchlingSecret}*`,
+                    secretArn,
+                    `${secretArn}*`, // Include version suffixes
                 ],
             }),
         );
 
         // Grant wildcard S3 access (bucket name will be resolved at runtime)
+        // Includes both config.packages.bucket and config.quilt.bucket
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
@@ -123,7 +130,7 @@ export class FargateService extends Construct {
                     "sqs:GetQueueAttributes",
                 ],
                 resources: [
-                    `arn:aws:sqs:${props.region}:${props.account}:*`,
+                    `arn:aws:sqs:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:*`,
                 ],
             }),
         );
@@ -137,9 +144,9 @@ export class FargateService extends Construct {
                     "glue:GetPartitions",
                 ],
                 resources: [
-                    `arn:aws:glue:${props.region}:${props.account}:catalog`,
-                    `arn:aws:glue:${props.region}:${props.account}:database/*`,
-                    `arn:aws:glue:${props.region}:${props.account}:table/*`,
+                    `arn:aws:glue:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:catalog`,
+                    `arn:aws:glue:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:database/*`,
+                    `arn:aws:glue:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:table/*`,
                 ],
             }),
         );
@@ -155,13 +162,15 @@ export class FargateService extends Construct {
                     "athena:GetWorkGroup",
                 ],
                 resources: [
-                    `arn:aws:athena:${props.region}:${props.account}:workgroup/primary`,
+                    `arn:aws:athena:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:workgroup/primary`,
                 ],
             }),
         );
 
         // Grant S3 access for Athena query results
-        const athenaResultsBucketArn = `arn:aws:s3:::aws-athena-query-results-${props.account}-${props.region}`;
+        const account = config.deployment.account || cdk.Aws.ACCOUNT_ID;
+        const region = config.deployment.region;
+        const athenaResultsBucketArn = `arn:aws:s3:::aws-athena-query-results-${account}-${region}`;
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
@@ -186,18 +195,23 @@ export class FargateService extends Construct {
             family: "benchling-webhook-task",
         });
 
-        // Build environment variables for secrets-only mode
-        // Container will query CloudFormation and Secrets Manager for everything else
+        // Build environment variables using new config structure
+        // Container will query CloudFormation and Secrets Manager for runtime config
         const environmentVars: { [key: string]: string } = {
-            AWS_REGION: props.region,
-            AWS_DEFAULT_REGION: props.region,
+            AWS_REGION: region,
+            AWS_DEFAULT_REGION: region,
             FLASK_ENV: "production",
-            LOG_LEVEL: props.logLevel || "INFO",
-            ENABLE_WEBHOOK_VERIFICATION: props.enableWebhookVerification || "true",
+            LOG_LEVEL: props.logLevel || config.logging?.level || "INFO",
+            ENABLE_WEBHOOK_VERIFICATION: config.security?.enableVerification !== false ? "true" : "false",
             BENCHLING_WEBHOOK_VERSION: props.stackVersion || props.imageTag || "latest",
-            // Secrets-only mode: Only pass 2 environment variables
+            // Runtime-configurable parameters (from CloudFormation)
             QuiltStackARN: props.quiltStackArn,
             BenchlingSecret: props.benchlingSecret,
+            // Static config values (for reference)
+            BENCHLING_TENANT: config.benchling.tenant,
+            BENCHLING_PKG_BUCKET: config.packages.bucket,
+            BENCHLING_PKG_PREFIX: config.packages.prefix,
+            BENCHLING_PKG_KEY: config.packages.metadataKey,
         };
 
         // Add container with configured environment
@@ -228,7 +242,7 @@ export class FargateService extends Construct {
 
         // Create S3 bucket for ALB access logs
         const albLogsBucket = new s3.Bucket(this, "AlbLogsBucket", {
-            bucketName: `benchling-webhook-alb-logs-${props.account}`,
+            bucketName: `benchling-webhook-alb-logs-${account}`,
             removalPolicy: cdk.RemovalPolicy.DESTROY,
             autoDeleteObjects: true,
             lifecycleRules: [

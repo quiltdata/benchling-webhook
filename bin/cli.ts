@@ -7,6 +7,7 @@ import { validateCommand } from "./commands/validate";
 import { testCommand } from "./commands/test";
 import { manifestCommand } from "./commands/manifest";
 import { setupWizardCommand } from "./commands/setup-wizard";
+import { setupProfileCommand } from "./commands/setup-profile";
 import { healthCheckCommand } from "./commands/health-check";
 
 // Load package.json for version
@@ -19,7 +20,17 @@ program
     .name("benchling-webhook")
     .description("Benchling Webhook Integration for Quilt - Deploy lab notebook integration to AWS")
     .version(pkg.version, "-v, --version", "Display version number")
-    .helpOption("-h, --help", "Display help for command");
+    .helpOption("-h, --help", "Display help for command")
+    .addHelpText("after", `
+
+v0.7.0 Changes:
+  - New unified configuration architecture with profile support
+  - Profile-based deployment tracking (~/.config/benchling-webhook/{profile}/)
+  - Independent --profile and --stage options for flexible deployments
+  - Profile inheritance support for environment hierarchies
+
+For upgrade instructions: https://github.com/quiltdata/benchling-webhook/blob/main/MIGRATION.md
+`);
 
 // Deploy command (default)
 program
@@ -28,24 +39,29 @@ program
     .option("--quilt-stack-arn <arn>", "ARN of Quilt CloudFormation stack")
     .option("--benchling-secret <name>", "Name or ARN of Benchling secret in Secrets Manager")
     .option("--env-file <path>", "Path to .env file", ".env")
+    // Multi-environment options (v0.7.0)
+    .option("--profile <name>", "Configuration profile to use (default: default)")
+    .option("--stage <name>", "API Gateway stage: dev or prod (default: prod)")
     // Common options
     .option("--no-bootstrap-check", "Skip CDK bootstrap verification")
     .option("--require-approval <level>", "CDK approval level", "never")
-    .option("--profile <name>", "AWS profile to use")
-    .option("--stage <name>", "API Gateway stage (dev or prod)")
     .option("--region <region>", "AWS region to deploy to")
     .option("--image-tag <tag>", "Docker image tag to deploy (default: latest)")
     .option("--yes", "Skip confirmation prompts")
     .addHelpText("after", `
+
 Examples:
-  Deploy with default secret name:
+  Deploy to production with default profile:
     $ npx @quiltdata/benchling-webhook deploy \\
         --quilt-stack-arn "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123"
 
-  Deploy with custom secret name:
+  Deploy to dev stage with dev profile:
     $ npx @quiltdata/benchling-webhook deploy \\
-        --quilt-stack-arn "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123" \\
-        --benchling-secret "my-benchling-credentials"
+        --profile dev --stage dev
+
+  Deploy to prod with custom image tag:
+    $ npx @quiltdata/benchling-webhook deploy \\
+        --stage prod --image-tag "0.7.0"
 
 For more information: https://github.com/quiltdata/benchling-webhook#deployment
 `)
@@ -112,6 +128,37 @@ program
     .action(async (options) => {
         try {
             await manifestCommand(options);
+        } catch (error) {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        }
+    });
+
+// Setup profile command (v0.7.0)
+program
+    .command("setup-profile <name>")
+    .description("Create a new configuration profile with optional inheritance")
+    .option("--inherit-from <profile>", "Base profile to inherit from", "default")
+    .option("--force", "Overwrite existing profile without prompting")
+    .addHelpText("after", `
+
+Examples:
+  Create dev profile inheriting from default:
+    $ npx @quiltdata/benchling-webhook setup-profile dev
+
+  Create staging profile inheriting from prod:
+    $ npx @quiltdata/benchling-webhook setup-profile staging --inherit-from prod
+
+Profile inheritance allows you to:
+  - Reuse common settings across environments
+  - Override only environment-specific values
+  - Maintain a single source of truth for shared configuration
+
+For more information: https://github.com/quiltdata/benchling-webhook#multi-environment-setup
+`)
+    .action(async (name, options) => {
+        try {
+            await setupProfileCommand(name, options);
         } catch (error) {
             console.error(chalk.red((error as Error).message));
             process.exit(1);

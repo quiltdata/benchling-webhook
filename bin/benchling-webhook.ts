@@ -4,26 +4,27 @@ import * as cdk from "aws-cdk-lib";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
 import { execSync } from "child_process";
 import type { Config } from "../lib/utils/config";
+import type { ProfileConfig } from "../lib/types/config";
 
 /**
  * Result of CDK bootstrap check
  */
 export interface BootstrapStatus {
-  bootstrapped: boolean;
-  status?: string;
-  message?: string;
-  command?: string;
-  warning?: string;
+    bootstrapped: boolean;
+    status?: string;
+    message?: string;
+    command?: string;
+    warning?: string;
 }
 
 /**
  * Result of deployment
  */
 export interface DeploymentResult {
-  app: cdk.App;
-  stack: BenchlingWebhookStack;
-  stackName: string;
-  stackId: string;
+    app: cdk.App;
+    stack: BenchlingWebhookStack;
+    stackName: string;
+    stackId: string;
 }
 
 /**
@@ -44,7 +45,7 @@ export async function checkCdkBootstrap(
 
         if (
             stackStatus.includes("does not exist") ||
-      stackStatus.includes("ValidationError")
+            stackStatus.includes("ValidationError")
         ) {
             return {
                 bootstrapped: false,
@@ -74,24 +75,71 @@ export async function checkCdkBootstrap(
 }
 
 /**
+ * Convert legacy Config to ProfileConfig (temporary adapter for Phase 4 migration)
+ * TODO: Remove this function in Phase 4 when all config loading uses ProfileConfig directly
+ */
+function legacyConfigToProfileConfig(config: Config): ProfileConfig {
+    return {
+        quilt: {
+            stackArn: config.quiltStackArn || "",
+            catalog: config.quiltCatalog,
+            bucket: config.quiltUserBucket,
+            database: config.quiltDatabase,
+            queueArn: config.queueArn,
+            region: config.cdkRegion,
+        },
+        benchling: {
+            tenant: config.benchlingTenant,
+            clientId: config.benchlingClientId,
+            clientSecret: config.benchlingClientSecret,
+            secretArn: config.benchlingSecret,
+            appDefinitionId: config.benchlingAppDefinitionId,
+        },
+        packages: {
+            bucket: config.quiltUserBucket,
+            prefix: config.pkgPrefix || "benchling",
+            metadataKey: config.pkgKey || "experiment_id",
+        },
+        deployment: {
+            region: config.cdkRegion,
+            account: config.cdkAccount,
+            ecrRepository: config.ecrRepositoryName || "quiltdata/benchling",
+            imageTag: config.imageTag || "latest",
+        },
+        logging: {
+            level: (config.logLevel as "DEBUG" | "INFO" | "WARNING" | "ERROR") || "INFO",
+        },
+        security: {
+            webhookAllowList: config.webhookAllowList || "",
+            enableVerification: config.enableWebhookVerification !== "false",
+        },
+        _metadata: {
+            version: "0.7.0-migration",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            source: "cli",
+        },
+    };
+}
+
+/**
  * Create CDK app and stack (synthesis only, no deployment)
- * Secrets-only mode (v0.6.0+) - requires QUILT_STACK_ARN and BENCHLING_SECRET
+ * v0.7.0: Updated to use ProfileConfig
+ * TODO: Phase 4 will update this to read ProfileConfig directly from XDGConfig
  */
 export function createStack(config: Config): DeploymentResult {
     const app = new cdk.App();
+
+    // Convert legacy config to ProfileConfig
+    const profileConfig = legacyConfigToProfileConfig(config);
 
     const stack = new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
         env: {
             account: config.cdkAccount,
             region: config.cdkRegion,
         },
-        // Secrets-only mode parameters (v0.6.0+)
-        quiltStackArn: config.quiltStackArn!,
-        benchlingSecret: config.benchlingSecret!,
-        logLevel: config.logLevel || "INFO",
+        config: profileConfig,
         createEcrRepository: config.createEcrRepository === "true",
-        ecrRepositoryName: config.ecrRepositoryName || "quiltdata/benchling",
-        imageTag: config.imageTag || "latest",
     });
 
     return {
@@ -103,20 +151,59 @@ export function createStack(config: Config): DeploymentResult {
 }
 
 // Only run if called directly (not imported)
-// Secrets-only mode (v0.6.0+) - all configuration comes from environment variables
+// v0.7.0: Updated to use ProfileConfig
+// TODO: Phase 4 will replace this with proper XDGConfig loading
 if (require.main === module) {
     const app = new cdk.App();
+
+    // Minimal ProfileConfig from environment variables (for direct CDK usage)
+    const profileConfig: ProfileConfig = {
+        quilt: {
+            stackArn: process.env.QUILT_STACK_ARN || "",
+            catalog: process.env.QUILT_CATALOG || "",
+            bucket: process.env.QUILT_USER_BUCKET || "",
+            database: process.env.QUILT_DATABASE || "",
+            queueArn: process.env.QUEUE_ARN || "",
+            region: process.env.CDK_DEFAULT_REGION || "us-east-1",
+        },
+        benchling: {
+            tenant: process.env.BENCHLING_TENANT || "",
+            clientId: process.env.BENCHLING_CLIENT_ID || "",
+            secretArn: process.env.BENCHLING_SECRET,
+            appDefinitionId: process.env.BENCHLING_APP_DEFINITION_ID || "",
+        },
+        packages: {
+            bucket: process.env.QUILT_USER_BUCKET || "",
+            prefix: process.env.PKG_PREFIX || "benchling",
+            metadataKey: process.env.PKG_KEY || "experiment_id",
+        },
+        deployment: {
+            region: process.env.CDK_DEFAULT_REGION || "us-east-1",
+            account: process.env.CDK_DEFAULT_ACCOUNT,
+            ecrRepository: process.env.ECR_REPOSITORY_NAME || "quiltdata/benchling",
+            imageTag: process.env.IMAGE_TAG || "latest",
+        },
+        logging: {
+            level: (process.env.LOG_LEVEL as "DEBUG" | "INFO" | "WARNING" | "ERROR") || "INFO",
+        },
+        security: {
+            webhookAllowList: process.env.WEBHOOK_ALLOW_LIST || "",
+            enableVerification: process.env.ENABLE_WEBHOOK_VERIFICATION !== "false",
+        },
+        _metadata: {
+            version: "0.7.0",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            source: "cli",
+        },
+    };
 
     new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
         env: {
             account: process.env.CDK_DEFAULT_ACCOUNT,
             region: process.env.CDK_DEFAULT_REGION,
         },
-        quiltStackArn: process.env.QUILT_STACK_ARN!,
-        benchlingSecret: process.env.BENCHLING_SECRET!,
-        logLevel: process.env.LOG_LEVEL || "INFO",
+        config: profileConfig,
         createEcrRepository: process.env.CREATE_ECR_REPOSITORY === "true",
-        ecrRepositoryName: process.env.ECR_REPOSITORY_NAME || "quiltdata/benchling",
-        imageTag: process.env.IMAGE_TAG || "latest",
     });
 }

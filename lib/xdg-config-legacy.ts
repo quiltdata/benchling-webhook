@@ -21,7 +21,7 @@ import merge from "lodash.merge";
 import {
     UserConfig,
     DerivedConfig,
-    DeploymentConfig,
+    LegacyDeploymentConfig,
     ConfigType,
     ProfileName,
     XDGConfigPaths,
@@ -609,7 +609,7 @@ export class XDGConfig {
         // Load deploy config if exists
         if (existsSync(paths.deployConfig)) {
             try {
-                profile.deploy = this.readProfileConfig("deploy", profileName) as DeploymentConfig;
+                profile.deploy = this.readProfileConfig("deploy", profileName) as LegacyDeploymentConfig;
             } catch {
                 // Deploy config is optional
             }

@@ -1,13 +1,15 @@
 # Benchling-Quilt Integration Makefile
 
-# Configuration is now managed via XDG (~/.config/benchling-webhook/default.json)
-# and AWS Secrets Manager instead of .env files
+# Configuration is now managed via XDG (~/.config/benchling-webhook/{profile}/)
+# with unified config.json and deployments.json per profile (v0.7.0)
 
 # Include deployment targets
 include make.deploy
 
-# XDG configuration directory
+# XDG configuration directory and profile (v0.7.0)
 XDG_CONFIG ?= $(HOME)/.config/benchling-webhook
+PROFILE ?= default
+PROFILE_DIR = $(XDG_CONFIG)/$(PROFILE)
 
 # Default log level
 LOG_LEVEL ?= INFO
@@ -27,7 +29,7 @@ help:
 	@echo "Benchling Integration Service - Development Commands"
 	@echo ""
 	@echo "Setup:"
-	@echo "  check-xdg             - Verify XDG config exists (~/.config/benchling-webhook/default.json)"
+	@echo "  check-xdg             - Verify XDG config exists (~/.config/benchling-webhook/default/config.json)"
 	@echo "  check-ngrok           - Verify ngrok is configured (auto-adds authtoken if needed)"
 	@echo "  install               - Install dependencies with uv"
 	@echo ""
@@ -75,13 +77,18 @@ help:
 	@echo "  clean                 - Remove containers and images"
 	@echo "  docker-clean          - Deep clean Docker (fixes run-dev issues)"
 	@echo "  kill                  - Stop Docker containers and kill local processes"
+	@echo ""
+	@echo "Environment Variables (v0.7.0):"
+	@echo "  PROFILE               - Configuration profile to use (default: default)"
+	@echo "  SKIP_AUTO_DEPLOY      - Skip auto-deployment in test-deployed-dev"
 
 # Setup
 
-# Verify XDG config exists
+# Verify XDG config exists (v0.7.0: check for profile-based config)
 check-xdg:
-	@if [ ! -f ~/.config/benchling-webhook/default.json ]; then \
-		echo "❌ XDG config not found. Run: npm run setup"; \
+	@if [ ! -f $(PROFILE_DIR)/config.json ]; then \
+		echo "❌ Profile '$(PROFILE)' config not found at $(PROFILE_DIR)/config.json"; \
+		echo "   Run: npm run setup"; \
 		exit 1; \
 	fi
 
@@ -237,22 +244,23 @@ test-ecr: check-xdg
 	@echo "✅ Done"
 
 # Test deployed dev stack via API Gateway endpoint (auto-deploys if needed)
+# v0.7.0: Updated to use deployments.json with profile/stage structure
 test-deployed-dev: check-xdg
 	@if [ -n "$(SKIP_AUTO_DEPLOY)" ]; then \
 		echo "⏭️  Auto-deploy disabled (SKIP_AUTO_DEPLOY=1)"; \
 		$(MAKE) -f Makefile test-deployed-dev-direct; \
 	else \
 		echo "🔍 Checking if dev deployment is needed..."; \
-		DEPLOY_JSON=$(XDG_CONFIG)/deploy.json; \
+		DEPLOYMENTS_JSON=$(PROFILE_DIR)/deployments.json; \
 		NEEDS_DEPLOY=0; \
-		if [ ! -f "$$DEPLOY_JSON" ]; then \
-			echo "📦 No deploy.json found - deployment needed"; \
+		if [ ! -f "$$DEPLOYMENTS_JSON" ]; then \
+			echo "📦 No deployments.json found - deployment needed"; \
 			NEEDS_DEPLOY=1; \
-		elif ! jq -e '.dev' "$$DEPLOY_JSON" >/dev/null 2>&1; then \
+		elif ! jq -e '.active.dev' "$$DEPLOYMENTS_JSON" >/dev/null 2>&1; then \
 			echo "📦 No dev deployment found - deployment needed"; \
 			NEEDS_DEPLOY=1; \
 		else \
-			DEPLOYED_AT=$$(jq -r '.dev.deployedAt // empty' "$$DEPLOY_JSON"); \
+			DEPLOYED_AT=$$(jq -r '.active.dev.timestamp // empty' "$$DEPLOYMENTS_JSON"); \
 			if [ -z "$$DEPLOYED_AT" ]; then \
 				echo "📦 No deployment timestamp found - deployment needed"; \
 				NEEDS_DEPLOY=1; \
@@ -281,24 +289,26 @@ test-deployed-dev: check-xdg
 	fi
 
 # Test deployed dev stack (direct, no auto-deploy check)
+# v0.7.0: Updated to use deployments.json with profile/stage structure
 test-deployed-dev-direct: check-xdg
-	@echo "🧪 Testing deployed dev stack..."
-	@DEV_ENDPOINT=$$(jq -r '.dev.endpoint // empty' $(XDG_CONFIG)/deploy.json 2>/dev/null); \
+	@echo "🧪 Testing deployed dev stack (profile: $(PROFILE))..."
+	@DEV_ENDPOINT=$$(jq -r '.active.dev.endpoint // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
 	if [ -z "$$DEV_ENDPOINT" ]; then \
-		echo "❌ No dev endpoint found in $(XDG_CONFIG)/deploy.json"; \
-		echo "💡 Run 'npm run deploy:dev' first to deploy the dev stack"; \
+		echo "❌ No dev endpoint found in $(PROFILE_DIR)/deployments.json"; \
+		echo "💡 Run 'npm run deploy:dev -- --profile $(PROFILE)' first to deploy the dev stack"; \
 		exit 1; \
 	fi; \
 	echo "📡 Testing endpoint: $$DEV_ENDPOINT"; \
 	uv run python scripts/test_webhook.py "$$DEV_ENDPOINT"
 
 # Test deployed prod stack via API Gateway endpoint
+# v0.7.0: Updated to use deployments.json with profile/stage structure
 test-deployed-prod: check-xdg
-	@echo "🧪 Testing deployed prod stack..."
-	@PROD_ENDPOINT=$$(jq -r '.prod.endpoint // empty' $(XDG_CONFIG)/deploy.json 2>/dev/null); \
+	@echo "🧪 Testing deployed prod stack (profile: $(PROFILE))..."
+	@PROD_ENDPOINT=$$(jq -r '.active.prod.endpoint // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
 	if [ -z "$$PROD_ENDPOINT" ]; then \
-		echo "❌ No prod endpoint found in $(XDG_CONFIG)/deploy.json"; \
-		echo "💡 Run 'npm run deploy:prod' first to deploy the prod stack"; \
+		echo "❌ No prod endpoint found in $(PROFILE_DIR)/deployments.json"; \
+		echo "💡 Run 'npm run deploy:prod -- --profile $(PROFILE)' first to deploy the prod stack"; \
 		exit 1; \
 	fi; \
 	echo "📡 Testing endpoint: $$PROD_ENDPOINT"; \
@@ -393,4 +403,3 @@ docker-clean:
 	@echo "Pruning Docker system (containers, networks, build cache)..."
 	docker system prune -af --volumes
 	@echo "✅ Docker cleanup complete. You can now run 'make run-dev'"
-

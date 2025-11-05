@@ -139,11 +139,7 @@ class Payload:
             return button_id
 
         # Standard extraction: resourceId or entryId from message or payload root
-        entry_id = (
-            self._message.get("resourceId")
-            or self._message.get("entryId")
-            or self._payload.get("resourceId")
-        )
+        entry_id = self._message.get("resourceId") or self._message.get("entryId") or self._payload.get("resourceId")
 
         if entry_id:
             self._cached_entry_id = entry_id

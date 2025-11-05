@@ -11,10 +11,12 @@
  */
 
 import { XDGConfig } from "../../lib/xdg-config";
-import { DerivedConfig, DeploymentConfig, ProfileName } from "../../lib/types/config";
-import { existsSync, statSync } from "fs";
+import { ProfileName } from "../../lib/types/config";
+import { statSync } from "fs";
 import { SecretsManagerClient, DescribeSecretCommand } from "@aws-sdk/client-secrets-manager";
+import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import chalk from "chalk";
+import { join } from "path";
 
 /**
  * Health check result
@@ -49,69 +51,44 @@ interface HealthCheckOptions {
  */
 async function checkXDGIntegrity(xdgConfig: XDGConfig, profile: ProfileName): Promise<HealthCheckResult> {
     try {
-        const paths = xdgConfig.getProfilePaths(profile);
-
-        // Check if profile directory exists
-        const profileDir = xdgConfig.getProfileDir(profile);
-        if (!existsSync(profileDir)) {
+        // Check if profile exists
+        if (!xdgConfig.profileExists(profile)) {
             return {
                 check: "xdg-integrity",
                 status: "fail",
-                message: "Profile directory does not exist",
-                details: { profileDir, profile },
+                message: "Profile does not exist",
+                details: { profile, recommendation: "Run setup wizard to create configuration" },
             };
         }
 
-        // Check for configuration files
-        const files = {
-            userConfig: existsSync(paths.userConfig),
-            derivedConfig: existsSync(paths.derivedConfig),
-            deployConfig: existsSync(paths.deployConfig),
-        };
+        // Try to read and validate profile config
+        try {
+            const config = xdgConfig.readProfile(profile);
 
-        // At least user or derived config should exist
-        if (!files.userConfig && !files.derivedConfig) {
+            // Validate required fields
+            if (!config.quilt || !config.benchling || !config.packages || !config.deployment) {
+                return {
+                    check: "xdg-integrity",
+                    status: "fail",
+                    message: "Configuration is missing required sections",
+                    details: { profile },
+                };
+            }
+
             return {
                 check: "xdg-integrity",
-                status: "warn",
-                message: "No configuration files found",
-                details: { ...files, profile, recommendation: "Run setup wizard to create configuration" },
+                status: "pass",
+                message: "XDG configuration integrity verified",
+                details: { profile },
+            };
+        } catch (error) {
+            return {
+                check: "xdg-integrity",
+                status: "fail",
+                message: `Configuration validation failed: ${(error as Error).message}`,
+                details: { profile, error: (error as Error).message },
             };
         }
-
-        // Try to read and validate existing configs
-        if (files.userConfig) {
-            try {
-                xdgConfig.readProfileConfig("user", profile);
-            } catch (error) {
-                return {
-                    check: "xdg-integrity",
-                    status: "fail",
-                    message: `User config validation failed: ${(error as Error).message}`,
-                    details: { profile, error: (error as Error).message },
-                };
-            }
-        }
-
-        if (files.derivedConfig) {
-            try {
-                xdgConfig.readProfileConfig("derived", profile);
-            } catch (error) {
-                return {
-                    check: "xdg-integrity",
-                    status: "fail",
-                    message: `Derived config validation failed: ${(error as Error).message}`,
-                    details: { profile, error: (error as Error).message },
-                };
-            }
-        }
-
-        return {
-            check: "xdg-integrity",
-            status: "pass",
-            message: "XDG configuration integrity verified",
-            details: { ...files, profile },
-        };
     } catch (error) {
         return {
             check: "xdg-integrity",
@@ -127,22 +104,20 @@ async function checkXDGIntegrity(xdgConfig: XDGConfig, profile: ProfileName): Pr
  */
 async function checkSecretsSync(xdgConfig: XDGConfig, profile: ProfileName): Promise<HealthCheckResult> {
     try {
-        const paths = xdgConfig.getProfilePaths(profile);
-
-        // Check if user config exists
-        if (!existsSync(paths.userConfig)) {
+        // Check if profile exists
+        if (!xdgConfig.profileExists(profile)) {
             return {
                 check: "secrets-sync",
                 status: "warn",
-                message: "No user configuration found",
+                message: "No configuration found",
                 details: { profile, recommendation: "Run setup wizard first" },
             };
         }
 
-        // Load derived config to get secret ARN
-        const derivedConfig = xdgConfig.readProfileConfig("derived", profile) as DerivedConfig;
+        // Load profile config
+        const config = xdgConfig.readProfile(profile);
 
-        if (!derivedConfig.benchlingSecretArn) {
+        if (!config.benchling.secretArn) {
             return {
                 check: "secrets-sync",
                 status: "warn",
@@ -152,20 +127,22 @@ async function checkSecretsSync(xdgConfig: XDGConfig, profile: ProfileName): Pro
         }
 
         // Get local config modification time
-        const userConfigStats = statSync(paths.userConfig);
-        const localModifiedAt = userConfigStats.mtime;
+        const configPath = join(xdgConfig["baseDir"], profile, "config.json");
+        const configStats = statSync(configPath);
+        const localModifiedAt = configStats.mtime;
 
         // Get remote secret modification time
-        const region = derivedConfig.cdkRegion || "us-east-1";
-        const clientConfig: { region: string; credentials?: unknown } = { region };
+        const region = config.deployment.region;
+        const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region };
 
-        if (derivedConfig.awsProfile) {
+        // If AWS profile is configured, use it
+        if (process.env.AWS_PROFILE) {
             const { fromIni } = await import("@aws-sdk/credential-providers");
-            clientConfig.credentials = fromIni({ profile: derivedConfig.awsProfile });
+            clientConfig.credentials = fromIni({ profile: process.env.AWS_PROFILE });
         }
 
         const client = new SecretsManagerClient(clientConfig);
-        const command = new DescribeSecretCommand({ SecretId: derivedConfig.benchlingSecretArn });
+        const command = new DescribeSecretCommand({ SecretId: config.benchling.secretArn });
         const secretMetadata = await client.send(command);
 
         if (!secretMetadata.LastChangedDate) {
@@ -173,7 +150,7 @@ async function checkSecretsSync(xdgConfig: XDGConfig, profile: ProfileName): Pro
                 check: "secrets-sync",
                 status: "warn",
                 message: "Cannot determine secret modification time",
-                details: { secretArn: derivedConfig.benchlingSecretArn },
+                details: { secretArn: config.benchling.secretArn },
             };
         }
 
@@ -236,13 +213,14 @@ async function checkSecretsSync(xdgConfig: XDGConfig, profile: ProfileName): Pro
  */
 async function checkDeploymentConfig(xdgConfig: XDGConfig, profile: ProfileName): Promise<HealthCheckResult> {
     try {
-        const paths = xdgConfig.getProfilePaths(profile);
+        // Check for active deployment
+        const deployment = xdgConfig.getActiveDeployment(profile, "prod");
 
-        if (!existsSync(paths.deployConfig)) {
+        if (!deployment) {
             return {
                 check: "deployment-config",
                 status: "warn",
-                message: "No deployment configuration found",
+                message: "No deployment found",
                 details: {
                     profile,
                     recommendation: "Run 'benchling-webhook deploy' to deploy the stack",
@@ -250,10 +228,8 @@ async function checkDeploymentConfig(xdgConfig: XDGConfig, profile: ProfileName)
             };
         }
 
-        const deployConfig = xdgConfig.readProfileConfig("deploy", profile) as DeploymentConfig;
-
         // Check for webhook endpoint
-        if (!deployConfig.webhookEndpoint && !deployConfig.webhookUrl) {
+        if (!deployment.endpoint) {
             return {
                 check: "deployment-config",
                 status: "warn",
@@ -263,22 +239,20 @@ async function checkDeploymentConfig(xdgConfig: XDGConfig, profile: ProfileName)
         }
 
         // Check deployment age
-        if (deployConfig.deployedAt) {
-            const deployedDate = new Date(deployConfig.deployedAt);
-            const ageInDays = (Date.now() - deployedDate.getTime()) / (1000 * 60 * 60 * 24);
+        const deployedDate = new Date(deployment.timestamp);
+        const ageInDays = (Date.now() - deployedDate.getTime()) / (1000 * 60 * 60 * 24);
 
-            if (ageInDays > 30) {
-                return {
-                    check: "deployment-config",
-                    status: "warn",
-                    message: `Deployment is ${Math.floor(ageInDays)} days old`,
-                    details: {
-                        deployedAt: deployConfig.deployedAt,
-                        ageInDays: Math.floor(ageInDays),
-                        recommendation: "Consider updating deployment",
-                    },
-                };
-            }
+        if (ageInDays > 30) {
+            return {
+                check: "deployment-config",
+                status: "warn",
+                message: `Deployment is ${Math.floor(ageInDays)} days old`,
+                details: {
+                    deployedAt: deployment.timestamp,
+                    ageInDays: Math.floor(ageInDays),
+                    recommendation: "Consider updating deployment",
+                },
+            };
         }
 
         return {
@@ -286,9 +260,10 @@ async function checkDeploymentConfig(xdgConfig: XDGConfig, profile: ProfileName)
             status: "pass",
             message: "Deployment configuration valid",
             details: {
-                webhookEndpoint: deployConfig.webhookEndpoint || deployConfig.webhookUrl,
-                deployedAt: deployConfig.deployedAt,
-                stackArn: deployConfig.stackArn,
+                endpoint: deployment.endpoint,
+                deployedAt: deployment.timestamp,
+                stackName: deployment.stackName,
+                region: deployment.region,
             },
         };
     } catch (error) {

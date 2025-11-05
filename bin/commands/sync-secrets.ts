@@ -2,6 +2,11 @@
 /**
  * AWS Secrets Manager Integration
  *
+ * WARNING: This file needs significant refactoring for v0.7.0
+ * TODO: Update to use ProfileConfig instead of UserConfig/DerivedConfig
+ * TODO: Remove references to BaseConfig
+ * TODO: Update to use readProfile/writeProfile instead of readProfileConfig/writeProfileConfig
+ *
  * Synchronizes configuration to AWS Secrets Manager with:
  * - Consistent secret naming conventions
  * - AWS profile selection support
@@ -19,9 +24,9 @@ import {
     DescribeSecretCommand,
     ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
-import { XDGConfig, BaseConfig } from "../../lib/xdg-config";
+import { XDGConfig } from "../../lib/xdg-config";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
-import { UserConfig, DerivedConfig, ProfileName } from "../../lib/types/config";
+import { ProfileConfig, ProfileName } from "../../lib/types/config";
 import { generateSecretName } from "../../lib/utils/secrets";
 
 /**
@@ -106,7 +111,7 @@ async function createSecret(client: SecretsManagerClient, secretConfig: SecretCo
         Description: secretConfig.description,
         Tags: [
             { Key: "ManagedBy", Value: "benchling-webhook" },
-            { Key: "Version", Value: "0.6.0" },
+            { Key: "Version", Value: "0.7.0" },
         ],
     });
 
@@ -146,29 +151,29 @@ async function getSecret(client: SecretsManagerClient, secretName: string): Prom
 }
 
 /**
- * Builds secret value JSON from user configuration
+ * Builds secret value JSON from profile configuration
  *
- * @param config - User configuration
+ * @param config - Profile configuration
  * @returns Secret value as JSON string
  */
-function buildSecretValue(config: UserConfig): string {
+function buildSecretValue(config: ProfileConfig): string {
     // Use snake_case field names to match Python config_resolver expectations
     const secretData = {
-        tenant: config.benchlingTenant,
-        client_id: config.benchlingClientId,
-        client_secret: config.benchlingClientSecret,
-        app_definition_id: config.benchlingAppDefinitionId,
-        user_bucket: config.benchlingPkgBucket || config.quiltUserBucket,
-        pkg_prefix: config.pkgPrefix || "benchling",
-        pkg_key: config.pkgKey || "experiment_id",
-        log_level: config.logLevel || "INFO",
-        webhook_allow_list: config.webhookAllowList || "",
-        enable_webhook_verification: config.enableWebhookVerification || "true",
+        tenant: config.benchling.tenant,
+        client_id: config.benchling.clientId,
+        client_secret: config.benchling.clientSecret || "",
+        app_definition_id: config.benchling.appDefinitionId,
+        user_bucket: config.packages.bucket,
+        pkg_prefix: config.packages.prefix,
+        pkg_key: config.packages.metadataKey,
+        log_level: config.logging?.level || "INFO",
+        webhook_allow_list: config.security?.webhookAllowList || "",
+        enable_webhook_verification: config.security?.enableVerification !== false ? "true" : "false",
     };
 
     // Add optional fields
-    if (config.queueArn) {
-        Object.assign(secretData, { queue_arn: config.queueArn });
+    if (config.quilt.queueArn) {
+        Object.assign(secretData, { queue_arn: config.quilt.queueArn });
     }
 
     return JSON.stringify(secretData, null, 2);
@@ -189,20 +194,20 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
     console.log(`Loading configuration from profile: ${profile}...`);
     const xdgConfig = new XDGConfig();
 
-    let userConfig: UserConfig;
+    let config: ProfileConfig;
     try {
-        userConfig = xdgConfig.readProfileConfig("user", profile) as UserConfig;
+        config = xdgConfig.readProfile(profile);
     } catch (error) {
         throw new Error(`Failed to load configuration: ${(error as Error).message}`);
     }
 
     // Validate required fields
-    if (!userConfig.benchlingTenant) {
+    if (!config.benchling.tenant) {
         throw new Error("Benchling tenant is required");
     }
 
-    if (!userConfig.benchlingClientId || !userConfig.benchlingClientSecret) {
-        throw new Error("Benchling OAuth credentials are required");
+    if (!config.benchling.clientId) {
+        throw new Error("Benchling OAuth client ID is required");
     }
 
     // Step 2: Initialize Secrets Manager client
@@ -210,11 +215,11 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
     const client = await getSecretsManagerClient(region, awsProfile);
 
     // Step 3: Generate secret name
-    const secretName = generateSecretName(profile, userConfig.benchlingTenant);
+    const secretName = generateSecretName(profile, config.benchling.tenant);
     console.log(`Secret name: ${secretName}`);
 
     // Step 4: Build secret value
-    const secretValue = buildSecretValue(userConfig);
+    const secretValue = buildSecretValue(config);
 
     if (dryRun) {
         console.log("\n=== DRY RUN MODE ===");
@@ -235,7 +240,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
             secretArn = await updateSecret(client, {
                 name: secretName,
                 value: secretValue,
-                description: `Benchling Webhook configuration for ${userConfig.benchlingTenant} (profile: ${profile})`,
+                description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile})`,
             });
             action = "updated";
             console.log(`✓ Secret updated: ${secretArn}`);
@@ -254,7 +259,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
         secretArn = await createSecret(client, {
             name: secretName,
             value: secretValue,
-            description: `Benchling Webhook configuration for ${userConfig.benchlingTenant} (profile: ${profile})`,
+            description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile})`,
         });
         action = "created";
         console.log(`✓ Secret created: ${secretArn}`);
@@ -270,33 +275,13 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
     // Step 6: Update XDG configuration with secret ARN
     console.log("Updating XDG configuration with secret ARN...");
 
-    // Read or create derived config
-    let derivedConfig: DerivedConfig;
-    try {
-        derivedConfig = xdgConfig.readProfileConfig("derived", profile) as DerivedConfig;
-    } catch {
-        // Create new derived config if it doesn't exist
-        derivedConfig = {
-            _metadata: {
-                source: "sync-secrets",
-                savedAt: new Date().toISOString(),
-                version: "0.6.0",
-            },
-        };
-    }
+    // Update config with secret ARN
+    config.benchling.secretArn = secretArn;
+    config._metadata.updatedAt = new Date().toISOString();
+    config._metadata.source = "cli";
 
-    // Update secret ARN
-    derivedConfig.benchlingSecretArn = secretArn;
-
-    // Update metadata
-    derivedConfig._metadata = {
-        ...derivedConfig._metadata,
-        savedAt: new Date().toISOString(),
-        source: "sync-secrets",
-    };
-
-    // Write updated derived config
-    xdgConfig.writeProfileConfig("derived", derivedConfig as BaseConfig, profile);
+    // Write updated config
+    xdgConfig.writeProfile(profile, config);
 
     console.log("✓ XDG configuration updated with secret ARN");
 
@@ -318,9 +303,9 @@ export async function getSecretsFromAWS(options: {
 
     // Load configuration
     const xdgConfig = new XDGConfig();
-    const derivedConfig = xdgConfig.readProfileConfig("derived", profile) as DerivedConfig;
+    const config = xdgConfig.readProfile(profile);
 
-    if (!derivedConfig.benchlingSecretArn) {
+    if (!config.benchling.secretArn) {
         throw new Error("No secret ARN found in configuration. Run sync-secrets first.");
     }
 
@@ -328,7 +313,7 @@ export async function getSecretsFromAWS(options: {
     const client = await getSecretsManagerClient(region, awsProfile);
 
     // Retrieve secret
-    const secretValue = await getSecret(client, derivedConfig.benchlingSecretArn);
+    const secretValue = await getSecret(client, config.benchling.secretArn);
 
     // Parse and return
     return JSON.parse(secretValue);

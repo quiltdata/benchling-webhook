@@ -10,90 +10,24 @@ import {
 } from "../../lib/utils/config-resolver";
 import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
-import { generateSecretName } from "../../lib/utils/secrets";
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
+import { ProfileConfig } from "../../lib/types/config";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 
 /**
- * Deployment configuration stored in ~/.config/benchling-webhook/deploy.json
+ * Deploy command for v0.7.0 configuration architecture
+ *
+ * Uses new profile-based configuration with deployment tracking.
+ * Supports independent --profile and --stage options.
+ *
+ * @module commands/deploy
+ * @version 0.7.0
  */
-interface DeploymentConfig {
-    dev?: EnvironmentConfig;
-    prod?: EnvironmentConfig;
-}
-
-/**
- * Environment-specific deployment details
- */
-interface EnvironmentConfig {
-    endpoint: string;       // API Gateway webhook URL
-    imageTag: string;       // Docker image tag deployed
-    deployedAt: string;     // ISO 8601 timestamp
-    stackName: string;      // CloudFormation stack name
-    region?: string;        // AWS region (default: us-east-1)
-}
-
-/**
- * Store deployment configuration in XDG config directory
- * Uses atomic write pattern to prevent corruption
- */
-function storeDeploymentConfig(
-    stage: "dev" | "prod",
-    config: EnvironmentConfig,
-): void {
-    const configDir = join(homedir(), ".config", "benchling-webhook");
-    const deployJsonPath = join(configDir, "deploy.json");
-
-    // Read existing deploy.json or create new one
-    let deployConfig: DeploymentConfig = {};
-    if (existsSync(deployJsonPath)) {
-        const content = readFileSync(deployJsonPath, "utf8");
-        deployConfig = JSON.parse(content);
-    }
-
-    // Update stage section
-    deployConfig[stage] = config;
-
-    // Ensure config directory exists
-    if (!existsSync(configDir)) {
-        mkdirSync(configDir, { recursive: true });
-    }
-
-    // Write deploy.json atomically
-    const tempPath = `${deployJsonPath}.tmp`;
-    writeFileSync(tempPath, JSON.stringify(deployConfig, null, 2));
-
-    // Atomic rename (platform-specific)
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require("fs");
-    if (process.platform === "win32") {
-        // Windows: create backup before rename
-        if (existsSync(deployJsonPath)) {
-            const backupPath = `${deployJsonPath}.backup`;
-            if (existsSync(backupPath)) {
-                fs.unlinkSync(backupPath);
-            }
-            fs.renameSync(deployJsonPath, backupPath);
-        }
-        fs.renameSync(tempPath, deployJsonPath);
-    } else {
-        // Unix: atomic rename with overwrite
-        fs.renameSync(tempPath, deployJsonPath);
-    }
-
-    console.log(`✅ Stored deployment config in ${deployJsonPath}`);
-    console.log(`   Stage: ${stage}`);
-    console.log(`   Endpoint: ${config.endpoint}`);
-}
-
 export async function deployCommand(options: {
     yes?: boolean;
     bootstrapCheck?: boolean;
     requireApproval?: string;
-    profile?: string;           // Profile name
-    stage?: "dev" | "prod";     // API Gateway stage
+    profile?: string;           // Profile name (default: "default")
+    stage?: "dev" | "prod";     // API Gateway stage (independent of profile)
     quiltStackArn?: string;
     benchlingSecret?: string;
     imageTag?: string;
@@ -109,93 +43,39 @@ export async function deployCommand(options: {
     );
     console.log();
 
-    // Determine profile: CLI option > stage default > "default"
-    const profileName = options.profile ||
-                       (options.stage === "dev" ? "dev" : "default");
+    // Determine profile name (default: "default")
+    const profileName = options.profile || "default";
 
-    // Validate profile/stage mismatch
-    if (options.stage === "prod" && options.profile === "dev") {
-        console.error(chalk.red.bold("❌ Invalid Configuration\n"));
-        console.error(chalk.red("  Cannot deploy prod stage with dev profile"));
+    // Determine stage (default: "prod")
+    const stage = options.stage || "prod";
+
+    // Load configuration from profile
+    const xdg = new XDGConfig();
+    let config: ProfileConfig;
+
+    try {
+        // Use readProfileWithInheritance to support profile inheritance
+        config = xdg.readProfileWithInheritance(profileName);
+        console.log(chalk.dim(`✓ Loaded configuration from profile: ${profileName}\n`));
+    } catch (error) {
+        console.error(chalk.red.bold("❌ Configuration Error\n"));
+        console.error(chalk.red((error as Error).message));
         console.log();
-        console.log(chalk.yellow("Suggestions:"));
-        console.log("  • Use default profile for production: --profile default");
-        console.log("  • Or deploy to dev stage: --stage dev");
+        console.log(chalk.yellow("Run setup wizard to create configuration:"));
+        console.log(chalk.cyan("  npm run setup"));
         console.log();
         process.exit(1);
     }
 
-    // Try to read from XDG config profile
-    const xdg = new XDGConfig();
-    let xdgConfig: Record<string, unknown> | null = null;
-
-    try {
-        // First, try to load default profile as base
-        let defaultConfig: Record<string, unknown> | null = null;
-        const defaultPath = xdg.getPaths().userConfig;
-        if (existsSync(defaultPath)) {
-            try {
-                defaultConfig = xdg.readConfig("user");
-            } catch {
-                // Default config is optional
-            }
-        }
-
-        if (xdg.profileExists(profileName)) {
-            xdgConfig = xdg.readProfileConfig("user", profileName);
-            console.log(chalk.dim(`✓ Loaded configuration from profile: ${profileName}\n`));
-
-            // Merge with default profile if it exists (profile overrides default)
-            if (profileName !== "default" && defaultConfig) {
-                xdgConfig = { ...defaultConfig, ...xdgConfig };
-                console.log(chalk.dim("  (Merged with default profile values)\n"));
-            }
-        } else if (profileName !== "default") {
-            console.log(chalk.yellow(`⚠  Profile '${profileName}' not found`));
-            console.log(chalk.dim("  Using default profile\n"));
-            xdgConfig = defaultConfig;
-        } else {
-            xdgConfig = defaultConfig;
-        }
-    } catch (error) {
-        console.log(chalk.yellow(`⚠  Could not load XDG config: ${(error as Error).message}`));
-        console.log(chalk.dim("  Falling back to CLI options and environment variables\n"));
-    }
-
-    // Get required parameters with priority: CLI options > XDG config > environment variables
-    const quiltStackArn = options.quiltStackArn ||
-                         (xdgConfig?.quiltStackArn as string) ||
-                         process.env.QUILT_STACK_ARN;
-
-    // Generate secret name from XDG config if available
-    let xdgSecretName: string | undefined;
-    if (xdgConfig) {
-        const profile = (xdgConfig.profile as string) || profileName;
-        const tenant = xdgConfig.benchlingTenant as string;
-        if (tenant) {
-            xdgSecretName = generateSecretName(profile, tenant);
-            console.log(chalk.dim(`  Generated secret name: ${xdgSecretName}\n`));
-        } else {
-            console.log(chalk.yellow("  ⚠  XDG config missing benchlingTenant field"));
-            console.log(chalk.dim("    Secret name will use default or CLI option\n"));
-        }
-    }
-
-    // Resolve secret name from various sources
-    const benchlingSecret = options.benchlingSecret ||
-                           xdgSecretName ||
-                           (xdgConfig?.benchlingSecret as string) ||
-                           process.env.BENCHLING_SECRET;
-
-    // Get image tag from options or XDG config
-    const imageTag = options.imageTag ||
-                    (xdgConfig?.imageTag as string) ||
-                    "latest";
+    // Get required parameters with priority: CLI options > Profile config
+    const quiltStackArn = options.quiltStackArn || config.quilt.stackArn;
+    const benchlingSecret = options.benchlingSecret || config.benchling.secretArn;
+    const imageTag = options.imageTag || config.deployment.imageTag || "latest";
 
     // Validate required parameters
     const missingParams: string[] = [];
-    if (!quiltStackArn) missingParams.push("--quilt-stack-arn");
-    if (!benchlingSecret) missingParams.push("--benchling-secret");
+    if (!quiltStackArn) missingParams.push("quiltStackArn (in profile or --quilt-stack-arn)");
+    if (!benchlingSecret) missingParams.push("benchlingSecret (in profile or --benchling-secret)");
 
     if (missingParams.length > 0) {
         console.error(chalk.red.bold("❌ Missing Required Parameters\n"));
@@ -207,21 +87,21 @@ export async function deployCommand(options: {
         console.log("  1. Provide via CLI:");
         console.log(chalk.cyan("     npx @quiltdata/benchling-webhook deploy \\"));
         console.log(chalk.cyan("       --quilt-stack-arn <arn> \\"));
-        console.log(chalk.cyan("       --benchling-secret <name>"));
+        console.log(chalk.cyan("       --benchling-secret <arn>"));
         console.log();
-        console.log("  2. Set in XDG config:");
+        console.log("  2. Update profile configuration:");
         console.log(chalk.cyan("     npm run setup"));
-        console.log();
-        console.log(chalk.yellow("Example:"));
-        console.log(chalk.cyan("  npx @quiltdata/benchling-webhook deploy \\"));
-        console.log(chalk.cyan("    --quilt-stack-arn \"arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123\" \\"));
-        console.log(chalk.cyan("    --benchling-secret \"quiltdata/benchling-webhook/default/my-tenant\""));
         console.log();
         process.exit(1);
     }
 
     // Deploy (both parameters validated above)
-    return await deploy(quiltStackArn!, benchlingSecret!, { ...options, imageTag, profileName });
+    return await deploy(quiltStackArn!, benchlingSecret!, {
+        ...options,
+        imageTag,
+        profileName,
+        stage,
+    });
 }
 
 /**
@@ -234,9 +114,9 @@ async function deploy(
         yes?: boolean;
         bootstrapCheck?: boolean;
         requireApproval?: string;
-        stage?: "dev" | "prod";
-        profileName?: string;
-        imageTag?: string;
+        stage: "dev" | "prod";
+        profileName: string;
+        imageTag: string;
         region?: string;
         envFile?: string;
     },
@@ -273,7 +153,7 @@ async function deploy(
     spinner.start("Syncing Benchling secrets to AWS Secrets Manager...");
     try {
         // Run sync-secrets with --force to ensure secrets are up-to-date
-        execSync("npm run setup:sync-secrets -- --force", {
+        execSync(`npm run setup:sync-secrets -- --force --profile ${options.profileName}`, {
             stdio: "pipe",
             encoding: "utf-8",
             env: {
@@ -289,7 +169,7 @@ async function deploy(
         console.error(chalk.red((error as Error).message));
         console.log();
         console.log(chalk.yellow("To sync secrets manually, run:"));
-        console.log(chalk.cyan(`  npm run setup:sync-secrets -- --force --region ${deployRegion}`));
+        console.log(chalk.cyan(`  npm run setup:sync-secrets -- --force --profile ${options.profileName} --region ${deployRegion}`));
         console.log();
         process.exit(1);
     }
@@ -331,17 +211,13 @@ async function deploy(
     console.log(`  ${chalk.bold("Stack:")}                     BenchlingWebhookStack`);
     console.log(`  ${chalk.bold("Account:")}                   ${deployAccount}`);
     console.log(`  ${chalk.bold("Region:")}                    ${deployRegion}`);
-    if (options.stage) {
-        console.log(`  ${chalk.bold("Stage:")}                     ${options.stage}`);
-    }
-    if (options.profileName && options.profileName !== "default") {
-        console.log(`  ${chalk.bold("Profile:")}                   ${options.profileName}`);
-    }
+    console.log(`  ${chalk.bold("Stage:")}                     ${options.stage}`);
+    console.log(`  ${chalk.bold("Profile:")}                   ${options.profileName}`);
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
     console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(quiltStackArn)}`);
     console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
-    console.log(`    ${chalk.bold("Docker Image Tag:")}        ${options.imageTag || "latest"}`);
+    console.log(`    ${chalk.bold("Docker Image Tag:")}        ${options.imageTag}`);
     console.log();
     console.log(chalk.dim("  ℹ️  All other configuration will be resolved from AWS at runtime"));
     console.log(chalk.gray("─".repeat(80)));
@@ -373,7 +249,7 @@ async function deploy(
         const parameters = [
             `QuiltStackARN=${quiltStackArn}`,
             `BenchlingSecret=${benchlingSecret}`,
-            `ImageTag=${options.imageTag || "latest"}`,
+            `ImageTag=${options.imageTag}`,
         ];
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
@@ -410,38 +286,37 @@ async function deploy(
                 const webhookUrl = endpointOutput?.OutputValue || "";
 
                 if (webhookUrl) {
-                    // Determine image tag
-                    const imageTag = options.imageTag || "latest";
-
                     // Remove trailing slash to avoid double slashes in test URLs
                     const cleanEndpoint = webhookUrl.replace(/\/$/, "");
 
-                    // Determine stage from options (default to prod)
-                    const stage = options.stage || "prod";
-
-                    // Store deployment config for correct stage
-                    storeDeploymentConfig(stage, {
+                    // Record deployment in profile
+                    const xdg = new XDGConfig();
+                    xdg.recordDeployment(options.profileName, {
+                        stage: options.stage,
+                        timestamp: new Date().toISOString(),
+                        imageTag: options.imageTag,
                         endpoint: cleanEndpoint,
-                        imageTag: imageTag,
-                        deployedAt: new Date().toISOString(),
                         stackName: stackName,
                         region: deployRegion,
+                        deployedBy: process.env.USER || process.env.USERNAME,
                     });
+
+                    console.log(`✅ Recorded deployment to profile '${options.profileName}' stage '${options.stage}'`);
 
                     // Run stage-specific tests
                     console.log();
-                    console.log(`Running ${stage} integration tests...`);
+                    console.log(`Running ${options.stage} integration tests...`);
                     try {
-                        const testCommand = stage === "dev" ? "npm run test:dev" : "npm run test:prod";
+                        const testCommand = options.stage === "dev" ? "npm run test:dev" : "npm run test:prod";
                         execSync(testCommand, {
                             stdio: "inherit",
                             cwd: process.cwd(),
                         });
                         console.log();
-                        console.log(`✅ ${stage.charAt(0).toUpperCase() + stage.slice(1)} deployment and tests completed successfully!`);
+                        console.log(`✅ ${options.stage.charAt(0).toUpperCase() + options.stage.slice(1)} deployment and tests completed successfully!`);
                     } catch {
                         console.error();
-                        console.error(`❌ ${stage.charAt(0).toUpperCase() + stage.slice(1)} tests failed!`);
+                        console.error(`❌ ${options.stage.charAt(0).toUpperCase() + options.stage.slice(1)} tests failed!`);
                         console.error("   Deployment completed but tests did not pass.");
                         console.error("   Review test output above for details.");
                         process.exit(1);
@@ -454,7 +329,8 @@ async function deploy(
                             `${chalk.green.bold("✓ Deployment and Testing Complete!")}\n\n` +
                             `Stack:  ${chalk.cyan("BenchlingWebhookStack")}\n` +
                             `Region: ${chalk.cyan(deployRegion)}\n` +
-                            `Stage: ${chalk.cyan(stage)}\n` +
+                            `Stage:  ${chalk.cyan(options.stage)}\n` +
+                            `Profile: ${chalk.cyan(options.profileName)}\n` +
                             `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` +
                             `${chalk.bold("Next steps:")}\n` +
                             "  1. Set the webhook URL in your Benchling app settings:\n" +

@@ -36,9 +36,7 @@ class TestPackage:
 
         # Verify format includes the query parameter
         assert "?action=revisePackage" in result
-        expected_url = (
-            "https://nightly.quilttest.com/b/test-bucket/packages/benchling/etr_123?action=revisePackage"
-        )
+        expected_url = "https://nightly.quilttest.com/b/test-bucket/packages/benchling/etr_123?action=revisePackage"
         assert result == expected_url
 
     def test_upload_url_format(self, package):
@@ -77,8 +75,7 @@ class TestPackage:
                 "bucket": "production-data",
                 "package": "org/project/etr_ABC123",
                 "expected": (
-                    "https://prod.quilt.com/b/production-data/packages/"
-                    "org/project/etr_ABC123?action=revisePackage"
+                    "https://prod.quilt.com/b/production-data/packages/" "org/project/etr_ABC123?action=revisePackage"
                 ),
             },
         ]

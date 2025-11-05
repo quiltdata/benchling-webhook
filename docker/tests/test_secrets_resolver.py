@@ -347,10 +347,7 @@ class TestResolutionOrchestrator:
         from src.secrets_resolver import resolve_benchling_secrets
 
         # Should fail because BENCHLING_SECRETS is required
-        with pytest.raises(
-            SecretsResolutionError,
-            match="BENCHLING_SECRETS environment variable is required"
-        ):
+        with pytest.raises(SecretsResolutionError, match="BENCHLING_SECRETS environment variable is required"):
             resolve_benchling_secrets("us-east-2")
 
     def test_resolve_error_message_mentions_legacy_removal(self, monkeypatch):
@@ -360,7 +357,6 @@ class TestResolutionOrchestrator:
         from src.secrets_resolver import resolve_benchling_secrets
 
         with pytest.raises(
-            SecretsResolutionError,
-            match="Legacy mode with individual environment variables.*is no longer supported"
+            SecretsResolutionError, match="Legacy mode with individual environment variables.*is no longer supported"
         ):
             resolve_benchling_secrets("us-east-2")

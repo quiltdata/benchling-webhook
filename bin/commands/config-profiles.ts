@@ -2,6 +2,11 @@
 /**
  * Configuration Profile Management CLI
  *
+ * WARNING: This file needs refactoring for v0.7.0
+ * TODO: Update to use ProfileConfig instead of UserConfig/DerivedConfig/DeploymentConfig
+ * TODO: Remove references to BaseConfig and loadProfile
+ * TODO: Update to use new readProfile API
+ *
  * Provides commands for creating, listing, and managing configuration profiles.
  * Supports AWS profile integration and profile validation.
  *
@@ -14,8 +19,8 @@
  * @module bin/config-profiles
  */
 
-import { XDGConfig, BaseConfig } from "../../lib/xdg-config";
-import { ProfileName, UserConfig, DerivedConfig, DeploymentConfig } from "../../lib/types/config";
+import { XDGConfig } from "../../lib/xdg-config";
+import { ProfileName, ProfileConfig } from "../../lib/types/config";
 import { Command } from "commander";
 
 /**
@@ -53,14 +58,19 @@ class ProfileManager {
 
             // Show configuration status
             if (exists) {
-                const profile = this.xdgConfig.loadProfile(profileName);
-                const hasUser = profile.user ? "user" : "";
-                const hasDerived = profile.derived ? "derived" : "";
-                const hasDeploy = profile.deploy ? "deploy" : "";
-                const configs = [hasUser, hasDerived, hasDeploy].filter(Boolean).join(", ");
+                try {
+                    const profile = this.xdgConfig.readProfile(profileName);
+                    const sections = [];
+                    if (profile.quilt) sections.push("quilt");
+                    if (profile.benchling) sections.push("benchling");
+                    if (profile.packages) sections.push("packages");
+                    if (profile.deployment) sections.push("deployment");
 
-                if (configs) {
-                    console.log(`    Configs: ${configs}`);
+                    if (sections.length > 0) {
+                        console.log(`    Sections: ${sections.join(", ")}`);
+                    }
+                } catch (error) {
+                    console.log(`    Error reading profile: ${(error as Error).message}`);
                 }
             }
         });
@@ -72,12 +82,8 @@ class ProfileManager {
      * Creates a new profile
      *
      * @param profileName - Name of the profile to create
-     * @param options - Creation options
      */
-    public createProfile(
-        profileName: ProfileName,
-        options: { awsProfile?: string; description?: string } = {},
-    ): void {
+    public createProfile(profileName: ProfileName): void {
         console.log(`Creating profile: ${profileName}\n`);
 
         // Check if profile already exists
@@ -86,28 +92,43 @@ class ProfileManager {
             process.exit(1);
         }
 
-        // Ensure directories exist
-        this.xdgConfig.ensureProfileDirectories(profileName);
-
-        // Create initial user configuration
-        const userConfig: BaseConfig = {
-            awsProfile: options.awsProfile,
+        // Create minimal valid ProfileConfig
+        const config: ProfileConfig = {
+            quilt: {
+                stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/placeholder/placeholder",
+                catalog: "https://placeholder.quilt.com",
+                bucket: "placeholder-bucket",
+                database: "placeholder_db",
+                queueArn: "arn:aws:sqs:us-east-1:123456789012:placeholder",
+                region: "us-east-1",
+            },
+            benchling: {
+                tenant: "placeholder",
+                clientId: "placeholder",
+                appDefinitionId: "placeholder",
+            },
+            packages: {
+                bucket: "placeholder-bucket",
+                prefix: "benchling",
+                metadataKey: "experiment_id",
+            },
+            deployment: {
+                region: "us-east-1",
+            },
             _metadata: {
-                savedAt: new Date().toISOString(),
+                version: "0.7.0",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
                 source: "cli",
-                version: "0.6.0",
             },
         };
 
-        // Write user configuration
-        this.xdgConfig.writeProfileConfig("user", userConfig, profileName);
+        // Write profile configuration
+        this.xdgConfig.writeProfile(profileName, config);
 
-        const paths = this.xdgConfig.getProfilePaths(profileName);
         console.log(`Profile '${profileName}' created successfully!`);
-        console.log("\nConfiguration files:");
-        console.log(`  User config:   ${paths.userConfig}`);
-        console.log(`  Derived config: ${paths.derivedConfig}`);
-        console.log(`  Deploy config:  ${paths.deployConfig}`);
+        console.log(`\nConfiguration file: ~/.config/benchling-webhook/${profileName}/config.json`);
+        console.log("\nEdit the config file to add your actual configuration values.");
         console.log();
     }
 
@@ -124,35 +145,38 @@ class ProfileManager {
 
         console.log(`Profile: ${profileName}\n`);
 
-        const profile = this.xdgConfig.loadProfile(profileName);
-        const paths = this.xdgConfig.getProfilePaths(profileName);
+        try {
+            const profile = this.xdgConfig.readProfile(profileName);
 
-        // Show paths
-        console.log("Configuration files:");
-        console.log(`  User config:   ${paths.userConfig}`);
-        console.log(`  Derived config: ${paths.derivedConfig}`);
-        console.log(`  Deploy config:  ${paths.deployConfig}`);
-        console.log();
+            console.log("Configuration:");
+            console.log("\nQuilt:");
+            this.printSection(profile.quilt);
 
-        // Show user configuration
-        if (profile.user) {
-            console.log("User Configuration:");
-            this.printConfig(profile.user);
+            console.log("\nBenchling:");
+            this.printSection(profile.benchling);
+
+            console.log("\nPackages:");
+            this.printSection(profile.packages);
+
+            console.log("\nDeployment:");
+            this.printSection(profile.deployment);
+
+            if (profile.logging) {
+                console.log("\nLogging:");
+                this.printSection(profile.logging);
+            }
+
+            if (profile.security) {
+                console.log("\nSecurity:");
+                this.printSection(profile.security);
+            }
+
+            console.log("\nMetadata:");
+            this.printSection(profile._metadata);
             console.log();
-        }
-
-        // Show derived configuration
-        if (profile.derived) {
-            console.log("Derived Configuration:");
-            this.printConfig(profile.derived);
-            console.log();
-        }
-
-        // Show deployment configuration
-        if (profile.deploy) {
-            console.log("Deployment Configuration:");
-            this.printConfig(profile.deploy);
-            console.log();
+        } catch (error) {
+            console.error(`Error reading profile: ${(error as Error).message}`);
+            process.exit(1);
         }
     }
 
@@ -169,73 +193,48 @@ class ProfileManager {
             process.exit(1);
         }
 
-        const profile = this.xdgConfig.loadProfile(profileName);
-        const errors: string[] = [];
-        const warnings: string[] = [];
+        try {
+            const profile = this.xdgConfig.readProfile(profileName);
+            const validation = this.xdgConfig.validateProfile(profile);
 
-        // Validate user configuration
-        if (!profile.user) {
-            errors.push("Missing user configuration");
-        } else {
-            // Check required fields
-            const required = [
-                "benchlingTenant",
-                "benchlingClientId",
-                "quiltCatalog",
-                "quiltUserBucket",
-            ];
-
-            required.forEach((field) => {
-                if (!profile.user![field as keyof UserConfig]) {
-                    errors.push(`Missing required field in user config: ${field}`);
-                }
-            });
-
-            // Check AWS profile
-            if (!profile.user.awsProfile) {
-                warnings.push("No AWS profile specified");
+            if (validation.isValid) {
+                console.log("✓ Profile validation passed!");
+                return;
             }
-        }
 
-        // Validate derived configuration
-        if (profile.derived) {
-            if (!profile.derived.catalogUrl) {
-                warnings.push("Derived config missing catalogUrl");
+            if (validation.errors.length > 0) {
+                console.log("Errors:");
+                validation.errors.forEach((error) => console.log(`  ✗ ${error}`));
+                console.log();
             }
-        } else {
-            warnings.push("No derived configuration found");
-        }
 
-        // Report results
-        if (errors.length === 0 && warnings.length === 0) {
-            console.log("✓ Profile validation passed!");
-            return;
-        }
+            if (validation.warnings && validation.warnings.length > 0) {
+                console.log("Warnings:");
+                validation.warnings.forEach((warning) => console.log(`  ⚠ ${warning}`));
+                console.log();
+            }
 
-        if (errors.length > 0) {
-            console.log("Errors:");
-            errors.forEach((error) => console.log(`  ✗ ${error}`));
-            console.log();
-        }
-
-        if (warnings.length > 0) {
-            console.log("Warnings:");
-            warnings.forEach((warning) => console.log(`  ⚠ ${warning}`));
-            console.log();
-        }
-
-        if (errors.length > 0) {
+            if (validation.errors.length > 0) {
+                process.exit(1);
+            }
+        } catch (error) {
+            console.error(`Validation failed: ${(error as Error).message}`);
             process.exit(1);
         }
     }
 
     /**
-     * Prints configuration object in a readable format
+     * Prints a configuration section in a readable format
      *
-     * @param config - Configuration object to print
+     * @param section - Configuration section to print
      */
-    private printConfig(config: UserConfig | DerivedConfig | DeploymentConfig): void {
-        const entries = Object.entries(config).filter(([key]) => key !== "_metadata");
+    private printSection(section: unknown): void {
+        if (!section || typeof section !== "object") {
+            console.log("  (empty)");
+            return;
+        }
+
+        const entries = Object.entries(section);
 
         if (entries.length === 0) {
             console.log("  (empty)");
@@ -246,7 +245,7 @@ class ProfileManager {
             if (key.toLowerCase().includes("secret") && typeof value === "string") {
                 // Mask secrets
                 console.log(`  ${key}: ${value.substring(0, 4)}****`);
-            } else if (typeof value === "object") {
+            } else if (typeof value === "object" && value !== null) {
                 console.log(`  ${key}: ${JSON.stringify(value, null, 2)}`);
             } else {
                 console.log(`  ${key}: ${value}`);
@@ -265,7 +264,7 @@ function main(): void {
     program
         .name("config-profiles")
         .description("Configuration Profile Management for Benchling Webhook")
-        .version("0.6.0");
+        .version("0.7.0");
 
     // List command
     program
@@ -281,8 +280,8 @@ function main(): void {
         .description("Create a new configuration profile")
         .option("--aws-profile <profile>", "AWS profile to associate with this configuration")
         .option("--description <text>", "Profile description")
-        .action((profileName: string, options: { awsProfile?: string; description?: string }) => {
-            manager.createProfile(profileName, options);
+        .action((profileName: string) => {
+            manager.createProfile(profileName);
         });
 
     // Show command

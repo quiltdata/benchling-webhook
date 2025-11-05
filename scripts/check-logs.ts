@@ -1,22 +1,19 @@
 #!/usr/bin/env node
 /**
  * Check CloudWatch logs for the deployed Benchling webhook ECS service
- * Uses CloudFormation stack outputs to find the correct log group
+ *
+ * Uses profile deployment tracking (v0.7.0) to find deployment details.
+ * Falls back to CloudFormation stack outputs if no deployment record exists.
+ *
+ * @module scripts/check-logs
+ * @version 0.7.0
  */
 
 import "dotenv/config";
 import { execSync } from "child_process";
+import { XDGConfig } from "../lib/xdg-config";
 
 const STACK_NAME = "BenchlingWebhookStack";
-
-// Validate required environment variables
-if (!process.env.CDK_DEFAULT_REGION) {
-    console.error("Error: CDK_DEFAULT_REGION is not set in .env file");
-    console.error("Please set CDK_DEFAULT_REGION in your .env file");
-    process.exit(1);
-}
-
-const AWS_REGION = process.env.CDK_DEFAULT_REGION;
 
 interface StackOutput {
     OutputKey: string;
@@ -30,10 +27,56 @@ interface LogGroupDefinition {
     group: string | undefined;
 }
 
-function getStackOutputs(): StackOutput[] {
+/**
+ * Get deployment configuration from profile
+ *
+ * Reads from ~/.config/benchling-webhook/{profile}/deployments.json
+ */
+function getDeploymentFromProfile(profile: string, stage: string): { region: string } | null {
+    try {
+        const xdg = new XDGConfig();
+        const deployment = xdg.getActiveDeployment(profile, stage);
+
+        if (deployment) {
+            return {
+                region: deployment.region,
+            };
+        }
+    } catch {
+        // Deployment tracking not available, will fall back to env vars
+    }
+    return null;
+}
+
+/**
+ * Get AWS region from deployment tracking or environment
+ */
+function getAwsRegion(profile: string, stage: string): string {
+    // Try to get region from deployment tracking
+    const deployment = getDeploymentFromProfile(profile, stage);
+    if (deployment) {
+        return deployment.region;
+    }
+
+    // Fall back to environment variables
+    if (process.env.CDK_DEFAULT_REGION) {
+        return process.env.CDK_DEFAULT_REGION;
+    }
+
+    if (process.env.AWS_REGION) {
+        return process.env.AWS_REGION;
+    }
+
+    // Default to us-east-1
+    console.warn("⚠️  No region found in deployment tracking or environment variables");
+    console.warn("   Defaulting to us-east-1");
+    return "us-east-1";
+}
+
+function getStackOutputs(region: string): StackOutput[] {
     try {
         const output = execSync(
-            `aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${AWS_REGION} --query 'Stacks[0].Outputs' --output json`,
+            `aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${region} --query 'Stacks[0].Outputs' --output json`,
             { encoding: "utf-8" },
         );
         return JSON.parse(output) as StackOutput[];
@@ -68,7 +111,7 @@ function getLogGroupFromOutputs(outputs: StackOutput[], logType: string): string
     return logGroupOutput.OutputValue;
 }
 
-function printStackInfo(outputs: StackOutput[], logGroup: string | null, logType: string): void {
+function printStackInfo(outputs: StackOutput[], logGroup: string | null, logType: string, profile: string, stage: string): void {
     console.log("=".repeat(80));
     console.log("Benchling Webhook Stack Information");
     console.log("=".repeat(80));
@@ -82,6 +125,8 @@ function printStackInfo(outputs: StackOutput[], logGroup: string | null, logType
     const apiExecLogGroup = outputs.find((o) => o.OutputKey === "ApiGatewayExecutionLogGroup");
     const albDns = outputs.find((o) => o.OutputKey === "LoadBalancerDNS");
 
+    console.log(`Profile:   ${profile}`);
+    console.log(`Stage:     ${stage}`);
     if (clusterName) console.log(`Cluster:   ${clusterName.OutputValue}`);
     if (serviceName) console.log(`Service:   ${serviceName.OutputValue}`);
     if (webhookEndpoint) console.log(`Endpoint:  ${webhookEndpoint.OutputValue}`);
@@ -105,6 +150,8 @@ function main(): void {
     const since = args.find((arg) => arg.startsWith("--since="))?.split("=")[1] || "5m";
     const follow = args.includes("--follow") || args.includes("-f");
     const tail = args.find((arg) => arg.startsWith("--tail="))?.split("=")[1] || "100";
+    const profile = args.find((arg) => arg.startsWith("--profile="))?.split("=")[1] || "default";
+    const stage = args.find((arg) => arg.startsWith("--stage="))?.split("=")[1] || "prod";
 
     // Validate log type
     if (!["ecs", "api", "api-exec", "all"].includes(logType)) {
@@ -112,12 +159,15 @@ function main(): void {
         process.exit(1);
     }
 
+    // Get AWS region
+    const AWS_REGION = getAwsRegion(profile, stage);
+
     // Get stack outputs
-    const outputs = getStackOutputs();
+    const outputs = getStackOutputs(AWS_REGION);
 
     // Handle 'all' type - show all three log groups
     if (logType === "all") {
-        printStackInfo(outputs, null, "all");
+        printStackInfo(outputs, null, "all", profile, stage);
         console.log("Showing logs from all sources (most recent first):\n");
 
         const logGroupDefs: LogGroupDefinition[] = [
@@ -168,7 +218,7 @@ function main(): void {
     }
 
     const logGroup = getLogGroupFromOutputs(outputs, logType);
-    printStackInfo(outputs, logGroup, logType);
+    printStackInfo(outputs, logGroup, logType, profile, stage);
 
     // Build AWS logs command
     let command = `aws logs tail ${logGroup}`;
@@ -208,6 +258,8 @@ function printHelp(): void {
     console.log("Usage: npm run logs [options]");
     console.log("");
     console.log("Options:");
+    console.log("  --profile=NAME     Configuration profile to use (default: default)");
+    console.log("  --stage=STAGE      Deployment stage (default: prod)");
     console.log("  --type=TYPE        Log group to view (default: all)");
     console.log("                     all      = All logs (ECS, API Access, API Execution)");
     console.log("                     ecs      = ECS container logs (application logs)");
@@ -222,7 +274,9 @@ function printHelp(): void {
     console.log("  --help, -h         Show this help message");
     console.log("");
     console.log("Examples:");
-    console.log("  npm run logs                                   # View all logs from past 5 min");
+    console.log("  npm run logs                                   # View all logs from prod deployment");
+    console.log("  npm run logs -- --stage=dev                    # View dev deployment logs");
+    console.log("  npm run logs -- --profile=dev --stage=dev      # View dev profile, dev stage");
     console.log("  npm run logs -- --type=ecs                     # View only ECS logs");
     console.log("  npm run logs -- --type=api-exec                # View API Gateway execution logs");
     console.log("  npm run logs -- --since=1h                     # Last hour of all logs");
