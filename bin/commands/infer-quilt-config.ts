@@ -277,6 +277,9 @@ export async function inferQuiltConfig(options: {
     if (selectedStack.bucket) {
         result.quiltUserBucket = selectedStack.bucket;
     }
+    if (selectedStack.database) {
+        result.quiltDatabase = selectedStack.database;
+    }
     if (selectedStack.queueArn) {
         result.queueArn = selectedStack.queueArn;
     }
