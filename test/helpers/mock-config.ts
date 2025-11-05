@@ -17,7 +17,7 @@ export function createMockConfig(overrides?: Partial<ProfileConfig>): ProfileCon
     const defaults: ProfileConfig = {
         quilt: {
             stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-            catalog: "https://quilt.example.com",
+            catalog: "quilt.example.com",
             bucket: "test-quilt-bucket",
             database: "quilt_catalog",
             queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
@@ -65,7 +65,7 @@ export function createDevConfig(overrides?: Partial<ProfileConfig>): ProfileConf
     return createMockConfig({
         quilt: {
             stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/dev-quilt-stack/xyz789",
-            catalog: "https://dev.quilt.example.com",
+            catalog: "dev.quilt.example.com",
             bucket: "dev-quilt-bucket",
             database: "dev_quilt_catalog",
             queueArn: "arn:aws:sqs:us-east-1:123456789012:dev-queue",
@@ -95,7 +95,7 @@ export function createProdConfig(overrides?: Partial<ProfileConfig>): ProfileCon
     return createMockConfig({
         quilt: {
             stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/prod-quilt-stack/abc123",
-            catalog: "https://prod.quilt.example.com",
+            catalog: "prod.quilt.example.com",
             bucket: "prod-quilt-bucket",
             database: "prod_quilt_catalog",
             queueArn: "arn:aws:sqs:us-east-1:123456789012:prod-queue",

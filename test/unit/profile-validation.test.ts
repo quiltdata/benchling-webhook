@@ -464,11 +464,11 @@ describe("Profile Validation", () => {
             expect(result.errors.some(e => e.includes("stackArn"))).toBe(true);
         });
 
-        it("should reject invalid URL format", () => {
+        it("should reject empty catalog domain", () => {
             const invalidConfig: ProfileConfig = {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-                    catalog: "not-a-url",
+                    catalog: "",
                     bucket: "test-bucket",
                     database: "test_db",
                     queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
@@ -505,7 +505,7 @@ describe("Profile Validation", () => {
             const invalidConfig: ProfileConfig = {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-                    catalog: "https://quilt.example.com",
+                    catalog: "quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
                     queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",

@@ -27,7 +27,7 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
             },
             quilt: {
                 stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                catalog: "https://quilt.example.com",
+                catalog: "quilt.example.com",
                 bucket: "my-quilt-bucket",
                 database: "quilt_catalog",
                 queueArn: "arn:aws:sqs:us-east-1:123456789012:quilt-queue",
