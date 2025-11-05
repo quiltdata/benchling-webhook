@@ -37,7 +37,7 @@ function getStackOutputs(): StackOutput[] {
             { encoding: "utf-8" },
         );
         return JSON.parse(output) as StackOutput[];
-    } catch (_error: unknown) {
+    } catch {
         console.error(`Error: Could not get stack outputs for ${STACK_NAME}`);
         console.error("Make sure the stack is deployed and AWS credentials are configured.");
         process.exit(1);

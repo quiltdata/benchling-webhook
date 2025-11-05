@@ -11,7 +11,7 @@
  */
 
 import { XDGConfig } from "../../lib/xdg-config";
-import { UserConfig, DerivedConfig, DeploymentConfig, ProfileName } from "../../lib/types/config";
+import { DerivedConfig, DeploymentConfig, ProfileName } from "../../lib/types/config";
 import { existsSync, statSync } from "fs";
 import { SecretsManagerClient, DescribeSecretCommand } from "@aws-sdk/client-secrets-manager";
 import chalk from "chalk";
@@ -157,7 +157,7 @@ async function checkSecretsSync(xdgConfig: XDGConfig, profile: ProfileName): Pro
 
         // Get remote secret modification time
         const region = derivedConfig.cdkRegion || "us-east-1";
-        const clientConfig: { region: string; credentials?: any } = { region };
+        const clientConfig: { region: string; credentials?: unknown } = { region };
 
         if (derivedConfig.awsProfile) {
             const { fromIni } = await import("@aws-sdk/credential-providers");

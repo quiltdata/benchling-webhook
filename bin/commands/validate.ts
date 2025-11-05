@@ -4,7 +4,6 @@ import boxen from "boxen";
 import { execSync } from "child_process";
 import {
     loadConfigSync,
-    mergeInferredConfig,
     validateConfig,
     formatValidationErrors,
     type ConfigOptions,

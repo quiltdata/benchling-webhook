@@ -241,7 +241,7 @@ function main(): void {
             let hasChanges = false;
             try {
                 execSync("git diff --quiet docker/pyproject.toml docker/app-manifest.yaml", { stdio: "ignore" });
-            } catch (e: unknown) {
+            } catch {
                 hasChanges = true;
             }
 
@@ -285,7 +285,7 @@ function main(): void {
     // Check for uncommitted changes (for version bump commands)
     try {
         execSync("git diff-index --quiet HEAD --", { stdio: "ignore" });
-    } catch (e: unknown) {
+    } catch {
         console.error("❌ You have uncommitted changes");
         console.error("   Commit or stash your changes before bumping version");
         process.exit(1);

@@ -1,298 +1,457 @@
 /**
- * Comprehensive Type Definitions for XDG Configuration System
+ * Type Definitions for v0.7.0 Configuration Architecture
  *
- * This module defines all TypeScript types and interfaces for the
- * XDG-compliant configuration management system.
+ * BREAKING CHANGE: Complete rewrite with NO backward compatibility.
+ * This module defines the new unified configuration system for multi-environment deployments.
  *
  * @module types/config
+ * @version 0.7.0
  */
 
 /**
  * Configuration profile identifier
  * Profiles allow multiple named configurations (e.g., "default", "dev", "prod")
+ *
+ * @example "default"
+ * @example "dev"
+ * @example "prod"
  */
 export type ProfileName = string;
 
 /**
- * Configuration type identifier
- */
-export type ConfigType = "user" | "derived" | "deploy" | "complete";
-
-/**
- * User Configuration
+ * Profile Configuration (Single Source of Truth)
  *
- * User-provided settings that define the core configuration.
- * This is the primary configuration file edited by users.
+ * This is the primary configuration interface for v0.7.0, replacing the previous
+ * three-tier system (user/derived/deploy). All configuration is now unified in
+ * a single structured format.
+ *
+ * @example
+ * ```json
+ * {
+ *   "quilt": {
+ *     "stackArn": "arn:aws:cloudformation:...",
+ *     "catalog": "https://quilt.example.com",
+ *     "bucket": "my-quilt-bucket",
+ *     "database": "quilt_catalog",
+ *     "queueArn": "arn:aws:sqs:...",
+ *     "region": "us-east-1"
+ *   },
+ *   "benchling": {
+ *     "tenant": "my-tenant",
+ *     "clientId": "client_123",
+ *     "secretArn": "arn:aws:secretsmanager:...",
+ *     "appDefinitionId": "app_456"
+ *   },
+ *   "packages": {
+ *     "bucket": "benchling-packages",
+ *     "prefix": "benchling",
+ *     "metadataKey": "experiment_id"
+ *   },
+ *   "deployment": {
+ *     "region": "us-east-1",
+ *     "imageTag": "latest"
+ *   },
+ *   "_metadata": {
+ *     "version": "0.7.0",
+ *     "createdAt": "2025-11-04T10:00:00Z",
+ *     "updatedAt": "2025-11-04T10:00:00Z",
+ *     "source": "wizard"
+ *   }
+ * }
+ * ```
  */
-export interface UserConfig {
+export interface ProfileConfig {
     /**
-     * Quilt catalog URL (e.g., "https://quilt.example.com")
+     * Quilt catalog and infrastructure configuration
      */
-    quiltCatalog?: string;
+    quilt: QuiltConfig;
 
     /**
-     * Quilt user bucket name for package storage
+     * Benchling tenant and OAuth configuration
      */
-    quiltUserBucket?: string;
+    benchling: BenchlingConfig;
 
     /**
-     * Quilt database (Athena/Glue) identifier
+     * Package storage and metadata configuration
      */
-    quiltDatabase?: string;
+    packages: PackageConfig;
 
     /**
-     * Quilt CloudFormation stack ARN
+     * AWS deployment configuration (CDK)
      */
-    quiltStackArn?: string;
+    deployment: DeploymentConfig;
 
     /**
-     * AWS region for Quilt resources
+     * Optional logging configuration
      */
-    quiltRegion?: string;
+    logging?: LoggingConfig;
 
     /**
-     * Benchling tenant identifier
+     * Optional security configuration (webhook verification, IP allowlist)
      */
-    benchlingTenant?: string;
+    security?: SecurityConfig;
 
     /**
-     * Benchling OAuth client ID
+     * Configuration metadata (provenance, versioning, timestamps)
      */
-    benchlingClientId?: string;
+    _metadata: ConfigMetadata;
 
     /**
-     * Benchling OAuth client secret (stored in Secrets Manager in production)
+     * Optional profile inheritance (for profile hierarchies)
+     *
+     * When present, this profile inherits configuration from the specified base profile.
+     * Values in this profile override inherited values via deep merge.
+     *
+     * @example "_inherits": "default"
      */
-    benchlingClientSecret?: string;
-
-    /**
-     * Benchling app definition ID
-     */
-    benchlingAppDefinitionId?: string;
-
-    /**
-     * S3 bucket for Benchling package storage
-     */
-    benchlingPkgBucket?: string;
-
-    /**
-     * Benchling test entry ID (optional, for validation)
-     */
-    benchlingTestEntry?: string;
-
-    /**
-     * AWS Secrets Manager secret ARN for Benchling credentials
-     */
-    benchlingSecretArn?: string;
-
-    /**
-     * AWS account ID for CDK deployment
-     */
-    cdkAccount?: string;
-
-    /**
-     * AWS region for CDK deployment
-     */
-    cdkRegion?: string;
-
-    /**
-     * AWS profile to use for deployment operations
-     */
-    awsProfile?: string;
-
-    /**
-     * SQS queue ARN for package creation
-     */
-    queueArn?: string;
-
-    /**
-     * S3 key prefix for Benchling packages
-     */
-    pkgPrefix?: string;
-
-    /**
-     * Package metadata key (e.g., "experiment_id")
-     */
-    pkgKey?: string;
-
-    /**
-     * Logging level (DEBUG, INFO, WARNING, ERROR)
-     */
-    logLevel?: string;
-
-    /**
-     * Comma-separated IP allowlist for webhook access
-     */
-    webhookAllowList?: string;
-
-    /**
-     * Enable webhook signature verification
-     */
-    enableWebhookVerification?: string;
-
-    /**
-     * Create ECR repository flag
-     */
-    createEcrRepository?: string;
-
-    /**
-     * ECR repository name
-     */
-    ecrRepositoryName?: string;
-
-    /**
-     * Docker image tag
-     */
-    imageTag?: string;
-
-    /**
-     * Configuration metadata (optional)
-     */
-    _metadata?: ConfigMetadata;
+    _inherits?: string;
 }
 
 /**
- * Derived Configuration
+ * Quilt Catalog Configuration
  *
- * Configuration values inferred from CLI tools (e.g., quilt3 config)
- * or computed from user configuration.
+ * Configuration for Quilt data catalog integration, including S3 bucket,
+ * CloudFormation stack, and SQS queue for package creation.
  */
-export interface DerivedConfig extends UserConfig {
+export interface QuiltConfig {
     /**
-     * Catalog URL inferred from quilt3 CLI
+     * Quilt CloudFormation stack ARN
+     *
+     * @example "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-stack/..."
      */
-    catalogUrl?: string;
+    stackArn: string;
 
     /**
-     * Metadata tracking inference source and timestamp
+     * Quilt catalog URL
+     *
+     * @example "https://quilt.example.com"
      */
-    _metadata?: ConfigMetadata & {
-        inferredAt?: string;
-        inferredFrom?: string;
-    };
+    catalog: string;
+
+    /**
+     * S3 bucket for Quilt package storage
+     *
+     * @example "my-quilt-bucket"
+     */
+    bucket: string;
+
+    /**
+     * Athena/Glue database name for catalog metadata
+     *
+     * @example "quilt_catalog"
+     */
+    database: string;
+
+    /**
+     * SQS queue ARN for package creation jobs
+     *
+     * @example "arn:aws:sqs:us-east-1:123456789012:quilt-package-queue"
+     */
+    queueArn: string;
+
+    /**
+     * AWS region for Quilt resources
+     *
+     * @example "us-east-1"
+     */
+    region: string;
+}
+
+/**
+ * Benchling Configuration
+ *
+ * OAuth credentials and tenant information for Benchling API integration.
+ */
+export interface BenchlingConfig {
+    /**
+     * Benchling tenant identifier (subdomain)
+     *
+     * @example "my-company"
+     */
+    tenant: string;
+
+    /**
+     * OAuth client ID
+     *
+     * @example "client_abc123"
+     */
+    clientId: string;
+
+    /**
+     * OAuth client secret (optional, for local dev only)
+     *
+     * For production, use `secretArn` instead to reference AWS Secrets Manager.
+     *
+     * @example "secret_xyz789"
+     */
+    clientSecret?: string;
+
+    /**
+     * AWS Secrets Manager ARN for OAuth credentials (production)
+     *
+     * @example "arn:aws:secretsmanager:us-east-1:123456789012:secret:benchling-..."
+     */
+    secretArn?: string;
+
+    /**
+     * Benchling app definition ID
+     *
+     * @example "app_def_456"
+     */
+    appDefinitionId: string;
+
+    /**
+     * Test entry ID for validation (optional)
+     *
+     * @example "etr_abc123"
+     */
+    testEntryId?: string;
+}
+
+/**
+ * Package Configuration
+ *
+ * S3 storage and metadata settings for Benchling packages.
+ */
+export interface PackageConfig {
+    /**
+     * S3 bucket for package storage
+     *
+     * @example "benchling-packages"
+     */
+    bucket: string;
+
+    /**
+     * S3 key prefix for packages
+     *
+     * @example "benchling"
+     * @default "benchling"
+     */
+    prefix: string;
+
+    /**
+     * Metadata key for package organization
+     *
+     * @example "experiment_id"
+     * @default "experiment_id"
+     */
+    metadataKey: string;
 }
 
 /**
  * Deployment Configuration
  *
- * Configuration artifacts generated during deployment.
- * Contains deployment-specific values like webhook URLs and stack ARNs.
+ * AWS infrastructure settings for CDK deployment.
  */
-export interface DeploymentConfig extends DerivedConfig {
+export interface DeploymentConfig {
     /**
-     * Deployed webhook endpoint URL
+     * AWS region for deployment
+     *
+     * @example "us-east-1"
      */
-    webhookEndpoint?: string;
+    region: string;
 
     /**
-     * Deployed webhook URL (alias for webhookEndpoint)
+     * AWS account ID (optional, auto-detected if not provided)
+     *
+     * @example "123456789012"
      */
-    webhookUrl?: string;
+    account?: string;
 
     /**
-     * CloudFormation stack ARN
+     * ECR repository name (optional, default: "benchling-webhook")
+     *
+     * @example "my-custom-repo"
      */
-    stackArn?: string;
+    ecrRepository?: string;
 
     /**
-     * Deployment timestamp
+     * Docker image tag
+     *
+     * @example "latest"
+     * @example "0.7.0"
+     * @default "latest"
      */
-    deploymentTimestamp?: string;
+    imageTag?: string;
+}
+
+/**
+ * Logging Configuration
+ *
+ * Python logging level for Flask application.
+ */
+export interface LoggingConfig {
+    /**
+     * Python logging level
+     *
+     * @default "INFO"
+     */
+    level: "DEBUG" | "INFO" | "WARNING" | "ERROR";
+}
+
+/**
+ * Security Configuration
+ *
+ * Webhook security settings including IP allowlist and signature verification.
+ */
+export interface SecurityConfig {
+    /**
+     * Comma-separated list of allowed IP addresses/CIDR blocks
+     *
+     * Empty string means no IP filtering.
+     *
+     * @example "192.168.1.0/24,10.0.0.0/8"
+     * @default ""
+     */
+    webhookAllowList?: string;
 
     /**
-     * ISO timestamp of deployment
+     * Enable webhook signature verification
+     *
+     * @default true
      */
-    deployedAt?: string;
-
-    /**
-     * Metadata tracking deployment details
-     */
-    _metadata?: ConfigMetadata & {
-        deployedAt?: string;
-        deployedBy?: string;
-        stackName?: string;
-    };
+    enableVerification?: boolean;
 }
 
 /**
  * Configuration Metadata
  *
- * Tracks configuration provenance, timestamps, and versioning.
+ * Provenance tracking for configuration files.
  */
 export interface ConfigMetadata {
     /**
-     * ISO timestamp when configuration was saved
+     * Configuration schema version
+     *
+     * @example "0.7.0"
      */
-    savedAt?: string;
+    version: string;
 
     /**
-     * Source of configuration (e.g., "cli", "wizard", "manual")
+     * ISO 8601 timestamp when configuration was created
+     *
+     * @example "2025-11-04T10:00:00Z"
      */
-    source?: string;
+    createdAt: string;
 
     /**
-     * Configuration version
+     * ISO 8601 timestamp when configuration was last updated
+     *
+     * @example "2025-11-04T15:30:00Z"
      */
-    version?: string;
+    updatedAt: string;
 
     /**
-     * Additional metadata fields
+     * Source of configuration
+     *
+     * - "wizard": Created via interactive setup wizard
+     * - "manual": Hand-edited by user
+     * - "cli": Created via CLI command
+     */
+    source: "wizard" | "manual" | "cli";
+
+    /**
+     * Additional metadata fields (extensible)
      */
     [key: string]: string | undefined;
 }
 
 /**
- * Complete Configuration
+ * Deployment History
  *
- * Merged configuration from all sources (user + derived + deploy).
+ * Tracks all deployments for a profile, with active deployment pointers per stage.
  */
-export type CompleteConfig = DeploymentConfig;
+export interface DeploymentHistory {
+    /**
+     * Active deployments by stage name
+     *
+     * Maps stage name (e.g., "dev", "prod") to the currently active deployment.
+     *
+     * @example
+     * ```json
+     * {
+     *   "dev": { "stage": "dev", "endpoint": "https://...", "imageTag": "latest", ... },
+     *   "prod": { "stage": "prod", "endpoint": "https://...", "imageTag": "0.7.0", ... }
+     * }
+     * ```
+     */
+    active: Record<string, DeploymentRecord>;
 
-/**
- * Configuration Set
- *
- * Collection of configurations for merging operations.
- */
-export interface ConfigSet {
-    user?: UserConfig;
-    derived?: DerivedConfig;
-    deploy?: DeploymentConfig;
+    /**
+     * Complete deployment history (newest first)
+     *
+     * All past deployments for this profile, ordered by timestamp descending.
+     */
+    history: DeploymentRecord[];
 }
 
 /**
- * Configuration Profile
+ * Deployment Record
  *
- * Named configuration with metadata for profile management.
+ * A single deployment event with full metadata for debugging and rollback.
  */
-export interface ConfigProfile {
+export interface DeploymentRecord {
     /**
-     * Profile name (e.g., "default", "dev", "prod")
+     * API Gateway stage name
+     *
+     * @example "dev"
+     * @example "prod"
      */
-    name: ProfileName;
+    stage: string;
 
     /**
-     * User configuration for this profile
+     * ISO 8601 deployment timestamp
+     *
+     * @example "2025-11-04T10:30:00Z"
      */
-    user?: UserConfig;
+    timestamp: string;
 
     /**
-     * Derived configuration for this profile
+     * Docker image tag deployed
+     *
+     * @example "latest"
+     * @example "0.7.0"
      */
-    derived?: DerivedConfig;
+    imageTag: string;
 
     /**
-     * Deployment configuration for this profile
+     * Deployed webhook endpoint URL
+     *
+     * @example "https://abc123.execute-api.us-east-1.amazonaws.com/dev"
      */
-    deploy?: DeploymentConfig;
+    endpoint: string;
 
     /**
-     * Profile metadata
+     * CloudFormation stack name
+     *
+     * @example "BenchlingWebhookStack"
      */
-    metadata?: {
-        createdAt?: string;
-        updatedAt?: string;
-        description?: string;
-    };
+    stackName: string;
+
+    /**
+     * AWS region
+     *
+     * @example "us-east-1"
+     */
+    region: string;
+
+    /**
+     * User who triggered deployment (optional)
+     *
+     * @example "ernest@example.com"
+     */
+    deployedBy?: string;
+
+    /**
+     * Git commit hash (optional)
+     *
+     * @example "abc123f"
+     */
+    commit?: string;
+
+    /**
+     * Additional metadata (extensible)
+     */
+    [key: string]: string | undefined;
 }
 
 /**
@@ -307,7 +466,7 @@ export interface ValidationResult {
     isValid: boolean;
 
     /**
-     * Validation errors (if any)
+     * Validation errors (fatal issues that prevent deployment)
      */
     errors: string[];
 
@@ -323,25 +482,35 @@ export interface ValidationResult {
 }
 
 /**
- * XDG Configuration Paths
+ * Migration Report
  *
- * File paths for XDG-compliant configuration storage.
+ * Result of migrating from legacy configuration format.
  */
-export interface XDGConfigPaths {
+export interface MigrationReport {
     /**
-     * Path to user configuration file
+     * Whether migration completed successfully
      */
-    userConfig: string;
+    success: boolean;
 
     /**
-     * Path to derived configuration file
+     * Profiles that were successfully migrated
      */
-    derivedConfig: string;
+    profilesMigrated: string[];
 
     /**
-     * Path to deployment configuration file
+     * Migration errors
      */
-    deployConfig: string;
+    errors: string[];
+
+    /**
+     * Migration warnings (non-fatal issues)
+     */
+    warnings?: string[];
+
+    /**
+     * Additional migration details
+     */
+    details?: Record<string, unknown>;
 }
 
 /**
@@ -365,105 +534,132 @@ export interface ProfileOptions {
 }
 
 /**
- * Configuration Read Options
- */
-export interface ConfigReadOptions {
-    /**
-     * Configuration type to read
-     */
-    type: ConfigType;
-
-    /**
-     * Profile name (defaults to "default")
-     */
-    profile?: ProfileName;
-
-    /**
-     * Throw error if file doesn't exist
-     */
-    throwIfMissing?: boolean;
-
-    /**
-     * Validate schema after reading
-     */
-    validate?: boolean;
-}
-
-/**
- * Configuration Write Options
- */
-export interface ConfigWriteOptions {
-    /**
-     * Configuration type to write
-     */
-    type: ConfigType;
-
-    /**
-     * Profile name (defaults to "default")
-     */
-    profile?: ProfileName;
-
-    /**
-     * Create backup before writing
-     */
-    backup?: boolean;
-
-    /**
-     * Validate schema before writing
-     */
-    validate?: boolean;
-
-    /**
-     * Add metadata to configuration
-     */
-    addMetadata?: boolean;
-}
-
-/**
- * AWS Profile Configuration
+ * JSON Schema for ProfileConfig validation
  *
- * Integration with AWS credentials and profiles.
+ * This schema can be used with ajv or other JSON Schema validators.
  */
-export interface AWSProfileConfig {
-    /**
-     * AWS profile name from ~/.aws/credentials
-     */
-    profileName: string;
-
-    /**
-     * AWS region
-     */
-    region?: string;
-
-    /**
-     * AWS account ID
-     */
-    accountId?: string;
-}
+export const ProfileConfigSchema = {
+    $schema: "http://json-schema.org/draft-07/schema#",
+    title: "ProfileConfig",
+    description: "Benchling Webhook Profile Configuration (v0.7.0)",
+    type: "object",
+    required: ["quilt", "benchling", "packages", "deployment", "_metadata"],
+    properties: {
+        quilt: {
+            type: "object",
+            required: ["stackArn", "catalog", "bucket", "database", "queueArn", "region"],
+            properties: {
+                stackArn: { type: "string", pattern: "^arn:aws:cloudformation:" },
+                catalog: { type: "string", format: "uri" },
+                bucket: { type: "string", minLength: 3 },
+                database: { type: "string", minLength: 1 },
+                queueArn: { type: "string", pattern: "^arn:aws:sqs:" },
+                region: { type: "string", pattern: "^[a-z]{2}-[a-z]+-[0-9]$" },
+            },
+        },
+        benchling: {
+            type: "object",
+            required: ["tenant", "clientId", "appDefinitionId"],
+            properties: {
+                tenant: { type: "string", minLength: 1 },
+                clientId: { type: "string", minLength: 1 },
+                clientSecret: { type: "string" },
+                secretArn: { type: "string", pattern: "^arn:aws:secretsmanager:" },
+                appDefinitionId: { type: "string", minLength: 1 },
+                testEntryId: { type: "string" },
+            },
+        },
+        packages: {
+            type: "object",
+            required: ["bucket", "prefix", "metadataKey"],
+            properties: {
+                bucket: { type: "string", minLength: 3 },
+                prefix: { type: "string", minLength: 1 },
+                metadataKey: { type: "string", minLength: 1 },
+            },
+        },
+        deployment: {
+            type: "object",
+            required: ["region"],
+            properties: {
+                region: { type: "string", pattern: "^[a-z]{2}-[a-z]+-[0-9]$" },
+                account: { type: "string", pattern: "^[0-9]{12}$" },
+                ecrRepository: { type: "string" },
+                imageTag: { type: "string" },
+            },
+        },
+        logging: {
+            type: "object",
+            properties: {
+                level: { type: "string", enum: ["DEBUG", "INFO", "WARNING", "ERROR"] },
+            },
+        },
+        security: {
+            type: "object",
+            properties: {
+                webhookAllowList: { type: "string" },
+                enableVerification: { type: "boolean" },
+            },
+        },
+        _metadata: {
+            type: "object",
+            required: ["version", "createdAt", "updatedAt", "source"],
+            properties: {
+                version: { type: "string" },
+                createdAt: { type: "string", format: "date-time" },
+                updatedAt: { type: "string", format: "date-time" },
+                source: { type: "string", enum: ["wizard", "manual", "cli"] },
+            },
+        },
+        _inherits: { type: "string" },
+    },
+    additionalProperties: false,
+} as const;
 
 /**
- * Quilt CLI Configuration
- *
- * Configuration inferred from quilt3 CLI.
+ * JSON Schema for DeploymentHistory validation
  */
-export interface QuiltCLIConfig {
-    /**
-     * Catalog URL from quilt3 config
-     */
-    catalog?: string;
-
-    /**
-     * Default bucket from quilt3 config
-     */
-    defaultBucket?: string;
-
-    /**
-     * AWS region from quilt3 config
-     */
-    region?: string;
-
-    /**
-     * Registry URL from quilt3 config
-     */
-    registryUrl?: string;
-}
+export const DeploymentHistorySchema = {
+    $schema: "http://json-schema.org/draft-07/schema#",
+    title: "DeploymentHistory",
+    description: "Deployment tracking for a profile",
+    type: "object",
+    required: ["active", "history"],
+    properties: {
+        active: {
+            type: "object",
+            additionalProperties: {
+                type: "object",
+                required: ["stage", "timestamp", "imageTag", "endpoint", "stackName", "region"],
+                properties: {
+                    stage: { type: "string" },
+                    timestamp: { type: "string", format: "date-time" },
+                    imageTag: { type: "string" },
+                    endpoint: { type: "string", format: "uri" },
+                    stackName: { type: "string" },
+                    region: { type: "string" },
+                    deployedBy: { type: "string" },
+                    commit: { type: "string" },
+                },
+            },
+        },
+        history: {
+            type: "array",
+            items: {
+                type: "object",
+                required: ["stage", "timestamp", "imageTag", "endpoint", "stackName", "region"],
+                properties: {
+                    stage: { type: "string" },
+                    timestamp: { type: "string", format: "date-time" },
+                    imageTag: { type: "string" },
+                    endpoint: { type: "string", format: "uri" },
+                    stackName: { type: "string" },
+                    region: { type: "string" },
+                    deployedBy: { type: "string" },
+                    commit: { type: "string" },
+                },
+            },
+        },
+    },
+    additionalProperties: false,
+} as const;

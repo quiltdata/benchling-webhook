@@ -119,7 +119,7 @@ function validateGitState(isDryRun: boolean): Promise<void> {
     // Check for uncommitted changes
     try {
         execSync("git diff-index --quiet HEAD --", { stdio: "ignore" });
-    } catch (_e) {
+    } catch {
         console.error("⚠️  Warning: You have uncommitted changes");
         console.error("   It is recommended to commit changes before publishing");
         console.error("");
@@ -323,7 +323,7 @@ async function main(): Promise<void> {
 
         // Publish package
         publishPackage(isDryRun, isProd);
-    } catch (_error: unknown) {
+    } catch {
         console.error("");
         console.error("Publishing failed");
         process.exit(1);

@@ -1,7 +1,6 @@
 import { existsSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import chalk from "chalk";
-import ora from "ora";
 import boxen from "boxen";
 import { prompt } from "enquirer";
 
