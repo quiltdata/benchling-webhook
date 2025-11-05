@@ -308,10 +308,50 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
 
     // Prompt for Quilt configuration (if not inherited)
     if (!inheritFrom) {
-        console.log("Step 1: Quilt Configuration\n");
-        console.log("Note: Run 'npm run setup:infer' first to auto-detect Quilt stack\n");
+        // Check if all required Quilt fields are already present (from inference)
+        // Note: bucket is optional and can be inferred from other sources if missing
+        const hasAllQuiltFields =
+            config.quilt?.stackArn &&
+            config.quilt?.catalog &&
+            config.quilt?.database &&
+            config.quilt?.queueArn;
 
-        const quiltAnswers = await inquirer.prompt([
+        let shouldPromptForQuilt = !hasAllQuiltFields;
+
+        if (hasAllQuiltFields) {
+            console.log("Step 1: Quilt Configuration (inferred from AWS)\n");
+            console.log(`  Stack ARN: ${config.quilt!.stackArn}`);
+            console.log(`  Catalog: ${config.quilt!.catalog}`);
+            console.log(`  Database: ${config.quilt!.database}`);
+            console.log(`  Queue ARN: ${config.quilt!.queueArn}`);
+            if (config.quilt!.bucket) {
+                console.log(`  Bucket: ${config.quilt!.bucket}`);
+            }
+            console.log("");
+
+            const { confirmQuilt } = await inquirer.prompt([
+                {
+                    type: "confirm",
+                    name: "confirmQuilt",
+                    message: "Use these inferred Quilt settings?",
+                    default: true,
+                },
+            ]);
+
+            if (!confirmQuilt) {
+                console.log("\nPlease enter Quilt configuration manually:\n");
+                shouldPromptForQuilt = true;
+            }
+        }
+
+        // Only prompt for Quilt fields if not all are present OR user chose to enter manually
+        if (shouldPromptForQuilt) {
+            if (!hasAllQuiltFields) {
+                console.log("Step 1: Quilt Configuration\n");
+                console.log("Note: Run 'npm run setup:infer' first to auto-detect Quilt stack\n");
+            }
+
+            const quiltAnswers = await inquirer.prompt([
             {
                 type: "input",
                 name: "stackArn",
@@ -365,18 +405,19 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             },
         ]);
 
-        // Extract region from stack ARN
-        const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([^:]+):/);
-        const quiltRegion = arnMatch ? arnMatch[1] : "us-east-1";
+            // Extract region from stack ARN
+            const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([^:]+):/);
+            const quiltRegion = arnMatch ? arnMatch[1] : "us-east-1";
 
-        config.quilt = {
-            stackArn: quiltAnswers.stackArn,
-            catalog: quiltAnswers.catalog,
-            bucket: quiltAnswers.bucket,
-            database: quiltAnswers.database,
-            queueArn: quiltAnswers.queueArn,
-            region: quiltRegion,
-        };
+            config.quilt = {
+                stackArn: quiltAnswers.stackArn,
+                catalog: quiltAnswers.catalog,
+                bucket: quiltAnswers.bucket,
+                database: quiltAnswers.database,
+                queueArn: quiltAnswers.queueArn,
+                region: quiltRegion,
+            };
+        }
     }
 
     // Prompt for Benchling configuration
@@ -622,11 +663,32 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         console.log("Step 1: Inferring Quilt configuration from AWS...\n");
 
         try {
-            quiltConfig = await inferQuiltConfig({
+            const inferenceResult = await inferQuiltConfig({
                 region: awsRegion,
                 profile: awsProfile,
                 interactive: !nonInteractive,
             });
+
+            // Map InferenceResult to QuiltConfig fields
+            if (inferenceResult.quiltStackArn) {
+                quiltConfig.stackArn = inferenceResult.quiltStackArn;
+            }
+            if (inferenceResult.catalogUrl) {
+                // Strip protocol and trailing slash to store only domain
+                quiltConfig.catalog = inferenceResult.catalogUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+            }
+            if (inferenceResult.quiltUserBucket) {
+                quiltConfig.bucket = inferenceResult.quiltUserBucket;
+            }
+            if (inferenceResult.quiltDatabase) {
+                quiltConfig.database = inferenceResult.quiltDatabase;
+            }
+            if (inferenceResult.queueArn) {
+                quiltConfig.queueArn = inferenceResult.queueArn;
+            }
+            if (inferenceResult.quiltRegion) {
+                quiltConfig.region = inferenceResult.quiltRegion;
+            }
 
             console.log("✓ Quilt configuration inferred\n");
         } catch (error) {
