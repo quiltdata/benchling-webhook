@@ -103,6 +103,21 @@ class TestPayload:
 
         assert payload.entry_id == "etr_payload_level"
 
+    def test_entry_id_fallback_to_canvas_context(self):
+        """Test entry_id falls back to context entryId for canvas payloads without message wrapper."""
+        payload_dict = {
+            "canvasId": "canvas_12345",
+            "context": {
+                "entryId": "etr_from_context",
+                "benchlingUrl": "https://demo.benchling.com",
+            },
+        }
+
+        payload = Payload(payload_dict)
+
+        assert payload.entry_id == "etr_from_context"
+        assert payload.canvas_id == "canvas_12345"
+
     def test_missing_entry_id_raises(self):
         """Test missing entry_id raises ValueError."""
         payload_dict = {
