@@ -30,7 +30,7 @@ class Payload:
 
         Args:
             payload: Raw webhook payload dict
-            benchling: Optional Benchling client for fallback entry_id lookup
+            benchling: Optional Benchling client for canvas resource_id lookup
             display_id: Optional display_id for package naming (e.g., "PRT001")
         """
         logger.debug("Initializing Payload", payload_keys=list(payload.keys()))
@@ -60,7 +60,7 @@ class Payload:
 
         Args:
             request: Flask Request object
-            benchling: Optional Benchling client for fallback entry_id lookup
+            benchling: Optional Benchling client for canvas resource_id lookup
 
         Returns:
             Payload instance
@@ -75,29 +75,6 @@ class Payload:
         logger.debug("Payload parsed from Flask request", payload_keys=list(payload.keys()))
         return cls(payload, benchling)
 
-    @staticmethod
-    def get_most_recent_entry(benchling: "Benchling") -> Optional[str]:
-        """
-        Fetch the most recent entry from Benchling.
-
-        Args:
-            benchling: Benchling SDK client
-
-        Returns:
-            Most recent entry ID, or None if not found
-        """
-        try:
-            entries_response = benchling.entries.list_entries()
-            first_entry = entries_response.first()
-            if first_entry:
-                logger.info("Found most recent entry: %s", first_entry.id)
-                return first_entry.id
-            logger.warning("No entries found in Benchling")
-            return None
-        except Exception as e:
-            logger.error("Failed to fetch entries: %s", str(e))
-            return None
-
     @property
     def entry_id(self) -> str:
         """
@@ -107,7 +84,6 @@ class Payload:
         - Standard events: uses resourceId or entryId from message
         - Canvas userInteracted events: uses buttonId (which contains entry_id)
         - Canvas events: uses canvas API to get resource_id from canvas_id
-        - Fallback: queries Benchling for most recent entry if client provided
 
         Returns:
             Entry ID
@@ -148,26 +124,25 @@ class Payload:
                 except (ValueError, Exception) as e:
                     # Fallback to simple extraction if parsing fails
                     logger.debug(
-                        "Failed to parse button_id with pagination parser, using fallback",
+                        "Failed to parse button_id with pagination parser, using simple extraction",
                         button_id=button_id,
                         error=str(e),
                     )
-                    # Legacy format: extract last part after dash
+                    # Extract last part after dash (simple prefix format)
                     entry_id = button_id.split("-")[-1]
                     self._cached_entry_id = entry_id
-                    logger.info("Extracted entry_id from button_id (fallback)", button_id=button_id, entry_id=entry_id)
+                    logger.info("Extracted entry_id from button_id (simple)", button_id=button_id, entry_id=entry_id)
                     return entry_id
             # Direct entry_id (no prefix)
             self._cached_entry_id = button_id
             logger.info("Using button_id as entry_id", entry_id=button_id)
             return button_id
 
-        # Standard extraction: resourceId or entryId from message, payload root, or context
+        # Standard extraction: resourceId or entryId from message or payload root
         entry_id = (
             self._message.get("resourceId")
             or self._message.get("entryId")
             or self._payload.get("resourceId")
-            or self._payload.get("context", {}).get("entryId")
         )
 
         if entry_id:
@@ -188,14 +163,6 @@ class Payload:
                     )
             except Exception as e:
                 logger.warning("Failed to fetch canvas", canvas_id=self.canvas_id, error=str(e))
-
-        if not entry_id and self._benchling:
-            # Fallback: fetch most recent entry
-            logger.info("No entry_id in payload, attempting to fetch most recent entry")
-            entry_id = self.get_most_recent_entry(self._benchling)
-            if entry_id:
-                self._cached_entry_id = entry_id
-                logger.info("Using most recent entry as fallback", entry_id=entry_id)
 
         if not entry_id:
             logger.error(

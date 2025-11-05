@@ -4,8 +4,6 @@ import json
 import re
 from pathlib import Path
 
-import pytest
-
 
 def get_package_json_version():
     """Get version from package.json in repo root."""

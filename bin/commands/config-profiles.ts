@@ -14,8 +14,8 @@
  * @module bin/config-profiles
  */
 
-import { XDGConfig, BaseConfig } from "../lib/xdg-config";
-import { ProfileName, UserConfig, DerivedConfig, DeploymentConfig } from "../lib/types/config";
+import { XDGConfig, BaseConfig } from "../../lib/xdg-config";
+import { ProfileName, UserConfig, DerivedConfig, DeploymentConfig } from "../../lib/types/config";
 import { Command } from "commander";
 
 /**

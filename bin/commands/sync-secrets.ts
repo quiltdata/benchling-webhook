@@ -19,10 +19,10 @@ import {
     DescribeSecretCommand,
     ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
-import { XDGConfig, BaseConfig } from "../lib/xdg-config";
+import { XDGConfig, BaseConfig } from "../../lib/xdg-config";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
-import { UserConfig, DerivedConfig, ProfileName } from "../lib/types/config";
-import { generateSecretName } from "../lib/utils/secrets";
+import { UserConfig, DerivedConfig, ProfileName } from "../../lib/types/config";
+import { generateSecretName } from "../../lib/utils/secrets";
 
 /**
  * Secrets sync options

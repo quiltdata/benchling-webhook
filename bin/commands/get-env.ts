@@ -17,7 +17,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 // Import utility functions from lib/utils
-import { inferStackConfig } from "../lib/utils/stack-inference";
+import { inferStackConfig } from "../../lib/utils/stack-inference";
 
 // Parse command line arguments (only when run directly)
 let args: string[];
@@ -186,4 +186,4 @@ if (require.main === module) {
 }
 
 // For backward compatibility, re-export from the new location
-export * from "../lib/utils/stack-inference";
+export * from "../../lib/utils/stack-inference";
