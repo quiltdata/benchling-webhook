@@ -10,6 +10,8 @@
 
 The current XDG configuration system and install wizard have accumulated significant technical debt during the multi-environment implementation. This specification proposes a complete restructuring to create a clean, maintainable, and intuitive configuration architecture.
 
+**IMPORTANT: This is a HARD SHIFT with NO backward compatibility. Version 0.7.0 will completely remove all legacy configuration support. Users must manually reconfigure using the new wizard.**
+
 ### Current Problems
 
 1. **Directory Structure Chaos**: Mixing of concerns across multiple directory levels
@@ -467,137 +469,141 @@ class XDGConfig {
 
 ---
 
-## Part 3: Migration Plan
+## Part 3: No Migration - Hard Shift to v0.7.0
 
-### 3.1 Migration Strategy
+### 3.1 Breaking Change Strategy
 
-**Approach**: Automatic migration on first run
+**BREAKING CHANGE: Complete removal of legacy configuration support in v0.7.0**
+
+**Approach**: No automatic migration, no fallback, no legacy support
 
 ```typescript
 // lib/xdg-config.ts
 class XDGConfig {
   constructor() {
-    if (this.needsMigration()) {
-      console.log("Migrating configuration to new format...");
-      const report = this.migrateFromLegacy();
-      console.log(report.summary);
+    // NO migration logic
+    // Only work with new format
+    this.ensureBaseDirectoryExists();
+  }
+
+  private ensureBaseDirectoryExists(): void {
+    if (!existsSync(this.baseDir)) {
+      mkdirSync(this.baseDir, { recursive: true });
     }
   }
 
-  private needsMigration(): boolean {
-    // Check for old structure
-    const oldDefaultConfig = join(this.baseDir, "default.json");
-    const oldDeployJson = join(this.baseDir, "deploy.json");
-    const newDefaultConfig = join(this.baseDir, "profiles", "default", "config.json");
+  readProfile(profile: string): ProfileConfig {
+    const configPath = join(this.baseDir, profile, "config.json");
 
-    return (
-      (existsSync(oldDefaultConfig) || existsSync(oldDeployJson)) &&
-      !existsSync(newDefaultConfig)
-    );
-  }
+    if (!existsSync(configPath)) {
+      throw new Error(`
+        ❌ Profile not found: ${profile}
 
-  migrateFromLegacy(): MigrationReport {
-    const report: MigrationReport = {
-      success: true,
-      profilesMigrated: [],
-      errors: [],
-    };
-
-    // 1. Migrate default profile
-    this.migrateProfile("default", report);
-
-    // 2. Migrate named profiles
-    const profilesDir = join(this.baseDir, "profiles");
-    if (existsSync(profilesDir)) {
-      const profiles = readdirSync(profilesDir).filter(p => p !== "default");
-      profiles.forEach(profile => this.migrateProfile(profile, report));
+        ${this.getLegacyHelpMessage()}
+      `);
     }
 
-    // 3. Migrate shared deploy.json
-    this.migrateDeploymentTracking(report);
+    return JSON.parse(readFileSync(configPath, "utf-8"));
+  }
 
-    // 4. Archive old files
-    this.archiveLegacyFiles(report);
+  private getLegacyHelpMessage(): string {
+    const legacyFiles = [
+      join(this.baseDir, "default.json"),
+      join(this.baseDir, "deploy.json"),
+      join(this.baseDir, "profiles"),
+    ];
 
-    return report;
+    const hasLegacyFiles = legacyFiles.some(f => existsSync(f));
+
+    if (hasLegacyFiles) {
+      return `
+Configuration format changed in v0.7.0.
+Your old configuration files are not compatible.
+
+Please run setup wizard to create new configuration:
+  npx @quiltdata/benchling-webhook@latest setup
+
+Your old configuration files remain at:
+  ~/.config/benchling-webhook/default.json
+  ~/.config/benchling-webhook/deploy.json
+
+You can manually reference these files to re-enter your settings.
+      `.trim();
+    }
+
+    return `
+No configuration found for profile: ${profile}
+
+Run setup wizard to create configuration:
+  npx @quiltdata/benchling-webhook@latest setup
+    `.trim();
   }
 }
 ```
 
-### 3.2 Migration Steps
+### 3.2 No Migration Steps
 
-**Step 1**: Migrate profile configs
-```
-OLD: ~/.config/benchling-webhook/default.json
-NEW: ~/.config/benchling-webhook/default/config.json
+**There is NO automatic migration. Users must manually reconfigure.**
 
-OLD: ~/.config/benchling-webhook/profiles/dev/default.json
-NEW: ~/.config/benchling-webhook/dev/config.json
-```
+**Old structure** (v0.6.x - IGNORED by v0.7.0):
 
-**Step 2**: Migrate deployment tracking
-```
-OLD: ~/.config/benchling-webhook/deploy.json
-{
-  "prod": { "endpoint": "...", "imageTag": "0.6.3" }
-}
-
-NEW: ~/.config/benchling-webhook/default/deployments.json
-{
-  "active": {
-    "prod": { "endpoint": "...", "imageTag": "0.6.3" }
-  },
-  "history": [ ... ]
-}
-```
-
-**Step 3**: Archive legacy files
-```
+```text
 ~/.config/benchling-webhook/
-├── .legacy/
-│   ├── default.json           # Archived
-│   ├── deploy.json            # Archived
-│   ├── config/
-│   │   └── default.json       # Archived
-│   └── profiles/              # Archived (old nested structure)
-│       └── ...
-└── default/
-    ├── config.json            # New format
-    └── deployments.json       # New format
+├── default.json              # ❌ NOT READ
+├── deploy.json               # ❌ NOT READ
+├── config/
+│   └── default.json          # ❌ NOT READ
+└── profiles/
+    └── dev/
+        └── default.json      # ❌ NOT READ
 ```
 
-### 3.3 Backward Compatibility
+**New structure** (v0.7.0 - REQUIRED):
 
-**Grace period**: 2 releases (v0.7.0 - v0.8.0)
-
-**Approach**:
-1. **v0.7.0**: Auto-migrate on first run, keep reading old files as fallback
-2. **v0.7.x**: Warning if old files still present
-3. **v0.8.0**: Remove legacy file reading, only new format
-
-**Example**:
-```typescript
-readProfile(profile: string): ProfileConfig {
-  const newPath = this.getProfilePath(profile);
-
-  if (existsSync(newPath)) {
-    return this.readNewFormat(newPath);
-  }
-
-  // Fallback to legacy (v0.7.0 only)
-  const legacyPath = this.getLegacyPath(profile);
-  if (existsSync(legacyPath)) {
-    console.warn(`
-      ⚠️  Warning: Using legacy configuration format.
-      Run 'benchling-webhook config migrate' to upgrade.
-      Legacy support will be removed in v0.8.0.
-    `);
-    return this.readLegacyFormat(legacyPath);
-  }
-
-  throw new Error(`Profile not found: ${profile}`);
-}
+```text
+~/.config/benchling-webhook/
+├── default/
+│   ├── config.json           # ✅ ONLY THIS IS READ
+│   └── deployments.json
+└── dev/
+    ├── config.json           # ✅ ONLY THIS IS READ
+    └── deployments.json
 ```
+
+### 3.3 User Reconfiguration Required
+
+#### Rationale for Hard Shift
+
+- The legacy configuration structure is fundamentally incompatible with the new architecture
+- Auto-migration is complex, error-prone, and masks the architectural shift
+- Clean break forces users to understand the new multi-environment model
+- Simplifies codebase by removing all legacy code paths immediately
+- Users can keep v0.6.x for existing deployments while setting up v0.7.0 separately
+
+#### User Migration Guide
+
+Users upgrading from v0.6.x to v0.7.0 must:
+
+1. **Review current configuration** (before upgrading):
+   - Note settings from `~/.config/benchling-webhook/default.json`
+   - Note any profile configurations from `~/.config/benchling-webhook/profiles/*/default.json`
+   - Document deployment settings from `~/.config/benchling-webhook/deploy.json`
+
+2. **Upgrade and reconfigure**:
+   - Install v0.7.0: `npm install -g @quiltdata/benchling-webhook@0.7.0`
+   - Run setup wizard: `benchling-webhook setup`
+   - Re-enter configuration values when prompted
+   - For multi-environment setups, create additional profiles:
+     - `benchling-webhook setup-profile dev --inherit-from default`
+
+3. **Verify new configuration**:
+   - Test deployment: `benchling-webhook deploy --profile default --stage prod`
+   - Confirm webhook functionality
+   - Verify logs and monitoring
+
+4. **Clean up** (optional):
+   - Old configuration files at `~/.config/benchling-webhook/*.json` can be deleted
+   - Or keep them for reference/rollback purposes
 
 ---
 
@@ -612,14 +618,16 @@ readProfile(profile: string): ProfileConfig {
 
 - [ ] **Task 1.2**: Refactor `XDGConfig` class
   - [ ] Remove `ConfigType` enum
-  - [ ] Implement new API methods
+  - [ ] Implement new API methods (profile-first design)
   - [ ] Add profile inheritance support
   - [ ] Add deployment tracking methods
+  - [ ] Remove ALL legacy file reading code
+  - [ ] Add helpful error messages for missing configs
 
-- [ ] **Task 1.3**: Implement migration logic
-  - [ ] Write `migrateFromLegacy()` method
-  - [ ] Test migration with various old structures
-  - [ ] Add rollback capability
+- [ ] **Task 1.3**: Update file paths and structure
+  - [ ] Change from `profiles/{name}/default.json` to `{name}/config.json`
+  - [ ] Implement per-profile `deployments.json`
+  - [ ] Remove global `deploy.json` support entirely
 
 ### Phase 2: Install Wizard Cleanup
 
@@ -758,41 +766,55 @@ npx @quiltdata/benchling-webhook@latest deploy --profile dev --stage prod
 npm run test -- --profile dev --stage prod
 ```
 
-### Workflow 4: Migration from v0.6.3
+### Workflow 4: Upgrading from v0.6.3 to v0.7.0
 
 ```bash
-# Before (legacy structure):
-# ~/.config/benchling-webhook/
-# ├── default.json
-# ├── deploy.json
-# └── profiles/
-#     └── dev/
-#         └── default.json
+# Step 1: Review existing configuration (while still on v0.6.3)
+cat ~/.config/benchling-webhook/default.json
+cat ~/.config/benchling-webhook/deploy.json
+cat ~/.config/benchling-webhook/profiles/dev/default.json  # if using profiles
 
-# Run any command (auto-migrates)
-npx @quiltdata/benchling-webhook@latest deploy
+# Step 2: Install v0.7.0
+npm install -g @quiltdata/benchling-webhook@0.7.0
+
+# Step 3: Run any command (will fail with helpful message)
+benchling-webhook deploy
 
 # Output:
-# ℹ️  Migrating configuration to new format...
-# ✓ Migrated profile: default
-# ✓ Migrated profile: dev
-# ✓ Migrated deployment tracking
-# ✓ Archived legacy files to .legacy/
-# ✓ Migration complete!
+# ❌ Profile not found: default
+#
+# Configuration format changed in v0.7.0.
+# Your old configuration files are not compatible.
+#
+# Please run setup wizard to create new configuration:
+#   benchling-webhook setup
+#
+# Your old configuration files remain at:
+#   ~/.config/benchling-webhook/default.json
+#   ~/.config/benchling-webhook/deploy.json
+#
+# You can manually reference these files to re-enter your settings.
 
-# After (new structure):
+# Step 4: Run setup wizard and re-enter configuration
+benchling-webhook setup
+
+# Step 5: For multi-environment, create additional profiles
+benchling-webhook setup-profile dev --inherit-from default
+
+# Step 6: Test deployment
+benchling-webhook deploy --profile default --stage prod
+
+# Result (new structure):
 # ~/.config/benchling-webhook/
-# ├── .legacy/
-# │   ├── default.json
-# │   ├── deploy.json
-# │   ├── config/
-# │   └── profiles/
+# ├── default.json              # ⚠️  Old file (ignored by v0.7.0)
+# ├── deploy.json               # ⚠️  Old file (ignored by v0.7.0)
+# ├── profiles/                 # ⚠️  Old directory (ignored by v0.7.0)
 # ├── default/
-# │   ├── config.json
-# │   └── deployments.json
+# │   ├── config.json           # ✅ New config (v0.7.0)
+# │   └── deployments.json      # ✅ New deployments (v0.7.0)
 # └── dev/
-#     ├── config.json
-#     └── deployments.json
+#     ├── config.json           # ✅ New config (v0.7.0)
+#     └── deployments.json      # ✅ New deployments (v0.7.0)
 ```
 
 ---
@@ -944,10 +966,34 @@ export interface MigrationReport {
 
 This specification proposes a complete cleanup of the configuration architecture, addressing the technical debt accumulated during multi-environment implementation. The new design is clearer, more maintainable, and better aligned with user needs.
 
+**This is a BREAKING CHANGE release (v0.7.0)**:
+
+- NO backward compatibility with v0.6.x configuration files
+- NO automatic migration
+- Users MUST run setup wizard to reconfigure
+
+**Rationale for Hard Shift**:
+
+- Legacy structure is fundamentally incompatible with new architecture
+- Clean break simplifies codebase and reduces technical debt
+- Forces users to understand new multi-environment model
+- Eliminates complex migration logic and edge cases
+- Users can keep v0.6.x installed alongside v0.7.0 if needed
+
 **Next Steps**:
+
 1. Review and approve specification
-2. Implement Phase 1 (Core Refactoring)
-3. Test migration with existing deployments
-4. Release v0.7.0 with auto-migration
+2. Implement Phase 1 (Core Refactoring - remove all legacy code)
+3. Implement Phase 2-4 (Wizard, Deploy, Tests, Docs)
+4. Test with fresh installs and reconfiguration workflows
+5. Prepare clear upgrade documentation and release notes
+6. Release v0.7.0 as BREAKING CHANGE
 
 **Timeline**: 2-3 weeks for full implementation and testing
+
+**User Communication**:
+
+- Release notes must clearly state BREAKING CHANGE
+- Provide step-by-step upgrade guide
+- Consider publishing upgrade guide before release
+- Recommend users document their v0.6.x config before upgrading
