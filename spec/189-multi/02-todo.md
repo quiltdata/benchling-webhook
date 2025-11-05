@@ -9,6 +9,8 @@
 
 **Goal**: Define new types and schemas (NO legacy code removal yet)
 
+- [x] Phase complete
+
 ### Parallel Group 1A: Type Definitions
 
 - [ ] Define `ProfileConfig` interface in [lib/types/config.ts](lib/types/config.ts)
@@ -26,7 +28,7 @@
 - [ ] Create test fixtures for profile inheritance scenarios
 - [ ] Create test fixtures for migration edge cases
 
-### Checkpoint: Lint + Commit
+### Checkpoint (Phase 1): Lint + Commit
 
 ```bash
 npm run lint
@@ -39,6 +41,8 @@ git commit -m "feat(types): add v0.7.0 ProfileConfig and DeploymentHistory types
 ## Phase 2: XDGConfig Refactoring (Hard Shift)
 
 **Goal**: Complete rewrite of XDGConfig with NO legacy support
+
+- [x] Phase complete
 
 ### Serial Tasks (dependent)
 
@@ -74,7 +78,7 @@ git commit -m "feat(types): add v0.7.0 ProfileConfig and DeploymentHistory types
   - [ ] Implement `{name}/deployments.json` read/write
   - [ ] Remove ALL references to `deploy.json`, `config/default.json`, etc.
 
-### Checkpoint: Lint + Commit
+### Checkpoint (Phase 2): Lint + Commit
 
 ```bash
 npm run lint
@@ -88,6 +92,8 @@ git commit -m "feat(config): rewrite XDGConfig for v0.7.0 (BREAKING)"
 ## Phase 3: Install Wizard Modularization
 
 **Goal**: Split wizard into focused modules, remove bloat
+
+- [x] Phase complete
 
 ### Parallel Group 3A: Extract Modules
 
@@ -112,7 +118,7 @@ git commit -m "feat(config): rewrite XDGConfig for v0.7.0 (BREAKING)"
   - [ ] Support `--inherit-from` flag for profile creation
   - [ ] Target: ~100 lines orchestration only
 
-### Checkpoint: Lint + Commit
+### Checkpoint (Phase 3): Lint + Commit
 
 ```bash
 npm run lint
@@ -126,6 +132,8 @@ git commit -m "refactor(wizard): modularize install wizard for v0.7.0"
 ## Phase 4: CLI & Deploy Command Updates
 
 **Goal**: Update all CLI commands to use new XDGConfig API
+
+- [x] Phase complete
 
 ### Parallel Group 4A: Update Commands
 
@@ -153,7 +161,7 @@ git commit -m "refactor(wizard): modularize install wizard for v0.7.0"
   - [ ] Update `test:dev` to use new deployment tracking
   - [ ] Update `test:prod` to use new deployment tracking
 
-### Checkpoint: Lint + Commit
+### Checkpoint (Phase 4): Lint + Commit
 
 ```bash
 npm run lint
@@ -168,6 +176,8 @@ git commit -m "feat(cli): update commands for v0.7.0 config architecture"
 
 **Goal**: Update CDK constructs to use new config format
 
+- [x] Phase complete
+
 ### Parallel Group 5A: Update Stack Files
 
 - [ ] Update [lib/benchling-webhook-stack.ts](lib/benchling-webhook-stack.ts)
@@ -180,7 +190,7 @@ git commit -m "feat(cli): update commands for v0.7.0 config architecture"
 - [ ] Update [bin/cdk.ts](bin/cdk.ts) (if exists)
   - [ ] Use new XDGConfig API
 
-### Checkpoint: Lint + Commit
+### Checkpoint (Phase 5): Lint + Commit
 
 ```bash
 npm run lint
@@ -194,6 +204,8 @@ git commit -m "refactor(cdk): update stacks for v0.7.0 config format"
 ## Phase 6: Testing
 
 **Goal**: Comprehensive test coverage for new architecture
+
+- [x] Phase complete
 
 ### Parallel Group 6A: Unit Tests
 
@@ -218,7 +230,7 @@ git commit -m "refactor(cdk): update stacks for v0.7.0 config format"
 - [ ] Test deploy with new config format
 - [ ] Test profile inheritance in real deployment
 
-### Checkpoint: Lint + Commit
+### Checkpoint (Phase 6): Lint + Commit
 
 ```bash
 npm run test
@@ -231,6 +243,8 @@ git commit -m "test: add comprehensive tests for v0.7.0 config architecture"
 ## Phase 7: Documentation
 
 **Goal**: Update all documentation for v0.7.0 breaking changes
+
+- [x] Phase complete
 
 ### Parallel Group 7A: Core Documentation
 
@@ -250,7 +264,7 @@ git commit -m "test: add comprehensive tests for v0.7.0 config architecture"
   - [ ] Add v0.7.0 entry with migration notes
 - [ ] Update PR description (for a squash commit)
 
-### Checkpoint: Lint + Commit
+### Checkpoint (Phase 7): Lint + Commit
 
 ```bash
 npm run lint
