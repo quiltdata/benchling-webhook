@@ -6,6 +6,10 @@
 # But include everything in dist/
 !dist/
 
+# Development scripts and specs (NOT published)
+scripts/
+spec/
+
 # CDK asset staging directory
 .cdk.staging
 cdk.out

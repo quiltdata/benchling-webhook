@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
+import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/mock-config";
 
 /**
  * Multi-Environment Stack Tests
@@ -18,10 +19,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("Profile Handling", () => {
         test("creates stack with prod profile only", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
-                logLevel: "INFO",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -42,10 +42,15 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates stack with image tag parameter", () => {
+            const config = createMockConfig({
+                deployment: {
+                    region: "us-east-1",
+                    imageTag: "v0.6.3",
+                },
+            });
+
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
-                imageTag: "v0.6.3",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -61,37 +66,55 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("throws error when missing required parameters", () => {
+            const config = createMockConfig({
+                quilt: {
+                    stackArn: "",
+                    catalog: "https://quilt.example.com",
+                    bucket: "test-bucket",
+                    database: "test_db",
+                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    region: "us-east-1",
+                },
+            });
+
             expect(() => {
                 new BenchlingWebhookStack(app, "TestStack", {
-                    quiltStackArn: "",
-                    benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-secret",
+                    config,
                     env: {
                         account: "123456789012",
                         region: "us-east-1",
                     },
                 });
-            }).toThrow("Secrets-only mode");
+            }).toThrow("Configuration validation failed");
         });
 
         test("throws error when missing benchling secret", () => {
+            const config = createMockConfig({
+                benchling: {
+                    tenant: "test-tenant",
+                    clientId: "client_123",
+                    secretArn: "",
+                    appDefinitionId: "app_456",
+                },
+            });
+
             expect(() => {
                 new BenchlingWebhookStack(app, "TestStack", {
-                    quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                    benchlingSecret: "",
+                    config,
                     env: {
                         account: "123456789012",
                         region: "us-east-1",
                     },
                 });
-            }).toThrow("Secrets-only mode");
+            }).toThrow("Configuration validation failed");
         });
     });
 
     describe("CloudFormation Parameters", () => {
         test("creates QuiltStackARN parameter", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -107,9 +130,17 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates BenchlingSecret parameter", () => {
+            const config = createMockConfig({
+                benchling: {
+                    tenant: "test-tenant",
+                    clientId: "client_123",
+                    secretArn: "quiltdata/benchling-webhook/default/tenant",
+                    appDefinitionId: "app_456",
+                },
+            });
+
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "quiltdata/benchling-webhook/default/tenant",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -119,15 +150,15 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             const template = Template.fromStack(stack);
             const parameters = template.toJSON().Parameters;
 
-            expect(parameters.BenchlingSecret).toBeDefined();
-            expect(parameters.BenchlingSecret.Type).toBe("String");
-            expect(parameters.BenchlingSecret.Description).toContain("Secrets Manager secret");
+            expect(parameters.BenchlingSecretARN).toBeDefined();
+            expect(parameters.BenchlingSecretARN.Type).toBe("String");
+            expect(parameters.BenchlingSecretARN.Description).toContain("Secrets Manager secret");
         });
 
         test("creates LogLevel parameter with allowed values", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -145,10 +176,15 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates ImageTag parameter", () => {
+            const config = createMockConfig({
+                deployment: {
+                    region: "us-east-1",
+                    imageTag: "latest",
+                },
+            });
+
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
-                imageTag: "latest",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -166,9 +202,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("Infrastructure Components", () => {
         test("creates single ECS cluster", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -183,9 +219,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates Application Load Balancer", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -201,9 +237,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates API Gateway REST API", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -218,11 +254,16 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates ECR repository when requested", () => {
+            const config = createMockConfig({
+                deployment: {
+                    region: "us-east-1",
+                    ecrRepository: "test-repo",
+                },
+            });
+
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 createEcrRepository: true,
-                ecrRepositoryName: "test-repo",
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -239,10 +280,15 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("Environment-Specific Configuration", () => {
         test("prod configuration uses semantic versioning", () => {
+            const config = createProdConfig({
+                deployment: {
+                    region: "us-east-1",
+                    imageTag: "v0.6.3",
+                },
+            });
+
             const stack = new BenchlingWebhookStack(app, "ProdStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/prod-quilt-stack/abc123",
-                benchlingSecret: "quiltdata/benchling-webhook/default/prod-tenant",
-                imageTag: "v0.6.3",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -256,10 +302,15 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("dev configuration can use latest tag", () => {
+            const config = createDevConfig({
+                deployment: {
+                    region: "us-east-1",
+                    imageTag: "latest",
+                },
+            });
+
             const stack = new BenchlingWebhookStack(app, "DevStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/dev-quilt-stack/xyz789",
-                benchlingSecret: "quiltdata/benchling-webhook/dev/dev-tenant",
-                imageTag: "latest",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -275,11 +326,12 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("Service Isolation", () => {
         test("separate stacks can coexist", () => {
+            const devConfig = createDevConfig();
+            const prodConfig = createProdConfig();
+
             // Create dev stack
             const devStack = new BenchlingWebhookStack(app, "DevStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/dev-quilt-stack/xyz789",
-                benchlingSecret: "quiltdata/benchling-webhook/dev/tenant",
-                imageTag: "latest",
+                config: devConfig,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -288,9 +340,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             // Create prod stack
             const prodStack = new BenchlingWebhookStack(app, "ProdStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/prod-quilt-stack/abc123",
-                benchlingSecret: "quiltdata/benchling-webhook/default/tenant",
-                imageTag: "v0.6.3",
+                config: prodConfig,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -313,9 +363,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("IAM Permissions", () => {
         test("task role has required permissions", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -359,9 +409,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("CloudFormation Outputs", () => {
         test("exports webhook endpoint", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -375,9 +425,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("exports API Gateway ID", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -392,9 +442,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("exports Load Balancer DNS", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -411,9 +461,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("Auto-scaling", () => {
         test("configures auto-scaling for service", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -431,9 +481,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("Monitoring", () => {
         test("enables Container Insights", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -451,9 +501,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates CloudWatch log groups", () => {
+            const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",

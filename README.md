@@ -2,6 +2,10 @@
 
 Connects Benchling lab notebook entries to Quilt data packages via webhooks.
 
+## BREAKING CHANGE: v0.7.0
+
+Version 0.7.0 introduces a completely new configuration architecture. If you are upgrading from v0.6.x, **you must reconfigure your deployment**. See [Migration Guide](#migration-from-v06x) below.
+
 ## Prerequisites
 
 - Node.js 18+ with `npx` ([download](https://nodejs.org))
@@ -30,17 +34,40 @@ After deployment, install the webhook URL in your [Benchling app settings](https
 
 In Benchling: Create entry → Insert Canvas → "Quilt Integration" → Create/Update package
 
-## Multi-Environment Deployments
+## Configuration Structure (v0.7.0+)
 
-The Benchling webhook supports running development and production environments simultaneously using API Gateway stages and configuration profiles.
+Profiles are stored in `~/.config/benchling-webhook/{profile}/`:
+
+```
+~/.config/benchling-webhook/
+├── default/
+│   ├── config.json          # All configuration settings
+│   └── deployments.json     # Deployment history and tracking
+├── dev/                     # Optional: development profile
+│   ├── config.json
+│   └── deployments.json
+└── prod/                    # Optional: separate production profile
+    ├── config.json
+    └── deployments.json
+```
+
+### Profile-Based Configuration
+
+**Profile**: A named set of configuration values (credentials, settings, etc.)
+
+**Stage**: An API Gateway deployment target (`dev`, `prod`, `staging`, etc.)
+
+Profiles and stages are independent - you can deploy any profile to any stage.
+
+## Multi-Environment Deployments
 
 ### For End Users (Single Environment)
 
 Most users only need production:
 
 ```bash
-npx @quiltdata/benchling-webhook@latest        # Setup production
-npx @quiltdata/benchling-webhook@latest deploy # Deploy production
+npx @quiltdata/benchling-webhook@latest        # Setup production profile
+npx @quiltdata/benchling-webhook@latest deploy # Deploy to production
 npx @quiltdata/benchling-webhook@latest test   # Test production
 ```
 
@@ -50,18 +77,18 @@ Create side-by-side dev and production environments:
 
 ```bash
 # Initial setup (one-time)
-npx @quiltdata/benchling-webhook@latest                   # Setup production profile
-npx @quiltdata/benchling-webhook@latest setup-profile dev # Setup dev profile
+npx @quiltdata/benchling-webhook@latest setup                       # Setup default profile
+npx @quiltdata/benchling-webhook@latest setup-profile dev --inherit # Setup dev profile
 
-# Edit ~/.config/benchling-webhook/dev.json
-# - Set different benchlingAppDefinitionId for dev Benchling app
-# - Set imageTag: "latest" for dev, semantic version for prod
+# Edit dev profile to override:
+# - benchling.appDefinitionId (different Benchling app for dev)
+# - deployment.imageTag ("latest" for dev, semantic version for prod)
 
 # Deploy both environments
-npx @quiltdata/benchling-webhook@latest deploy --profile dev   # Deploy dev
-npx @quiltdata/benchling-webhook@latest deploy --profile default # Deploy prod
+npx @quiltdata/benchling-webhook@latest deploy --profile dev --stage dev     # Deploy dev
+npx @quiltdata/benchling-webhook@latest deploy --profile default --stage prod # Deploy prod
 
-# Both environments running simultaneously!
+# Test both environments
 npx @quiltdata/benchling-webhook@latest test --profile dev    # Test dev
 npx @quiltdata/benchling-webhook@latest test --profile default # Test prod
 ```
@@ -78,29 +105,89 @@ Single AWS Stack: BenchlingWebhookStack
 │   └── Target Group: prod-targets → ECS Service: benchling-webhook-prod
 ├── ECS Cluster (shared)
 │   ├── Service: benchling-webhook-dev  (imageTag: latest)
-│   └── Service: benchling-webhook-prod (imageTag: v0.6.3)
+│   └── Service: benchling-webhook-prod (imageTag: v0.7.0)
 └── VPC, Secrets Manager, CloudWatch (shared)
 ```
 
-### Configuration Profiles
+## Available Commands
 
-Profiles are stored in `~/.config/benchling-webhook/`:
-
+```bash
+npx @quiltdata/benchling-webhook@latest --help              # Show all commands
+npx @quiltdata/benchling-webhook@latest setup               # Initial setup (creates default profile)
+npx @quiltdata/benchling-webhook@latest setup-profile dev   # Create dev profile
+npx @quiltdata/benchling-webhook@latest deploy              # Deploy default profile to prod stage
+npx @quiltdata/benchling-webhook@latest deploy --profile dev --stage dev # Deploy dev profile to dev stage
+npx @quiltdata/benchling-webhook@latest test                # Test deployed integration
+npx @quiltdata/benchling-webhook@latest manifest            # Generate Benchling app manifest
 ```
-default.json    # Production profile (required)
-dev.json        # Development profile (optional)
-deploy.json     # Deployment tracking
-```
 
-**Key differences between profiles:**
-- `benchlingAppDefinitionId` - Different Benchling app IDs for dev/prod
-- `imageTag` - Dev uses `latest`, prod uses semantic versions (e.g., `v0.6.3`)
-- `benchlingSecret` - Separate AWS Secrets Manager secrets
-- `quiltStackArn` - Can point to different Quilt environments
+## Migration from v0.6.x
 
-### Cost Information
+**IMPORTANT: Version 0.7.0 is a BREAKING CHANGE release.**
 
-Running both dev and production environments increases infrastructure costs:
+The configuration structure has completely changed. There is **NO automatic migration**. You must manually reconfigure your deployment.
+
+### Step-by-Step Upgrade Guide
+
+1. **Before upgrading, save your current configuration:**
+
+   ```bash
+   # Save your current settings for reference
+   cat ~/.config/benchling-webhook/default.json > ~/benchling-config-backup.json
+   cat ~/.config/benchling-webhook/deploy.json >> ~/benchling-config-backup.json
+   ```
+
+2. **Install v0.7.0:**
+
+   ```bash
+   npm install -g @quiltdata/benchling-webhook@0.7.0
+   # or use npx
+   npx @quiltdata/benchling-webhook@0.7.0
+   ```
+
+3. **Run setup wizard to create new configuration:**
+
+   ```bash
+   npx @quiltdata/benchling-webhook@latest setup
+   ```
+
+   The wizard will prompt you to re-enter your configuration. Reference your backup file for settings.
+
+4. **For multi-environment setups, create additional profiles:**
+
+   ```bash
+   npx @quiltdata/benchling-webhook@latest setup-profile dev --inherit
+   ```
+
+5. **Test your deployment:**
+
+   ```bash
+   npx @quiltdata/benchling-webhook@latest deploy --profile default --stage prod
+   npx @quiltdata/benchling-webhook@latest test --profile default
+   ```
+
+6. **Optional: Clean up old configuration files:**
+
+   Old configuration files are not used by v0.7.0 but remain for reference:
+   - `~/.config/benchling-webhook/default.json` (old user config)
+   - `~/.config/benchling-webhook/deploy.json` (old deployment tracking)
+   - `~/.config/benchling-webhook/profiles/` (old profiles directory)
+
+   You can safely delete these after verifying your new deployment works.
+
+### What Changed in v0.7.0
+
+| v0.6.x | v0.7.0 |
+|--------|--------|
+| `~/.config/benchling-webhook/default.json` | `~/.config/benchling-webhook/default/config.json` |
+| `~/.config/benchling-webhook/profiles/dev/default.json` | `~/.config/benchling-webhook/dev/config.json` |
+| `~/.config/benchling-webhook/deploy.json` (shared) | `~/.config/benchling-webhook/{profile}/deployments.json` (per-profile) |
+
+For detailed migration information, see [MIGRATION.md](./MIGRATION.md).
+
+## Cost Information
+
+Running multiple environments increases infrastructure costs:
 
 | Configuration | Monthly Cost | Notes |
 |---------------|--------------|-------|
@@ -112,23 +199,10 @@ Running both dev and production environments increases infrastructure costs:
 - NAT Gateway: ~$32 (shared between environments)
 - ECS Fargate: ~$15-45 per environment (scales with usage)
 
-The multi-environment architecture shares expensive infrastructure (ALB, NAT Gateway, VPC) while maintaining separate containers for isolation.
-
-## Additional Commands
-
-```bash
-npx @quiltdata/benchling-webhook@latest --help           # Show all commands
-npx @quiltdata/benchling-webhook@latest deploy           # Deploy (uses default profile)
-npx @quiltdata/benchling-webhook@latest deploy --profile dev # Deploy dev profile
-npx @quiltdata/benchling-webhook@latest test             # Test integration
-npx @quiltdata/benchling-webhook@latest test --profile dev   # Test dev profile
-npx @quiltdata/benchling-webhook@latest manifest         # Generate app manifest
-npx @quiltdata/benchling-webhook@latest setup-profile dev    # Create dev profile
-```
-
 ## Resources
 
 - [Changelog](./CHANGELOG.md) - Version history
+- [Migration Guide](./MIGRATION.md) - Upgrading from v0.6.x to v0.7.0
 - [Report Issues](https://github.com/quiltdata/benchling-webhook/issues)
 
 ## License

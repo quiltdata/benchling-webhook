@@ -1,7 +1,5 @@
 """Tests for canvas_formatting module."""
 
-import pytest
-
 from src.canvas_formatting import dict_to_markdown_list, format_package_header, linkify_urls
 
 

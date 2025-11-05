@@ -339,7 +339,7 @@ def resolve_and_fetch_secret(client, region: str, secret_identifier: str) -> Ben
         log_level = data["log_level"]
         if log_level not in valid_log_levels:
             raise ConfigResolverError(
-                f"Invalid value for parameter 'log_level'",
+                "Invalid value for parameter 'log_level'",
                 f"Received: {log_level!r}",
                 f"Expected one of: {', '.join(valid_log_levels)}",
             )
@@ -349,7 +349,7 @@ def resolve_and_fetch_secret(client, region: str, secret_identifier: str) -> Ben
             enable_webhook_verification = parse_bool(data["enable_webhook_verification"])
         except ValueError as e:
             raise ConfigResolverError(
-                f"Invalid value for parameter 'enable_webhook_verification'",
+                "Invalid value for parameter 'enable_webhook_verification'",
                 str(e),
                 "Expected: true, false, 'true', 'false', '1', or '0'",
             )
@@ -369,7 +369,7 @@ def resolve_and_fetch_secret(client, region: str, secret_identifier: str) -> Ben
                 raise ConfigResolverError(
                     f"Invalid value for parameter '{param}'",
                     f"Received: {data[param]!r}",
-                    f"Expected: non-empty string",
+                    "Expected: non-empty string",
                 )
 
         return BenchlingSecretData(

@@ -4,10 +4,16 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { Construct } from "constructs";
+import { ProfileConfig } from "./types/config";
 
+/**
+ * Properties for AlbApiGateway construct (v0.7.0+)
+ *
+ * Uses ProfileConfig to access security settings like webhook allow list.
+ */
 export interface AlbApiGatewayProps {
     readonly loadBalancer: elbv2.ApplicationLoadBalancer;
-    readonly webhookAllowList?: string;
+    readonly config: ProfileConfig;
 }
 
 export class AlbApiGateway {
@@ -19,6 +25,8 @@ export class AlbApiGateway {
         id: string,
         props: AlbApiGatewayProps,
     ) {
+        const { config } = props;
+
         this.logGroup = new logs.LogGroup(scope, "ApiGatewayAccessLogs", {
             logGroupName: "/aws/apigateway/benchling-webhook",
             retention: logs.RetentionDays.ONE_WEEK,
@@ -27,16 +35,19 @@ export class AlbApiGateway {
 
         this.createCloudWatchRole(scope);
 
+        // Get webhook allow list from config
+        const webhookAllowList = config.security?.webhookAllowList || "";
+
         // Parse IP allowlist for resource policy
         let allowedIps: string[] | undefined = undefined;
-        if (props.webhookAllowList) {
-            if (cdk.Token.isUnresolved(props.webhookAllowList)) {
+        if (webhookAllowList) {
+            if (cdk.Token.isUnresolved(webhookAllowList)) {
                 // For CDK tokens (parameters), we can't evaluate at synth time
                 // Split and let CloudFormation handle it
-                allowedIps = cdk.Fn.split(",", props.webhookAllowList) as unknown as string[];
-            } else if (props.webhookAllowList.trim() !== "") {
+                allowedIps = cdk.Fn.split(",", webhookAllowList) as unknown as string[];
+            } else if (webhookAllowList.trim() !== "") {
                 // For concrete values, parse and filter
-                const parsed = props.webhookAllowList
+                const parsed = webhookAllowList
                     .split(",")
                     .map(ip => ip.trim())
                     .filter(ip => ip.length > 0);
@@ -48,7 +59,7 @@ export class AlbApiGateway {
 
         // Create resource policy for IP filtering at the edge
         // Only create policy if we have IPs and they're not from an empty parameter
-        const policyDocument = this.createResourcePolicy(allowedIps, props.webhookAllowList);
+        const policyDocument = this.createResourcePolicy(allowedIps, webhookAllowList);
 
         this.api = new apigateway.RestApi(scope, "BenchlingWebhookAPI", {
             restApiName: "BenchlingWebhookAPI",

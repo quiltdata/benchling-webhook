@@ -9,7 +9,6 @@ export interface Config {
   quiltStackArn?: string;
   benchlingSecret?: string;
 
-  // Legacy Mode (DEPRECATED)
   // Quilt
   quiltCatalog: string;
   quiltUserBucket: string;

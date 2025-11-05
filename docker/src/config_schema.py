@@ -13,7 +13,6 @@ ensuring consistency between TypeScript and Python code.
 Module: config_schema
 """
 
-from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Literal, Optional
 

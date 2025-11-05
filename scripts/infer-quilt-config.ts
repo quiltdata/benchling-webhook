@@ -1,11 +1,13 @@
-#!/usr/bin/env node
+#!/usr/bin/env ts-node
 /**
- * Quilt Catalog Auto-Inference
+ * Quilt Catalog Auto-Inference (v0.7.0)
  *
  * Automatically infers Quilt catalog configuration from:
  * 1. quilt3 CLI command (`quilt3 config`)
  * 2. AWS CloudFormation stack inspection
  * 3. Interactive catalog selection (if multiple catalogs available)
+ *
+ * Returns configuration in v0.7.0 ProfileConfig format.
  *
  * @module scripts/infer-quilt-config
  */
@@ -14,7 +16,7 @@ import { execSync } from "child_process";
 import * as readline from "readline";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
-import { DerivedConfig } from "../lib/types/config";
+import { QuiltConfig } from "../lib/types/config";
 
 /**
  * Quilt CLI configuration
@@ -37,17 +39,12 @@ interface QuiltStackInfo {
 }
 
 /**
- * Result of Quilt configuration inference
+ * Inference options
  */
-interface InferenceResult {
-    catalogUrl?: string;
-    quiltUserBucket?: string;
-    quiltDatabase?: string;
-    quiltStackArn?: string;
-    quiltRegion?: string;
-    queueArn?: string;
-    registryUrl?: string;
-    source: string;
+export interface InferenceOptions {
+    region?: string;
+    profile?: string;
+    interactive?: boolean;
 }
 
 /**
@@ -58,10 +55,12 @@ interface InferenceResult {
 function getQuilt3Catalog(): QuiltCliConfig | null {
     try {
         const output = execSync("quilt3 config", { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] });
-        const catalogUrl = output.trim();
+        let catalogUrl = output.trim();
 
         if (catalogUrl && catalogUrl.startsWith("http")) {
             console.log(`Found quilt3 CLI configuration: ${catalogUrl}`);
+            // Strip protocol and trailing slash, store only domain
+            catalogUrl = catalogUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
             return { catalogUrl };
         }
 
@@ -75,16 +74,15 @@ function getQuilt3Catalog(): QuiltCliConfig | null {
 /**
  * Finds Quilt CloudFormation stacks in AWS account
  *
- * @param region - AWS region to search (defaults to us-east-1)
+ * @param region - AWS region to search
  * @param profile - AWS profile to use
  * @returns Array of Quilt stack information
  */
-async function findQuiltStacks(region: string = "us-east-1", profile?: string): Promise<QuiltStackInfo[]> {
+async function findQuiltStacks(region: string, profile?: string): Promise<QuiltStackInfo[]> {
     try {
         const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region };
 
         if (profile) {
-            // Load AWS profile credentials
             const { fromIni } = await import("@aws-sdk/credential-providers");
             clientConfig.credentials = fromIni({ profile });
         }
@@ -134,7 +132,8 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
                     const value = output.OutputValue || "";
 
                     if (key === "QuiltWebHost") {
-                        stackInfo.catalogUrl = value;
+                        // Strip protocol and trailing slash, store only domain
+                        stackInfo.catalogUrl = value.replace(/^https?:\/\//, "").replace(/\/$/, "");
                     } else if (key.includes("ucket")) {
                         stackInfo.bucket = value;
                     } else if (key === "UserAthenaDatabaseName" || key.includes("Database")) {
@@ -196,18 +195,26 @@ async function promptCatalogSelection(options: string[]): Promise<number> {
  * 2. CloudFormation stack inspection
  * 3. Interactive selection if multiple options
  *
+ * Returns configuration in v0.7.0 ProfileConfig.quilt format.
+ *
  * @param options - Inference options
- * @returns Inferred configuration
+ * @returns Quilt configuration object
+ *
+ * @example
+ * ```typescript
+ * const quiltConfig = await inferQuiltConfig({
+ *   region: "us-east-1",
+ *   profile: "default",
+ *   interactive: true
+ * });
+ * console.log(quiltConfig.stackArn);
+ * ```
  */
-export async function inferQuiltConfig(options: {
-    region?: string;
-    profile?: string;
-    interactive?: boolean;
-}): Promise<InferenceResult> {
+export async function inferQuiltConfig(options: InferenceOptions = {}): Promise<Partial<QuiltConfig>> {
     const { region = "us-east-1", profile, interactive = true } = options;
 
-    const result: InferenceResult = {
-        source: "none",
+    const result: Partial<QuiltConfig> = {
+        region,
     };
 
     // Step 1: Try quilt3 CLI command
@@ -215,10 +222,10 @@ export async function inferQuiltConfig(options: {
     const quilt3Config = getQuilt3Catalog();
 
     if (quilt3Config?.catalogUrl) {
-        result.catalogUrl = quilt3Config.catalogUrl;
-        result.source = "quilt3-cli";
+        result.catalog = quilt3Config.catalogUrl;
+        console.log(`  ✓ Found catalog URL from quilt3: ${result.catalog}`);
     } else {
-        console.log("No quilt3 CLI configuration found.");
+        console.log("  No quilt3 CLI configuration found.");
     }
 
     // Step 2: Search for CloudFormation stacks
@@ -226,27 +233,28 @@ export async function inferQuiltConfig(options: {
     const stacks = await findQuiltStacks(region, profile);
 
     if (stacks.length === 0) {
-        console.log("No Quilt CloudFormation stacks found.");
+        console.log("  No Quilt CloudFormation stacks found.");
+        if (!result.catalog) {
+            throw new Error(
+                "Unable to infer Quilt configuration. Please run 'quilt3 config <catalog-url>' or provide stack ARN manually.",
+            );
+        }
         return result;
     }
 
-    console.log(`Found ${stacks.length} Quilt stack(s):\n`);
+    console.log(`  Found ${stacks.length} Quilt stack(s)\n`);
 
     let selectedStack: QuiltStackInfo;
 
     // If we have a catalog URL from quilt3, try to find matching stack
-    if (result.catalogUrl && stacks.length > 1) {
-        // Normalize URLs for comparison (remove protocol and trailing slashes)
-        const normalizeUrl = (url: string): string => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
-        const targetUrl = normalizeUrl(result.catalogUrl);
-
-        const matchingStack = stacks.find((s) => s.catalogUrl && normalizeUrl(s.catalogUrl) === targetUrl);
+    if (result.catalog && stacks.length > 1) {
+        // Both result.catalog and stack catalogUrl are now bare domains, so compare directly
+        const matchingStack = stacks.find((s) => s.catalogUrl === result.catalog);
         if (matchingStack) {
             selectedStack = matchingStack;
-            console.log(`Auto-selected stack matching catalog URL: ${selectedStack.stackName}`);
+            console.log(`  Auto-selected stack matching catalog URL: ${selectedStack.stackName}`);
         } else {
-            // No match found, prompt user
-            console.log(`No stack found matching catalog URL: ${result.catalogUrl}`);
+            console.log(`  No stack found matching catalog URL: ${result.catalog}`);
             if (interactive) {
                 const options = stacks.map((s) => `${s.stackName} (${s.region})`);
                 const selectedIndex = await promptCatalogSelection(options);
@@ -254,12 +262,12 @@ export async function inferQuiltConfig(options: {
                 console.log(`\nSelected: ${selectedStack.stackName}`);
             } else {
                 selectedStack = stacks[0];
-                console.log(`Using first stack: ${selectedStack.stackName}`);
+                console.log(`  Using first stack: ${selectedStack.stackName}`);
             }
         }
     } else if (stacks.length === 1) {
         selectedStack = stacks[0];
-        console.log(`Using stack: ${selectedStack.stackName}`);
+        console.log(`  Using stack: ${selectedStack.stackName}`);
     } else if (interactive) {
         const options = stacks.map((s) => `${s.stackName} (${s.region})`);
         const selectedIndex = await promptCatalogSelection(options);
@@ -267,73 +275,23 @@ export async function inferQuiltConfig(options: {
         console.log(`\nSelected: ${selectedStack.stackName}`);
     } else {
         selectedStack = stacks[0];
-        console.log(`Using first stack: ${selectedStack.stackName}`);
+        console.log(`  Using first stack: ${selectedStack.stackName}`);
     }
 
     // Populate result from selected stack
-    if (selectedStack.stackArn) {
-        result.quiltStackArn = selectedStack.stackArn;
-    }
-    if (selectedStack.bucket) {
-        result.quiltUserBucket = selectedStack.bucket;
-    }
-    if (selectedStack.queueArn) {
-        result.queueArn = selectedStack.queueArn;
-    }
-    if (selectedStack.catalogUrl && !result.catalogUrl) {
-        result.catalogUrl = selectedStack.catalogUrl;
-    }
-    if (selectedStack.region) {
-        result.quiltRegion = selectedStack.region;
+    result.stackArn = selectedStack.stackArn;
+    result.bucket = selectedStack.bucket;
+    result.database = selectedStack.database || "quilt_catalog";
+    result.queueArn = selectedStack.queueArn;
+    result.region = selectedStack.region;
+
+    if (selectedStack.catalogUrl) {
+        result.catalog = selectedStack.catalogUrl;
     }
 
-    if (result.source === "quilt3-cli") {
-        result.source = "quilt3-cli+cloudformation";
-    } else {
-        result.source = "cloudformation";
-    }
+    console.log("\n✓ Quilt configuration inferred successfully\n");
 
     return result;
-}
-
-/**
- * Converts inference result to DerivedConfig
- *
- * @param result - Inference result
- * @returns DerivedConfig object
- */
-export function inferenceResultToDerivedConfig(result: InferenceResult): DerivedConfig {
-    const config: DerivedConfig = {
-        _metadata: {
-            inferredAt: new Date().toISOString(),
-            inferredFrom: result.source,
-            source: "infer-quilt-config",
-            version: "0.6.0",
-        },
-    };
-
-    if (result.catalogUrl) {
-        config.catalogUrl = result.catalogUrl;
-        config.quiltCatalog = result.catalogUrl;
-    }
-
-    if (result.quiltUserBucket) {
-        config.quiltUserBucket = result.quiltUserBucket;
-    }
-
-    if (result.quiltStackArn) {
-        config.quiltStackArn = result.quiltStackArn;
-    }
-
-    if (result.quiltRegion) {
-        config.quiltRegion = result.quiltRegion;
-    }
-
-    if (result.queueArn) {
-        config.queueArn = result.queueArn;
-    }
-
-    return config;
 }
 
 /**
@@ -341,7 +299,7 @@ export function inferenceResultToDerivedConfig(result: InferenceResult): Derived
  */
 async function main(): Promise<void> {
     const args = process.argv.slice(2);
-    const options: { region?: string; profile?: string; interactive?: boolean } = {
+    const options: InferenceOptions = {
         interactive: true,
     };
 
@@ -358,21 +316,17 @@ async function main(): Promise<void> {
         }
     }
 
-    console.log("Quilt Catalog Auto-Inference\n");
+    console.log("Quilt Catalog Auto-Inference (v0.7.0)\n");
 
     const result = await inferQuiltConfig(options);
 
-    console.log("\n=== Inference Results ===");
-    console.log(`Source: ${result.source}`);
-    if (result.catalogUrl) console.log(`Catalog URL: ${result.catalogUrl}`);
-    if (result.quiltUserBucket) console.log(`User Bucket: ${result.quiltUserBucket}`);
-    if (result.quiltStackArn) console.log(`Stack ARN: ${result.quiltStackArn}`);
-    if (result.quiltRegion) console.log(`Region: ${result.quiltRegion}`);
-    if (result.queueArn) console.log(`Queue ARN: ${result.queueArn}`);
-
-    const derivedConfig = inferenceResultToDerivedConfig(result);
-    console.log("\n=== Derived Configuration ===");
-    console.log(JSON.stringify(derivedConfig, null, 4));
+    console.log("=== Inference Results ===");
+    console.log(`Stack ARN: ${result.stackArn || "Not found"}`);
+    console.log(`Catalog URL: ${result.catalog || "Not found"}`);
+    console.log(`Bucket: ${result.bucket || "Not found"}`);
+    console.log(`Database: ${result.database || "Not found"}`);
+    console.log(`Queue ARN: ${result.queueArn || "Not found"}`);
+    console.log(`Region: ${result.region || "Not found"}`);
 }
 
 // Run main if executed directly

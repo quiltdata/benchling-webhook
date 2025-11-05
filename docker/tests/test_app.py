@@ -9,7 +9,7 @@ from src.app import create_app
 class TestFlaskApp:
     @pytest.fixture
     def mock_config(self):
-        """Mock config with Python orchestration."""
+        """Mock config with secrets-only mode configuration."""
         config = Mock()
         config.aws_region = "us-west-2"
         config.benchling_tenant = "test-tenant"
@@ -247,9 +247,8 @@ class TestFlaskApp:
             assert "test.txt" in markdown_block.value
 
     def test_health_secrets_endpoint_with_secrets_manager_arn(self, mocker, monkeypatch):
-        """Test /health/secrets reports Secrets Manager ARN source (secrets-only mode)."""
+        """Test /health/secrets reports Secrets Manager ARN source."""
         from src.config_resolver import ResolvedConfig
-        from src.secrets_resolver import BenchlingSecrets
 
         # Set secrets-only mode env vars
         stack_arn = "arn:aws:cloudformation:us-east-2:123456789012:stack/test-quilt/abc123"
@@ -299,9 +298,8 @@ class TestFlaskApp:
             assert data["quilt_stack_configured"] is True
 
     def test_health_secrets_endpoint_with_secrets_manager_name(self, mocker, monkeypatch):
-        """Test /health/secrets reports Secrets Manager name source (secrets-only mode)."""
+        """Test /health/secrets reports Secrets Manager name source."""
         from src.config_resolver import ResolvedConfig
-        from src.secrets_resolver import BenchlingSecrets
 
         # Set secrets-only mode env vars with secret name (not ARN)
         stack_arn = "arn:aws:cloudformation:us-east-2:123456789012:stack/test-quilt/abc123"
@@ -350,23 +348,20 @@ class TestFlaskApp:
             assert data["tenant_configured"] is True
             assert data["quilt_stack_configured"] is True
 
-    def test_health_secrets_endpoint_missing_config(self, monkeypatch):
+    def test_health_secrets_endpoint_misconfigured(self, monkeypatch):
         """Test /health/secrets reports misconfigured status when secrets-only env vars missing."""
         # Remove secrets-only mode env vars
         monkeypatch.delenv("QuiltStackARN", raising=False)
         monkeypatch.delenv("BenchlingSecret", raising=False)
-        monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
-        monkeypatch.delenv("BENCHLING_TENANT", raising=False)
         monkeypatch.setenv("AWS_REGION", "us-east-2")
 
-        # Create app without proper config - this should raise an error
-        # So we test the health endpoint's error handling instead
+        # Create app without proper config - mock config that returns False for validation
         with (
             patch("src.app.Benchling"),
             patch("src.app.EntryPackager"),
             patch("src.app.get_config") as mock_config,
         ):
-            # Mock a config that returns False for validation
+            # Mock a config that returns None/empty for required fields
             mock_cfg = Mock()
             mock_cfg.benchling_tenant = None
             mock_cfg.benchling_client_id = None

@@ -48,7 +48,7 @@ The current codebase has **three separate script directories** (`bin/`, `scripts
 | `create-secret.ts` | AWS Secrets Manager operations | ? | ? |
 | `get-env.ts` | Environment variable helper | ? | ? |
 | `config-profiles.ts` | Profile management | ? | ? |
-| `test-invalid-signature.ts` | Test invalid webhook signatures | Development/testing | ? |
+| `check-webhook-verification.ts` | Test invalid webhook signatures | Development/testing | ? |
 
 ### `scripts/` Directory (4 files)
 
@@ -120,7 +120,7 @@ All files are **Python test/development utilities**:
 - `send-event.ts` - Send test events
 
 **`bin/`:**
-- `test-invalid-signature.ts` - Signature validation tests
+- `check-webhook-verification.ts` - Signature validation tests
 
 **Observation:** Testing is split by language (Python for app tests, TypeScript for deployment tests)
 
@@ -287,7 +287,7 @@ bin/
 ├── create-secret.ts            # Secret creation
 ├── get-env.ts                  # Environment helper
 ├── config-profiles.ts          # Profile management
-└── test-invalid-signature.ts   # Signature tests
+└── check-webhook-verification.ts   # Signature tests
 ```
 
 ### `scripts/` Files

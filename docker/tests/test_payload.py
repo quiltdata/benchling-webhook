@@ -203,8 +203,8 @@ class TestPayload:
         assert payload.entry_id == "etr_from_canvas"
         mock_benchling.apps.get_canvas_by_id.assert_called_once_with("canvas_abc123")
 
-    def test_entry_id_canvas_fetch_failure_falls_back(self):
-        """Test entry_id falls back to most_recent_entry when canvas fetch fails."""
+    def test_entry_id_canvas_fetch_failure_raises(self):
+        """Test entry_id raises ValueError when canvas fetch fails and no fallback exists."""
         payload_dict = {
             "message": {
                 "id": "evt_123",
@@ -218,19 +218,12 @@ class TestPayload:
         mock_benchling = Mock()
         mock_benchling.apps.get_canvas_by_id.side_effect = Exception("Canvas not found")
 
-        # Mock entries response
-        mock_entry = Mock()
-        mock_entry.id = "etr_fallback_123"
-        mock_entries_iter = Mock()
-        mock_entries_iter.first.return_value = mock_entry
-        mock_benchling.entries.list_entries.return_value = mock_entries_iter
-
         payload = Payload(payload_dict, benchling=mock_benchling)
 
-        # Should fall back to most recent entry
-        assert payload.entry_id == "etr_fallback_123"
+        # Should raise ValueError since no entry_id can be extracted
+        with pytest.raises(ValueError, match="entry_id is required"):
+            _ = payload.entry_id
         mock_benchling.apps.get_canvas_by_id.assert_called_once_with("canvas_abc123")
-        mock_benchling.entries.list_entries.assert_called_once()
 
     def test_entry_id_canvas_resource_id_takes_precedence(self):
         """Test that explicit resourceId takes precedence over canvas fetch."""

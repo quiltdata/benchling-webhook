@@ -1,0 +1,67 @@
+{
+  "$comment": "Test fixture for v0.7.0 DeploymentHistory",
+  "active": {
+    "dev": {
+      "stage": "dev",
+      "timestamp": "2025-11-04T10:30:00Z",
+      "imageTag": "latest",
+      "endpoint": "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+      "stackName": "BenchlingWebhookStack",
+      "region": "us-east-1",
+      "deployedBy": "ernest@example.com",
+      "commit": "abc123f"
+    },
+    "prod": {
+      "stage": "prod",
+      "timestamp": "2025-11-03T14:20:00Z",
+      "imageTag": "0.7.0",
+      "endpoint": "https://xyz789.execute-api.us-east-1.amazonaws.com/prod",
+      "stackName": "BenchlingWebhookStack",
+      "region": "us-east-1",
+      "deployedBy": "ernest@example.com",
+      "commit": "def456a"
+    }
+  },
+  "history": [
+    {
+      "stage": "dev",
+      "timestamp": "2025-11-04T10:30:00Z",
+      "imageTag": "latest",
+      "endpoint": "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+      "stackName": "BenchlingWebhookStack",
+      "region": "us-east-1",
+      "deployedBy": "ernest@example.com",
+      "commit": "abc123f"
+    },
+    {
+      "stage": "dev",
+      "timestamp": "2025-11-04T09:15:00Z",
+      "imageTag": "latest",
+      "endpoint": "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+      "stackName": "BenchlingWebhookStack",
+      "region": "us-east-1",
+      "deployedBy": "ernest@example.com",
+      "commit": "ghi789b"
+    },
+    {
+      "stage": "prod",
+      "timestamp": "2025-11-03T14:20:00Z",
+      "imageTag": "0.7.0",
+      "endpoint": "https://xyz789.execute-api.us-east-1.amazonaws.com/prod",
+      "stackName": "BenchlingWebhookStack",
+      "region": "us-east-1",
+      "deployedBy": "ernest@example.com",
+      "commit": "def456a"
+    },
+    {
+      "stage": "prod",
+      "timestamp": "2025-11-02T16:45:00Z",
+      "imageTag": "0.6.3",
+      "endpoint": "https://xyz789.execute-api.us-east-1.amazonaws.com/prod",
+      "stackName": "BenchlingWebhookStack",
+      "region": "us-east-1",
+      "deployedBy": "ernest@example.com",
+      "commit": "jkl012c"
+    }
+  ]
+}

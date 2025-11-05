@@ -223,14 +223,14 @@ bin/dev-deploy.ts
 bin/version.ts
 bin/check-logs.ts
 bin/send-event.ts
-bin/test-invalid-signature.ts
+bin/check-webhook-verification.ts
 
 AFTER:
 tools/dev/deploy-dev.ts
 tools/dev/version.ts
 tools/dev/logs.ts
 tools/dev/send-event.ts
-tools/dev/test-invalid-signature.ts
+tools/dev/check-webhook-verification.ts
 ```
 
 **Actions:**

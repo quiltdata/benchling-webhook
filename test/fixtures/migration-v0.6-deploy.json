@@ -1,0 +1,19 @@
+{
+  "$comment": "Test fixture for v0.6.x legacy format - ~/.config/benchling-webhook/deploy.json",
+  "prod": {
+    "webhookEndpoint": "https://xyz789.execute-api.us-east-1.amazonaws.com/prod",
+    "webhookUrl": "https://xyz789.execute-api.us-east-1.amazonaws.com/prod",
+    "stackArn": "arn:aws:cloudformation:us-east-1:123456789012:stack/BenchlingWebhookStack/prod123",
+    "deploymentTimestamp": "2025-11-03T14:20:00Z",
+    "deployedAt": "2025-11-03T14:20:00Z",
+    "imageTag": "0.6.3"
+  },
+  "dev": {
+    "webhookEndpoint": "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+    "webhookUrl": "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+    "stackArn": "arn:aws:cloudformation:us-east-1:123456789012:stack/BenchlingWebhookStack/dev456",
+    "deploymentTimestamp": "2025-11-04T10:30:00Z",
+    "deployedAt": "2025-11-04T10:30:00Z",
+    "imageTag": "latest"
+  }
+}

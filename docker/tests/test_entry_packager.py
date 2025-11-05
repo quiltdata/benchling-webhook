@@ -485,14 +485,6 @@ class TestEntryPackager:
         mock_response = Mock()
         mock_response.raise_for_status.side_effect = Exception("Download failed")
 
-        # Patch the retry decorator to use faster retries for testing
-        fast_retry = retry(
-            stop=stop_after_attempt(2),
-            wait=wait_fixed(0.01),
-            retry=lambda retry_state: True,
-            reraise=True,
-        )
-
         # Create a payload object
         payload = Payload(
             {

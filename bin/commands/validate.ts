@@ -4,14 +4,12 @@ import boxen from "boxen";
 import { execSync } from "child_process";
 import {
     loadConfigSync,
-    mergeInferredConfig,
     validateConfig,
     formatValidationErrors,
     type ConfigOptions,
 } from "../../lib/utils/config";
 import {
     checkCdkBootstrap,
-    inferConfiguration,
 } from "../benchling-webhook";
 
 export async function validateCommand(options: ConfigOptions & { verbose?: boolean }): Promise<void> {
@@ -29,19 +27,8 @@ export async function validateCommand(options: ConfigOptions & { verbose?: boole
     let config = loadConfigSync(options);
     spinner.succeed(`Configuration loaded from: ${options.envFile || ".env"}`);
 
-    // 2. Attempt inference
-    if (config.quiltCatalog) {
-        spinner.start("Inferring additional configuration from catalog...");
-
-        const inferenceResult = await inferConfiguration(config.quiltCatalog);
-
-        if (inferenceResult.success) {
-            config = mergeInferredConfig(config, inferenceResult.inferredVars);
-            spinner.succeed("Configuration inferred from catalog");
-        } else {
-            spinner.warn(`Could not infer configuration: ${inferenceResult.error}`);
-        }
-    }
+    // 2. Inference is deprecated in secrets-only mode (v0.6.0+)
+    // Configuration is now stored in AWS Secrets Manager and CloudFormation parameters
 
     // 3. Validate
     spinner.start("Validating configuration...");

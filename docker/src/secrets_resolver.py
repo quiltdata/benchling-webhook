@@ -1,11 +1,11 @@
 """Secret resolution for Benchling credentials.
 
-This module provides runtime resolution of Benchling secrets from multiple sources
-with hierarchical fallback:
+This module provides runtime resolution of Benchling secrets from AWS Secrets Manager.
 
-1. AWS Secrets Manager (via ARN in BENCHLING_SECRETS env var)
-2. JSON environment variable (BENCHLING_SECRETS with JSON content)
-3. Individual environment variables (legacy: BENCHLING_TENANT, etc.)
+Secrets-only mode (v0.6.0+):
+    - Supports ARN format: arn:aws:secretsmanager:region:account:secret:name
+    - Supports JSON format: {"tenant": "...", "clientId": "...", "clientSecret": "..."}
+    - No longer supports individual environment variables
 
 Usage:
     from src.secrets_resolver import resolve_benchling_secrets
@@ -15,9 +15,6 @@ Usage:
 
 Environment Variables:
     BENCHLING_SECRETS: ARN or JSON string with Benchling credentials
-    BENCHLING_TENANT: (Legacy) Benchling tenant name
-    BENCHLING_CLIENT_ID: (Legacy) OAuth client ID
-    BENCHLING_CLIENT_SECRET: (Legacy) OAuth client secret
 
 Raises:
     SecretsResolutionError: When secrets cannot be resolved or are invalid
@@ -53,7 +50,7 @@ class SecretFormat(Enum):
 
 @dataclass
 class BenchlingSecrets:
-    """Benchling credentials resolved from Secrets Manager or environment.
+    """Benchling credentials resolved from Secrets Manager.
 
     Attributes:
         tenant: Benchling tenant name (e.g., 'mycompany')
@@ -187,13 +184,12 @@ def fetch_from_secrets_manager(arn: str, aws_region: str) -> BenchlingSecrets:
 
 
 def resolve_benchling_secrets(aws_region: str) -> BenchlingSecrets:
-    """Resolve Benchling secrets from environment with hierarchical fallback.
+    """Resolve Benchling secrets from AWS Secrets Manager.
 
-    Resolution order:
-    1. BENCHLING_SECRETS (ARN) -> Fetch from Secrets Manager
-    2. BENCHLING_SECRETS (JSON) -> Parse directly
-    3. Individual env vars -> Legacy fallback
-    4. None -> Fail with error
+    Secrets-only mode (v0.6.0+):
+        Requires BENCHLING_SECRETS environment variable in one of two formats:
+        1. ARN format: arn:aws:secretsmanager:region:account:secret:name
+        2. JSON format: {"tenant": "...", "clientId": "...", "clientSecret": "..."}
 
     Args:
         aws_region: AWS region for Secrets Manager client
@@ -206,32 +202,23 @@ def resolve_benchling_secrets(aws_region: str) -> BenchlingSecrets:
     """
     benchling_secrets_env = os.getenv("BENCHLING_SECRETS")
 
-    # Priority 1: BENCHLING_SECRETS env var
-    if benchling_secrets_env:
-        secret_format = detect_secret_format(benchling_secrets_env)
+    if not benchling_secrets_env:
+        raise SecretsResolutionError(
+            "BENCHLING_SECRETS environment variable is required.\n"
+            "\n"
+            "Supported formats:\n"
+            "  1. ARN: arn:aws:secretsmanager:region:account:secret:name\n"
+            '  2. JSON: {"tenant": "...", "clientId": "...", "clientSecret": "..."}\n'
+            "\n"
+            "Legacy mode with individual environment variables (BENCHLING_TENANT, etc.) "
+            "is no longer supported in v0.6.0+."
+        )
 
-        if secret_format == SecretFormat.ARN:
-            logger.info("Resolving Benchling secrets from Secrets Manager")
-            return fetch_from_secrets_manager(benchling_secrets_env, aws_region)
-        else:  # JSON
-            logger.info("Resolving Benchling secrets from JSON environment variable")
-            return parse_secrets_json(benchling_secrets_env)
+    secret_format = detect_secret_format(benchling_secrets_env)
 
-    # Priority 2: Individual environment variables (backward compatibility)
-    tenant = os.getenv("BENCHLING_TENANT", "")
-    client_id = os.getenv("BENCHLING_CLIENT_ID", "")
-    client_secret = os.getenv("BENCHLING_CLIENT_SECRET", "")
-
-    if tenant and client_id and client_secret:
-        logger.info("Resolving Benchling secrets from individual environment variables")
-        secrets = BenchlingSecrets(tenant=tenant, client_id=client_id, client_secret=client_secret)
-        secrets.validate()
-        return secrets
-
-    # Priority 3: None found - fail with clear error
-    raise SecretsResolutionError(
-        "No Benchling secrets found. Configure one of:\n"
-        "1. BENCHLING_SECRETS (ARN to Secrets Manager)\n"
-        "2. BENCHLING_SECRETS (JSON with tenant, clientId, clientSecret)\n"
-        "3. Individual vars: BENCHLING_TENANT, BENCHLING_CLIENT_ID, BENCHLING_CLIENT_SECRET"
-    )
+    if secret_format == SecretFormat.ARN:
+        logger.info("Resolving Benchling secrets from Secrets Manager")
+        return fetch_from_secrets_manager(benchling_secrets_env, aws_region)
+    else:  # JSON
+        logger.info("Resolving Benchling secrets from JSON environment variable")
+        return parse_secrets_json(benchling_secrets_env)

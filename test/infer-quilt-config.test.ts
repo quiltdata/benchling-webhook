@@ -2,7 +2,7 @@ import { jest } from "@jest/globals";
 import { execSync } from "child_process";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { mockClient } from "aws-sdk-client-mock";
-import { inferQuiltConfig, inferenceResultToDerivedConfig } from "../scripts/infer-quilt-config";
+import { inferQuiltConfig, inferenceResultToDerivedConfig } from "../bin/commands/infer-quilt-config";
 
 // Mock child_process
 jest.mock("child_process");
@@ -331,9 +331,12 @@ describe("infer-quilt-config", () => {
             expect(config.quiltStackArn).toBe("arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/abc-123");
             expect(config.quiltRegion).toBe("us-east-1");
             expect(config.queueArn).toBe("arn:aws:sqs:us-east-1:123456789012:my-queue");
-            expect(config._metadata?.inferredFrom).toBe("quilt3-cli+cloudformation");
-            expect(config._metadata?.source).toBe("infer-quilt-config");
-            expect(config._metadata?.version).toBe("0.6.0");
+
+            // Type assertion for _metadata access
+            const metadata = config._metadata as any;
+            expect(metadata.inferredFrom).toBe("quilt3-cli+cloudformation");
+            expect(metadata.source).toBe("infer-quilt-config");
+            expect(metadata.version).toBe("0.6.0");
         });
 
         it("should handle minimal inference result", () => {
@@ -345,7 +348,10 @@ describe("infer-quilt-config", () => {
 
             expect(config.catalogUrl).toBeUndefined();
             expect(config.quiltUserBucket).toBeUndefined();
-            expect(config._metadata?.inferredFrom).toBe("none");
+
+            // Type assertion for _metadata access
+            const metadata = config._metadata as any;
+            expect(metadata.inferredFrom).toBe("none");
         });
     });
 });

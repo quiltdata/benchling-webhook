@@ -32,12 +32,12 @@ Module: xdg_cli
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import click
 from pydantic import ValidationError
 
-from .config_schema import BenchlingSecret, ConfigType, DeploymentConfig, DerivedConfig, UserConfig, get_config_model
+from .config_schema import ConfigType, get_config_model
 from .xdg_config import XDGConfig
 
 

@@ -1,0 +1,31 @@
+{
+  "$comment": "Test fixture for v0.7.0 ProfileConfig - Minimal required fields only",
+  "quilt": {
+    "stackArn": "arn:aws:cloudformation:us-west-2:987654321098:stack/quilt/def456",
+    "catalog": "https://catalog.example.org",
+    "bucket": "test-bucket",
+    "database": "test_db",
+    "queueArn": "arn:aws:sqs:us-west-2:987654321098:test-queue",
+    "region": "us-west-2"
+  },
+  "benchling": {
+    "tenant": "test-tenant",
+    "clientId": "client_test",
+    "clientSecret": "secret_test",
+    "appDefinitionId": "app_test"
+  },
+  "packages": {
+    "bucket": "test-packages",
+    "prefix": "test",
+    "metadataKey": "test_id"
+  },
+  "deployment": {
+    "region": "us-west-2"
+  },
+  "_metadata": {
+    "version": "0.7.0",
+    "createdAt": "2025-11-04T12:00:00Z",
+    "updatedAt": "2025-11-04T12:00:00Z",
+    "source": "cli"
+  }
+}

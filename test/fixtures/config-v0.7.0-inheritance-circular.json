@@ -1,0 +1,14 @@
+{
+  "$comment": "Test fixture for circular inheritance detection - INVALID",
+  "_inherits": "dev",
+  "deployment": {
+    "region": "us-east-1",
+    "imageTag": "test"
+  },
+  "_metadata": {
+    "version": "0.7.0",
+    "createdAt": "2025-11-04T13:00:00Z",
+    "updatedAt": "2025-11-04T13:00:00Z",
+    "source": "manual"
+  }
+}

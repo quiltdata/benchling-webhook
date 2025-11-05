@@ -14,5 +14,24 @@ module.exports = {
     'node_modules/(?!(.*)\\.ts$)'
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
-  cacheDirectory: '<rootDir>/.jest-cache'
+  cacheDirectory: '<rootDir>/.jest-cache',
+  collectCoverage: true,
+  coverageDirectory: 'coverage',
+  coverageReporters: ['text', 'lcov', 'html'],
+  collectCoverageFrom: [
+    'lib/**/*.ts',
+    'bin/**/*.ts',
+    'scripts/**/*.ts',
+    '!**/*.d.ts',
+    '!**/node_modules/**',
+    '!**/*.test.ts'
+  ],
+  coverageThresholds: {
+    global: {
+      branches: 70,
+      functions: 70,
+      lines: 70,
+      statements: 70
+    }
+  }
 };

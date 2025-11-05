@@ -1,18 +1,16 @@
 import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
-import * as fs from "fs";
-import * as path from "path";
+import { createMockConfig } from "./helpers/mock-config";
 
 describe("BenchlingWebhookStack", () => {
     let template: Template;
 
     beforeEach(() => {
         const app = new cdk.App();
+        const config = createMockConfig();
         const stack = new BenchlingWebhookStack(app, "TestStack", {
-            quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
-            benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-benchling-secret",
-            logLevel: "INFO",
+            config,
             env: {
                 account: "123456789012",
                 region: "us-east-1",
@@ -105,16 +103,26 @@ describe("BenchlingWebhookStack", () => {
 
     test("throws error when missing required parameters", () => {
         const app = new cdk.App();
+        const config = createMockConfig({
+            quilt: {
+                stackArn: "",
+                catalog: "https://quilt.example.com",
+                bucket: "test-bucket",
+                database: "test_db",
+                queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                region: "us-east-1",
+            },
+        });
+
         expect(() => {
             new BenchlingWebhookStack(app, "TestStack", {
-                quiltStackArn: "",
-                benchlingSecret: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-secret",
+                config,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
                 },
             });
-        }).toThrow("Secrets-only mode");
+        }).toThrow("Configuration validation failed");
     });
 
     test("creates IAM role with correct permissions", () => {
@@ -156,13 +164,10 @@ describe("BenchlingWebhookStack", () => {
         expect(foundSQSPolicy).toBe(true);
     });
 
-    test.skip("creates Secrets Manager secret for Benchling credentials [LEGACY TEST - secrets-only mode uses external secret]", () => {
-        // SKIP: In secrets-only mode, we reference an existing Secrets Manager secret
-        // We don't create one in the stack
-        template.hasResourceProperties("AWS::SecretsManager::Secret", {
-            Name: "benchling-webhook/credentials",
-            Description: "Benchling API credentials for webhook processor",
-        });
+    test("does not create Secrets Manager secret (uses external secret)", () => {
+        // In secrets-only mode, we reference an existing Secrets Manager secret
+        // We don't create one in the stack - it's managed externally
+        template.resourceCountIs("AWS::SecretsManager::Secret", 0);
     });
 
     test("creates task definition with correct container configuration", () => {
@@ -205,39 +210,11 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
-    test.skip("environment variables match Flask config expectations (LEGACY TEST - secrets-only mode uses ConfigResolver)", () => {
-        // SKIP: This test is for legacy mode with individual environment variables
-        // In secrets-only mode, we only use 2 env vars: QuiltStackARN and BenchlingSecret
-        // All runtime parameters come from the Benchling secret via ConfigResolver
-
-        // Read the Python config files to extract expected environment variable names
-        const configPath = path.join(__dirname, "../docker/src/config.py");
-        const secretsResolverPath = path.join(__dirname, "../docker/src/secrets_resolver.py");
-        const configContent = fs.readFileSync(configPath, "utf-8");
-        const secretsResolverContent = fs.readFileSync(secretsResolverPath, "utf-8");
-
-        // Extract environment variable names from both files using regex
-        // Pattern: os.getenv("VAR_NAME", ...)
-        const envVarPattern = /os\.getenv\("([^"]+)"/g;
-        const expectedEnvVars = new Set<string>();
-        let match;
-
-        // Extract from config.py
-        while ((match = envVarPattern.exec(configContent)) !== null) {
-            expectedEnvVars.add(match[1]);
-        }
-
-        // Extract from secrets_resolver.py
-        envVarPattern.lastIndex = 0; // Reset regex
-        while ((match = envVarPattern.exec(secretsResolverContent)) !== null) {
-            expectedEnvVars.add(match[1]);
-        }
-
-        // Get the container definition from the synthesized template
+    test("container receives v0.7.0 environment variables", () => {
+        // v0.7.0 uses structured config with static values as env vars
+        // and runtime parameters (QuiltStackARN, BenchlingSecret) from CloudFormation
         const taskDefs = template.findResources("AWS::ECS::TaskDefinition");
         const taskDefKeys = Object.keys(taskDefs);
-        expect(taskDefKeys.length).toBeGreaterThan(0);
-
         const taskDef = taskDefs[taskDefKeys[0]];
         const containerDef = taskDef.Properties.ContainerDefinitions[0];
         const environment = containerDef.Environment || [];
@@ -252,30 +229,66 @@ describe("BenchlingWebhookStack", () => {
             actualEnvVars.add(secret.Name);
         });
 
-        // Critical environment variables that must match between CDK and Flask
-        const criticalMappings: Record<string, string> = {
-            QUEUE_ARN: "queue_arn",
-            QUILT_USER_BUCKET: "s3_bucket_name",
-            PKG_PREFIX: "s3_prefix",
-            PKG_KEY: "package_key",
-            QUILT_CATALOG: "quilt_catalog",
-            QUILT_DATABASE: "quilt_database",
-            BENCHLING_TENANT: "benchling_tenant",
-            BENCHLING_CLIENT_ID: "benchling_client_id",
-            BENCHLING_CLIENT_SECRET: "benchling_client_secret",
-            LOG_LEVEL: "log_level",
-            AWS_REGION: "aws_region",
-            ENABLE_WEBHOOK_VERIFICATION: "enable_webhook_verification",
-        };
+        // v0.7.0 static config values (from ProfileConfig)
+        const expectedStaticVars = [
+            "BENCHLING_TENANT",
+            "BENCHLING_PKG_BUCKET",
+            "BENCHLING_PKG_PREFIX",
+            "BENCHLING_PKG_KEY",
+        ];
 
-        // Verify all critical environment variables are present in CDK stack
-        Object.keys(criticalMappings).forEach((envVar) => {
-            expect(actualEnvVars.has(envVar)).toBe(true);
+        // Runtime parameters (from CloudFormation)
+        const expectedRuntimeVars = [
+            "QuiltStackARN",
+            "BenchlingSecret",
+        ];
+
+        // Common/system variables
+        const expectedCommonVars = [
+            "LOG_LEVEL",
+            "AWS_REGION",
+            "AWS_DEFAULT_REGION",
+            "ENABLE_WEBHOOK_VERIFICATION",
+            "FLASK_ENV",
+            "BENCHLING_WEBHOOK_VERSION",
+        ];
+
+        // Verify static config values are present
+        expectedStaticVars.forEach((varName) => {
+            expect(actualEnvVars.has(varName)).toBe(true);
         });
 
-        // Verify the Flask config expects these exact variable names
-        Object.keys(criticalMappings).forEach((envVar) => {
-            expect(expectedEnvVars.has(envVar)).toBe(true);
+        // Verify runtime parameters are present
+        expectedRuntimeVars.forEach((varName) => {
+            expect(actualEnvVars.has(varName)).toBe(true);
+        });
+
+        // Verify common variables are present
+        expectedCommonVars.forEach((varName) => {
+            expect(actualEnvVars.has(varName)).toBe(true);
+        });
+
+        // Verify sensitive secrets are NOT in environment (retrieved at runtime from Secrets Manager)
+        const prohibitedVars = [
+            "BENCHLING_CLIENT_ID",
+            "BENCHLING_CLIENT_SECRET",
+            "BENCHLING_APP_DEFINITION_ID",
+        ];
+
+        prohibitedVars.forEach((varName) => {
+            expect(actualEnvVars.has(varName)).toBe(false);
+        });
+
+        // Verify old queue/catalog variables are NOT present (now resolved at runtime via CloudFormation)
+        const removedVars = [
+            "QUEUE_ARN",
+            "QUILT_USER_BUCKET",
+            "QUILT_CATALOG",
+            "QUILT_DATABASE",
+        ];
+
+        removedVars.forEach((varName) => {
+            expect(actualEnvVars.has(varName)).toBe(false);
         });
     });
 
@@ -294,9 +307,9 @@ describe("BenchlingWebhookStack", () => {
 
     test("creates BenchlingSecret CloudFormation parameter", () => {
         const parameters = template.toJSON().Parameters;
-        expect(parameters).toHaveProperty("BenchlingSecret");
+        expect(parameters).toHaveProperty("BenchlingSecretARN");
 
-        const param = parameters.BenchlingSecret;
+        const param = parameters.BenchlingSecretARN;
         expect(param.Type).toBe("String");
         expect(param.Description).toContain("Secrets Manager secret");
     });

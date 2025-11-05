@@ -6,29 +6,28 @@ import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
 import { AlbApiGateway } from "./alb-api-gateway";
 import { EcrRepository } from "./ecr-repository";
+import { ProfileConfig } from "./types/config";
 import packageJson from "../package.json";
 
+/**
+ * Stack properties for BenchlingWebhookStack (v0.7.0+)
+ *
+ * Configuration is provided via ProfileConfig interface, which contains
+ * all necessary settings for deployment in a structured format.
+ */
 export interface BenchlingWebhookStackProps extends cdk.StackProps {
-    // ===== Secrets-Only Mode (v0.6.0+) =====
     /**
-     * ARN of the Quilt CloudFormation stack.
-     * All configuration is resolved from AWS (CloudFormation outputs + Secrets Manager).
-     * Format: arn:aws:cloudformation:{region}:{account}:stack/{name}/{id}
-     * REQUIRED.
+     * Profile configuration containing all deployment settings
+     * This replaces the previous secrets-only mode parameters.
      */
-    readonly quiltStackArn: string;
-    /**
-     * Name or ARN of the AWS Secrets Manager secret containing Benchling credentials.
-     * Secret must contain: client_id, client_secret, tenant, app_definition_id (optional)
-     * REQUIRED.
-     */
-    readonly benchlingSecret: string;
+    readonly config: ProfileConfig;
 
-    // ===== Common Options =====
+    /**
+     * Whether to create a new ECR repository
+     * If false, uses existing repository specified in config.deployment.ecrRepository
+     * @default false
+     */
     readonly createEcrRepository?: boolean;
-    readonly ecrRepositoryName?: string;
-    readonly logLevel?: string;
-    readonly imageTag?: string;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
@@ -44,47 +43,52 @@ export class BenchlingWebhookStack extends cdk.Stack {
     ) {
         super(scope, id, props);
 
-        // Validate required secrets-only mode parameters
-        if (!props.quiltStackArn || !props.benchlingSecret) {
+        const { config } = props;
+
+        // Validate required configuration fields
+        if (!config.quilt.stackArn || !config.benchling.secretArn) {
             throw new Error(
-                "Secrets-only mode (v0.6.0+) requires both:\n" +
-                "  - quiltStackArn: CloudFormation stack ARN\n" +
-                "  - benchlingSecret: Secrets Manager secret name\n\n" +
-                "See: https://github.com/quiltdata/benchling-webhook/issues/156",
+                "Configuration validation failed. Required fields:\n" +
+                "  - config.quilt.stackArn: CloudFormation stack ARN\n" +
+                "  - config.benchling.secretArn: Secrets Manager secret ARN\n\n" +
+                "Run 'npm run setup' to configure your deployment.",
             );
         }
-        console.log("✓ Using secrets-only mode (v0.6.0+)");
+
+        console.log(`Deploying with profile configuration (v${config._metadata.version})`);
+        console.log(`  Quilt Stack: ${config.quilt.stackArn}`);
+        console.log(`  Benchling Tenant: ${config.benchling.tenant}`);
+        console.log(`  Region: ${config.deployment.region}`);
 
         // Create CloudFormation parameters for runtime-configurable values
-        // Parameters can be updated via CloudFormation stack updates
+        // These parameters can be updated via CloudFormation stack updates
 
-        // ===== Secrets-Only Mode Parameters (v0.6.0+) =====
         const quiltStackArnParam = new cdk.CfnParameter(this, "QuiltStackARN", {
             type: "String",
             description: "ARN of Quilt CloudFormation stack for configuration resolution",
-            default: props.quiltStackArn,
+            default: config.quilt.stackArn,
         });
 
-        const benchlingSecretParam = new cdk.CfnParameter(this, "BenchlingSecret", {
+        const benchlingSecretParam = new cdk.CfnParameter(this, "BenchlingSecretARN", {
             type: "String",
-            description: "Name/ARN of Secrets Manager secret with Benchling credentials",
-            default: props.benchlingSecret,
+            description: "ARN of Secrets Manager secret with Benchling credentials",
+            default: config.benchling.secretArn,
         });
 
         const logLevelParam = new cdk.CfnParameter(this, "LogLevel", {
             type: "String",
-            description: "Application log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
-            default: props.logLevel || "INFO",
-            allowedValues: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+            description: "Application log level (DEBUG, INFO, WARNING, ERROR)",
+            default: config.logging?.level || "INFO",
+            allowedValues: ["DEBUG", "INFO", "WARNING", "ERROR"],
         });
 
         const imageTagParam = new cdk.CfnParameter(this, "ImageTag", {
             type: "String",
-            description: "Docker image tag to deploy (e.g., latest, 0.5.3, 0.5.3-20251030T123456Z)",
-            default: props.imageTag || "latest",
+            description: "Docker image tag to deploy (e.g., latest, 0.7.0, 0.7.0-20251104T123456Z)",
+            default: config.deployment.imageTag || "latest",
         });
 
-        // Use parameter values (which have props as defaults)
+        // Use parameter values (which have config as defaults)
         // This allows runtime updates via CloudFormation
         const quiltStackArnValue = quiltStackArnParam.valueAsString;
         const benchlingSecretValue = benchlingSecretParam.valueAsString;
@@ -103,45 +107,47 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // Get or create ECR repository
         let ecrRepo: ecr.IRepository;
         let ecrImageUri: string;
+        const repoName = config.deployment.ecrRepository || "quiltdata/benchling";
+
         if (props.createEcrRepository) {
             const newRepo = new EcrRepository(this, "EcrRepository", {
-                repositoryName: props.ecrRepositoryName || "quiltdata/benchling",
+                repositoryName: repoName,
                 publicReadAccess: true,
             });
             ecrRepo = newRepo.repository;
-            ecrImageUri = `${newRepo.repositoryUri}:latest`;
+            ecrImageUri = `${newRepo.repositoryUri}:${imageTagValue}`;
         } else {
             // Reference existing ECR repository
-            const repoName = props.ecrRepositoryName || "quiltdata/benchling";
             ecrRepo = ecr.Repository.fromRepositoryName(this, "ExistingEcrRepository", repoName);
-            ecrImageUri = `${this.account}.dkr.ecr.${this.region}.amazonaws.com/${repoName}:latest`;
+            const account = config.deployment.account || this.account;
+            const region = config.deployment.region;
+            ecrImageUri = `${account}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTagValue}`;
         }
 
         // Create the Fargate service
         // Use imageTag for stackVersion if it looks like a timestamped dev version
-        // (e.g., "0.5.3-20251031T000139Z"), otherwise use package.json version
+        // (e.g., "0.7.0-20251104T000139Z"), otherwise use package.json version
         const isDevVersion = imageTagValue.match(/^\d+\.\d+\.\d+-\d{8}T\d{6}Z$/);
         const stackVersion = isDevVersion ? imageTagValue : packageJson.version;
 
-        // Build Fargate Service props - secrets-only mode
+        // Build Fargate Service props using new config structure
         this.fargateService = new FargateService(this, "FargateService", {
             vpc,
             bucket: this.bucket,
-            region: this.region,
-            account: this.account,
+            config: config,
             ecrRepository: ecrRepo,
             imageTag: imageTagValue,
             stackVersion: stackVersion,
-            logLevel: logLevelValue,
-            // Secrets-only mode: Only 2 required parameters
+            // Runtime-configurable parameters
             quiltStackArn: quiltStackArnValue,
             benchlingSecret: benchlingSecretValue,
+            logLevel: logLevelValue,
         });
 
         // Create API Gateway that routes to the ALB
         this.api = new AlbApiGateway(this, "ApiGateway", {
             loadBalancer: this.fargateService.loadBalancer,
-            webhookAllowList: "", // Empty allow list = allow all IPs
+            config: config,
         });
 
         // Store webhook endpoint for easy access
@@ -174,6 +180,17 @@ export class BenchlingWebhookStack extends cdk.Stack {
         new cdk.CfnOutput(this, "ApiGatewayLogGroup", {
             value: this.api.logGroup.logGroupName,
             description: "CloudWatch log group for API Gateway access logs",
+        });
+
+        // Export configuration metadata
+        new cdk.CfnOutput(this, "ConfigVersion", {
+            value: config._metadata.version,
+            description: "Configuration schema version",
+        });
+
+        new cdk.CfnOutput(this, "ConfigSource", {
+            value: config._metadata.source,
+            description: "Configuration source (wizard, manual, cli)",
         });
     }
 
