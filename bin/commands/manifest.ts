@@ -6,22 +6,32 @@ import { loadConfigSync, type ConfigOptions } from "../../lib/utils/config";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pkg = require("../../package.json");
 
-export async function manifestCommand(options: ConfigOptions & { output?: string }): Promise<void> {
-    const config = loadConfigSync(options);
-    const outputPath = options.output || "app-manifest.yaml";
+export interface ManifestOptions {
+    catalogDomain?: string;
+    version?: string;
+}
 
-    // Generate app name from catalog URL if available
+/**
+ * Generates the Benchling application manifest used during setup.
+ *
+ * @param options - Manifest generation options
+ * @returns Manifest YAML as a string
+ */
+export function generateBenchlingManifest(options: ManifestOptions = {}): string {
+    const version = options.version || pkg.version;
+
+    // Generate app name from catalog domain if available
     let appName = "Quilt Integration";
-    if (config.quiltCatalog) {
+    if (options.catalogDomain) {
         // Replace dots and colons with hyphens to create a valid identifier
-        appName = config.quiltCatalog.replace(/[.:]/g, "-");
+        appName = options.catalogDomain.replace(/[.:]/g, "-");
     }
 
-    const manifest = `manifestVersion: 1
+    return `manifestVersion: 1
 info:
   name: ${appName}
   description: Package Benchling notebook entries as Quilt data packages
-  version: ${pkg.version}
+  version: ${version}
 features:
   - name: Quilt Package
     id: quilt-entry
@@ -34,6 +44,16 @@ subscriptions:
     - type: v2.entry.created
     - type: v2.entry.updated.fields
 `;
+}
+
+export async function manifestCommand(options: ConfigOptions & { output?: string }): Promise<void> {
+    const config = loadConfigSync(options);
+    const outputPath = options.output || "app-manifest.yaml";
+
+    const manifest = generateBenchlingManifest({
+        catalogDomain: config.quiltCatalog,
+        version: pkg.version,
+    });
 
     try {
         writeFileSync(outputPath, manifest);
