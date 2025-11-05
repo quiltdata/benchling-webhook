@@ -7,6 +7,7 @@ import { validateCommand } from "./commands/validate";
 import { testCommand } from "./commands/test";
 import { manifestCommand } from "./commands/manifest";
 import { setupWizardCommand } from "./commands/setup-wizard";
+import { healthCheckCommand } from "./commands/health-check";
 
 // Load package.json for version
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -111,6 +112,21 @@ program
     .action(async (options) => {
         try {
             await manifestCommand(options);
+        } catch (error) {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        }
+    });
+
+// Health check command
+program
+    .command("health-check")
+    .description("Check configuration health and secrets sync status")
+    .option("--profile <name>", "Configuration profile to check", "default")
+    .option("--json", "Output in JSON format")
+    .action(async (options) => {
+        try {
+            await healthCheckCommand(options);
         } catch (error) {
             console.error(chalk.red((error as Error).message));
             process.exit(1);

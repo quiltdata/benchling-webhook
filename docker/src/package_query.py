@@ -260,7 +260,10 @@ class PackageQuery:
             error_msg = str(e)
             # Extract more helpful information from AWS errors
             if "AccessDeniedException" in error_msg or "not authorized" in error_msg.lower():
-                error_msg = f"AWS Athena access denied. Please check IAM permissions for athena:StartQueryExecution on database '{self.database}'"
+                error_msg = (
+                    "AWS Athena access denied. Please check IAM permissions for "
+                    f"athena:StartQueryExecution on database '{self.database}'"
+                )
 
             self.logger.error(
                 "Query failed",

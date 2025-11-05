@@ -14,7 +14,7 @@ import { execSync } from "child_process";
 import * as readline from "readline";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
-import { DerivedConfig } from "../lib/types/config";
+import { DerivedConfig } from "../../lib/types/config";
 
 /**
  * Quilt CLI configuration
