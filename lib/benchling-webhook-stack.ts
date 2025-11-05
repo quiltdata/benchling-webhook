@@ -4,7 +4,6 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
-import { AlbApiGateway } from "./alb-api-gateway";
 import { EcrRepository } from "./ecr-repository";
 import { ProfileConfig } from "./types/config";
 import packageJson from "../package.json";
@@ -33,7 +32,6 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
 export class BenchlingWebhookStack extends cdk.Stack {
     private readonly bucket: s3.IBucket;
     private readonly fargateService: FargateService;
-    private readonly api: AlbApiGateway;
     public readonly webhookEndpoint: string;
 
     constructor(
@@ -144,16 +142,10 @@ export class BenchlingWebhookStack extends cdk.Stack {
             logLevel: logLevelValue,
         });
 
-        // Create API Gateway that routes to the ALB
-        this.api = new AlbApiGateway(this, "ApiGateway", {
-            loadBalancer: this.fargateService.loadBalancer,
-            config: config,
-        });
+        // Store webhook endpoint for easy access (direct ALB access)
+        this.webhookEndpoint = `http://${this.fargateService.loadBalancer.loadBalancerDnsName}/`;
 
-        // Store webhook endpoint for easy access
-        this.webhookEndpoint = this.api.api.url;
-
-        // Export webhook endpoint as a stack output
+        // Export webhook endpoint as a stack output pointing to the ALB DNS name
         new cdk.CfnOutput(this, "WebhookEndpoint", {
             value: this.webhookEndpoint,
             description: "Webhook endpoint URL - use this in Benchling app configuration",
@@ -175,11 +167,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
         new cdk.CfnOutput(this, "EcsLogGroup", {
             value: this.fargateService.logGroup.logGroupName,
             description: "CloudWatch log group for ECS container logs",
-        });
-
-        new cdk.CfnOutput(this, "ApiGatewayLogGroup", {
-            value: this.api.logGroup.logGroupName,
-            description: "CloudWatch log group for API Gateway access logs",
         });
 
         // Export configuration metadata

@@ -7,7 +7,8 @@ import { execSync } from "child_process";
 
 export interface QuiltCatalogConfig {
     region: string;
-    apiGatewayEndpoint: string;
+    apiGatewayEndpoint?: unknown;
+    webhookEndpoint?: unknown;
     analyticsBucket: string;
     serviceBucket: string;
     stackVersion?: string;
@@ -214,7 +215,11 @@ export function buildInferredConfig(
     if (config.stackVersion) {
         vars["# Stack Version"] = config.stackVersion;
     }
-    vars["# API Gateway Endpoint"] = config.apiGatewayEndpoint;
+    if (typeof config.webhookEndpoint === "string") {
+        vars["# Webhook Endpoint"] = config.webhookEndpoint;
+    } else if (typeof config.apiGatewayEndpoint === "string") {
+        vars["# Webhook Endpoint"] = config.apiGatewayEndpoint;
+    }
 
     return vars;
 }
@@ -270,11 +275,19 @@ export async function inferStackConfig(
 
     // Extract identifiable resources
     const region = config.region;
-    const apiGatewayId = extractApiGatewayId(config.apiGatewayEndpoint);
+    const webhookEndpointValue = typeof config.webhookEndpoint === "string"
+        ? config.webhookEndpoint
+        : typeof config.apiGatewayEndpoint === "string"
+            ? config.apiGatewayEndpoint
+            : null;
+    const apiGatewayId = webhookEndpointValue ? extractApiGatewayId(webhookEndpointValue) : null;
 
     if (verbose) {
         console.log("Searching for CloudFormation stack...");
         console.log(`  Region: ${region}`);
+        if (webhookEndpointValue) {
+            console.log(`  Webhook Endpoint: ${webhookEndpointValue}`);
+        }
         console.log(`  API Gateway ID: ${apiGatewayId || "not found"}`);
         console.log("");
     }

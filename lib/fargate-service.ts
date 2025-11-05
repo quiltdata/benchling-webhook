@@ -9,6 +9,38 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { ProfileConfig } from "./types/config";
 
+interface AllowListEntry {
+    readonly cidr: string;
+    readonly isIpv6: boolean;
+}
+
+function parseWebhookAllowList(value: string | undefined): AllowListEntry[] {
+    if (!value) {
+        return [];
+    }
+
+    return value
+        .split(",")
+        .map(entry => entry.trim())
+        .filter(entry => entry.length > 0)
+        .map(entry => {
+            const isIpv6 = entry.includes(":");
+            if (isIpv6) {
+                const normalized = entry.includes("/") ? entry : `${entry}/128`;
+                return {
+                    cidr: normalized,
+                    isIpv6: true,
+                };
+            }
+
+            const normalized = entry.includes("/") ? entry : `${entry}/32`;
+            return {
+                cidr: normalized,
+                isIpv6: false,
+            };
+        });
+}
+
 /**
  * Properties for FargateService construct (v0.7.0+)
  *
@@ -252,11 +284,54 @@ export class FargateService extends Construct {
             ],
         });
 
+        const rawWebhookAllowList = config.security?.webhookAllowList || "";
+        let allowListEntries: AllowListEntry[] = [];
+        let enforceAllowList = true;
+
+        if (rawWebhookAllowList && cdk.Token.isUnresolved(rawWebhookAllowList)) {
+            enforceAllowList = false;
+            cdk.Annotations.of(this).addWarning(
+                "BENCHLING_WEBHOOK_ALLOW_LIST is configured as a CloudFormation parameter; allowing all traffic at ALB security group.",
+            );
+        } else {
+            allowListEntries = parseWebhookAllowList(rawWebhookAllowList);
+        }
+
+        // Create a dedicated security group for the internet-facing ALB so we can enforce the allow list
+        const albSecurityGroup = new ec2.SecurityGroup(this, "AlbSecurityGroup", {
+            vpc: props.vpc,
+            description: "Security group for Benchling webhook ALB",
+            allowAllOutbound: true,
+        });
+
+        if (enforceAllowList && allowListEntries.length > 0) {
+            for (const entry of allowListEntries) {
+                const peer = entry.isIpv6 ? ec2.Peer.ipv6(entry.cidr) : ec2.Peer.ipv4(entry.cidr);
+                albSecurityGroup.addIngressRule(
+                    peer,
+                    ec2.Port.tcp(80),
+                    "Allow Benchling webhook traffic",
+                );
+            }
+        } else {
+            albSecurityGroup.addIngressRule(
+                ec2.Peer.anyIpv4(),
+                ec2.Port.tcp(80),
+                "Allow all IPv4 traffic (no webhook allow list configured)",
+            );
+            albSecurityGroup.addIngressRule(
+                ec2.Peer.anyIpv6(),
+                ec2.Port.tcp(80),
+                "Allow all IPv6 traffic (no webhook allow list configured)",
+            );
+        }
+
         // Create Application Load Balancer
         this.loadBalancer = new elbv2.ApplicationLoadBalancer(this, "ALB", {
             vpc: props.vpc,
             internetFacing: true,
             loadBalancerName: "benchling-webhook-alb",
+            securityGroup: albSecurityGroup,
         });
 
         // Enable ALB access logs
@@ -295,7 +370,7 @@ export class FargateService extends Construct {
 
         // Allow ALB to communicate with Fargate tasks
         fargateSecurityGroup.addIngressRule(
-            ec2.Peer.securityGroupId(this.loadBalancer.connections.securityGroups[0].securityGroupId),
+            ec2.Peer.securityGroupId(albSecurityGroup.securityGroupId),
             ec2.Port.tcp(5000),
             "Allow traffic from ALB",
         );

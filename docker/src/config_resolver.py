@@ -560,17 +560,18 @@ class ConfigResolver:
         if "CatalogDomain" in outputs:
             return self._normalize_catalog_url(outputs["CatalogDomain"])
 
-        # Option 3: Extract from API Gateway endpoint
-        if "ApiGatewayEndpoint" in outputs:
+        # Option 3: Extract from webhook endpoint (ALB or legacy API Gateway)
+        webhook_endpoint = outputs.get("WebhookEndpoint") or outputs.get("ApiGatewayEndpoint")
+        if webhook_endpoint:
             try:
-                parsed = urlparse(outputs["ApiGatewayEndpoint"])
+                parsed = urlparse(webhook_endpoint)
                 return parsed.hostname or parsed.netloc
             except Exception:
                 pass  # Fall through to error
 
         raise ConfigResolverError(
             "Cannot determine catalog URL",
-            'Stack must export "QuiltWebHost", "Catalog", "CatalogDomain", or "ApiGatewayEndpoint"',
+            'Stack must export "QuiltWebHost", "Catalog", "CatalogDomain", or "WebhookEndpoint" (legacy stacks may export ApiGatewayEndpoint)',
         )
 
     def _normalize_catalog_url(self, url: str) -> str:

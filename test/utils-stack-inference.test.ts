@@ -26,7 +26,7 @@ describe("stack-inference utility", () => {
     describe("buildInferredConfig", () => {
         const mockConfig: QuiltCatalogConfig = {
             region: "us-east-1",
-            apiGatewayEndpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/prod",
+            webhookEndpoint: "http://benchling-webhook-alb-123456.us-east-1.elb.amazonaws.com/",
             analyticsBucket: "quilt-staging-analyticsbucket-abc123",
             serviceBucket: "quilt-staging-servicebucket-xyz789",
             stackVersion: "1.2.3",
@@ -58,6 +58,9 @@ describe("stack-inference utility", () => {
             expect(vars.QUEUE_ARN).toBe("arn:aws:sqs:us-east-1:123456789012:my-queue");
             expect(vars["# CloudFormation Stack"]).toBe("my-quilt-stack");
             expect(vars["# Stack Version"]).toBe("1.2.3");
+            expect(vars["# Webhook Endpoint"]).toBe(
+                "http://benchling-webhook-alb-123456.us-east-1.elb.amazonaws.com/",
+            );
         });
 
         it("should extract database from UserAthenaDatabaseName output", () => {

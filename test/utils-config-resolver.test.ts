@@ -504,7 +504,46 @@ describe("ConfigResolver", () => {
     expect(config.quiltCatalog).toBe("my.catalog.com");
   });
 
-  it("should resolve catalog from ApiGatewayEndpoint", async () => {
+  it("should resolve catalog from WebhookEndpoint", async () => {
+    cfnMock.on(DescribeStacksCommand).resolves({
+      Stacks: [
+        {
+          StackName: "Stack",
+          CreationTime: new Date(),
+          StackStatus: "CREATE_COMPLETE",
+          Outputs: [
+            { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
+            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:q" },
+            { OutputKey: "UserBucket", OutputValue: "bucket" },
+            {
+              OutputKey: "WebhookEndpoint",
+              OutputValue: "http://benchling-webhook-alb-123.us-east-1.elb.amazonaws.com/",
+            },
+          ],
+        },
+      ],
+    });
+
+    smMock.on(GetSecretValueCommand).resolves({
+      SecretString: JSON.stringify({
+        client_id: "id",
+        client_secret: "secret",
+        tenant: "tenant",
+      }),
+    });
+
+    const resolver = new ConfigResolver();
+    const config = await resolver.resolve({
+      quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
+      benchlingSecret: "secret",
+      mockCloudFormation: cfnMock as any,
+      mockSecretsManager: smMock as any,
+    });
+
+    expect(config.quiltCatalog).toBe("benchling-webhook-alb-123.us-east-1.elb.amazonaws.com");
+  });
+
+  it("should fall back to ApiGatewayEndpoint when WebhookEndpoint missing", async () => {
     cfnMock.on(DescribeStacksCommand).resolves({
       Stacks: [
         {
@@ -554,7 +593,7 @@ describe("ConfigResolver", () => {
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
             { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:q" },
             { OutputKey: "UserBucket", OutputValue: "bucket" },
-            // No Catalog, CatalogDomain, or ApiGatewayEndpoint
+            // No Catalog, CatalogDomain, WebhookEndpoint, or ApiGatewayEndpoint
           ],
         },
       ],

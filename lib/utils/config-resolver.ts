@@ -374,14 +374,14 @@ export class ConfigResolver {
     }
 
     /**
-   * Resolve catalog URL from stack outputs
-   *
-   * @param outputs - Stack outputs
-   * @returns Normalized catalog URL (hostname only)
-   * @throws ConfigResolverError if catalog URL cannot be determined
-   */
+     * Resolve catalog URL from stack outputs.
+     *
+     * @param outputs - Stack outputs
+     * @returns Normalized catalog URL (hostname only)
+     * @throws ConfigResolverError if catalog URL cannot be determined
+     */
     private resolveCatalogUrl(outputs: Record<string, string>): string {
-    // Option 1: Direct from Catalog or CatalogDomain output
+        // Option 1: Direct from Catalog or CatalogDomain output
         if (outputs.Catalog) {
             return this.normalizeCatalogUrl(outputs.Catalog);
         }
@@ -390,10 +390,11 @@ export class ConfigResolver {
             return this.normalizeCatalogUrl(outputs.CatalogDomain);
         }
 
-        // Option 2: Extract from API Gateway endpoint
-        if (outputs.ApiGatewayEndpoint) {
+        // Option 2: Extract from webhook endpoint exposed by stack (API Gateway or ALB)
+        const webhookEndpoint = outputs.WebhookEndpoint || outputs.ApiGatewayEndpoint;
+        if (webhookEndpoint) {
             try {
-                const url = new URL(outputs.ApiGatewayEndpoint);
+                const url = new URL(webhookEndpoint);
                 return url.hostname;
             } catch {
                 // Invalid URL, fall through to error
@@ -402,23 +403,23 @@ export class ConfigResolver {
 
         throw new ConfigResolverError(
             "Cannot determine catalog URL",
-            "Stack must export \"Catalog\", \"CatalogDomain\", or \"ApiGatewayEndpoint\"",
+            "Stack must export \"Catalog\", \"CatalogDomain\", or \"WebhookEndpoint\" (legacy stacks may export ApiGatewayEndpoint)",
         );
     }
 
     /**
-   * Normalize catalog URL to hostname only (remove protocol and trailing slash)
-   *
-   * @param url - Catalog URL
-   * @returns Normalized hostname
-   */
+     * Normalize catalog URL to hostname only (remove protocol and trailing slash).
+     *
+     * @param url - Catalog URL
+     * @returns Normalized hostname
+     */
     private normalizeCatalogUrl(url: string): string {
         return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
     }
 
     /**
-   * Clear cached configuration (for testing only)
-   */
+     * Clear cached configuration (for testing only).
+     */
     clearCache(): void {
         this.cache = null;
     }

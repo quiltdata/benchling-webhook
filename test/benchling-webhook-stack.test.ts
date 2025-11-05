@@ -43,43 +43,9 @@ describe("BenchlingWebhookStack", () => {
         template.resourceCountIs("AWS::Events::Connection", 0);
     });
 
-    test("creates CloudWatch log groups", () => {
-        template.resourceCountIs("AWS::Logs::LogGroup", 2); // One for API Gateway, one for container logs
-
-        template.hasResourceProperties("AWS::ApiGateway::Stage", {
-            AccessLogSetting: {
-                DestinationArn: {
-                    "Fn::GetAtt": [
-                        Match.stringLikeRegexp("ApiGatewayAccessLogs.*"),
-                        "Arn",
-                    ],
-                },
-            },
-        });
-    });
-
-    test("creates API Gateway with correct configuration", () => {
-        template.hasResourceProperties("AWS::ApiGateway::RestApi", {
-            Name: "BenchlingWebhookAPI",
-        });
-
-        template.hasResourceProperties("AWS::ApiGateway::Stage", {
-            StageName: "prod",
-            MethodSettings: [{
-                LoggingLevel: "INFO",
-                DataTraceEnabled: true,
-                HttpMethod: "*",
-                ResourcePath: "/*",
-            }],
-        });
-
-        // Check that API Gateway has HTTP_PROXY integration to ALB (not Step Functions)
-        template.hasResourceProperties("AWS::ApiGateway::Method", {
-            HttpMethod: "ANY",
-            AuthorizationType: "NONE",
-            Integration: {
-                Type: "HTTP_PROXY",
-            },
+    test("creates container log group", () => {
+        template.hasResourceProperties("AWS::Logs::LogGroup", {
+            LogGroupName: "/ecs/benchling-webhook",
         });
     });
 
