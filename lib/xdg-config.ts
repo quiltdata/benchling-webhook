@@ -88,6 +88,11 @@ export class XDGConfig {
      * @returns The default base directory path (~/.config/benchling-webhook)
      */
     private getDefaultBaseDir(): string {
+        const xdgConfigHome = process.env.XDG_CONFIG_HOME;
+        if (xdgConfigHome && xdgConfigHome.trim().length > 0) {
+            return resolve(xdgConfigHome, "benchling-webhook");
+        }
+
         const home = homedir();
         return resolve(home, ".config", "benchling-webhook");
     }
