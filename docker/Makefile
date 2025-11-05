@@ -76,9 +76,7 @@ help:
 	@echo "  docker-clean          - Deep clean Docker (fixes run-dev issues)"
 	@echo "  kill                  - Stop Docker containers and kill local processes"
 
-# ==============================================================================
 # Setup
-# ==============================================================================
 
 # Verify XDG config exists
 check-xdg:
@@ -111,9 +109,7 @@ test-benchling: check-xdg
 test-query: check-xdg
 	uv run python scripts/test_query.py
 
-# ==============================================================================
 # Run Servers
-# ==============================================================================
 
 # Docker development server with hot-reload (requires AWS credentials)
 run: build check-xdg
@@ -166,9 +162,7 @@ run-ecr: check-xdg docker-ecr-login
 	echo "✅ Container started on port $(PORT_DOCKER_PROD)"; \
 	echo "💡 Stop with: docker stop benchling-ecr-test && docker rm benchling-ecr-test"
 
-# ==============================================================================
 # Testing
-# ==============================================================================
 
 # Run standlaone tests
 test: lint test-unit test-integration
@@ -315,17 +309,13 @@ lint:
 	uv run black src/ tests/ scripts/
 	uv run isort src/ tests/ scripts/
 
-# ==============================================================================
 # Deployment
-# ==============================================================================
 
 # Build Docker image (local development)
 build:
 	docker build -t benchling-webhook .
 
-# ==============================================================================
 # Health & Monitoring
-# ==============================================================================
 
 # Check docker prod health - DEFAULT
 health-prod:
@@ -358,9 +348,7 @@ logs-dev:
 
 logs: logs-dev logs-prod
 
-# ==============================================================================
 # Infrastructure
-# ==============================================================================
 
 # Expose any port via ngrok (defaults to PORT_DOCKER_DEV if PORT not specified)
 # Usage: make ngrok [PORT=5002] [SLEEP=5]
@@ -378,9 +366,7 @@ ngrok: check-ngrok
 	fi; \
 	make kill
 
-# ==============================================================================
 # Maintenance
-# ==============================================================================
 
 # Smart kill: stop Docker containers and kill local Python processes
 kill:
