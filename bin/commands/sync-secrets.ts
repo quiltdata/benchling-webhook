@@ -151,17 +151,151 @@ async function getSecret(client: SecretsManagerClient, secretName: string): Prom
 }
 
 /**
+ * Determine if a stored value is actually referencing a secret identifier rather than the secret value.
+ *
+ * @param value - The candidate value from configuration
+ * @param secretName - The generated secret name for the profile
+ * @param secretArn - Optional ARN recorded in configuration
+ * @returns True if value matches known identifiers, false otherwise
+ */
+function isSecretPlaceholder(value: string | undefined, secretName: string, secretArn?: string): boolean {
+    if (!value) {
+        return false;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+        return false;
+    }
+
+    if (trimmed === secretName) {
+        return true;
+    }
+
+    if (secretArn && trimmed === secretArn) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Parse secret payload JSON and ensure it is an object.
+ *
+ * @param secretString - Raw secret JSON string
+ * @param identifier - Secret identifier (for error messages)
+ * @returns Parsed payload as record
+ * @throws Error if JSON is invalid or not an object
+ */
+function parseSecretPayload(secretString: string, identifier: string): Record<string, unknown> {
+    try {
+        const parsed = JSON.parse(secretString);
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+            throw new Error(`Secret ${identifier} must be a JSON object`);
+        }
+        return parsed as Record<string, unknown>;
+    } catch (error) {
+        throw new Error(`Secret ${identifier} contains invalid JSON: ${(error as Error).message}`);
+    }
+}
+
+/**
+ * Extract client secret from secret payload supporting both snake_case and camelCase.
+ *
+ * @param payload - Parsed secret payload
+ * @returns Client secret value if present
+ */
+function extractClientSecret(payload: Record<string, unknown>): string | undefined {
+    const candidates = ["client_secret", "clientSecret"];
+
+    for (const key of candidates) {
+        const value = payload[key];
+        if (typeof value === "string" && value.trim().length > 0) {
+            return value.trim();
+        }
+    }
+
+    return undefined;
+}
+
+/**
+ * Resolve the Benchling client secret value to upload.
+ *
+ * This ensures we never upload the secret name/ARN itself by attempting to read the
+ * existing secret when configuration contains only identifiers.
+ *
+ * @param client - Secrets Manager client
+ * @param config - Profile configuration
+ * @param secretName - Generated secret name for the profile
+ * @returns Resolved client secret value
+ * @throws Error if the client secret cannot be resolved
+ */
+async function resolveClientSecretValue(
+    client: SecretsManagerClient,
+    config: ProfileConfig,
+    secretName: string,
+): Promise<string> {
+    const directValue = config.benchling.clientSecret?.trim();
+    if (directValue && !isSecretPlaceholder(directValue, secretName, config.benchling.secretArn)) {
+        return directValue;
+    }
+
+    const identifiers: string[] = [];
+    if (config.benchling.secretArn) {
+        identifiers.push(config.benchling.secretArn);
+    }
+    identifiers.push(secretName);
+
+    let lastError: Error | undefined;
+
+    for (const identifier of identifiers) {
+        if (!identifier) {
+            continue;
+        }
+
+        try {
+            const secretString = await getSecret(client, identifier);
+            const payload = parseSecretPayload(secretString, identifier);
+            const resolved = extractClientSecret(payload);
+
+            if (resolved) {
+                return resolved;
+            }
+
+            lastError = new Error(`Secret ${identifier} does not contain a client_secret field`);
+        } catch (error) {
+            if (error instanceof ResourceNotFoundException) {
+                // Try next identifier
+                continue;
+            }
+
+            lastError = error instanceof Error ? error : new Error(String(error));
+        }
+    }
+
+    if (lastError) {
+        throw lastError;
+    }
+
+    throw new Error(
+        "Benchling OAuth client secret is required but could not be resolved from the profile or existing Secrets Manager entries. " +
+            "Provide benchling.clientSecret in your profile configuration or ensure the existing secret contains a client_secret value.",
+    );
+}
+
+/**
  * Builds secret value JSON from profile configuration
  *
  * @param config - Profile configuration
+ * @param clientSecret - Resolved client secret value
  * @returns Secret value as JSON string
  */
-function buildSecretValue(config: ProfileConfig): string {
+function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
     // Use snake_case field names to match Python config_resolver expectations
     const secretData = {
         tenant: config.benchling.tenant,
         client_id: config.benchling.clientId,
-        client_secret: config.benchling.clientSecret || "",
+        client_secret: clientSecret,
         app_definition_id: config.benchling.appDefinitionId,
         user_bucket: config.packages.bucket,
         pkg_prefix: config.packages.prefix,
@@ -219,7 +353,14 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
     console.log(`Secret name: ${secretName}`);
 
     // Step 4: Build secret value
-    const secretValue = buildSecretValue(config);
+    let clientSecretValue: string;
+    try {
+        clientSecretValue = await resolveClientSecretValue(client, config, secretName);
+    } catch (error) {
+        throw new Error(`Failed to resolve Benchling client secret: ${(error as Error).message}`);
+    }
+
+    const secretValue = buildSecretValue(config, clientSecretValue);
 
     if (dryRun) {
         console.log("\n=== DRY RUN MODE ===");

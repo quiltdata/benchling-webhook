@@ -3,6 +3,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.1] - 2025-11-04
+
+### Fixed
+
+- Resolved a regression where `sync-secrets` could upload a secret name or ARN instead of the resolved credential by re-reading the stored payload and extracting the real `client_secret`.
+- Normalized the Python secrets resolver to accept both `clientSecret` and `client_secret`, keeping runtime parity with the CLI writer.
+- Hardened XDG profile writes by staging temp files inside each profile directory to avoid cross-device rename failures in parallel test runs.
+
+### Added
+
+- Jest regression test covering the `sync-secrets` flow to ensure the resolved secret value is preserved.
+
 ## [0.7.0] - 2025-11-04
 
 ### BREAKING CHANGES

@@ -120,6 +120,18 @@ class TestJSONParsing:
         assert secrets.client_id == "test-client-id"
         assert secrets.client_secret == "test-client-secret"
 
+    def test_parse_valid_snake_case_json(self):
+        """Test parsing JSON that uses snake_case keys."""
+        json_str = json.dumps(
+            {"tenant": "test-tenant", "client_id": "test-client-id", "client_secret": "test-client-secret"}
+        )
+
+        secrets = parse_secrets_json(json_str)
+
+        assert secrets.tenant == "test-tenant"
+        assert secrets.client_id == "test-client-id"
+        assert secrets.client_secret == "test-client-secret"
+
     def test_parse_json_missing_tenant(self):
         """Test parsing fails when tenant is missing."""
         json_str = json.dumps({"clientId": "test-client-id", "clientSecret": "test-client-secret"})
