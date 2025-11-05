@@ -103,37 +103,14 @@ def test_cdk_environment_variables_match_config():
 
     fargate_content = fargate_service_path.read_text()
 
-    # Common environment variables set in secrets-only mode
-    common_vars = [
-        "LOG_LEVEL",
-        "AWS_REGION",
-        "ENABLE_WEBHOOK_VERIFICATION",
-    ]
-
     # Secrets-only mode variables (v0.6.0+) - REQUIRED
+    # These are the ONLY variables that config.py reads via os.getenv()
     secrets_only_vars = [
         "QuiltStackARN",
         "BenchlingSecret",
     ]
 
-    # Check that all common vars are present
-    missing_common = []
-    for var in common_vars:
-        # Match patterns like: VAR:, "VAR":, 'VAR':, or environmentVars.VAR
-        if (
-            f"{var}:" not in fargate_content
-            and f'"{var}":' not in fargate_content
-            and f"'{var}':" not in fargate_content
-            and f"environmentVars.{var}" not in fargate_content
-        ):
-            missing_common.append(var)
-
-    assert not missing_common, (
-        f"CDK Fargate service missing common environment variables: {missing_common}\n"
-        f"These variables are required for secrets-only mode"
-    )
-
-    # Check that secrets-only vars are present
+    # Check that secrets-only vars are present in CDK
     missing_secrets_only_vars = []
     for var in secrets_only_vars:
         # Match patterns like: VAR:, "VAR":, 'VAR':, or environmentVars.VAR
@@ -150,6 +127,33 @@ def test_cdk_environment_variables_match_config():
         f"These variables are REQUIRED for secrets-only mode (v0.6.0+)"
     )
 
+    # Additional environment variables set by CDK (but NOT read by config.py)
+    # These are set for Flask/application runtime, not for config resolution
+    cdk_runtime_vars = [
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "FLASK_ENV",
+        "LOG_LEVEL",
+        "ENABLE_WEBHOOK_VERIFICATION",
+        "BENCHLING_WEBHOOK_VERSION",
+    ]
+
+    # Check that runtime vars are present in CDK
+    missing_runtime_vars = []
+    for var in cdk_runtime_vars:
+        if (
+            f"{var}:" not in fargate_content
+            and f'"{var}":' not in fargate_content
+            and f"'{var}':" not in fargate_content
+            and f"environmentVars.{var}" not in fargate_content
+        ):
+            missing_runtime_vars.append(var)
+
+    assert not missing_runtime_vars, (
+        f"CDK Fargate service missing runtime environment variables: {missing_runtime_vars}\n"
+        f"These variables are set by CDK for Flask runtime (not used by config.py)"
+    )
+
     # Verify legacy mode variables are NOT present
     legacy_vars = [
         "QUEUE_ARN",
@@ -159,10 +163,14 @@ def test_cdk_environment_variables_match_config():
         "QUILT_CATALOG",
         "QUILT_DATABASE",
         "BENCHLING_TENANT",
+        "BENCHLING_CLIENT_ID",
+        "BENCHLING_CLIENT_SECRET",
+        "BENCHLING_APP_DEFINITION_ID",
     ]
 
     found_legacy_vars = []
     for var in legacy_vars:
+        # More strict matching for legacy vars - they should NOT appear as env var assignments
         if (
             f'"{var}"' in fargate_content
             or f"'{var}'" in fargate_content

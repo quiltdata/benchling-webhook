@@ -1,7 +1,5 @@
 """Pytest configuration and fixtures for test isolation."""
 
-import os
-from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
 import pytest

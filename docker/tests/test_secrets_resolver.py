@@ -1,4 +1,10 @@
-"""Test suite for secrets_resolver module."""
+"""Test suite for secrets_resolver module.
+
+Tests secrets-only mode (v0.6.0+):
+- ARN format resolution from AWS Secrets Manager
+- JSON format resolution from environment variable
+- No longer tests individual environment variable fallback (legacy mode removed)
+"""
 
 import json
 
@@ -275,7 +281,11 @@ class TestSecretsManagerFetch:
 
 
 class TestResolutionOrchestrator:
-    """Test suite for main secret resolution orchestrator."""
+    """Test suite for main secret resolution orchestrator.
+
+    Secrets-only mode (v0.6.0+): Only ARN and JSON formats supported.
+    Legacy individual environment variables (BENCHLING_TENANT, etc.) are no longer supported.
+    """
 
     def test_resolve_from_arn(self, mocker, monkeypatch):
         """Test resolution from BENCHLING_SECRETS ARN."""
@@ -307,63 +317,50 @@ class TestResolutionOrchestrator:
         assert secrets.client_id == "json-id"
         assert secrets.client_secret == "json-secret"
 
-    def test_resolve_from_individual_env_vars(self, monkeypatch):
-        """Test fallback to individual environment variables."""
+    def test_resolve_no_secrets_configured(self, monkeypatch):
+        """Test resolution fails when BENCHLING_SECRETS is not configured.
+
+        Secrets-only mode (v0.6.0+): Individual environment variables are no longer supported.
+        """
+        # Remove BENCHLING_SECRETS env var
+        monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
+
+        from src.secrets_resolver import resolve_benchling_secrets
+
+        with pytest.raises(SecretsResolutionError, match="BENCHLING_SECRETS environment variable is required"):
+            resolve_benchling_secrets("us-east-2")
+
+    def test_resolve_individual_vars_not_supported(self, monkeypatch):
+        """Test that individual environment variables are no longer supported.
+
+        Legacy mode removed in v0.6.0+: Individual vars (BENCHLING_TENANT, etc.)
+        are no longer a fallback option.
+        """
         # No BENCHLING_SECRETS
         monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
 
-        # Set individual vars
+        # Set individual vars (legacy mode)
         monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
         monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
         monkeypatch.setenv("BENCHLING_CLIENT_SECRET", "env-secret")
 
         from src.secrets_resolver import resolve_benchling_secrets
 
-        secrets = resolve_benchling_secrets("us-east-2")
-
-        assert secrets.tenant == "env-tenant"
-        assert secrets.client_id == "env-id"
-        assert secrets.client_secret == "env-secret"
-
-    def test_resolve_priority_benchling_secrets_over_individual(self, mocker, monkeypatch):
-        """Test BENCHLING_SECRETS takes priority over individual vars."""
-        # Set both
-        json_str = json.dumps({"tenant": "json-tenant", "clientId": "json-id", "clientSecret": "json-secret"})
-        monkeypatch.setenv("BENCHLING_SECRETS", json_str)
-        monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
-        monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
-        monkeypatch.setenv("BENCHLING_CLIENT_SECRET", "env-secret")
-
-        from src.secrets_resolver import resolve_benchling_secrets
-
-        secrets = resolve_benchling_secrets("us-east-2")
-
-        # Should use BENCHLING_SECRETS (JSON), not individual vars
-        assert secrets.tenant == "json-tenant"
-        assert secrets.client_id == "json-id"
-        assert secrets.client_secret == "json-secret"
-
-    def test_resolve_no_secrets_configured(self, monkeypatch):
-        """Test resolution fails when no secrets configured."""
-        # Remove all env vars
-        monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
-        monkeypatch.delenv("BENCHLING_TENANT", raising=False)
-        monkeypatch.delenv("BENCHLING_CLIENT_ID", raising=False)
-        monkeypatch.delenv("BENCHLING_CLIENT_SECRET", raising=False)
-
-        from src.secrets_resolver import resolve_benchling_secrets
-
-        with pytest.raises(SecretsResolutionError, match="No Benchling secrets found"):
+        # Should fail because BENCHLING_SECRETS is required
+        with pytest.raises(
+            SecretsResolutionError,
+            match="BENCHLING_SECRETS environment variable is required"
+        ):
             resolve_benchling_secrets("us-east-2")
 
-    def test_resolve_partial_individual_vars(self, monkeypatch):
-        """Test resolution fails when individual vars are incomplete."""
+    def test_resolve_error_message_mentions_legacy_removal(self, monkeypatch):
+        """Test that error message mentions legacy mode is no longer supported."""
         monkeypatch.delenv("BENCHLING_SECRETS", raising=False)
-        monkeypatch.setenv("BENCHLING_TENANT", "env-tenant")
-        monkeypatch.setenv("BENCHLING_CLIENT_ID", "env-id")
-        monkeypatch.delenv("BENCHLING_CLIENT_SECRET", raising=False)  # Missing BENCHLING_CLIENT_SECRET
 
         from src.secrets_resolver import resolve_benchling_secrets
 
-        with pytest.raises(SecretsResolutionError, match="No Benchling secrets found"):
+        with pytest.raises(
+            SecretsResolutionError,
+            match="Legacy mode with individual environment variables.*is no longer supported"
+        ):
             resolve_benchling_secrets("us-east-2")

@@ -36,7 +36,10 @@ class TestPackage:
 
         # Verify format includes the query parameter
         assert "?action=revisePackage" in result
-        assert result == "https://nightly.quilttest.com/b/test-bucket/packages/benchling/etr_123?action=revisePackage"
+        expected_url = (
+            "https://nightly.quilttest.com/b/test-bucket/packages/benchling/etr_123?action=revisePackage"
+        )
+        assert result == expected_url
 
     def test_upload_url_format(self, package):
         """Test upload_url format matches expected pattern."""
@@ -55,19 +58,28 @@ class TestPackage:
                 "catalog": "demo.quiltdata.com",
                 "bucket": "quilt-benchling",
                 "package": "benchling/EXP25000007",
-                "expected": "https://demo.quiltdata.com/b/quilt-benchling/packages/benchling/EXP25000007?action=revisePackage",
+                "expected": (
+                    "https://demo.quiltdata.com/b/quilt-benchling/packages/"
+                    "benchling/EXP25000007?action=revisePackage"
+                ),
             },
             {
                 "catalog": "catalog.example.com",
                 "bucket": "my-test-bucket",
                 "package": "benchling/test-entry",
-                "expected": "https://catalog.example.com/b/my-test-bucket/packages/benchling/test-entry?action=revisePackage",
+                "expected": (
+                    "https://catalog.example.com/b/my-test-bucket/packages/"
+                    "benchling/test-entry?action=revisePackage"
+                ),
             },
             {
                 "catalog": "prod.quilt.com",
                 "bucket": "production-data",
                 "package": "org/project/etr_ABC123",
-                "expected": "https://prod.quilt.com/b/production-data/packages/org/project/etr_ABC123?action=revisePackage",
+                "expected": (
+                    "https://prod.quilt.com/b/production-data/packages/"
+                    "org/project/etr_ABC123?action=revisePackage"
+                ),
             },
         ]
 
@@ -99,10 +111,11 @@ class TestPackage:
         result = package.make_catalog_url("data/file name with spaces.txt")
         # Spaces should be encoded
         assert "%20" in result
-        assert (
-            result
-            == "https://nightly.quilttest.com/b/test-bucket/packages/benchling/etr_123/tree/data%2Ffile%20name%20with%20spaces.txt"
+        expected_url = (
+            "https://nightly.quilttest.com/b/test-bucket/packages/benchling/etr_123/"
+            "tree/data%2Ffile%20name%20with%20spaces.txt"
         )
+        assert result == expected_url
 
     def test_make_sync_url_default(self, package):
         """Test make_sync_url with default parameters includes :latest."""
