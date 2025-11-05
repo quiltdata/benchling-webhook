@@ -8,7 +8,7 @@
  * - Quilt API connectivity testing
  * - AWS Secrets Manager integration
  *
- * Supports both interactive and non-interactive (CI/CD) modes.
+ * Supports both interactive and --yes (non-interactive) modes.
  *
  * @module commands/setup-wizard
  */
@@ -586,11 +586,12 @@ export async function runInstallWizard(options: WizardOptions = {}): Promise<Use
             }
         }
     } else {
-        // Non-interactive mode: use existing config values
-        // Required fields must already be set in XDG config
+        // --yes mode: use existing config values
+        // Required fields must already be set in profile config
         if (!config.benchlingTenant || !config.benchlingClientId || !config.benchlingClientSecret) {
+            const profileMsg = profile !== "default" ? ` --profile ${profile}` : "";
             throw new Error(
-                "Non-interactive mode requires benchlingTenant, benchlingClientId, and benchlingClientSecret to be already configured in XDG config. Run 'npm run setup' interactively first.",
+                `--yes mode requires benchlingTenant, benchlingClientId, and benchlingClientSecret to be already configured. Run 'npm run setup${profileMsg === " --profile dev" ? ":dev" : profileMsg}' interactively first.`,
             );
         }
 
