@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Version management script - bumps version numbers across all files
+ * Version management script - bumps version numbers and creates release tags
  *
  * Usage:
  *   node bin/version.ts          # Show all three version files
@@ -9,6 +9,8 @@
  *   node bin/version.ts minor    # 0.4.7 -> 0.5.0
  *   node bin/version.ts major    # 0.4.7 -> 1.0.0
  *   node bin/version.ts sync     # Force TOML and YAML to match JSON version
+ *   node bin/version.ts tag      # Create and push production release tag
+ *   node bin/version.ts tag dev  # Create and push dev release tag
  */
 
 import * as fs from "fs";
@@ -104,6 +106,64 @@ function updateAppManifestVersion(newVersion: string): void {
     console.log(`✅ Updated docker/app-manifest.yaml to version ${newVersion}`);
 }
 
+function createGitTag(version: string, isDev: boolean, noPush: boolean): void {
+    let tagName = `v${version}`;
+
+    // For dev releases, append timestamp to make unique
+    if (isDev) {
+        const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+        tagName = `v${version}-${timestamp}`;
+    }
+
+    const tagType = isDev ? "pre-release (dev)" : "release";
+
+    // Check if tag already exists
+    try {
+        execSync(`git rev-parse ${tagName}`, { stdio: "ignore" });
+        console.error(`❌ Tag ${tagName} already exists`);
+        process.exit(1);
+    } catch {
+        // Tag doesn't exist, continue
+    }
+
+    // Create tag
+    const message = isDev
+        ? `Development ${tagType} ${tagName}\n\nThis is a pre-release for testing purposes.`
+        : `Release ${tagName}`;
+
+    execSync(`git tag -a ${tagName} -m "${message}"`, { stdio: "inherit" });
+    console.log(`✅ Created git tag ${tagName}`);
+
+    // Push tag unless --no-push is specified
+    if (!noPush) {
+        console.log("");
+        console.log(`Pushing tag ${tagName} to origin...`);
+        try {
+            execSync(`git push origin ${tagName}`, { stdio: "inherit" });
+            console.log(`✅ Pushed tag ${tagName} to origin`);
+            console.log("");
+            console.log("CI/CD pipeline will now:");
+            console.log("  - Run all tests");
+            console.log("  - Build and push Docker image to ECR");
+            console.log("  - Create GitHub release");
+            if (!isDev) {
+                console.log("  - Publish to NPM (production releases only)");
+            }
+            console.log("  - Publish to GitHub Packages");
+            console.log("");
+            console.log("Monitor progress at: https://github.com/quiltdata/benchling-webhook/actions");
+        } catch {
+            console.error(`❌ Failed to push tag ${tagName}`);
+            console.error("You can manually push with: git push origin " + tagName);
+            process.exit(1);
+        }
+    } else {
+        console.log("");
+        console.log("Tag created but not pushed (--no-push specified)");
+        console.log(`To push later: git push origin ${tagName}`);
+    }
+}
+
 function main(): void {
     const args = process.argv.slice(2);
 
@@ -130,21 +190,32 @@ function main(): void {
     if (args.includes("--help") || args.includes("-h")) {
         console.log("Current version:", pkg.version);
         console.log("");
-        console.log("Usage: node bin/version.ts [command]");
+        console.log("Usage: node bin/version.ts [command] [options]");
         console.log("");
-        console.log("Commands:");
+        console.log("Version Management Commands:");
         console.log("  (no args)  - Display all three version files");
         console.log("  major      - Bump major version (1.0.0 -> 2.0.0)");
         console.log("  minor      - Bump minor version (0.4.7 -> 0.5.0)");
         console.log("  patch      - Bump patch version (0.4.7 -> 0.4.8)");
         console.log("  sync       - Force TOML and YAML to match JSON version");
         console.log("");
-        console.log("This script updates version numbers in:");
+        console.log("Release Tagging Commands:");
+        console.log("  tag        - Create and push production release tag");
+        console.log("  tag dev    - Create and push dev release tag with timestamp");
+        console.log("");
+        console.log("Options:");
+        console.log("  --no-push  - Create tag but do not push to origin (tag command only)");
+        console.log("");
+        console.log("This script manages version numbers in:");
         console.log("  - package.json");
         console.log("  - docker/pyproject.toml");
         console.log("  - docker/app-manifest.yaml");
         console.log("");
-        console.log("To create a release tag, use: npm run release or npm run release:dev");
+        console.log("Examples:");
+        console.log("  npm run version              # Show versions");
+        console.log("  npm run version patch        # Bump patch version");
+        console.log("  npm run version:tag          # Create production release tag");
+        console.log("  npm run version:tag:dev      # Create dev release tag");
         process.exit(0);
     }
 
@@ -189,7 +260,29 @@ function main(): void {
         process.exit(0);
     }
 
-    // Check for uncommitted changes
+    // Tag command - create and push git tags
+    if (bumpType === "tag") {
+        // Check for uncommitted changes
+        try {
+            execSync("git diff-index --quiet HEAD --", { stdio: "ignore" });
+        } catch {
+            console.error("❌ You have uncommitted changes");
+            console.error("   Commit or stash your changes before creating a release");
+            process.exit(1);
+        }
+
+        const isDev = args.includes("dev");
+        const noPush = args.includes("--no-push");
+        const version = pkg.version;
+
+        console.log(`Creating ${isDev ? "dev" : "production"} release from version: ${version}`);
+        console.log("");
+
+        createGitTag(version, isDev, noPush);
+        process.exit(0);
+    }
+
+    // Check for uncommitted changes (for version bump commands)
     try {
         execSync("git diff-index --quiet HEAD --", { stdio: "ignore" });
     } catch (e: unknown) {
@@ -217,7 +310,7 @@ function main(): void {
         console.log("");
         console.log("Next steps:");
         console.log("  1. Push changes: git push");
-        console.log("  2. Create release: npm run release (or npm run release:dev for dev release)");
+        console.log("  2. Create release tag: npm run version:tag (or npm run version:tag:dev for dev release)");
 
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);

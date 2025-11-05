@@ -318,9 +318,12 @@ async function main(): Promise<void> {
                     deployConfig = JSON.parse(readFileSync(deployJsonPath, "utf8"));
                 }
 
+                // Remove trailing slash to avoid double slashes in test URLs
+                const cleanEndpoint = webhookUrl.replace(/\/$/, "");
+
                 // Update dev section
                 deployConfig.dev = {
-                    endpoint: webhookUrl,
+                    endpoint: cleanEndpoint,
                     imageTag: imageTag,
                     deployedAt: new Date().toISOString(),
                     stackName: "BenchlingWebhookStack",
@@ -334,7 +337,7 @@ async function main(): Promise<void> {
                 // Write deploy.json
                 writeFileSync(deployJsonPath, JSON.stringify(deployConfig, null, 2));
                 console.log(`✅ Stored deployment endpoint in ${deployJsonPath}`);
-                console.log(`   Endpoint: ${webhookUrl}`);
+                console.log(`   Endpoint: ${cleanEndpoint}`);
             }
         }
     } catch (error) {
