@@ -22,7 +22,6 @@ from benchling_sdk.benchling import Benchling
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.config import Config  # type: ignore
 from src.entry_packager import EntryPackager  # type: ignore
-from src.payload import Payload  # type: ignore
 from src.xdg_config import XDGConfig  # type: ignore
 
 
@@ -257,7 +256,9 @@ def test_oauth_credentials(tenant: str, client_id: str, client_secret: str, entr
         if not test_entry_id:
             # Use most recent entry if none specified
             if entries:
-                test_entry_id = Payload.get_most_recent_entry(benchling)
+                # Get the first (most recent) entry directly
+                first_entry = entries[0]
+                test_entry_id = first_entry.id
                 if test_entry_id:
                     print(f"Using most recent entry: {test_entry_id}\n")
                 else:

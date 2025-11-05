@@ -88,8 +88,8 @@ def test_cdk_environment_variables_match_config():
     This cross-checks the TypeScript CDK code against the Python config to
     ensure they stay in sync.
 
-    Note: This test validates both legacy mode (individual env vars) and
-    secrets-only mode (QuiltStackARN + BenchlingSecret).
+    Secrets-only mode (v0.6.0+): Only QuiltStackARN and BenchlingSecret are passed.
+    All other configuration is resolved at runtime from AWS.
     """
     # Navigate from docker/tests up two levels to project root, then to lib
     test_dir = Path(__file__).parent  # docker/tests
@@ -103,61 +103,14 @@ def test_cdk_environment_variables_match_config():
 
     fargate_content = fargate_service_path.read_text()
 
-    # Critical environment variables that must be set by CDK in LEGACY mode
-    # In secrets-only mode, these are resolved at runtime
-    legacy_vars = [
-        "QUEUE_ARN",  # SQS Queue ARN (not URL!)
-        "QUILT_USER_BUCKET",
-        "PKG_PREFIX",
-        "PKG_KEY",
-        "QUILT_CATALOG",
-        "QUILT_DATABASE",
-        "BENCHLING_TENANT",
-    ]
-
-    # Common environment variables set in both modes
-    common_vars = [
-        "LOG_LEVEL",
-        "AWS_REGION",
-        "ENABLE_WEBHOOK_VERIFICATION",
-    ]
-
-    # Secrets-only mode variables (v0.6.0+)
+    # Secrets-only mode variables (v0.6.0+) - REQUIRED
+    # These are the ONLY variables that config.py reads via os.getenv()
     secrets_only_vars = [
         "QuiltStackARN",
         "BenchlingSecret",
     ]
 
-    # Check that all common vars are present
-    missing_common = []
-    for var in common_vars:
-        # Match patterns like: VAR:, "VAR":, 'VAR':, or environmentVars.VAR
-        if (
-            f"{var}:" not in fargate_content
-            and f'"{var}":' not in fargate_content
-            and f"'{var}':" not in fargate_content
-            and f"environmentVars.{var}" not in fargate_content
-        ):
-            missing_common.append(var)
-
-    assert not missing_common, (
-        f"CDK Fargate service missing common environment variables: {missing_common}\n"
-        f"These variables are required in both legacy and secrets-only modes"
-    )
-
-    # Check that BOTH legacy vars AND secrets-only vars are present
-    # (they are used in different conditional branches)
-    missing_legacy_vars = []
-    for var in legacy_vars:
-        # Match patterns like: VAR:, "VAR":, 'VAR':, or environmentVars.VAR
-        if (
-            f"{var}:" not in fargate_content
-            and f'"{var}":' not in fargate_content
-            and f"'{var}':" not in fargate_content
-            and f"environmentVars.{var}" not in fargate_content
-        ):
-            missing_legacy_vars.append(var)
-
+    # Check that secrets-only vars are present in CDK
     missing_secrets_only_vars = []
     for var in secrets_only_vars:
         # Match patterns like: VAR:, "VAR":, 'VAR':, or environmentVars.VAR
@@ -169,26 +122,63 @@ def test_cdk_environment_variables_match_config():
         ):
             missing_secrets_only_vars.append(var)
 
-    assert not missing_legacy_vars, (
-        f"CDK Fargate service missing legacy mode environment variables: {missing_legacy_vars}\n"
-        f"These variables must be present (used in legacy mode conditional branch)"
-    )
-
     assert not missing_secrets_only_vars, (
         f"CDK Fargate service missing secrets-only mode environment variables: {missing_secrets_only_vars}\n"
-        f"These variables must be present (used in secrets-only mode conditional branch)"
+        f"These variables are REQUIRED for secrets-only mode (v0.6.0+)"
     )
 
-    # Both modes should be supported
-    has_legacy_vars = not missing_legacy_vars
-    has_secrets_only_vars = not missing_secrets_only_vars
+    # Additional environment variables set by CDK (but NOT read by config.py)
+    # These are set for Flask/application runtime, not for config resolution
+    cdk_runtime_vars = [
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "FLASK_ENV",
+        "LOG_LEVEL",
+        "ENABLE_WEBHOOK_VERIFICATION",
+        "BENCHLING_WEBHOOK_VERSION",
+    ]
 
-    # Specifically verify QUEUE_ARN is used in legacy mode (not QUEUE_URL)
-    if has_legacy_vars:
-        assert (
-            "QUEUE_ARN" in fargate_content
-        ), "fargate-service.ts must set QUEUE_ARN environment variable in legacy mode"
+    # Check that runtime vars are present in CDK
+    missing_runtime_vars = []
+    for var in cdk_runtime_vars:
+        if (
+            f"{var}:" not in fargate_content
+            and f'"{var}":' not in fargate_content
+            and f"'{var}':" not in fargate_content
+            and f"environmentVars.{var}" not in fargate_content
+        ):
+            missing_runtime_vars.append(var)
 
-        # Check that QUEUE_URL is not used instead (we want ARN, not URL)
-        if "QUEUE_URL" in fargate_content and "QUEUE_ARN" not in fargate_content:
-            raise AssertionError("fargate-service.ts uses QUEUE_URL but should use QUEUE_ARN")
+    assert not missing_runtime_vars, (
+        f"CDK Fargate service missing runtime environment variables: {missing_runtime_vars}\n"
+        f"These variables are set by CDK for Flask runtime (not used by config.py)"
+    )
+
+    # Verify legacy mode variables are NOT present
+    legacy_vars = [
+        "QUEUE_ARN",
+        "QUILT_USER_BUCKET",
+        "PKG_PREFIX",
+        "PKG_KEY",
+        "QUILT_CATALOG",
+        "QUILT_DATABASE",
+        "BENCHLING_TENANT",
+        "BENCHLING_CLIENT_ID",
+        "BENCHLING_CLIENT_SECRET",
+        "BENCHLING_APP_DEFINITION_ID",
+    ]
+
+    found_legacy_vars = []
+    for var in legacy_vars:
+        # More strict matching for legacy vars - they should NOT appear as env var assignments
+        if (
+            f'"{var}"' in fargate_content
+            or f"'{var}'" in fargate_content
+            or f"environmentVars.{var}" in fargate_content
+        ):
+            found_legacy_vars.append(var)
+
+    assert not found_legacy_vars, (
+        f"CDK Fargate service should NOT contain legacy mode environment variables: {found_legacy_vars}\n"
+        f"Legacy mode has been removed. Only secrets-only mode is supported."
+    )

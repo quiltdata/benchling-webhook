@@ -3,6 +3,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2025-11-04
+
+### BREAKING CHANGES
+
+**Configuration architecture redesigned - manual reconfiguration required.** See [MIGRATION.md](./MIGRATION.md).
+
+**What changed:**
+
+- Config moved: `default.json` → `default/config.json`
+- Deployment tracking: Shared `deploy.json` → per-profile `{profile}/deployments.json`
+- Profile/stage are now independent (deploy any profile to any stage)
+
+**Migration:**
+
+1. Backup: `cat ~/.config/benchling-webhook/default.json > ~/benchling-backup.json`
+2. Upgrade: `npm install @quiltdata/benchling-webhook@latest`
+3. Setup: `npm run setup` (re-enter configuration)
+4. Deploy: `npm run deploy -- --profile default --stage prod`
+
+### Added
+
+- **Profile inheritance** - Use `_inherits` field to reduce duplication
+- **Deployment history** - Full history per profile with rollback capability
+- **Profile management** - Commands: `setup`, `setup-profile <name>`, `setup-profile <name> --inherit`
+
+### Changed
+
+- Simplified config structure - single `config.json` per profile (no more user/derived/deploy split)
+- Per-profile deployment tracking eliminates cross-profile conflicts
+
+---
+
 ## [0.6.3] - 2025-11-04
 
 ### Added

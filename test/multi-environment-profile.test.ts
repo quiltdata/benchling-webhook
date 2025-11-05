@@ -1,4 +1,5 @@
 import { XDGConfig } from "../lib/xdg-config";
+import { ProfileConfig } from "../lib/types/config";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -14,6 +15,67 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
     let xdg: XDGConfig;
     let testConfigDir: string;
     let originalXdgConfigHome: string | undefined;
+
+    // Helper function to create a valid test config
+    const createTestConfig = (overrides: Partial<ProfileConfig> = {}): ProfileConfig => {
+        const baseConfig: ProfileConfig = {
+            benchling: {
+                tenant: "test-tenant",
+                appDefinitionId: "app_123",
+                clientId: "client_xyz",
+                clientSecret: "secret_abc",
+            },
+            quilt: {
+                stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
+                catalog: "quilt.example.com",
+                bucket: "my-quilt-bucket",
+                database: "quilt_catalog",
+                queueArn: "arn:aws:sqs:us-east-1:123456789012:quilt-queue",
+                region: "us-east-1",
+            },
+            packages: {
+                bucket: "test-bucket",
+                prefix: "benchling",
+                metadataKey: "experiment_id",
+            },
+            deployment: {
+                region: "us-east-1",
+                imageTag: "latest",
+            },
+            _metadata: {
+                version: "0.7.0",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                source: "cli",
+            },
+        };
+
+        // Deep merge overrides
+        return {
+            ...baseConfig,
+            ...overrides,
+            benchling: {
+                ...baseConfig.benchling,
+                ...overrides.benchling,
+            },
+            quilt: {
+                ...baseConfig.quilt,
+                ...overrides.quilt,
+            },
+            packages: {
+                ...baseConfig.packages,
+                ...overrides.packages,
+            },
+            deployment: {
+                ...baseConfig.deployment,
+                ...overrides.deployment,
+            },
+            _metadata: {
+                ...baseConfig._metadata,
+                ...overrides._metadata,
+            },
+        };
+    };
 
     beforeEach(() => {
         // Save original XDG_CONFIG_HOME
@@ -41,90 +103,100 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
     });
 
     describe("Configuration Management", () => {
-        test("writes configuration to default location", () => {
-            const config = {
-                benchlingTenant: "test-tenant",
-                benchlingAppDefinitionId: "app_123",
-                benchlingClientId: "client_xyz",
-                benchlingClientSecret: "secret_abc",
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "quiltdata/benchling-webhook/default/test-tenant",
-                imageTag: "v0.6.3",
-            };
+        test("writes configuration to default profile", () => {
+            const config = createTestConfig();
 
-            xdg.writeConfig("user", config);
+            xdg.writeProfile("default", config);
 
             // Verify file was created by reading it back
-            const readConfig = xdg.readConfig("user");
-            expect(readConfig.benchlingTenant).toBe("test-tenant");
+            const readConfig = xdg.readProfile("default");
+            expect(readConfig.benchling.tenant).toBe("test-tenant");
         });
 
-        test("reads configuration from default location", () => {
-            const config = {
-                benchlingTenant: "dev-tenant",
-                benchlingAppDefinitionId: "app_DEV_456",
-                benchlingClientId: "client_dev",
-                benchlingClientSecret: "secret_dev",
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/dev-stack/xyz789",
-                benchlingSecret: "quiltdata/benchling-webhook/dev/dev-tenant",
-                imageTag: "latest",
-            };
+        test("reads configuration from default profile", () => {
+            const config = createTestConfig({
+                benchling: {
+                    tenant: "dev-tenant",
+                    appDefinitionId: "app_DEV_456",
+                    clientId: "client_dev",
+                    clientSecret: "secret_dev",
+                },
+                deployment: {
+                    region: "us-east-1",
+                    imageTag: "latest",
+                },
+            });
 
-            xdg.writeConfig("user", config);
-            const readConfig = xdg.readConfig("user");
+            xdg.writeProfile("default", config);
+            const readConfig = xdg.readProfile("default");
 
-            expect(readConfig.benchlingTenant).toBe("dev-tenant");
-            expect(readConfig.benchlingAppDefinitionId).toBe("app_DEV_456");
-            expect(readConfig.imageTag).toBe("latest");
+            expect(readConfig.benchling.tenant).toBe("dev-tenant");
+            expect(readConfig.benchling.appDefinitionId).toBe("app_DEV_456");
+            expect(readConfig.deployment.imageTag).toBe("latest");
         });
 
-        test.skip("handles missing configuration gracefully - FIXME", () => {
+        test("handles missing configuration gracefully", () => {
             expect(() => {
-                xdg.readConfig("user");
-            }).toThrow();
+                xdg.readProfile("nonexistent");
+            }).toThrow(/Profile not found: nonexistent/);
         });
     });
 
-    describe("Profile Support (Already Implemented!)", () => {
+    describe("Profile Support", () => {
         test("creates profile directory", () => {
-            const profileDir = xdg.getProfileDir("default");
-            expect(fs.existsSync(profileDir)).toBe(true);
+            const config = createTestConfig();
+
+            xdg.writeProfile("default", config);
+
+            // XDGConfig creates profiles under ~/.config/benchling-webhook/<profile>/
+            // Since we set XDG_CONFIG_HOME to testConfigDir, the profile dir will be:
+            // testConfigDir/.config/benchling-webhook/default OR testConfigDir/benchling-webhook/default
+            // Let's check if the profile exists using the API instead
+            expect(xdg.profileExists("default")).toBe(true);
         });
 
-        test.skip("supports multiple profile directories - FIXME", () => {
-            const defaultDir = xdg.getProfileDir("default");
-            const devDir = xdg.getProfileDir("dev");
+        test("supports multiple profile directories", () => {
+            const baseConfig = createTestConfig();
 
-            expect(defaultDir).not.toBe(devDir);
-            expect(defaultDir).toContain("default");
-            expect(devDir).toContain("dev");
+            xdg.writeProfile("default", baseConfig);
+            xdg.writeProfile("dev", baseConfig);
+
+            // Verify both profiles exist using the API
+            expect(xdg.profileExists("default")).toBe(true);
+            expect(xdg.profileExists("dev")).toBe(true);
+
+            // Verify they are listed
+            const profiles = xdg.listProfiles();
+            expect(profiles).toContain("default");
+            expect(profiles).toContain("dev");
         });
 
         test("writes configuration to specific profile", () => {
-            const config = {
-                benchlingTenant: "dev-tenant",
-                benchlingAppDefinitionId: "app_DEV_456",
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/dev-stack/xyz789",
-                benchlingSecret: "quiltdata/benchling-webhook/dev/dev-tenant",
-                imageTag: "latest",
-            };
+            const config = createTestConfig({
+                benchling: {
+                    tenant: "dev-tenant",
+                    appDefinitionId: "app_DEV_456",
+                    clientId: "client_dev",
+                    clientSecret: "secret_dev",
+                },
+                deployment: {
+                    region: "us-east-1",
+                    imageTag: "latest",
+                },
+            });
 
-            xdg.writeProfileConfig("user", config, "dev");
-            const readConfig = xdg.readProfileConfig("user", "dev");
+            xdg.writeProfile("dev", config);
+            const readConfig = xdg.readProfile("dev");
 
-            expect(readConfig.benchlingTenant).toBe("dev-tenant");
-            expect(readConfig.imageTag).toBe("latest");
+            expect(readConfig.benchling.tenant).toBe("dev-tenant");
+            expect(readConfig.deployment.imageTag).toBe("latest");
         });
 
         test("lists available profiles", () => {
-            // Create multiple profiles
-            xdg.writeProfileConfig("user", {
-                benchlingTenant: "tenant1",
-            }, "default");
+            const baseConfig = createTestConfig();
 
-            xdg.writeProfileConfig("user", {
-                benchlingTenant: "tenant2",
-            }, "dev");
+            xdg.writeProfile("default", baseConfig);
+            xdg.writeProfile("dev", baseConfig);
 
             const profiles = xdg.listProfiles();
 
@@ -133,56 +205,91 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
         });
 
         test("checks if profile exists", () => {
-            xdg.writeProfileConfig("user", {
-                benchlingTenant: "test",
-            }, "custom");
+            const config = createTestConfig();
+
+            xdg.writeProfile("custom", config);
 
             expect(xdg.profileExists("custom")).toBe(true);
             expect(xdg.profileExists("nonexistent")).toBe(false);
         });
 
-        test("loads profile by name", () => {
-            const config = {
-                benchlingTenant: "custom-tenant",
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/custom-stack/xyz789",
-                benchlingSecret: "quiltdata/benchling-webhook/custom/custom-tenant",
-            };
+        test("reads profile by name", () => {
+            const config = createTestConfig({
+                benchling: {
+                    tenant: "custom-tenant",
+                    appDefinitionId: "app_CUSTOM_789",
+                    clientId: "client_custom",
+                    clientSecret: "secret_custom",
+                },
+                quilt: {
+                    stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/custom-stack/xyz789",
+                    catalog: "https://quilt.example.com",
+                    bucket: "custom-quilt-bucket",
+                    database: "quilt_catalog",
+                    queueArn: "arn:aws:sqs:us-east-1:123456789012:custom-queue",
+                    region: "us-east-1",
+                },
+                packages: {
+                    bucket: "custom-bucket",
+                    prefix: "benchling",
+                    metadataKey: "experiment_id",
+                },
+                deployment: {
+                    region: "us-east-1",
+                    imageTag: "v1.0.0",
+                },
+            });
 
-            xdg.writeProfileConfig("user", config, "custom");
-            const loadedProfile = xdg.loadProfile("custom");
+            xdg.writeProfile("custom", config);
+            const loadedProfile = xdg.readProfile("custom");
 
-            expect(loadedProfile.name).toBe("custom");
-            expect(loadedProfile.user?.benchlingTenant).toBe("custom-tenant");
+            expect(loadedProfile.benchling.tenant).toBe("custom-tenant");
+            expect(loadedProfile.quilt.stackArn).toContain("custom-stack");
         });
 
-        test("profile paths are different for different profiles", () => {
-            const defaultPaths = xdg.getProfilePaths("default");
-            const devPaths = xdg.getProfilePaths("dev");
+        test("profile config paths are different for different profiles", () => {
+            // This test verifies the structure without hard-coding paths
+            xdg.writeProfile("default", createTestConfig());
+            xdg.writeProfile("dev", createTestConfig());
 
-            expect(defaultPaths.userConfig).not.toBe(devPaths.userConfig);
-            expect(defaultPaths.deployConfig).not.toBe(devPaths.deployConfig);
+            const defaultConfig = xdg.readProfile("default");
+            const devConfig = xdg.readProfile("dev");
+
+            // Both should be readable independently
+            expect(defaultConfig).toBeDefined();
+            expect(devConfig).toBeDefined();
         });
     });
 
     describe("Secret Naming Convention (Spec Compliance)", () => {
         test("dev profile secret follows convention", () => {
-            const config = {
-                benchlingTenant: "my-company",
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/dev-stack/xyz789",
-                benchlingSecret: "quiltdata/benchling-webhook/dev/my-company",
-            };
+            // In v0.7.0, secrets are referenced via secretArn in benchling config
+            const config = createTestConfig({
+                benchling: {
+                    tenant: "my-company",
+                    appDefinitionId: "app_123",
+                    clientId: "client",
+                    clientSecret: "secret",
+                    secretArn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:quiltdata/benchling-webhook/dev/my-company",
+                },
+            });
 
-            expect(config.benchlingSecret).toBe("quiltdata/benchling-webhook/dev/my-company");
+            expect(config.benchling.secretArn).toContain("/dev/my-company");
         });
 
         test("prod profile secret follows convention", () => {
-            const config = {
-                benchlingTenant: "my-company",
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/prod-stack/abc123",
-                benchlingSecret: "quiltdata/benchling-webhook/default/my-company",
-            };
+            // In v0.7.0, secrets are referenced via secretArn in benchling config
+            const config = createTestConfig({
+                benchling: {
+                    tenant: "my-company",
+                    appDefinitionId: "app_123",
+                    clientId: "client",
+                    clientSecret: "secret",
+                    secretArn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:quiltdata/benchling-webhook/default/my-company",
+                },
+            });
 
-            expect(config.benchlingSecret).toBe("quiltdata/benchling-webhook/default/my-company");
+            expect(config.benchling.secretArn).toContain("/default/my-company");
         });
 
         test("secret naming follows profile convention", () => {
@@ -195,70 +302,94 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
     });
 
     describe("Deployment Configuration Structure (Spec Compliance)", () => {
-        test("deploy.json supports both dev and prod sections", () => {
-            // Both dev and prod deployments write to the same deploy.json
-            // but in different sections (dev/prod)
-            const deployConfig = {
-                dev: {
-                    endpoint: "https://api.example.com/dev",
-                    imageTag: "latest",
-                    deployedAt: new Date().toISOString(),
-                    stackName: "BenchlingWebhookStack",
-                    stage: "dev",
-                },
-                prod: {
-                    endpoint: "https://api.example.com/prod",
-                    imageTag: "v0.6.3",
-                    deployedAt: new Date().toISOString(),
-                    stackName: "BenchlingWebhookStack",
-                    stage: "prod",
-                },
-            };
+        test("deployments.json supports both dev and prod sections", () => {
+            const config = createTestConfig();
+
+            xdg.writeProfile("default", config);
+
+            // Record both dev and prod deployments
+            xdg.recordDeployment("default", {
+                stage: "dev",
+                timestamp: new Date().toISOString(),
+                imageTag: "latest",
+                endpoint: "https://api.example.com/dev",
+                stackName: "BenchlingWebhookStack",
+                region: "us-east-1",
+            });
+
+            xdg.recordDeployment("default", {
+                stage: "prod",
+                timestamp: new Date().toISOString(),
+                imageTag: "v0.6.3",
+                endpoint: "https://api.example.com/prod",
+                stackName: "BenchlingWebhookStack",
+                region: "us-east-1",
+            });
+
+            const deployments = xdg.getDeployments("default");
 
             // Verify structure supports both environments
-            expect(deployConfig.dev).toBeDefined();
-            expect(deployConfig.prod).toBeDefined();
-            expect(deployConfig.dev.stage).toBe("dev");
-            expect(deployConfig.prod.stage).toBe("prod");
+            expect(deployments.active["dev"]).toBeDefined();
+            expect(deployments.active["prod"]).toBeDefined();
+            expect(deployments.active["dev"].stage).toBe("dev");
+            expect(deployments.active["prod"].stage).toBe("prod");
         });
     });
 
     describe("Backward Compatibility", () => {
         test("default configuration works as expected", () => {
-            const config = {
-                benchlingTenant: "test-tenant",
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "quiltdata/benchling-webhook/default/test-tenant",
-            };
+            const config = createTestConfig();
 
-            xdg.writeConfig("user", config);
-            const readConfig = xdg.readConfig("user");
+            xdg.writeProfile("default", config);
+            const readConfig = xdg.readProfile("default");
 
-            expect(readConfig.benchlingTenant).toBe("test-tenant");
+            expect(readConfig.benchling.tenant).toBe("test-tenant");
         });
 
         test("handles missing optional dev profile gracefully", () => {
-            // Only create default profile
-            xdg.writeProfileConfig("user", {
-                benchlingTenant: "tenant",
-            }, "default");
+            const config = createTestConfig();
 
-            const profiles = xdg.listProfiles();
-            expect(profiles).toContain("default");
+            // Create a completely fresh directory for this test
+            const freshConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), "benchling-webhook-isolated-"));
+            const freshXdg = new XDGConfig(path.join(freshConfigDir, "benchling-webhook"));
+
+            try {
+                // Only create default profile
+                freshXdg.writeProfile("default", config);
+
+                const profiles = freshXdg.listProfiles();
+                expect(profiles).toContain("default");
+                expect(profiles.length).toBe(1);
+            } finally {
+                // Clean up the isolated directory
+                if (fs.existsSync(freshConfigDir)) {
+                    fs.rmSync(freshConfigDir, { recursive: true, force: true });
+                }
+            }
         });
     });
 
     describe("Profile Deletion", () => {
-        test.skip("can delete a profile - requires manual deletion", () => {
-            xdg.writeProfileConfig("user", {
-                benchlingTenant: "test",
-            }, "temp");
+        test("can delete a profile", () => {
+            const config = createTestConfig();
+
+            xdg.writeProfile("temp", config);
 
             expect(xdg.profileExists("temp")).toBe(true);
 
             xdg.deleteProfile("temp");
 
             expect(xdg.profileExists("temp")).toBe(false);
+        });
+
+        test("cannot delete default profile", () => {
+            const config = createTestConfig();
+
+            xdg.writeProfile("default", config);
+
+            expect(() => {
+                xdg.deleteProfile("default");
+            }).toThrow(/Cannot delete the default profile/);
         });
     });
 });

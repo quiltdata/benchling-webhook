@@ -1,10 +1,8 @@
 import { existsSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import chalk from "chalk";
-import ora from "ora";
 import boxen from "boxen";
 import { prompt } from "enquirer";
-import { inferConfiguration } from "../benchling-webhook";
 
 interface InitOptions {
     output?: string;
@@ -129,41 +127,8 @@ export async function initCommand(options: InitOptions): Promise<void> {
     envLines.push(`BENCHLING_APP_DEFINITION_ID=${answers.appId}`);
     envLines.push("");
 
-    // Attempt inference if requested
-    let inferredVars: Record<string, string> = {};
-
-    if (options.infer !== false) {
-        console.log();
-        const spinner = ora("Inferring additional configuration from catalog...").start();
-
-        const inferenceResult = await inferConfiguration(answers.catalog);
-
-        if (inferenceResult.success) {
-            inferredVars = inferenceResult.inferredVars;
-            spinner.succeed("Successfully inferred additional configuration");
-
-            if (inferredVars.CDK_DEFAULT_ACCOUNT) {
-                envLines.push("# AWS Configuration (inferred)");
-                envLines.push(`CDK_DEFAULT_ACCOUNT=${inferredVars.CDK_DEFAULT_ACCOUNT}`);
-                envLines.push(`CDK_DEFAULT_REGION=${inferredVars.CDK_DEFAULT_REGION}`);
-                envLines.push("");
-            }
-
-            if (inferredVars.QUEUE_ARN) {
-                envLines.push("# SQS Configuration (inferred)");
-                envLines.push(`QUEUE_ARN=${inferredVars.QUEUE_ARN}`);
-                envLines.push("");
-            }
-
-            if (inferredVars.QUILT_DATABASE) {
-                envLines.push("# Quilt Database (inferred)");
-                envLines.push(`QUILT_DATABASE=${inferredVars.QUILT_DATABASE}`);
-                envLines.push("");
-            }
-        } else {
-            spinner.warn(`Could not infer additional configuration: ${inferenceResult.error}`);
-        }
-    }
+    // Note: Inference is deprecated in secrets-only mode (v0.6.0+)
+    // Configuration is now stored in AWS Secrets Manager and CloudFormation parameters
 
     // Add optional configuration section
     if (!options.minimal) {

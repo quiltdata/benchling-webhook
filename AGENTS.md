@@ -92,6 +92,8 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 #### `scripts/` — Interactive setup & configuration scripts (TypeScript, run via ts-node)
 
 - [scripts/install-wizard.ts](scripts/install-wizard.ts) - Interactive setup wizard (`npm run setup`)
+- [scripts/config/wizard.ts](scripts/config/wizard.ts) - Interactive prompts module
+- [scripts/config/validator.ts](scripts/config/validator.ts) - Configuration validation module
 - [scripts/infer-quilt-config.ts](scripts/infer-quilt-config.ts) - Quilt catalog inference (`npm run setup:infer`)
 - [scripts/sync-secrets.ts](scripts/sync-secrets.ts) - AWS Secrets Manager sync (`npm run setup:sync-secrets`)
 - [scripts/config-health-check.ts](scripts/config-health-check.ts) - Configuration validation (`npm run setup:health`)
@@ -112,48 +114,17 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 
 ## Architecture
 
-### Single-Stack Multi-Environment Design
+AWS CDK application deploying auto-scaling webhook processor:
 
-AWS CDK application deploying auto-scaling webhook processor with support for parallel dev and production environments:
+- **API Gateway** → HTTPS webhook routing with IP filtering
+- **ALB** → Load balancing across containers
+- **Fargate (ECS)** → Flask app (auto-scales 2-10 tasks)
+- **S3** → Payload and package storage
+- **SQS** → Quilt package creation queue
+- **Secrets Manager** → Benchling OAuth credentials
+- **CloudWatch** → Logging and monitoring
 
-```
-Single AWS Stack: BenchlingWebhookStack
-├── API Gateway (shared)
-│   ├── Stage: dev  → https://xxx.execute-api.us-east-1.amazonaws.com/dev/*
-│   └── Stage: prod → https://xxx.execute-api.us-east-1.amazonaws.com/prod/*
-│
-├── ALB (shared)
-│   ├── Target Group: dev-targets  → Routes to dev ECS service
-│   └── Target Group: prod-targets → Routes to prod ECS service
-│
-├── ECS Cluster: benchling-webhook-cluster (shared)
-│   ├── Service: benchling-webhook-dev
-│   │   ├── Task Definition: dev (imageTag: latest)
-│   │   ├── Secret: quiltdata/benchling-webhook/dev/tenant
-│   │   └── Auto-scaling: 1-3 tasks
-│   │
-│   └── Service: benchling-webhook-prod
-│       ├── Task Definition: prod (imageTag: v0.6.3)
-│       ├── Secret: quiltdata/benchling-webhook/default/tenant
-│       └── Auto-scaling: 2-10 tasks
-│
-├── VPC (shared)
-├── S3 → Payload and package storage
-├── SQS → Quilt package creation queue
-├── Secrets Manager → Environment-specific Benchling OAuth credentials
-└── CloudWatch → Logging and monitoring (per-service logs)
-```
-
-**Request Flow:**
-```
-Benchling → API Gateway (stage: dev/prod) → ALB → Target Group → ECS Service → S3 + SQS
-```
-
-**Key Benefits:**
-- Cost-effective: Shared ALB, NAT Gateway, VPC (~15-45% increase vs separate stacks)
-- Isolated: Separate containers, secrets, and target groups per environment
-- Flexible: Different Benchling apps and Quilt stacks per environment
-- Simple: Single CloudFormation stack to manage
+**Flow:** Benchling → API Gateway → ALB → Fargate → S3 + SQS
 
 ---
 
@@ -202,152 +173,214 @@ make -C docker test-ecr      # ECR image validation
 - **After production deploy**: `npm run test:prod` (runs automatically via deploy:prod)
 - **Debugging only**: Individual test commands or Docker make targets
 
-### Environment-Specific Testing
-
-Tests automatically use the correct endpoint based on profile:
-
-```bash
-# Test dev environment
-npm run test:dev              # Uses endpoint from deploy.json["dev"]
-
-# Test prod environment
-npm run test:prod             # Uses endpoint from deploy.json["prod"]
-```
-
 ### Auto-Deployment (v0.6.3+)
 
 `npm run test:dev` now automatically deploys when:
 
-- No `deploy.json` exists
-- No `dev` section in `deploy.json`
+- No deployment tracking exists for profile
 - Python source files are newer than deployment timestamp
 
 Disable with `SKIP_AUTO_DEPLOY=1 npm run test:dev`
 
 ---
 
-## Configuration (v0.6.0+)
+## Configuration (v0.7.0+)
 
 ### XDG Configuration Model
 
-#### Single Source of Truth
+#### Profile-Based Configuration
 
-- User settings stored in `~/.config/benchling-webhook/`
-- Avoids `.env` files and environment variable pollution
-- Secrets synced to AWS Secrets Manager
+Version 0.7.0 introduces a completely redesigned configuration architecture with profile-based configuration and per-profile deployment tracking.
 
-#### Configuration Structure
+**Directory structure:**
 
 ```
 ~/.config/benchling-webhook/
-├── default.json    # Production profile (required)
-├── dev.json        # Development profile (optional)
-└── deploy.json     # Deployment tracking (both environments)
+├── default/
+│   ├── config.json          # All configuration for default profile
+│   └── deployments.json     # Deployment history for default profile
+├── dev/
+│   ├── config.json          # All configuration for dev profile
+│   └── deployments.json     # Deployment history for dev profile
+└── prod/
+    ├── config.json          # All configuration for prod profile
+    └── deployments.json     # Deployment history for prod profile
 ```
 
-#### Profile: default.json (Production)
+#### Key Concepts
+
+**Profile**: A named set of configuration values (credentials, Quilt settings, Benchling settings)
+- Examples: `default`, `dev`, `prod`, `staging`
+- Stored in `~/.config/benchling-webhook/{profile}/config.json`
+- Each profile has its own deployment tracking
+
+**Stage**: An API Gateway deployment target
+- Examples: `dev`, `prod`, `staging`, `test`
+- Multiple stages can be deployed per profile
+- Tracked in `~/.config/benchling-webhook/{profile}/deployments.json`
+
+**Independence**: Profiles and stages are independent - you can deploy any profile to any stage
+
+#### Configuration File Structure
+
+Each profile's `config.json` contains:
 
 ```json
 {
-  "profile": "default",
-  "benchlingTenant": "my-company",
-  "benchlingAppDefinitionId": "app_PROD_12345",
-  "benchlingClientId": "client_xyz",
-  "benchlingClientSecret": "secret_abc",
-  "quiltStackArn": "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-prod/...",
-  "benchlingSecret": "quiltdata/benchling-webhook/default/my-company",
-  "imageTag": "0.6.3"
-}
-```
-
-#### Profile: dev.json (Development, Optional)
-
-```json
-{
-  "profile": "dev",
-  "benchlingTenant": "my-company",
-  "benchlingAppDefinitionId": "app_DEV_67890",
-  "benchlingClientId": "client_xyz",
-  "benchlingClientSecret": "secret_abc",
-  "quiltStackArn": "arn:aws:cloudformation:us-east-1:712023778557:stack/quilt-staging/...",
-  "benchlingSecret": "quiltdata/benchling-webhook/dev/my-company",
-  "imageTag": "latest"
-}
-```
-
-**Key Differences:**
-- `benchlingAppDefinitionId`: Different app IDs allow side-by-side Benchling apps
-- `quiltStackArn`: Can point to different Quilt environments
-- `benchlingSecret`: Different secrets in Secrets Manager
-- `imageTag`: Dev uses `latest`, prod uses semantic versions
-
-#### Deployment Tracking: deploy.json
-
-```json
-{
-  "dev": {
-    "endpoint": "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
-    "imageTag": "latest",
-    "deployedAt": "2025-11-04T12:00:00.000Z",
-    "stackName": "BenchlingWebhookStack",
-    "stage": "dev"
+  "quilt": {
+    "stackArn": "arn:aws:cloudformation:...",
+    "catalog": "https://example.quiltdata.com",
+    "bucket": "quilt-example",
+    "database": "quilt_example",
+    "queueArn": "arn:aws:sqs:...",
+    "region": "us-east-1"
   },
-  "prod": {
-    "endpoint": "https://abc123.execute-api.us-east-1.amazonaws.com/prod",
-    "imageTag": "0.6.3",
-    "deployedAt": "2025-11-04T12:00:00.000Z",
-    "stackName": "BenchlingWebhookStack",
-    "stage": "prod"
+  "benchling": {
+    "tenant": "example",
+    "clientId": "...",
+    "secretArn": "arn:aws:secretsmanager:...",
+    "appDefinitionId": "app_...",
+    "testEntryId": "etr_..."
+  },
+  "packages": {
+    "bucket": "benchling-packages",
+    "prefix": "benchling",
+    "metadataKey": "experiment_id"
+  },
+  "deployment": {
+    "region": "us-east-1",
+    "account": "123456789012",
+    "imageTag": "latest"
+  },
+  "logging": {
+    "level": "INFO"
+  },
+  "security": {
+    "enableVerification": true
+  },
+  "_metadata": {
+    "version": "0.7.0",
+    "createdAt": "2025-11-04T10:00:00Z",
+    "updatedAt": "2025-11-04T10:00:00Z",
+    "source": "wizard"
   }
 }
 ```
 
-#### Configuration Flow
+#### Profile Inheritance
 
-1. `npm run setup` prompts for settings → stores in XDG
-2. npm scripts read from XDG for CDK operations
+Profiles can inherit from other profiles to reduce duplication:
+
+```json
+{
+  "_inherits": "default",
+  "benchling": {
+    "appDefinitionId": "app_dev_123"
+  },
+  "deployment": {
+    "imageTag": "latest"
+  }
+}
+```
+
+When read with inheritance, the profile is deep-merged with its parent profile.
+
+#### Deployment Tracking
+
+Each profile's `deployments.json` tracks deployment history:
+
+```json
+{
+  "active": {
+    "dev": {
+      "endpoint": "https://xxx.execute-api.us-east-1.amazonaws.com/dev",
+      "imageTag": "latest",
+      "deployedAt": "2025-11-04T10:30:00Z"
+    },
+    "prod": {
+      "endpoint": "https://xxx.execute-api.us-east-1.amazonaws.com/prod",
+      "imageTag": "0.7.0",
+      "deployedAt": "2025-11-03T14:20:00Z"
+    }
+  },
+  "history": [
+    {
+      "stage": "dev",
+      "timestamp": "2025-11-04T10:30:00Z",
+      "imageTag": "latest",
+      "endpoint": "https://...",
+      "stackName": "BenchlingWebhookStack",
+      "region": "us-east-1"
+    }
+  ]
+}
+```
+
+### Configuration Flow
+
+1. `npm run setup` prompts for settings → stores in `~/.config/benchling-webhook/default/config.json`
+2. npm scripts read profile configuration via `XDGConfig.readProfile(profile)`
 3. Secrets synced to AWS Secrets Manager
-4. Deployment outputs written back to XDG config
+4. Deployment outputs written to `~/.config/benchling-webhook/{profile}/deployments.json`
 
 ### Setup Commands
 
 ```bash
-npm run setup                # Interactive wizard (one-time setup)
-npm run setup:profile dev    # Create dev profile (interactive)
+npm run setup                # Interactive wizard (creates default profile)
 npm run setup:infer          # Infer Quilt config from catalog
 npm run setup:sync-secrets   # Sync secrets to AWS Secrets Manager
 npm run setup:health         # Validate configuration
 ```
 
-### Profile Management
+### XDGConfig API (v0.7.0)
 
-```bash
-# Create new profile
-npm run setup:profile <name>         # Interactive profile creation
+The new XDGConfig API is profile-first:
 
-# Use specific profile
-npm run deploy:dev --profile dev     # Deploy using dev profile
-npm run deploy:prod --profile default # Deploy using default profile
-npm run test:dev --profile dev       # Test using dev profile
+```typescript
+class XDGConfig {
+  // Configuration Management
+  readProfile(profile: string): ProfileConfig
+  writeProfile(profile: string, config: ProfileConfig): void
+  deleteProfile(profile: string): void
+  listProfiles(): string[]
+  profileExists(profile: string): boolean
+
+  // Deployment Tracking
+  getDeployments(profile: string): DeploymentHistory
+  recordDeployment(profile: string, deployment: DeploymentRecord): void
+  getActiveDeployment(profile: string, stage: string): DeploymentRecord | null
+
+  // Profile Inheritance
+  readProfileWithInheritance(profile: string, baseProfile?: string): ProfileConfig
+
+  // Validation
+  validateProfile(config: ProfileConfig): ValidationResult
+}
 ```
 
-### Required Secrets
+### Required Configuration
 
-Stored in AWS Secrets Manager and XDG config:
+Stored in AWS Secrets Manager and referenced in profile config:
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `BENCHLING_APP_DEFINITION_ID` | Yes | - | Benchling app identifier |
-| `BENCHLING_CLIENT_ID` | Yes | - | OAuth client ID |
-| `BENCHLING_CLIENT_SECRET` | Yes | - | OAuth client secret |
-| `BENCHLING_PKG_BUCKET` | Yes | - | S3 bucket for packages |
-| `BENCHLING_TENANT` | Yes | - | Benchling tenant name |
-| `BENCHLING_TEST_ENTRY` | No | - | Test entry ID for validation |
-| `BENCHLING_ENABLE_WEBHOOK_VERIFICATION` | No | `true` | Enable signature verification |
-| `BENCHLING_LOG_LEVEL` | No | `INFO` | Python logging level |
-| `BENCHLING_PKG_KEY` | No | `experiment_id` | Package metadata key |
-| `BENCHLING_PKG_PREFIX` | No | `benchling` | S3 key prefix |
-| `BENCHLING_WEBHOOK_ALLOW_LIST` | No | `""` | IP allowlist (comma-separated) |
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `benchling.tenant` | Yes | - | Benchling tenant name |
+| `benchling.clientId` | Yes | - | OAuth client ID |
+| `benchling.clientSecret` | Via Secrets Manager | - | OAuth client secret |
+| `benchling.secretArn` | Yes | - | AWS Secrets Manager ARN |
+| `benchling.appDefinitionId` | Yes | - | Benchling app identifier |
+| `benchling.testEntryId` | No | - | Test entry ID for validation |
+| `quilt.stackArn` | Yes | - | CloudFormation stack ARN |
+| `quilt.catalog` | Yes | - | Quilt catalog URL |
+| `quilt.bucket` | Yes | - | S3 bucket for packages |
+| `quilt.database` | Yes | - | Glue Data Catalog database |
+| `quilt.queueArn` | Yes | - | SQS queue ARN |
+| `packages.bucket` | Yes | - | S3 bucket for package storage |
+| `packages.prefix` | No | `benchling` | S3 key prefix |
+| `packages.metadataKey` | No | `experiment_id` | Package metadata key |
+| `security.enableVerification` | No | `true` | Enable webhook signature verification |
+| `security.webhookAllowList` | No | `""` | IP allowlist (comma-separated) |
+| `logging.level` | No | `INFO` | Python logging level |
 
 ---
 
@@ -386,62 +419,10 @@ This triggers CI to:
 
 ```bash
 npm run deploy:prod -- \
-  --quilt-stack-arn <arn> \
-  --benchling-secret <name> \
+  --profile default \
+  --stage prod \
   --image-tag <version> \
   --yes
-```
-
-### Multi-Environment Workflow Examples
-
-#### Example 1: End Users (Production Only)
-
-```bash
-# Setup (one-time)
-npm run setup
-
-# Deploy production
-npm run deploy:prod
-
-# Test production
-npm run test:prod
-```
-
-No profile awareness needed - uses `default` profile automatically.
-
-#### Example 2: Maintainers (Dev + Production)
-
-```bash
-# Initial setup (one-time)
-npm run setup                      # Create production profile
-npm run setup:profile dev          # Create dev profile
-
-# Edit ~/.config/benchling-webhook/dev.json
-# - Set benchlingAppDefinitionId: "app_DEV_67890"
-# - Set imageTag: "latest"
-
-# Deploy both environments
-npm run deploy:dev --profile dev   # Deploy dev stage
-npm run deploy:prod                # Deploy prod stage
-
-# Both environments running simultaneously!
-npm run test:dev                   # Test dev stage
-npm run test:prod                  # Test prod stage
-```
-
-#### Example 3: Testing Changes Before Production
-
-```bash
-# Make code changes
-git checkout -b feature/new-feature
-
-# Deploy to dev for testing
-npm run deploy:dev --profile dev
-npm run test:dev
-
-# After validation, deploy to production
-npm run deploy:prod
-npm run test:prod
 ```
 
 ---
@@ -451,12 +432,7 @@ npm run test:prod
 ### Logs
 
 ```bash
-# View logs for all services
 aws logs tail /ecs/benchling-webhook --follow
-
-# View logs for specific environment
-aws logs tail /ecs/benchling-webhook-dev --follow
-aws logs tail /ecs/benchling-webhook-prod --follow
 ```
 
 ### Health Checks
@@ -466,18 +442,8 @@ aws logs tail /ecs/benchling-webhook-prod --follow
 
 ### Metrics
 
-- CloudWatch: ECS tasks, API Gateway, ALB health (per-service metrics)
-- Deployment outputs: `~/.config/benchling-webhook/deploy.json`
-
-### Environment-Specific Endpoints
-
-```bash
-# Get dev endpoint
-jq -r '.dev.endpoint' ~/.config/benchling-webhook/deploy.json
-
-# Get prod endpoint
-jq -r '.prod.endpoint' ~/.config/benchling-webhook/deploy.json
-```
+- CloudWatch: ECS tasks, API Gateway, ALB health
+- Deployment outputs: `~/.config/benchling-webhook/{profile}/deployments.json`
 
 ---
 
@@ -485,15 +451,14 @@ jq -r '.prod.endpoint' ~/.config/benchling-webhook/deploy.json
 
 | Failure | Cause | Mitigation |
 |----------|--------|-------------|
-| Missing Quilt catalog | Quilt3 not configured | Prompt user to run `quilt3 config` and retry |
-| XDG config corrupted | Manual file edit | Validate JSON schema on read; re-run `npm run setup` |
-| AWS auth error | Invalid credentials | Check `AWS_PROFILE` and region before operations |
+| Missing profile | Profile not found | Run `npm run setup` to create profile |
+| Missing Quilt catalog | Quilt3 not configured | Run `quilt3 config` and retry |
+| Profile config corrupted | Manual file edit | Validate JSON schema; re-run `npm run setup` |
+| AWS auth error | Invalid credentials | Check `AWS_PROFILE` and region |
 | Docker build failure | Outdated base image | Auto-pull latest base before build |
 | Secrets not synced | Secrets Manager unreachable | Validate IAM permissions; retry sync with backoff |
 | CDK stack drift | Manual AWS changes | Run `cdk diff` preflight; warn on drift detection |
-| Missing secret variables | Incomplete `npm run setup` | Schema validation before secrets sync |
-| Profile not found | Dev profile missing | Only deploy prod stage; prompt to create profile |
-| Wrong profile for environment | User error | Validate profile matches target environment |
+| Legacy config detected | Upgrading from v0.6.x | Display migration message; see MIGRATION.md |
 
 ---
 
@@ -508,39 +473,24 @@ jq -r '.prod.endpoint' ~/.config/benchling-webhook/deploy.json
 
 ## Operational Principles
 
-- **Single Source of Truth**: XDG config defines the environment
+- **Profile-Based Configuration**: Each profile is self-contained with its own settings and deployment tracking
+- **Profile/Stage Independence**: Deploy any profile to any stage for maximum flexibility
+- **Single Source of Truth**: Profile's `config.json` defines all configuration
+- **Per-Profile Deployment Tracking**: Each profile tracks its own deployments independently
 - **Fail Fast**: Validation before deployment prevents partial stacks
-- **Idempotence**: Re-running `npm run setup` never breaks working setup
+- **Idempotence**: Re-running `npm run setup` updates existing profile
 - **Observability**: Every stage logs explicit diagnostics to CloudWatch
 - **Separation of Concerns**: npm orchestrates, TypeScript/Python implement
-- **Environment Isolation**: Separate containers, secrets, and logs per environment
 
 ---
 
 ## Security
 
-- Secrets in AWS Secrets Manager (separate secrets per environment)
+- Secrets in AWS Secrets Manager
 - IP-based access control (API Gateway)
 - Container scanning (ECR)
-- Least-privilege IAM roles (per-service)
+- Least-privilege IAM roles
 - TLS 1.2+ encryption
-- Network isolation via separate target groups
-
-### Security Considerations for Multi-Environment
-
-**Isolation Levels:**
-- Separate ECS services (different containers)
-- Separate IAM roles (least privilege)
-- Separate Secrets Manager secrets (dev/prod isolation)
-- Separate target groups (network isolation)
-- Separate CloudWatch logs (audit trail)
-
-**Acceptable Trade-offs:**
-- Shared VPC (cost optimization)
-- Shared ECS cluster (cost optimization)
-- Same AWS account (not multi-account compliance)
-
-**Recommendation:** For strict compliance requirements, use separate AWS accounts (existing approach still supported).
 
 ---
 
@@ -552,6 +502,19 @@ jq -r '.prod.endpoint' ~/.config/benchling-webhook/deploy.json
 - Docker
 - Quilt Stack (S3 bucket + SQS queue)
 - Benchling Account with app creation permissions
+
+---
+
+## Migration from v0.6.x
+
+Version 0.7.0 is a BREAKING CHANGE release. See [MIGRATION.md](./MIGRATION.md) for detailed upgrade instructions.
+
+**Key changes:**
+- Configuration moved from `~/.config/benchling-webhook/default.json` to `~/.config/benchling-webhook/default/config.json`
+- Deployment tracking moved from shared `deploy.json` to per-profile `deployments.json`
+- Profiles moved from `profiles/{name}/default.json` to `{name}/config.json`
+- Three-tier config system (user/derived/deploy) simplified to single `config.json`
+- Profile inheritance now explicit via `_inherits` field
 
 ---
 

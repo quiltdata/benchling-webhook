@@ -4,39 +4,27 @@ import * as cdk from "aws-cdk-lib";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
 import { execSync } from "child_process";
 import type { Config } from "../lib/utils/config";
-
-// Import get-env for library usage
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { inferStackConfig } = require("./get-env");
+import type { ProfileConfig } from "../lib/types/config";
 
 /**
  * Result of CDK bootstrap check
  */
 export interface BootstrapStatus {
-  bootstrapped: boolean;
-  status?: string;
-  message?: string;
-  command?: string;
-  warning?: string;
+    bootstrapped: boolean;
+    status?: string;
+    message?: string;
+    command?: string;
+    warning?: string;
 }
 
 /**
  * Result of deployment
  */
 export interface DeploymentResult {
-  app: cdk.App;
-  stack: BenchlingWebhookStack;
-  stackName: string;
-  stackId: string;
-}
-
-/**
- * Configuration inference result
- */
-export interface InferenceResult {
-  success: boolean;
-  inferredVars: Record<string, string>;
-  error?: string;
+    app: cdk.App;
+    stack: BenchlingWebhookStack;
+    stackName: string;
+    stackId: string;
 }
 
 /**
@@ -57,7 +45,7 @@ export async function checkCdkBootstrap(
 
         if (
             stackStatus.includes("does not exist") ||
-      stackStatus.includes("ValidationError")
+            stackStatus.includes("ValidationError")
         ) {
             return {
                 bootstrapped: false,
@@ -87,50 +75,71 @@ export async function checkCdkBootstrap(
 }
 
 /**
- * Attempt to infer configuration from catalog
- * Non-fatal - returns success flag and inferred values
+ * Convert legacy Config to ProfileConfig (temporary adapter for Phase 4 migration)
+ * TODO: Remove this function in Phase 4 when all config loading uses ProfileConfig directly
  */
-export async function inferConfiguration(catalogUrl: string): Promise<InferenceResult> {
-    try {
-    // Normalize URL
-        const normalizedUrl = catalogUrl.startsWith("http")
-            ? catalogUrl
-            : `https://${catalogUrl}`;
-
-        const result = await inferStackConfig(normalizedUrl);
-
-        return {
-            success: true,
-            inferredVars: result.inferredVars,
-        };
-    } catch (error) {
-        return {
-            success: false,
-            inferredVars: {},
-            error: (error as Error).message,
-        };
-    }
+function legacyConfigToProfileConfig(config: Config): ProfileConfig {
+    return {
+        quilt: {
+            stackArn: config.quiltStackArn || "",
+            catalog: config.quiltCatalog,
+            bucket: config.quiltUserBucket,
+            database: config.quiltDatabase,
+            queueArn: config.queueArn,
+            region: config.cdkRegion,
+        },
+        benchling: {
+            tenant: config.benchlingTenant,
+            clientId: config.benchlingClientId,
+            clientSecret: config.benchlingClientSecret,
+            secretArn: config.benchlingSecret,
+            appDefinitionId: config.benchlingAppDefinitionId,
+        },
+        packages: {
+            bucket: config.quiltUserBucket,
+            prefix: config.pkgPrefix || "benchling",
+            metadataKey: config.pkgKey || "experiment_id",
+        },
+        deployment: {
+            region: config.cdkRegion,
+            account: config.cdkAccount,
+            ecrRepository: config.ecrRepositoryName || "quiltdata/benchling",
+            imageTag: config.imageTag || "latest",
+        },
+        logging: {
+            level: (config.logLevel as "DEBUG" | "INFO" | "WARNING" | "ERROR") || "INFO",
+        },
+        security: {
+            webhookAllowList: config.webhookAllowList || "",
+            enableVerification: config.enableWebhookVerification !== "false",
+        },
+        _metadata: {
+            version: "0.7.0-migration",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            source: "cli",
+        },
+    };
 }
 
 /**
  * Create CDK app and stack (synthesis only, no deployment)
- * Secrets-only mode (v0.6.0+) - requires QUILT_STACK_ARN and BENCHLING_SECRET
+ * v0.7.0: Updated to use ProfileConfig
+ * TODO: Phase 4 will update this to read ProfileConfig directly from XDGConfig
  */
 export function createStack(config: Config): DeploymentResult {
     const app = new cdk.App();
+
+    // Convert legacy config to ProfileConfig
+    const profileConfig = legacyConfigToProfileConfig(config);
 
     const stack = new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
         env: {
             account: config.cdkAccount,
             region: config.cdkRegion,
         },
-        // Secrets-only mode parameters (v0.6.0+)
-        quiltStackArn: config.quiltStackArn!,
-        benchlingSecret: config.benchlingSecret!,
-        logLevel: config.logLevel || "INFO",
+        config: profileConfig,
         createEcrRepository: config.createEcrRepository === "true",
-        ecrRepositoryName: config.ecrRepositoryName || "quiltdata/benchling",
-        imageTag: config.imageTag || "latest",
     });
 
     return {
@@ -141,169 +150,60 @@ export function createStack(config: Config): DeploymentResult {
     };
 }
 
-/**
- * DEPRECATED: Legacy getConfig function for backwards compatibility
- * This combines user-provided values from .env with inferred values from the Quilt catalog.
- * User values always take precedence over inferred values.
- */
-async function legacyGetConfig(): Promise<Record<string, string | undefined>> {
-    const userEnv = process.env;
-    let inferredEnv: Record<string, string> = {};
-
-    // If QUILT_CATALOG is provided, try to infer additional configuration
-    if (userEnv.QUILT_CATALOG) {
-        try {
-            console.log(`Inferring configuration from catalog: ${userEnv.QUILT_CATALOG}`);
-            const result = await inferStackConfig(
-                `https://${userEnv.QUILT_CATALOG.replace(/^https?:\/\//, "")}`,
-            );
-            inferredEnv = result.inferredVars;
-            console.log("✓ Successfully inferred stack configuration\n");
-        } catch (error) {
-            console.error(
-                `Warning: Could not infer configuration from catalog: ${(error as Error).message}`,
-            );
-            console.error("Falling back to environment variables only.\n");
-        }
-    }
-
-    // Merge: user env takes precedence over inferred values
-    const config = { ...inferredEnv, ...userEnv };
-
-    // Validate required user-provided values
-    const requiredUserVars = [
-        "QUILT_CATALOG",
-        "QUILT_USER_BUCKET",
-        "BENCHLING_CLIENT_ID",
-        "BENCHLING_CLIENT_SECRET",
-        "BENCHLING_TENANT",
-    ];
-
-    const missingVars = requiredUserVars.filter((varName) => !config[varName]);
-
-    if (missingVars.length > 0) {
-        console.error("Error: Missing required environment variables:");
-        missingVars.forEach((varName) => {
-            console.error(`  - ${varName}`);
-        });
-        console.error("\nPlease set these variables in your .env file.");
-        console.error("See env.template for guidance.");
-        process.exit(1);
-    }
-
-    // Validate inferred values are present
-    const requiredInferredVars = [
-        "CDK_DEFAULT_ACCOUNT",
-        "CDK_DEFAULT_REGION",
-        "QUEUE_ARN",
-        "QUILT_DATABASE",
-    ];
-
-    const missingInferredVars = requiredInferredVars.filter(
-        (varName) => !config[varName],
-    );
-
-    if (missingInferredVars.length > 0) {
-        console.error("Error: Could not infer required configuration:");
-        missingInferredVars.forEach((varName) => {
-            console.error(`  - ${varName}`);
-        });
-        console.error(
-            "\nThese values should be automatically inferred from your Quilt catalog.",
-        );
-        console.error("Please ensure:");
-        console.error("  1. QUILT_CATALOG is set correctly");
-        console.error("  2. Your AWS credentials have CloudFormation read permissions");
-        console.error("  3. The Quilt stack is deployed and accessible");
-        console.error("\nAlternatively, you can manually set these values in your .env file.");
-        process.exit(1);
-    }
-
-    // Validate required Benchling fields
-    const requiredBenchlingFields = [
-        "BENCHLING_TENANT",
-        "BENCHLING_CLIENT_ID",
-        "BENCHLING_CLIENT_SECRET",
-        "BENCHLING_APP_DEFINITION_ID",
-    ] as const;
-
-    const missingBenchling = requiredBenchlingFields.filter(
-        (field) => !config[field],
-    );
-
-    if (missingBenchling.length > 0) {
-        console.error(
-            "Error: The following required Benchling configuration is missing:",
-        );
-        missingBenchling.forEach((field) => console.error(`  - ${field}`));
-        process.exit(1);
-    }
-
-    return config;
-}
-
-/**
- * DEPRECATED: Legacy main function for backwards compatibility
- * Use createStack() + CDK CLI for new code
- */
-async function legacyMain(): Promise<void> {
-    const config = await legacyGetConfig();
-
-    // Check bootstrap
-    const bootstrapStatus = await checkCdkBootstrap(
-    config.CDK_DEFAULT_ACCOUNT!,
-    config.CDK_DEFAULT_REGION!,
-    );
-
-    if (!bootstrapStatus.bootstrapped) {
-        console.error("\n❌ CDK Bootstrap Error");
-        console.error("=".repeat(80));
-        console.error(bootstrapStatus.message);
-        console.error("\nTo bootstrap CDK, run:");
-        console.error(`  ${bootstrapStatus.command}`);
-        console.error("=".repeat(80));
-        process.exit(1);
-    }
-
-    if (bootstrapStatus.warning) {
-        console.error("\n⚠️  CDK Bootstrap Warning");
-        console.error("=".repeat(80));
-        console.error(bootstrapStatus.warning);
-        console.error("=".repeat(80));
-    } else {
-        console.log(`✓ CDK is bootstrapped (CDKToolkit stack: ${bootstrapStatus.status})\n`);
-    }
-
-    // Create stack - Secrets-only mode (v0.6.0+)
+// Only run if called directly (not imported)
+// v0.7.0: Updated to use ProfileConfig
+// TODO: Phase 4 will replace this with proper XDGConfig loading
+if (require.main === module) {
     const app = new cdk.App();
 
-    // Get parameters from environment (set by CLI deploy command)
-    // These take precedence over legacy config
-    const quiltStackArn = process.env.QUILT_STACK_ARN || config.QUILT_STACK_ARN;
-    const benchlingSecret = process.env.BENCHLING_SECRET || config.BENCHLING_SECRET;
+    // Minimal ProfileConfig from environment variables (for direct CDK usage)
+    const profileConfig: ProfileConfig = {
+        quilt: {
+            stackArn: process.env.QUILT_STACK_ARN || "",
+            catalog: process.env.QUILT_CATALOG || "",
+            bucket: process.env.QUILT_USER_BUCKET || "",
+            database: process.env.QUILT_DATABASE || "",
+            queueArn: process.env.QUEUE_ARN || "",
+            region: process.env.CDK_DEFAULT_REGION || "us-east-1",
+        },
+        benchling: {
+            tenant: process.env.BENCHLING_TENANT || "",
+            clientId: process.env.BENCHLING_CLIENT_ID || "",
+            secretArn: process.env.BENCHLING_SECRET,
+            appDefinitionId: process.env.BENCHLING_APP_DEFINITION_ID || "",
+        },
+        packages: {
+            bucket: process.env.QUILT_USER_BUCKET || "",
+            prefix: process.env.PKG_PREFIX || "benchling",
+            metadataKey: process.env.PKG_KEY || "experiment_id",
+        },
+        deployment: {
+            region: process.env.CDK_DEFAULT_REGION || "us-east-1",
+            account: process.env.CDK_DEFAULT_ACCOUNT,
+            ecrRepository: process.env.ECR_REPOSITORY_NAME || "quiltdata/benchling",
+            imageTag: process.env.IMAGE_TAG || "latest",
+        },
+        logging: {
+            level: (process.env.LOG_LEVEL as "DEBUG" | "INFO" | "WARNING" | "ERROR") || "INFO",
+        },
+        security: {
+            webhookAllowList: process.env.WEBHOOK_ALLOW_LIST || "",
+            enableVerification: process.env.ENABLE_WEBHOOK_VERIFICATION !== "false",
+        },
+        _metadata: {
+            version: "0.7.0",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            source: "cli",
+        },
+    };
 
     new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
         env: {
-            account: config.CDK_DEFAULT_ACCOUNT,
-            region: config.CDK_DEFAULT_REGION,
+            account: process.env.CDK_DEFAULT_ACCOUNT,
+            region: process.env.CDK_DEFAULT_REGION,
         },
-        // Secrets-only mode parameters (v0.6.0+)
-        quiltStackArn: quiltStackArn!,
-        benchlingSecret: benchlingSecret!,
-        logLevel: config.LOG_LEVEL || "INFO",
-        // ECR repository configuration
-        createEcrRepository: config.CREATE_ECR_REPOSITORY === "true",
-        ecrRepositoryName: config.ECR_REPOSITORY_NAME || "quiltdata/benchling",
+        config: profileConfig,
+        createEcrRepository: process.env.CREATE_ECR_REPOSITORY === "true",
     });
 }
-
-// Only run if called directly (not imported)
-if (require.main === module) {
-    legacyMain().catch((error) => {
-        console.error("Fatal error during CDK synthesis:", error);
-        process.exit(1);
-    });
-}
-
-// Export functions for library usage
-export { inferStackConfig };
