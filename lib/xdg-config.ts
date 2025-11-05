@@ -27,7 +27,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, copyFileSync, unlinkSync, readdirSync, rmSync } from "fs";
-import { resolve, join } from "path";
+import { resolve, join, dirname } from "path";
 import { homedir } from "os";
 import { tmpdir } from "os";
 import Ajv from "ajv";
@@ -213,6 +213,11 @@ export class XDGConfig {
                 renameSync(tempPath, configPath);
             } catch {
                 // Fall back to copy+delete for cross-device scenarios (Windows)
+                // Ensure target directory exists before copying
+                const targetDir = dirname(configPath);
+                if (!existsSync(targetDir)) {
+                    mkdirSync(targetDir, { recursive: true });
+                }
                 copyFileSync(tempPath, configPath);
                 unlinkSync(tempPath);
             }
@@ -426,6 +431,11 @@ export class XDGConfig {
                 renameSync(tempPath, deploymentsPath);
             } catch {
                 // Fall back to copy+delete for cross-device scenarios (Windows)
+                // Ensure target directory exists before copying
+                const targetDir = dirname(deploymentsPath);
+                if (!existsSync(targetDir)) {
+                    mkdirSync(targetDir, { recursive: true });
+                }
                 copyFileSync(tempPath, deploymentsPath);
                 unlinkSync(tempPath);
             }

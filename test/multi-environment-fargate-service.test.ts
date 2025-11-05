@@ -4,6 +4,7 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { FargateService } from "../lib/fargate-service";
+import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/mock-config";
 
 /**
  * Multi-Environment Fargate Service Tests
@@ -46,14 +47,14 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Single Service (Current Behavior)", () => {
         test("creates single ECS cluster", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -64,14 +65,14 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("creates single Fargate service", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -83,14 +84,14 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("creates single target group", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -105,14 +106,14 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Environment Variable Configuration", () => {
         test("sets STAGE environment variable for production", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -130,14 +131,19 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test.skip("includes log level environment variable - TODO: verify implementation", () => {
+            const config = createMockConfig({
+                logging: {
+                    level: "DEBUG",
+                },
+            });
+
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
                 logLevel: "DEBUG",
             });
 
@@ -154,14 +160,20 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Image Tag Configuration", () => {
         test("uses provided image tag", () => {
+            const config = createMockConfig({
+                deployment: {
+                    region: "us-east-1",
+                    imageTag: "v0.6.3",
+                },
+            });
+
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
                 imageTag: "v0.6.3",
             });
 
@@ -175,14 +187,14 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("defaults to latest when no tag provided", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -195,14 +207,22 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Secret Management", () => {
         test("references Secrets Manager secret", () => {
+            const config = createMockConfig({
+                benchling: {
+                    tenant: "test-tenant",
+                    clientId: "client_123",
+                    secretArn: "quiltdata/benchling-webhook/default/tenant",
+                    appDefinitionId: "app_456",
+                },
+            });
+
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "quiltdata/benchling-webhook/default/tenant",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -226,26 +246,27 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("different secrets for different environments", () => {
+            const devConfig = createDevConfig();
+            const prodConfig = createProdConfig();
+
             // Create dev service
             const devService = new FargateService(stack, "DevFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config: devConfig,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "quiltdata/benchling-webhook/dev/tenant",
+                quiltStackArn: devConfig.quilt.stackArn,
+                benchlingSecret: devConfig.benchling.secretArn!,
             });
 
             // Create prod service
             const prodService = new FargateService(stack, "ProdFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config: prodConfig,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/prod-stack/xyz789",
-                benchlingSecret: "quiltdata/benchling-webhook/default/tenant",
+                quiltStackArn: prodConfig.quilt.stackArn,
+                benchlingSecret: prodConfig.benchling.secretArn!,
             });
 
             // Both services should be created
@@ -256,14 +277,14 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Target Group Configuration", () => {
         test("configures health check path", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -275,14 +296,14 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("uses IP target type for Fargate", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -295,14 +316,14 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Auto-scaling Configuration", () => {
         test("configures auto-scaling for service", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -316,14 +337,14 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("configures CPU-based scaling policy", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -340,14 +361,14 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("configures memory-based scaling policy", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -366,14 +387,14 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("IAM Permissions", () => {
         test("task role has CloudFormation read permissions", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -395,14 +416,14 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("task role has S3 permissions", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -424,14 +445,14 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("task role has SQS send permissions", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -455,14 +476,14 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Container Insights", () => {
         test("enables Container Insights on cluster", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
@@ -478,14 +499,14 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("CloudWatch Logging", () => {
         test("creates log group for container logs", () => {
+            const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
-                region: "us-east-1",
-                account: "123456789012",
+                config,
                 ecrRepository,
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
-                benchlingSecret: "test-secret",
+                quiltStackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
             });
 
             const template = Template.fromStack(stack);
