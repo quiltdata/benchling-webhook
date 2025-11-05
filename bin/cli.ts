@@ -181,8 +181,30 @@ program
     });
 
 // Run setup wizard when no command provided
-if (!process.argv.slice(2).length) {
-    setupWizardCommand()
+if (!process.argv.slice(2).length || (process.argv.slice(2).length > 0 && process.argv[2].startsWith("--"))) {
+    // Parse options for setup wizard
+    const args = process.argv.slice(2);
+    const options: { nonInteractive?: boolean; profile?: string; inheritFrom?: string; awsRegion?: string; awsProfile?: string } = {};
+
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === "--yes" || args[i] === "-y") {
+            options.nonInteractive = true;
+        } else if (args[i] === "--profile" && i + 1 < args.length) {
+            options.profile = args[i + 1];
+            i++;
+        } else if (args[i] === "--inherit-from" && i + 1 < args.length) {
+            options.inheritFrom = args[i + 1];
+            i++;
+        } else if (args[i] === "--region" && i + 1 < args.length) {
+            options.awsRegion = args[i + 1];
+            i++;
+        } else if (args[i] === "--aws-profile" && i + 1 < args.length) {
+            options.awsProfile = args[i + 1];
+            i++;
+        }
+    }
+
+    setupWizardCommand(options)
         .then(() => process.exit(0))
         .catch((error) => {
             console.error(chalk.red((error as Error).message));

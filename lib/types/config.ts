@@ -122,9 +122,9 @@ export interface QuiltConfig {
     stackArn: string;
 
     /**
-     * Quilt catalog URL
+     * Quilt catalog domain (without protocol)
      *
-     * @example "https://quilt.example.com"
+     * @example "quilt.example.com"
      */
     catalog: string;
 
@@ -550,7 +550,7 @@ export const ProfileConfigSchema = {
             required: ["stackArn", "catalog", "bucket", "database", "queueArn", "region"],
             properties: {
                 stackArn: { type: "string", pattern: "^arn:aws:cloudformation:" },
-                catalog: { type: "string", format: "uri" },
+                catalog: { type: "string", minLength: 1 },
                 bucket: { type: "string", minLength: 3 },
                 database: { type: "string", minLength: 1 },
                 queueArn: { type: "string", pattern: "^arn:aws:sqs:" },

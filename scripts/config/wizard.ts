@@ -77,11 +77,19 @@ export async function runConfigWizard(options: WizardOptions = {}): Promise<Prof
             {
                 type: "input",
                 name: "catalog",
-                message: "Quilt Catalog URL:",
+                message: "Quilt Catalog URL (domain or full URL):",
                 default: config.quilt?.catalog,
-                validate: (input: string): boolean | string =>
-                    input.trim().length > 0 && input.startsWith("http") ||
-                    "Catalog URL is required and must start with http",
+                validate: (input: string): boolean | string => {
+                    const trimmed = input.trim();
+                    if (trimmed.length === 0) {
+                        return "Catalog URL is required";
+                    }
+                    return true;
+                },
+                filter: (input: string): string => {
+                    // Strip protocol if present, store only domain
+                    return input.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
+                },
             },
             {
                 type: "input",

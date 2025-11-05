@@ -55,10 +55,12 @@ export interface InferenceOptions {
 function getQuilt3Catalog(): QuiltCliConfig | null {
     try {
         const output = execSync("quilt3 config", { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] });
-        const catalogUrl = output.trim();
+        let catalogUrl = output.trim();
 
         if (catalogUrl && catalogUrl.startsWith("http")) {
             console.log(`Found quilt3 CLI configuration: ${catalogUrl}`);
+            // Strip protocol and trailing slash, store only domain
+            catalogUrl = catalogUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
             return { catalogUrl };
         }
 
@@ -130,7 +132,8 @@ async function findQuiltStacks(region: string, profile?: string): Promise<QuiltS
                     const value = output.OutputValue || "";
 
                     if (key === "QuiltWebHost") {
-                        stackInfo.catalogUrl = value;
+                        // Strip protocol and trailing slash, store only domain
+                        stackInfo.catalogUrl = value.replace(/^https?:\/\//, "").replace(/\/$/, "");
                     } else if (key.includes("ucket")) {
                         stackInfo.bucket = value;
                     } else if (key === "UserAthenaDatabaseName" || key.includes("Database")) {
@@ -245,10 +248,8 @@ export async function inferQuiltConfig(options: InferenceOptions = {}): Promise<
 
     // If we have a catalog URL from quilt3, try to find matching stack
     if (result.catalog && stacks.length > 1) {
-        const normalizeUrl = (url: string): string => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
-        const targetUrl = normalizeUrl(result.catalog);
-
-        const matchingStack = stacks.find((s) => s.catalogUrl && normalizeUrl(s.catalogUrl) === targetUrl);
+        // Both result.catalog and stack catalogUrl are now bare domains, so compare directly
+        const matchingStack = stacks.find((s) => s.catalogUrl === result.catalog);
         if (matchingStack) {
             selectedStack = matchingStack;
             console.log(`  Auto-selected stack matching catalog URL: ${selectedStack.stackName}`);
