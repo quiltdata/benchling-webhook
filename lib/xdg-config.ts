@@ -323,6 +323,10 @@ export class XDGConfig {
                 renameSync(tempPath, configPath);
             } catch {
                 // Fall back to copy+delete for cross-device scenarios (Windows)
+                // Ensure parent directory exists before copy (in case rename failed due to cross-device)
+                if (!existsSync(configDir)) {
+                    mkdirSync(configDir, { recursive: true });
+                }
                 copyFileSync(tempPath, configPath);
                 unlinkSync(tempPath);
             }
