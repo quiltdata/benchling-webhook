@@ -29,9 +29,11 @@ The wizard should be **simple, clean, and linear** - walking the user through th
 ## Requirements Status
 
 ### 1. Setup Works at All ⚠️
+
 **Status**: Partial - Components exist but workflow is fragmented
 
 **Current State**:
+
 - ✅ Interactive wizard prompts exist ([lib/configuration-wizard.ts](../../lib/configuration-wizard.ts))
 - ✅ Stack auto-detection works ([lib/quilt-config-resolver.ts](../../lib/quilt-config-resolver.ts))
 - ✅ Manifest generation works ([bin/commands/manifest.ts](../../bin/commands/manifest.ts))
@@ -40,6 +42,7 @@ The wizard should be **simple, clean, and linear** - walking the user through th
 
 **Gap**:
 The user currently has to:
+
 1. Run `npm run setup:infer` separately to detect stack
 2. Manually create Benchling app (no guidance)
 3. Run `npm run setup` to enter credentials
@@ -49,14 +52,17 @@ The user currently has to:
 
 **Required**:
 One command (`npm run setup`) that does ALL of this in sequence:
+
 ```bash
 npx @quiltdata/benchling-webhook setup
 ```
 
 ### 2. Benchling App Creation Guidance ❌
+
 **Status**: Critical gap - This is the heart of the issue
 
 **Current State**:
+
 - ✅ Manifest generation exists (`manifest` command)
 - ✅ Documentation exists in README
 - ❌ **Not integrated into setup wizard**
@@ -67,6 +73,7 @@ npx @quiltdata/benchling-webhook setup
 The setup wizard MUST include a dedicated "Step 2" that:
 
 1. **Generate the manifest file** automatically based on detected stack
+
    ```typescript
    console.log("\n📋 Step 2: Create Benchling App\n");
 
@@ -78,6 +85,7 @@ The setup wizard MUST include a dedicated "Step 2" that:
    ```
 
 2. **Display clear instructions** for creating the app
+
    ```typescript
    console.log("\nCreate your Benchling app:\n");
    console.log("1. Open: https://{tenant}.benchling.com/admin/apps");
@@ -92,6 +100,7 @@ The setup wizard MUST include a dedicated "Step 2" that:
    ```
 
 3. **Wait for user confirmation** and collect credentials
+
    ```typescript
    const { ready } = await inquirer.prompt([{
      name: "ready",
@@ -114,6 +123,7 @@ The setup wizard MUST include a dedicated "Step 2" that:
    ```
 
 4. **Validate credentials** before proceeding
+
    ```typescript
    console.log("\nValidating credentials...");
    await validateBenchlingCredentials(credentials);
@@ -121,25 +131,30 @@ The setup wizard MUST include a dedicated "Step 2" that:
    ```
 
 ### 3. Security: No Secrets Manager for Verification Bypass ✅
+
 **Status**: Complete
 
 **Implementation**:
+
 - Webhook signature verification is controlled by `security.enableVerification` in local config
 - This setting is NEVER synced to AWS Secrets Manager
 - Secrets Manager only stores: `clientId`, `clientSecret`, webhook allow list
 - Verification can only be disabled via local config file or local env vars (dev mode only)
 
 **Security Properties**:
+
 - ✅ Verification enabled by default in production
 - ✅ Cannot be disabled via Secrets Manager
 - ✅ Only configurable through profile config (local file)
 - ✅ No runtime configuration override path from AWS
 
 **Code Reference**:
+
 - [lib/benchling-webhook-stack.ts](../../lib/benchling-webhook-stack.ts) - Passes verification setting as env var, not from Secrets Manager
 - [bin/commands/sync-secrets.ts](../../bin/commands/sync-secrets.ts) - Explicitly excludes security settings from sync
 
 ### 4. Sales Account Installation (Dedicated Profile) ✅
+
 **Status**: Complete (v0.7.0+)
 
 Profile-based configuration fully supports dedicated profiles:
@@ -166,6 +181,7 @@ npm run deploy -- --profile sales
 ```
 
 **Directory Structure**:
+
 ```
 ~/.config/benchling-webhook/
 ├── default/          # Default profile
@@ -180,19 +196,22 @@ npm run deploy -- --profile sales
 ```
 
 ### 5. Usable npx Package ✅
+
 **Status**: Complete
 
 ```bash
-# One command to set up everything:
-npx @quiltdata/benchling-webhook@latest setup
+# One command to set up and run everything:
+npx @quiltdata/benchling-webhook@latest
 
-# All CLI commands work via npx:
+# Sub commands ALSO work via npx:
+npx @quiltdata/benchling-webhook@latest setup --only
 npx @quiltdata/benchling-webhook@latest manifest
 npx @quiltdata/benchling-webhook@latest deploy
 npx @quiltdata/benchling-webhook@latest test
 ```
 
 **Package Configuration**:
+
 - Published to npm as `@quiltdata/benchling-webhook`
 - Entry point: `bin/cli.js`
 - All dependencies bundled
@@ -435,21 +454,25 @@ export async function setupCommand(options: { profile?: string }): Promise<void>
 ### Key Implementation Details
 
 **Stack Detection** ([lib/quilt-config-resolver.ts](../../lib/quilt-config-resolver.ts)):
+
 - Already implemented
 - Scans CloudFormation for Quilt stacks
 - Extracts outputs (bucket, queue, catalog)
 
 **Manifest Generation** ([bin/commands/manifest.ts](../../bin/commands/manifest.ts)):
+
 - Already implemented
 - Needs minor refactor to be callable from setup wizard
 - Should embed catalog URL in manifest
 
 **Credential Validation**:
+
 - New function needed: `validateBenchlingAuth()`
 - Make test API call to Benchling using OAuth token
 - Verify credentials work before saving
 
 **Deployment Automation**:
+
 - Existing CDK deployment logic
 - Needs wrapper to capture webhook URL output
 - Should stream CloudFormation events to console
@@ -489,21 +512,25 @@ curl https://xxx.amazonaws.com/prod/health  # Deployed stack
 ### Error Cases to Test
 
 1. **No Quilt stack found**
+
    ```bash
    # Should fail gracefully with helpful message
    ```
 
 2. **Invalid Benchling credentials**
+
    ```bash
    # Should validate before saving/deploying
    ```
 
 3. **User cancels mid-setup**
+
    ```bash
    # Should allow resume without re-doing steps
    ```
 
 4. **Deployment fails**
+
    ```bash
    # Should show CloudFormation error, not crash
    ```
@@ -525,16 +552,19 @@ npx @quiltdata/benchling-webhook setup --profile sales
 ## Current Gaps Summary
 
 ### Critical (Blocking Issue Resolution)
+
 1. **Integrated three-step workflow** - Setup wizard must execute all three steps in sequence
 2. **Benchling app guidance in wizard** - Must be embedded in setup flow, not separate command
 3. **Webhook URL display** - Must show final URL after deployment
 
 ### Important (User Experience)
+
 4. **Credential validation** - Verify Benchling credentials before deployment
 5. **Progress indicators** - Show deployment progress during long-running CDK deploy
 6. **Error recovery** - Allow resuming setup after failure without starting over
 
 ### Nice to Have
+
 7. **Pre-flight checks** - Validate AWS permissions before starting
 8. **Rollback on failure** - Clean up partial deployments
 9. **Setup video/docs** - Visual guide for first-time users
@@ -560,6 +590,7 @@ Issue #195 is resolved when:
 ## Related Work
 
 ### Completed (v0.7.0 - v0.7.2)
+
 - ✅ Profile-based configuration (PR #189)
 - ✅ Secrets resolution fix (PR #197)
 - ✅ NPX package improvements (PR #185)
@@ -567,6 +598,7 @@ Issue #195 is resolved when:
 - ✅ Manifest generation command
 
 ### Required (To Close #195)
+
 - ❌ Integrate three steps into single `setup` command
 - ❌ Embed Benchling app guidance in setup flow
 - ❌ Add credential validation
