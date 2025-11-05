@@ -663,3 +663,67 @@ export const DeploymentHistorySchema = {
     },
     additionalProperties: false,
 } as const;
+
+// ============================================================================
+// LEGACY TYPES (Temporary - for backward compatibility during Phase 2)
+// These will be removed in Phase 8 after all code is updated
+// ============================================================================
+
+/**
+ * @deprecated Legacy type from v0.6.x - use ProfileConfig instead
+ */
+export type ConfigType = "user" | "derived" | "deploy" | "complete";
+
+/**
+ * @deprecated Legacy interface from v0.6.x - use ProfileConfig instead
+ */
+export interface UserConfig {
+    [key: string]: unknown;
+}
+
+/**
+ * @deprecated Legacy interface from v0.6.x - use ProfileConfig instead
+ */
+export interface DerivedConfig extends UserConfig {
+    [key: string]: unknown;
+}
+
+/**
+ * @deprecated Legacy interface from v0.6.x - use DeploymentRecord instead
+ */
+export interface LegacyDeploymentConfig extends DerivedConfig {
+    [key: string]: unknown;
+}
+
+/**
+ * @deprecated Legacy type from v0.6.x - use ProfileConfig instead
+ */
+export type CompleteConfig = LegacyDeploymentConfig;
+
+/**
+ * @deprecated Legacy interface from v0.6.x - no longer used
+ */
+export interface ConfigSet {
+    user?: UserConfig;
+    derived?: DerivedConfig;
+    deploy?: LegacyDeploymentConfig;
+}
+
+/**
+ * @deprecated Legacy interface from v0.6.x - no longer used
+ */
+export interface ConfigProfile {
+    name: ProfileName;
+    user?: UserConfig;
+    derived?: DerivedConfig;
+    deploy?: LegacyDeploymentConfig;
+}
+
+/**
+ * @deprecated Legacy interface from v0.6.x - no longer used
+ */
+export interface XDGConfigPaths {
+    userConfig: string;
+    derivedConfig: string;
+    deployConfig: string;
+}
