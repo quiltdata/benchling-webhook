@@ -94,6 +94,12 @@ export class BenchlingWebhookStack extends cdk.Stack {
             default: config.packages.bucket,
         });
 
+        const quiltDatabaseParam = new cdk.CfnParameter(this, "QuiltDatabase", {
+            type: "String",
+            description: "Glue database name for Quilt packages (resolved from Quilt stack outputs at runtime)",
+            default: config.quilt.database || "",
+        });
+
         // Use parameter values (which have config as defaults)
         // This allows runtime updates via CloudFormation
         const quiltStackArnValue = quiltStackArnParam.valueAsString;
@@ -101,6 +107,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const logLevelValue = logLevelParam.valueAsString;
         const imageTagValue = imageTagParam.valueAsString;
         const packageBucketValue = packageBucketParam.valueAsString;
+        const quiltDatabaseValue = quiltDatabaseParam.valueAsString;
 
         // Bucket name will be resolved at runtime from CloudFormation outputs
         // For CDK purposes, we use a placeholder for IAM permissions
@@ -149,6 +156,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             stackArn: quiltStackArnValue,
             benchlingSecret: benchlingSecretValue,
             packageBucket: packageBucketValue,
+            quiltDatabase: quiltDatabaseValue,
             logLevel: logLevelValue,
         });
 

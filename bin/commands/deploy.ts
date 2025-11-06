@@ -306,6 +306,9 @@ async function deploy(
             `QuiltStackARN=${stackArn}`,
             `BenchlingSecretARN=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
+            `PackageBucket=${config.packages.bucket}`,
+            `QuiltDatabase=${config.quilt.database || ""}`,
+            `LogLevel=${config.logging?.level || "INFO"}`,
         ];
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
