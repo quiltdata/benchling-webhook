@@ -383,7 +383,6 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
         config.quilt = {
             stackArn: quiltAnswers.stackArn,
             catalog: quiltAnswers.catalog,
-            bucket: quiltAnswers.bucket,
             database: quiltAnswers.database,
             queueUrl: quiltAnswers.queueUrl,
             region: quiltRegion,

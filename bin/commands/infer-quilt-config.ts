@@ -15,7 +15,6 @@ import * as readline from "readline";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { toQueueUrl, isQueueUrl } from "../../lib/utils/sqs";
-import { DerivedConfig } from "../../lib/types/config";
 
 /**
  * Quilt CLI configuration
@@ -42,7 +41,6 @@ interface QuiltStackInfo {
  */
 interface InferenceResult {
     catalog?: string;
-    bucket?: string;
     database?: string;
     stackArn?: string;
     region?: string;
@@ -277,9 +275,6 @@ export async function inferQuiltConfig(options: {
     if (selectedStack.stackArn) {
         result.stackArn = selectedStack.stackArn;
     }
-    if (selectedStack.bucket) {
-        result.bucket = selectedStack.bucket;
-    }
     if (selectedStack.database) {
         result.database = selectedStack.database;
     }
@@ -302,45 +297,6 @@ export async function inferQuiltConfig(options: {
     return result;
 }
 
-/**
- * Converts inference result to DerivedConfig
- *
- * @param result - Inference result
- * @returns DerivedConfig object
- */
-export function inferenceResultToDerivedConfig(result: InferenceResult): DerivedConfig {
-    const config: DerivedConfig = {
-        _metadata: {
-            inferredAt: new Date().toISOString(),
-            inferredFrom: result.source,
-            source: "infer-quilt-config",
-            version: "0.6.0",
-        },
-    };
-
-    if (result.catalog) {
-        config.catalogUrl = result.catalog;
-        config.quiltCatalog = result.catalog;
-    }
-
-    if (result.bucket) {
-        config.quiltUserBucket = result.bucket;
-    }
-
-    if (result.stackArn) {
-        config.quiltStackArn = result.stackArn;
-    }
-
-    if (result.region) {
-        config.quiltRegion = result.region;
-    }
-
-    if (result.queueUrl) {
-        config.queueUrl = result.queueUrl;
-    }
-
-    return config;
-}
 
 /**
  * Main execution for CLI usage
@@ -371,15 +327,10 @@ async function main(): Promise<void> {
     console.log("\n=== Inference Results ===");
     console.log(`Source: ${result.source}`);
     if (result.catalog) console.log(`Catalog URL: ${result.catalog}`);
-    if (result.bucket) console.log(`User Bucket: ${result.bucket}`);
     if (result.database) console.log(`Database: ${result.database}`);
     if (result.stackArn) console.log(`Stack ARN: ${result.stackArn}`);
     if (result.region) console.log(`Region: ${result.region}`);
     if (result.queueUrl) console.log(`Queue URL: ${result.queueUrl}`);
-
-    const derivedConfig = inferenceResultToDerivedConfig(result);
-    console.log("\n=== Derived Configuration ===");
-    console.log(JSON.stringify(derivedConfig, null, 4));
 }
 
 // Run main if executed directly

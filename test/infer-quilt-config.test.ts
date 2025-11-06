@@ -2,7 +2,7 @@ import { jest } from "@jest/globals";
 import { execSync } from "child_process";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { mockClient } from "aws-sdk-client-mock";
-import { inferQuiltConfig, inferenceResultToDerivedConfig } from "../bin/commands/infer-quilt-config";
+import { inferQuiltConfig } from "../bin/commands/infer-quilt-config";
 
 // Mock child_process
 jest.mock("child_process");
@@ -312,46 +312,4 @@ describe("infer-quilt-config", () => {
         });
     });
 
-    describe("inferenceResultToDerivedConfig", () => {
-        it("should convert inference result to DerivedConfig", () => {
-            const inferenceResult = {
-                catalogUrl: "https://catalog.example.com",
-                quiltUserBucket: "my-bucket",
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/abc-123",
-                quiltRegion: "us-east-1",
-                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/my-queue",
-                source: "quilt3-cli+cloudformation",
-            };
-
-            const config = inferenceResultToDerivedConfig(inferenceResult);
-
-            expect(config.catalogUrl).toBe("https://catalog.example.com");
-            expect(config.quiltCatalog).toBe("https://catalog.example.com");
-            expect(config.quiltUserBucket).toBe("my-bucket");
-            expect(config.quiltStackArn).toBe("arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/abc-123");
-            expect(config.quiltRegion).toBe("us-east-1");
-            expect(config.queueUrl).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/my-queue");
-
-            // Type assertion for _metadata access
-            const metadata = config._metadata as any;
-            expect(metadata.inferredFrom).toBe("quilt3-cli+cloudformation");
-            expect(metadata.source).toBe("infer-quilt-config");
-            expect(metadata.version).toBe("0.6.0");
-        });
-
-        it("should handle minimal inference result", () => {
-            const inferenceResult = {
-                source: "none",
-            };
-
-            const config = inferenceResultToDerivedConfig(inferenceResult);
-
-            expect(config.catalogUrl).toBeUndefined();
-            expect(config.quiltUserBucket).toBeUndefined();
-
-            // Type assertion for _metadata access
-            const metadata = config._metadata as any;
-            expect(metadata.inferredFrom).toBe("none");
-        });
-    });
 });

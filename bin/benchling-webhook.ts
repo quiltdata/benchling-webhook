@@ -84,7 +84,6 @@ function legacyConfigToProfileConfig(config: Config): ProfileConfig {
         quilt: {
             stackArn: config.quiltStackArn || "",
             catalog: config.quiltCatalog,
-            bucket: config.quiltUserBucket,
             database: config.quiltDatabase,
             queueUrl: toQueueUrl(config.queueUrl) || config.queueUrl,
             region: config.cdkRegion,
