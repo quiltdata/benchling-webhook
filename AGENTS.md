@@ -194,7 +194,7 @@ Version 0.7.0 introduces a completely redesigned configuration architecture with
 
 **Directory structure:**
 
-```
+```text
 ~/.config/benchling-webhook/
 ├── default/
 │   ├── config.json          # All configuration for default profile
@@ -210,11 +210,13 @@ Version 0.7.0 introduces a completely redesigned configuration architecture with
 #### Key Concepts
 
 **Profile**: A named set of configuration values (credentials, Quilt settings, Benchling settings)
+
 - Examples: `default`, `dev`, `prod`, `staging`
 - Stored in `~/.config/benchling-webhook/{profile}/config.json`
 - Each profile has its own deployment tracking
 
 **Stage**: An API Gateway deployment target
+
 - Examples: `dev`, `prod`, `staging`, `test`
 - Multiple stages can be deployed per profile
 - Tracked in `~/.config/benchling-webhook/{profile}/deployments.json`
@@ -323,10 +325,54 @@ Each profile's `deployments.json` tracks deployment history:
 3. Secrets synced to AWS Secrets Manager
 4. Deployment outputs written to `~/.config/benchling-webhook/{profile}/deployments.json`
 
+### Setup Wizard Behavior
+
+#### Initial Setup
+
+When running `npm run setup` for the first time:
+
+
+- Wizard prompts for all required configuration
+- Attempts to infer Quilt configuration from AWS
+- Validates Benchling credentials in real-time
+- Saves all settings to `~/.config/benchling-webhook/{profile}/config.json`
+
+#### Re-running Setup (Idempotent)
+
+
+When running `npm run setup` on an existing profile:
+
+- **Loads existing configuration** from `{profile}/config.json`
+- **Uses previous values as defaults** for all prompts
+- Allows you to accept existing values (press Enter) or override them
+- Updates only the fields you change
+- Preserves `_metadata.createdAt` but updates `_metadata.updatedAt`
+
+
+**Example workflow:**
+
+```bash
+# First run - enter all values
+npm run setup
+
+# Later - change only deployment region
+npm run setup
+# (Press Enter to accept existing values until "AWS Deployment Region" prompt)
+# (Enter new region, then accept remaining defaults)
+
+```
+
+This idempotent behavior means you can safely re-run `npm run setup` to:
+
+- Update a single configuration value
+- Fix validation errors
+- Re-sync secrets after rotation
+- Add optional fields like `testEntryId`
+
 ### Setup Commands
 
 ```bash
-npm run setup                # Interactive wizard (creates default profile)
+npm run setup                # Interactive wizard (creates/updates default profile)
 npm run setup:infer          # Infer Quilt config from catalog
 npm run setup:sync-secrets   # Sync secrets to AWS Secrets Manager
 npm run setup:health         # Validate configuration
@@ -510,6 +556,7 @@ aws logs tail /ecs/benchling-webhook --follow
 Version 0.7.0 is a BREAKING CHANGE release. See [MIGRATION.md](./MIGRATION.md) for detailed upgrade instructions.
 
 **Key changes:**
+
 - Configuration moved from `~/.config/benchling-webhook/default.json` to `~/.config/benchling-webhook/default/config.json`
 - Deployment tracking moved from shared `deploy.json` to per-profile `deployments.json`
 - Profiles moved from `profiles/{name}/default.json` to `{name}/config.json`

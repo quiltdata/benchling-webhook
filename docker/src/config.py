@@ -50,12 +50,14 @@ class Config:
         benchling_secret = os.getenv("BenchlingSecret")
 
         # Check if we have direct configuration (local/testing mode)
-        has_direct_config = all([
-            os.getenv("BENCHLING_TENANT"),
-            os.getenv("BENCHLING_CLIENT_ID"),
-            os.getenv("BENCHLING_CLIENT_SECRET"),
-            os.getenv("QUILT_QUEUE_ARN"),
-        ])
+        has_direct_config = all(
+            [
+                os.getenv("BENCHLING_TENANT"),
+                os.getenv("BENCHLING_CLIENT_ID"),
+                os.getenv("BENCHLING_CLIENT_SECRET"),
+                os.getenv("QUILT_QUEUE_ARN"),
+            ]
+        )
 
         if has_direct_config:
             # Local/testing mode: read from environment variables directly

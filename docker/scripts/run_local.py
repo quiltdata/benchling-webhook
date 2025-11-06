@@ -94,20 +94,22 @@ def load_credentials_from_aws():
         print(f"   Quilt Stack ARN: {quilt_stack_arn}")
 
         # Set environment variables directly from config
-        env_vars.update({
-            "BENCHLING_TENANT": benchling_config.get("tenant", ""),
-            "BENCHLING_CLIENT_ID": benchling_config.get("clientId", ""),
-            "BENCHLING_CLIENT_SECRET": benchling_client_secret,
-            "BENCHLING_APP_DEFINITION_ID": benchling_config.get("appDefinitionId", ""),
-            "QUILT_STACK_ARN": quilt_stack_arn,
-            "QUILT_CATALOG": quilt_config.get("catalog", ""),
-            "QUILT_BUCKET": quilt_config.get("bucket", ""),
-            "QUILT_DATABASE": quilt_config.get("database", ""),
-            "QUILT_QUEUE_ARN": quilt_config.get("queueArn", ""),
-            "PACKAGES_BUCKET": packages_config.get("bucket", ""),
-            "PACKAGES_PREFIX": packages_config.get("prefix", "benchling"),
-            "METADATA_KEY": packages_config.get("metadataKey", "experiment_id"),
-        })
+        env_vars.update(
+            {
+                "BENCHLING_TENANT": benchling_config.get("tenant", ""),
+                "BENCHLING_CLIENT_ID": benchling_config.get("clientId", ""),
+                "BENCHLING_CLIENT_SECRET": benchling_client_secret,
+                "BENCHLING_APP_DEFINITION_ID": benchling_config.get("appDefinitionId", ""),
+                "QUILT_STACK_ARN": quilt_stack_arn,
+                "QUILT_CATALOG": quilt_config.get("catalog", ""),
+                "QUILT_BUCKET": quilt_config.get("bucket", ""),
+                "QUILT_DATABASE": quilt_config.get("database", ""),
+                "QUILT_QUEUE_ARN": quilt_config.get("queueArn", ""),
+                "PACKAGES_BUCKET": packages_config.get("bucket", ""),
+                "PACKAGES_PREFIX": packages_config.get("prefix", "benchling"),
+                "METADATA_KEY": packages_config.get("metadataKey", "experiment_id"),
+            }
+        )
 
         print(f"✅ Successfully loaded configuration from XDG profile")
 
@@ -151,10 +153,12 @@ def load_credentials_from_aws():
         # Map secret values to environment variables
         # The ConfigResolver in production expects QuiltStackARN and BenchlingSecret
         # to be the actual ARN/name, not the resolved values
-        env_vars.update({
-            "QuiltStackARN": quilt_stack_arn,
-            "BenchlingSecret": benchling_secret_arn,
-        })
+        env_vars.update(
+            {
+                "QuiltStackARN": quilt_stack_arn,
+                "BenchlingSecret": benchling_secret_arn,
+            }
+        )
 
     else:
         raise ValueError(

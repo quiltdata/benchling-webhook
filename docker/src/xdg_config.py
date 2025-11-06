@@ -125,7 +125,9 @@ class XDGConfig:
 
         return sorted(profiles)
 
-    def read_profile(self, profile_name: Optional[str] = None, raise_if_missing: bool = True) -> Optional[Dict[str, Any]]:
+    def read_profile(
+        self, profile_name: Optional[str] = None, raise_if_missing: bool = True
+    ) -> Optional[Dict[str, Any]]:
         """
         Reads a profile configuration
 
