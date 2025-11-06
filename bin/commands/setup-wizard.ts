@@ -23,6 +23,7 @@ import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig, ValidationResult } from "../../lib/types/config";
 import { inferQuiltConfig } from "../commands/infer-quilt-config";
 import { isQueueUrl } from "../../lib/utils/sqs";
+import { manifestCommand } from "./manifest";
 
 // =============================================================================
 // VALIDATION FUNCTIONS (from scripts/config/validator.ts)
@@ -424,14 +425,60 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
                 return input.trim().length > 0 || "Client secret is required";
             },
         },
+    ]);
+
+    // Ask if they have an app_definition_id
+    const hasAppDefId = await inquirer.prompt([
         {
-            type: "input",
-            name: "appDefinitionId",
-            message: "Benchling App Definition ID:",
-            default: config.benchling?.appDefinitionId,
-            validate: (input: string): boolean | string =>
-                input.trim().length > 0 || "App definition ID is required",
+            type: "confirm",
+            name: "hasIt",
+            message: "Do you have a Benchling App Definition ID for this app?",
+            default: !!config.benchling?.appDefinitionId,
         },
+    ]);
+
+    let appDefinitionId = config.benchling?.appDefinitionId;
+
+    if (hasAppDefId.hasIt) {
+        // They have it, ask for it
+        const appDefAnswer = await inquirer.prompt([
+            {
+                type: "input",
+                name: "appDefinitionId",
+                message: "Benchling App Definition ID:",
+                default: config.benchling?.appDefinitionId,
+                validate: (input: string): boolean | string =>
+                    input.trim().length > 0 || "App definition ID is required",
+            },
+        ]);
+        appDefinitionId = appDefAnswer.appDefinitionId;
+    } else {
+        // They don't have it, create the manifest and show instructions
+        console.log("\n" + chalk.blue("Creating app manifest...") + "\n");
+
+        // Create manifest using the existing command
+        await manifestCommand({
+            catalog: config.quilt?.catalog,
+            output: "app-manifest.yaml",
+        });
+
+        console.log("\n" + chalk.yellow("After you have installed the app in Benchling and have the App Definition ID, you can continue.") + "\n");
+
+        // Now ask for the app definition ID
+        const appDefAnswer = await inquirer.prompt([
+            {
+                type: "input",
+                name: "appDefinitionId",
+                message: "Benchling App Definition ID:",
+                validate: (input: string): boolean | string =>
+                    input.trim().length > 0 || "App definition ID is required",
+            },
+        ]);
+        appDefinitionId = appDefAnswer.appDefinitionId;
+    }
+
+    // Ask for optional test entry ID
+    const testEntryAnswer = await inquirer.prompt([
         {
             type: "input",
             name: "testEntryId",
@@ -449,11 +496,11 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
         tenant: benchlingAnswers.tenant,
         clientId: benchlingAnswers.clientId,
         clientSecret: benchlingAnswers.clientSecret,
-        appDefinitionId: benchlingAnswers.appDefinitionId,
+        appDefinitionId: appDefinitionId!,
     };
 
-    if (benchlingAnswers.testEntryId && benchlingAnswers.testEntryId.trim() !== "") {
-        config.benchling.testEntryId = benchlingAnswers.testEntryId;
+    if (testEntryAnswer.testEntryId && testEntryAnswer.testEntryId.trim() !== "") {
+        config.benchling!.testEntryId = testEntryAnswer.testEntryId;
     }
 
     // Prompt for package configuration
