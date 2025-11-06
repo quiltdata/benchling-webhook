@@ -703,18 +703,10 @@ For questions about the data, refer to the original Benchling entry.
         }
 
         try:
-            # Convert ARN to URL format for boto3
-            # ARN format: arn:aws:sqs:region:account:queue-name
-            # URL format: https://sqs.region.amazonaws.com/account/queue-name
-            arn_parts = self.config.queue_arn.split(":")
-            if len(arn_parts) >= 6:
-                region = arn_parts[3]
-                account = arn_parts[4]
-                queue_name = arn_parts[5]
-                queue_url = f"https://sqs.{region}.amazonaws.com/{account}/{queue_name}"
-            else:
-                # Fallback: if it's already a URL (shouldn't happen but for safety)
-                queue_url = self.config.queue_arn
+            # Get queue URL from ARN using boto3 (cleaner than manual parsing)
+            queue_name = self.config.queue_arn.split(":")[-1]
+            queue_url_response = self.sqs_client.get_queue_url(QueueName=queue_name)
+            queue_url = queue_url_response["QueueUrl"]
 
             response = self.sqs_client.send_message(QueueUrl=queue_url, MessageBody=json.dumps(message_body))
 
