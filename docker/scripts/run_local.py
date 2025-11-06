@@ -53,71 +53,114 @@ def load_credentials_from_aws():
         print("💡 Run 'make install' to set up configuration")
         raise
 
-    # Extract required ARNs from config
-    benchling_secret_arn = config.get("benchlingSecretArn")
-    quilt_stack_arn = config.get("quiltStackArn")
+    # Extract config sections (v0.7.0+ nested structure)
+    benchling_config = config.get("benchling", {})
+    quilt_config = config.get("quilt", {})
+    deployment_config = config.get("deployment", {})
+    packages_config = config.get("packages", {})
 
-    if not benchling_secret_arn:
-        raise ValueError("benchlingSecretArn not found in XDG config.\n" "Run 'make install' to configure secrets.")
-
-    if not quilt_stack_arn:
-        raise ValueError("quiltStackArn not found in XDG config.\n" "Run 'make install' to configure Quilt stack.")
-
-    # Extract region from ARN or config
-    # Try multiple field names for backward compatibility
+    # Extract region from config (v0.7.0+ structure)
     aws_region = (
-        config.get("awsRegion")
-        or config.get("cdkRegion")
-        or config.get("quiltRegion")
-        or config.get("region")
-        or "us-east-1"  # Default to us-east-1 (most common AWS region)
+        quilt_config.get("region")
+        or deployment_config.get("region")
+        or config.get("awsRegion")  # Legacy
+        or config.get("cdkRegion")  # Legacy
+        or "us-east-1"  # Default to us-east-1
     )
 
-    print(f"🔐 Loading credentials from AWS Secrets Manager...")
-    print(f"   Region: {aws_region}")
-    print(f"   Benchling Secret ARN: {benchling_secret_arn}")
-    print(f"   Quilt Stack ARN: {quilt_stack_arn}")
+    # Check if secrets are embedded in config (testing) or in AWS Secrets Manager (production)
+    benchling_client_secret = benchling_config.get("clientSecret")
+    benchling_secret_arn = benchling_config.get("secretArn") or config.get("benchlingSecretArn")
+    quilt_stack_arn = quilt_config.get("stackArn") or config.get("quiltStackArn")
 
-    # Create Secrets Manager client
-    try:
-        secrets_client = boto3.client("secretsmanager", region_name=aws_region)
-    except Exception as e:
-        print(f"❌ Failed to create AWS Secrets Manager client: {e}")
-        print("💡 Check your AWS credentials with 'aws sts get-caller-identity'")
-        raise
+    # Validate required config
+    if not quilt_stack_arn:
+        raise ValueError("quilt.stackArn not found in XDG config.\n" "Run 'make install' to configure Quilt stack.")
 
-    # Retrieve secret from Secrets Manager
-    try:
-        response = secrets_client.get_secret_value(SecretId=benchling_secret_arn)
-        secret_string = response["SecretString"]
-        secrets = json.loads(secret_string)
-    except ClientError as e:
-        error_code = e.response["Error"]["Code"]
-        if error_code == "ResourceNotFoundException":
-            print(f"❌ Secret not found: {benchling_secret_arn}")
-            print("💡 Verify the secret exists in AWS Secrets Manager")
-        elif error_code == "AccessDeniedException":
-            print(f"❌ Access denied to secret: {benchling_secret_arn}")
-            print("💡 Check your IAM permissions for Secrets Manager")
-        else:
-            print(f"❌ Failed to retrieve secret: {e}")
-        raise
-    except json.JSONDecodeError as e:
-        print(f"❌ Secret contains invalid JSON: {e}")
-        raise
-
-    print(f"✅ Successfully loaded {len(secrets)} configuration parameters from AWS")
-
-    # Map secret values to environment variables
-    # The ConfigResolver in production expects QuiltStackARN and BenchlingSecret
-    # to be the actual ARN/name, not the resolved values
+    # Handle two scenarios:
+    # 1. Testing/local dev with embedded secrets (clientSecret present)
+    # 2. Production with AWS Secrets Manager (secretArn present)
     env_vars = {
-        "QuiltStackARN": quilt_stack_arn,
-        "BenchlingSecret": benchling_secret_arn,
         "AWS_REGION": aws_region,
         "FLASK_ENV": "development",
         "FLASK_DEBUG": "true",
     }
+
+    if benchling_client_secret:
+        # Scenario 1: Embedded secrets (testing/local dev)
+        print(f"🔧 Using embedded configuration (testing mode)...")
+        print(f"   Region: {aws_region}")
+        print(f"   Benchling Tenant: {benchling_config.get('tenant')}")
+        print(f"   Quilt Stack ARN: {quilt_stack_arn}")
+
+        # Set environment variables directly from config
+        env_vars.update({
+            "BENCHLING_TENANT": benchling_config.get("tenant", ""),
+            "BENCHLING_CLIENT_ID": benchling_config.get("clientId", ""),
+            "BENCHLING_CLIENT_SECRET": benchling_client_secret,
+            "BENCHLING_APP_DEFINITION_ID": benchling_config.get("appDefinitionId", ""),
+            "QUILT_STACK_ARN": quilt_stack_arn,
+            "QUILT_CATALOG": quilt_config.get("catalog", ""),
+            "QUILT_BUCKET": quilt_config.get("bucket", ""),
+            "QUILT_DATABASE": quilt_config.get("database", ""),
+            "QUILT_QUEUE_ARN": quilt_config.get("queueArn", ""),
+            "PACKAGES_BUCKET": packages_config.get("bucket", ""),
+            "PACKAGES_PREFIX": packages_config.get("prefix", "benchling"),
+            "METADATA_KEY": packages_config.get("metadataKey", "experiment_id"),
+        })
+
+        print(f"✅ Successfully loaded configuration from XDG profile")
+
+    elif benchling_secret_arn:
+        # Scenario 2: AWS Secrets Manager (production)
+        print(f"🔐 Loading credentials from AWS Secrets Manager...")
+        print(f"   Region: {aws_region}")
+        print(f"   Benchling Secret ARN: {benchling_secret_arn}")
+        print(f"   Quilt Stack ARN: {quilt_stack_arn}")
+
+        # Create Secrets Manager client
+        try:
+            secrets_client = boto3.client("secretsmanager", region_name=aws_region)
+        except Exception as e:
+            print(f"❌ Failed to create AWS Secrets Manager client: {e}")
+            print("💡 Check your AWS credentials with 'aws sts get-caller-identity'")
+            raise
+
+        # Retrieve secret from Secrets Manager
+        try:
+            response = secrets_client.get_secret_value(SecretId=benchling_secret_arn)
+            secret_string = response["SecretString"]
+            secrets = json.loads(secret_string)
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            if error_code == "ResourceNotFoundException":
+                print(f"❌ Secret not found: {benchling_secret_arn}")
+                print("💡 Verify the secret exists in AWS Secrets Manager")
+            elif error_code == "AccessDeniedException":
+                print(f"❌ Access denied to secret: {benchling_secret_arn}")
+                print("💡 Check your IAM permissions for Secrets Manager")
+            else:
+                print(f"❌ Failed to retrieve secret: {e}")
+            raise
+        except json.JSONDecodeError as e:
+            print(f"❌ Secret contains invalid JSON: {e}")
+            raise
+
+        print(f"✅ Successfully loaded {len(secrets)} configuration parameters from AWS")
+
+        # Map secret values to environment variables
+        # The ConfigResolver in production expects QuiltStackARN and BenchlingSecret
+        # to be the actual ARN/name, not the resolved values
+        env_vars.update({
+            "QuiltStackARN": quilt_stack_arn,
+            "BenchlingSecret": benchling_secret_arn,
+        })
+
+    else:
+        raise ValueError(
+            "Neither benchling.clientSecret nor benchling.secretArn found in XDG config.\n"
+            "Run 'make install' to configure secrets or add clientSecret for testing."
+        )
 
     return env_vars
 
