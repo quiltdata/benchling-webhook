@@ -1,4 +1,10 @@
-# SETUP BUGS - RESOLVED
+# SETUP BUG
+
+## Open Issues
+
+- TBD
+- Display/verify AWS Account ID (got removed)
+- App Definition should come after tenant; if missing, switch to manifest and app install flow
 
 ## Fixed Issues
 

@@ -21,7 +21,7 @@ import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig, ValidationResult, QuiltConfig } from "../../lib/types/config";
 import { inferQuiltConfig } from "../commands/infer-quilt-config";
-import { toQueueUrl, isQueueUrl } from "../../lib/utils/sqs";
+import { isQueueUrl } from "../../lib/utils/sqs";
 
 // =============================================================================
 // VALIDATION FUNCTIONS (from scripts/config/validator.ts)
@@ -297,21 +297,6 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
 
     const config: Partial<ProfileConfig> = { ...existingConfig };
 
-    // Normalize legacy queue ARN to URL
-    if (config.quilt) {
-        const quiltConfig = config.quilt as QuiltConfig & { queueArn?: string };
-        const normalizedQueue =
-            toQueueUrl(quiltConfig.queueUrl ?? quiltConfig.queueArn) ?? quiltConfig.queueUrl;
-
-        if (normalizedQueue) {
-            quiltConfig.queueUrl = normalizedQueue;
-        }
-
-        if (quiltConfig.queueArn) {
-            delete quiltConfig.queueArn;
-        }
-    }
-
     // If non-interactive, validate that all required fields are present
     if (nonInteractive) {
         if (!config.benchling?.tenant || !config.benchling?.clientId || !config.benchling?.clientSecret) {
@@ -368,11 +353,9 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
                 message: "SQS Queue URL:",
                 default: config.quilt?.queueUrl,
                 validate: (input: string): boolean | string => {
-                    const normalized = toQueueUrl(input);
-                    return normalized && isQueueUrl(normalized) ||
+                    return isQueueUrl(input) ||
                         "Queue URL is required and must look like https://sqs.<region>.amazonaws.com/<account>/<queue>";
                 },
-                filter: (input: string): string => toQueueUrl(input) || input.trim(),
             },
         ]);
 

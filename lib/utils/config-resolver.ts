@@ -20,7 +20,7 @@ import {
     validateSecretData,
     type BenchlingSecretData,
 } from "./secrets";
-import { toQueueUrl, isQueueUrl } from "./sqs";
+import { isQueueUrl } from "./sqs";
 
 /**
  * Complete resolved configuration for the application
@@ -307,18 +307,13 @@ export class ConfigResolver {
         // Step 4: Validate required outputs
         this.validateRequiredOutputs(outputs);
 
-        // Extract queue identifier (URL preferred, fallback to ARN)
-        const queueIdentifier =
-      outputs.PackagerQueueUrl ||
-      outputs.QueueUrl ||
-      outputs.PackagerQueueArn;
-
-        const queueUrl = toQueueUrl(queueIdentifier);
+        // Extract queue URL
+        const queueUrl = outputs.PackagerQueueUrl || outputs.QueueUrl;
 
         if (!queueUrl || !isQueueUrl(queueUrl)) {
             throw new ConfigResolverError(
                 "Missing SQS queue URL in CloudFormation outputs",
-                "Ensure your Quilt stack exports PackagerQueueUrl or PackagerQueueArn",
+                "Ensure your Quilt stack exports PackagerQueueUrl or QueueUrl",
                 `Available outputs: ${Object.keys(outputs).join(", ")}`,
             );
         }
