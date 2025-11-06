@@ -133,7 +133,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
         } else {
             // Reference existing ECR repository
             ecrRepo = ecr.Repository.fromRepositoryName(this, "ExistingEcrRepository", repoName);
-            const account = config.deployment.account || this.account;
+            // Use ecrAccount if specified (for cross-account ECR access), otherwise use deployment account
+            const account = (config.deployment as any).ecrAccount || config.deployment.account || this.account;
             const region = config.deployment.region;
             ecrImageUri = `${account}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTagValue}`;
         }

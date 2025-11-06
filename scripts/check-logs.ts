@@ -73,10 +73,11 @@ function getAwsRegion(profile: string, stage: string): string {
     return "us-east-1";
 }
 
-function getStackOutputs(region: string): StackOutput[] {
+function getStackOutputs(region: string, profile: string): StackOutput[] {
     try {
+        const profileFlag = profile !== "default" ? `--profile ${profile}` : "";
         const output = execSync(
-            `aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${region} --query 'Stacks[0].Outputs' --output json`,
+            `aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${region} ${profileFlag} --query 'Stacks[0].Outputs' --output json`,
             { encoding: "utf-8" },
         );
         return JSON.parse(output) as StackOutput[];
@@ -163,7 +164,7 @@ function main(): void {
     const AWS_REGION = getAwsRegion(profile, stage);
 
     // Get stack outputs
-    const outputs = getStackOutputs(AWS_REGION);
+    const outputs = getStackOutputs(AWS_REGION, profile);
 
     // Handle 'all' type - show all three log groups
     if (logType === "all") {
@@ -193,8 +194,10 @@ function main(): void {
             console.log(`${type}: ${group}`);
             console.log("=".repeat(80));
 
+            const profileFlag = profile !== "default" ? `--profile ${profile}` : "";
             let command = `aws logs tail "${group}"`;
             command += ` --region ${AWS_REGION}`;
+            if (profileFlag) command += ` ${profileFlag}`;
             command += ` --since ${since}`;
             command += " --format short";
             if (filterPattern) {
@@ -221,8 +224,10 @@ function main(): void {
     printStackInfo(outputs, logGroup, logType, profile, stage);
 
     // Build AWS logs command
+    const profileFlag = profile !== "default" ? `--profile ${profile}` : "";
     let command = `aws logs tail ${logGroup}`;
     command += ` --region ${AWS_REGION}`;
+    if (profileFlag) command += ` ${profileFlag}`;
     command += ` --since ${since}`;
     command += " --format short";
 
