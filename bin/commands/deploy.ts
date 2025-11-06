@@ -260,6 +260,12 @@ async function deploy(
         }
     }
 
+    // Build ECR image URI for display
+    // Use ecrAccount if specified (for cross-account ECR access), otherwise use deployment account
+    const ecrAccount = (config.deployment as any).ecrAccount || config.deployment.account || deployAccount;
+    const ecrRepository = config.deployment.ecrRepository || "quiltdata/benchling";
+    const ecrImageUri = `${ecrAccount}.dkr.ecr.${deployRegion}.amazonaws.com/${ecrRepository}:${options.imageTag}`;
+
     // Display deployment plan
     console.log();
     console.log(chalk.bold("Deployment Plan"));
@@ -273,7 +279,12 @@ async function deploy(
     console.log(chalk.bold("  Stack Parameters:"));
     console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)}`);
     console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
-    console.log(`    ${chalk.bold("Docker Image Tag:")}        ${options.imageTag}`);
+    console.log();
+    console.log(chalk.bold("  Container Image:"));
+    console.log(`    ${chalk.bold("ECR Account:")}             ${ecrAccount}`);
+    console.log(`    ${chalk.bold("ECR Repository:")}          ${ecrRepository}`);
+    console.log(`    ${chalk.bold("Image Tag:")}               ${options.imageTag}`);
+    console.log(`    ${chalk.bold("Full Image URI:")}          ${ecrImageUri}`);
     console.log();
     console.log(chalk.dim("  ℹ️  All other configuration will be resolved from AWS at runtime"));
     console.log(chalk.gray("─".repeat(80)));
