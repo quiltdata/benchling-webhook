@@ -25,7 +25,7 @@ class Config:
     package_key: str = ""
     quilt_catalog: str = ""
     quilt_database: str = ""
-    queue_arn: str = ""
+    queue_url: str = ""
     benchling_tenant: str = ""
     benchling_client_id: str = ""
     benchling_client_secret: str = ""
@@ -69,7 +69,7 @@ class Config:
             self.package_key = resolved.pkg_key
             self.quilt_catalog = resolved.quilt_catalog
             self.quilt_database = resolved.quilt_database
-            self.queue_arn = resolved.queue_arn
+            self.queue_url = resolved.queue_url
             self.benchling_tenant = resolved.benchling_tenant
             self.benchling_client_id = resolved.benchling_client_id
             self.benchling_client_secret = resolved.benchling_client_secret

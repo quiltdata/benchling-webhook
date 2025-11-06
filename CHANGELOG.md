@@ -3,6 +3,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.2] - 2025-11-06
+
+### Fixed
+
+- Deployment tests now use correct XDG profile matching deployment profile
+- `test:dev` command now passes `PROFILE=dev` to match `deploy:dev` behavior
+- Deployed stack tests now run health checks only (webhook tests require Benchling signatures)
+
 ## [0.7.1] - 2025-11-04
 
 ### Fixed

@@ -138,6 +138,70 @@ describe("S3BucketValidator", () => {
             expect(result.hasAccess).toBe(false);
             expect(result.errors.length).toBeGreaterThan(0);
         });
+
+        it("should reject invalid bucket name", async () => {
+            // Arrange
+            const config = {
+                bucketName: "Invalid_Bucket_Name!", // Contains invalid characters
+                region: "us-west-2",
+            };
+
+            // Act
+            const result = await S3BucketValidator.validate(config);
+
+            // Assert
+            expect(result.hasAccess).toBe(false);
+            expect(result.isConfigured).toBe(false);
+            expect(result.errors).toContain("Invalid bucket name format");
+        });
+
+        it("should reject invalid AWS region", async () => {
+            // Arrange
+            const config = {
+                bucketName: "valid-bucket-name",
+                region: "invalid-region-format", // Does not match AWS region pattern
+            };
+
+            // Act
+            const result = await S3BucketValidator.validate(config);
+
+            // Assert
+            expect(result.hasAccess).toBe(false);
+            expect(result.isConfigured).toBe(false);
+            expect(result.errors).toContain("Invalid AWS region");
+        });
+
+        it("should reject empty bucket name", async () => {
+            // Arrange
+            const config = {
+                bucketName: "",
+                region: "us-west-2",
+            };
+
+            // Act
+            const result = await S3BucketValidator.validate(config);
+
+            // Assert
+            expect(result.hasAccess).toBe(false);
+            expect(result.isConfigured).toBe(false);
+            expect(result.errors).toContain("Invalid bucket name format");
+        });
+
+        it("should reject empty region", async () => {
+            // Arrange
+            const config = {
+                bucketName: "valid-bucket-name",
+                region: "",
+            };
+
+            // Act
+            const result = await S3BucketValidator.validate(config);
+
+            // Assert
+            expect(result.hasAccess).toBe(false);
+            expect(result.isConfigured).toBe(false);
+            expect(result.errors).toContain("Invalid AWS region");
+        });
     });
 
     describe("validateBucketName", () => {

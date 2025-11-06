@@ -3,6 +3,7 @@ import { expand as dotenvExpand } from "dotenv-expand";
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { execSync } from "child_process";
+import { isQueueUrl } from "./sqs";
 
 export interface Config {
   // Secrets-Only Mode (v0.6.0+)
@@ -29,7 +30,7 @@ export interface Config {
   awsProfile?: string;
 
   // SQS
-  queueArn: string;
+  queueUrl: string;
 
   // Optional
   pkgPrefix?: string;
@@ -247,7 +248,7 @@ export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
         awsProfile: options.profile || envVars.AWS_PROFILE,
 
         // SQS
-        queueArn: envVars.QUEUE_ARN,
+        queueUrl: envVars.QUEUE_URL,
 
         // Optional
         pkgPrefix: envVars.PKG_PREFIX || "benchling",
@@ -277,7 +278,7 @@ export function mergeInferredConfig(
     return {
         cdkAccount: config.cdkAccount || inferredVars.CDK_DEFAULT_ACCOUNT,
         cdkRegion: config.cdkRegion || inferredVars.CDK_DEFAULT_REGION,
-        queueArn: config.queueArn || inferredVars.QUEUE_ARN,
+        queueUrl: config.queueUrl || inferredVars.QUEUE_URL,
         quiltDatabase: config.quiltDatabase || inferredVars.QUILT_DATABASE,
         ...config, // User values always take precedence
     };
@@ -318,7 +319,7 @@ export function validateConfig(config: Partial<Config>): ValidationResult {
     const requiredInferredFields: Array<[keyof Config, string]> = [
         ["cdkAccount", "AWS account ID"],
         ["cdkRegion", "AWS region"],
-        ["queueArn", "SQS queue ARN"],
+        ["queueUrl", "SQS queue URL"],
         ["quiltDatabase", "Quilt database name"],
     ];
 
@@ -340,6 +341,10 @@ export function validateConfig(config: Partial<Config>): ValidationResult {
 
     if (config.quiltUserBucket && !/^[a-z0-9.-]{3,63}$/.test(config.quiltUserBucket)) {
         warnings.push("QUILT_USER_BUCKET does not look like a valid S3 bucket name");
+    }
+
+    if (config.queueUrl && !isQueueUrl(config.queueUrl)) {
+        warnings.push("QUEUE_URL should be a valid SQS queue URL (https://sqs.<region>.amazonaws.com/<account>/<queue>)");
     }
 
     // Security warnings

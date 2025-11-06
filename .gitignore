@@ -24,3 +24,5 @@ env.inferred
 .env.deploy
 CLAUDE.md
 /coverage
+benchling-app-manifest.yaml
+app-manifest.yaml

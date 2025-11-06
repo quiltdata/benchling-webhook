@@ -5,7 +5,7 @@
     "catalog": "https://quilt.example.com",
     "bucket": "my-quilt-bucket",
     "database": "quilt_catalog",
-    "queueArn": "arn:aws:sqs:us-east-1:123456789012:quilt-package-queue",
+    "queueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-package-queue",
     "region": "us-east-1"
   },
   "benchling": {

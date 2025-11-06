@@ -38,9 +38,8 @@ describe("Fresh Install Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "prod-quilt-bucket",
                     database: "prod_catalog",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:prod-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/prod-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -82,7 +81,6 @@ describe("Fresh Install Integration", () => {
 
             // Step 4: Read back and verify contents
             const readConfig = xdg.readProfile("default");
-            expect(readConfig.quilt.bucket).toBe("prod-quilt-bucket");
             expect(readConfig.benchling.tenant).toBe("prod-tenant");
             expect(readConfig.deployment.imageTag).toBe("stable");
 
@@ -97,9 +95,8 @@ describe("Fresh Install Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -154,9 +151,8 @@ describe("Fresh Install Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -197,9 +193,8 @@ describe("Fresh Install Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -241,9 +236,8 @@ describe("Fresh Install Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "initial-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -271,13 +265,11 @@ describe("Fresh Install Integration", () => {
 
             // Update configuration
             const updatedConfig = { ...initialConfig };
-            updatedConfig.quilt.bucket = "updated-bucket";
             updatedConfig._metadata.updatedAt = "2025-11-04T11:00:00Z";
 
             xdg.writeProfile("default", updatedConfig);
 
             const readConfig = xdg.readProfile("default");
-            expect(readConfig.quilt.bucket).toBe("updated-bucket");
             expect(readConfig._metadata.updatedAt).toBe("2025-11-04T11:00:00Z");
         });
 
@@ -286,9 +278,8 @@ describe("Fresh Install Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "bucket-v1",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -315,7 +306,6 @@ describe("Fresh Install Integration", () => {
             xdg.writeProfile("default", config1);
 
             const config2 = { ...config1 };
-            config2.quilt.bucket = "bucket-v2";
 
             xdg.writeProfile("default", config2);
 
@@ -340,9 +330,8 @@ describe("Fresh Install Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -384,9 +373,8 @@ describe("Fresh Install Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {

@@ -38,9 +38,8 @@ describe("XDGConfig", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -147,9 +146,8 @@ describe("XDGConfig", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -187,9 +185,8 @@ describe("XDGConfig", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -224,9 +221,8 @@ describe("XDGConfig", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket-1",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -253,14 +249,12 @@ describe("XDGConfig", () => {
             xdg.writeProfile("default", config1);
 
             const config2 = { ...config1 };
-            config2.quilt.bucket = "test-bucket-2";
             xdg.writeProfile("default", config2);
 
             const backupPath = join(testBaseDir, "default", "config.json.backup");
             expect(existsSync(backupPath)).toBe(true);
 
             const backup = JSON.parse(readFileSync(backupPath, "utf-8"));
-            expect(backup.quilt.bucket).toBe("test-bucket-1");
         });
 
         it("should throw error for invalid configuration", () => {
@@ -285,9 +279,8 @@ describe("XDGConfig", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -342,9 +335,8 @@ describe("XDGConfig", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -387,9 +379,8 @@ describe("XDGConfig", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -435,9 +426,8 @@ describe("XDGConfig", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -494,7 +484,7 @@ describe("XDGConfig", () => {
                     catalog: "not-a-url",
                     bucket: "ab",
                     database: "",
-                    queueArn: "invalid",
+                    queueUrl: "invalid",
                     region: "invalid-region",
                 },
                 benchling: {

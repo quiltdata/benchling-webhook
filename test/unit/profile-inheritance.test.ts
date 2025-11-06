@@ -35,9 +35,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "default-bucket",
                     database: "default_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:default-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/default-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -79,9 +78,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "default-bucket",
                     database: "default_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:default-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/default-queue",
                     region: "us-east-1",
                 },
                 packages: {
@@ -103,7 +101,6 @@ describe("Profile Inheritance", () => {
             const resolved = xdg.readProfileWithInheritance("dev");
 
             // Should have all fields from default
-            expect(resolved.quilt.bucket).toBe("default-bucket");
             expect(resolved.benchling.tenant).toBe("default-tenant");
             expect(resolved.packages.bucket).toBe("default-packages");
 
@@ -120,9 +117,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -152,9 +148,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -191,9 +186,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "standalone-bucket",
                     database: "standalone_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:standalone-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/standalone-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -231,9 +225,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -273,9 +266,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -327,9 +319,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -364,9 +355,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -410,9 +400,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -447,9 +436,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -478,9 +466,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -517,9 +504,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -548,9 +534,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -579,9 +564,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -620,9 +604,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -655,9 +638,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -690,9 +672,8 @@ describe("Profile Inheritance", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -722,7 +703,6 @@ describe("Profile Inheritance", () => {
             const resolved = xdg.readProfileWithInheritance("staging");
 
             // Should inherit from base through dev
-            expect(resolved.quilt.bucket).toBe("base-bucket");
             expect(resolved.benchling.tenant).toBe("base-tenant");
 
             // Should use staging overrides

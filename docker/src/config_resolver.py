@@ -31,6 +31,36 @@ from botocore.exceptions import ClientError
 
 logger = structlog.get_logger(__name__)
 
+QUEUE_URL_REGEX = re.compile(r"^arn:aws:sqs:([a-z0-9-]+):(\d+):(.+)$", re.IGNORECASE)
+QUEUE_URL_REGEX = re.compile(r"^https://sqs\.[a-z0-9-]+\.amazonaws\.com/\d+/.+", re.IGNORECASE)
+
+
+def to_queue_url(identifier: Optional[str]) -> Optional[str]:
+    """Normalize an SQS queue identifier (ARN or URL) to a queue URL."""
+
+    if not identifier:
+        return identifier
+
+    trimmed = identifier.strip()
+    if not trimmed:
+        return None
+
+    if is_queue_url(trimmed):
+        return trimmed
+
+    match = QUEUE_URL_REGEX.match(trimmed)
+    if not match:
+        return trimmed
+
+    region, account, queue_name = match.groups()
+    return f"https://sqs.{region}.amazonaws.com/{account}/{queue_name}"
+
+
+def is_queue_url(value: Optional[str]) -> bool:
+    if not value:
+        return False
+    return bool(QUEUE_URL_REGEX.match(value.strip()))
+
 
 class ConfigResolverError(Exception):
     """Raised when configuration resolution fails."""
@@ -114,7 +144,7 @@ class ResolvedConfig:
 
     Infrastructure parameters come from CloudFormation:
         - aws_region, aws_account: Parsed from stack ARN
-        - quilt_catalog, quilt_database, queue_arn: Stack outputs
+        - quilt_catalog, quilt_database, queue_url: Stack outputs
         - benchling_api_url: Stack output (optional)
 
     Runtime parameters come from Benchling secret:
@@ -130,7 +160,7 @@ class ResolvedConfig:
     # Infrastructure (from CloudFormation outputs)
     quilt_catalog: str
     quilt_database: str
-    queue_arn: str
+    queue_url: str
 
     # Runtime Configuration (from Benchling secret - all 10 parameters)
     benchling_tenant: str
@@ -154,7 +184,7 @@ class ResolvedConfig:
             "aws_account": self.aws_account,
             "quilt_catalog": self.quilt_catalog,
             "quilt_database": self.quilt_database,
-            "queue_arn": self.queue_arn,
+            "queue_url": self.queue_url,
             "user_bucket": self.user_bucket,
             "benchling_tenant": self.benchling_tenant,
             "benchling_client_id": self.benchling_client_id,
@@ -495,6 +525,22 @@ class ConfigResolver:
         # Step 6: Resolve catalog URL
         catalog = self._resolve_catalog_url(outputs)
 
+        # Step 6.5: Normalize queue identifier
+        queue_identifier = (
+            outputs.get("PackagerQueueUrl")
+            or outputs.get("QueueUrl")
+            or outputs.get("PackagerQueueArn")
+        )
+
+        queue_url = to_queue_url(queue_identifier)
+
+        if not queue_url or not is_queue_url(queue_url):
+            raise ConfigResolverError(
+                "Missing SQS queue URL in CloudFormation outputs",
+                "Ensure your Quilt stack exports PackagerQueueUrl or PackagerQueueArn",
+                f"Available outputs: {', '.join(outputs.keys())}",
+            )
+
         # Step 7: Assemble complete configuration
         config = ResolvedConfig(
             # AWS Context (from ARN parsing)
@@ -503,7 +549,7 @@ class ConfigResolver:
             # Infrastructure (from CloudFormation outputs)
             quilt_catalog=catalog,
             quilt_database=outputs["UserAthenaDatabaseName"],
-            queue_arn=outputs["PackagerQueueArn"],
+            queue_url=queue_url,
             # Runtime Configuration (from Benchling secret - all 10 parameters)
             benchling_tenant=secret.tenant,
             benchling_client_id=secret.client_id,
@@ -536,9 +582,17 @@ class ConfigResolver:
 
         USER_BUCKET now comes from secret, not CloudFormation.
         """
-        required = ["UserAthenaDatabaseName", "PackagerQueueArn"]
+        missing = []
 
-        missing = [key for key in required if key not in outputs]
+        if "UserAthenaDatabaseName" not in outputs or not outputs.get("UserAthenaDatabaseName"):
+            missing.append("UserAthenaDatabaseName")
+
+        if not (
+            outputs.get("PackagerQueueUrl")
+            or outputs.get("QueueUrl")
+            or outputs.get("PackagerQueueUrl")
+        ):
+            missing.append("PackagerQueueUrl or PackagerQueueUrl")
 
         if missing:
             raise ConfigResolverError(

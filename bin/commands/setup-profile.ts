@@ -144,24 +144,22 @@ export async function setupProfileCommand(
     // Optionally prompt for custom Quilt stack ARN
     let quiltStackArn = baseConfig.quilt.stackArn;
     if (answers.customizeQuiltStack) {
-        const stackAnswer = await inquirer.prompt<{ quiltStackArn: string }>([
-            {
-                type: "input",
-                name: "quiltStackArn",
-                message: "Quilt Stack ARN:",
-                default: baseConfig.quilt.stackArn,
-                validate: (input: string): boolean | string => {
-                    if (!input || input.trim().length === 0) {
-                        return "Quilt Stack ARN is required";
-                    }
-                    if (!input.startsWith("arn:aws:cloudformation:")) {
-                        return "Must be a valid CloudFormation stack ARN";
-                    }
-                    return true;
-                },
+        const stackAnswer = await inquirer.prompt<{ stackArn: string }>({
+            type: "input",
+            name: "stackArn",
+            message: "Quilt Stack ARN:",
+            default: baseConfig.quilt.stackArn,
+            validate: (input: string): boolean | string => {
+                if (!input || input.trim().length === 0) {
+                    return "Quilt Stack ARN is required";
+                }
+                if (!input.startsWith("arn:aws:cloudformation:")) {
+                    return "Must be a valid CloudFormation stack ARN";
+                }
+                return true;
             },
-        ]);
-        quiltStackArn = stackAnswer.quiltStackArn;
+        });
+        quiltStackArn = stackAnswer.stackArn;
     }
 
     // Optionally prompt for custom secret ARN

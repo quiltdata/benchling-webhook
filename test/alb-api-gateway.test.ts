@@ -31,9 +31,8 @@ describe("AlbApiGateway", () => {
             quilt: {
                 stackArn: "arn:aws:cloudformation:us-west-2:987654321098:stack/quilt/def456",
                 catalog: "https://catalog.example.org",
-                bucket: "test-bucket",
                 database: "test_db",
-                queueArn: "arn:aws:sqs:us-west-2:987654321098:test-queue",
+                queueUrl: "https://sqs.us-west-2.amazonaws.com/987654321098/test-queue",
                 region: "us-west-2",
             },
             benchling: {

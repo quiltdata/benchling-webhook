@@ -201,6 +201,20 @@ def create_app():
                     parts[4] = mask_value(parts[4], 4)
                 return ":".join(parts)
 
+            def mask_queue_url(url):
+                """Mask SQS queue URL account ID."""
+                if not url or not url.startswith("https://sqs."):
+                    return url
+                prefix, _, remainder = url.partition("amazonaws.com/")
+                if not remainder:
+                    return url
+                parts = remainder.split("/", 1)
+                if len(parts) != 2:
+                    return url
+                account_id, queue_path = parts
+                masked_account = mask_value(account_id, 4)
+                return f"{prefix}amazonaws.com/{masked_account}/{queue_path}"
+
             response = {
                 "config_mode": config_mode,
                 "aws": {
@@ -210,7 +224,7 @@ def create_app():
                     "catalog": config.quilt_catalog,
                     "database": config.quilt_database,
                     "bucket": config.s3_bucket_name,
-                    "queue_arn": mask_arn(config.queue_arn) if config.queue_arn else None,
+                    "queue_url": mask_queue_url(config.queue_url) if config.queue_url else None,
                 },
                 "benchling": {
                     "tenant": config.benchling_tenant,

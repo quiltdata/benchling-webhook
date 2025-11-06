@@ -22,7 +22,7 @@ def isolate_environment(monkeypatch):
         "BENCHLING_CLIENT_SECRET",
         "BENCHLING_APP_DEFINITION_ID",
         "QUILT_USER_BUCKET",
-        "QUEUE_ARN",
+        "QUEUE_URL",
         "QUILT_CATALOG",
         "QUILT_DATABASE",
         "AWS_REGION",
@@ -64,7 +64,7 @@ def mock_config_resolver(monkeypatch):
         # Infrastructure (CloudFormation)
         quilt_catalog="test.quiltdata.com",
         quilt_database="test_database",
-        queue_arn="arn:aws:sqs:us-east-1:123456789012:test-queue",
+        queue_url="https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
         # Runtime Configuration (Secret - all 10 parameters)
         benchling_tenant="test-tenant",
         benchling_client_id="test-client-id",

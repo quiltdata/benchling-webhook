@@ -33,7 +33,7 @@ export type ProfileName = string;
  *     "catalog": "https://quilt.example.com",
  *     "bucket": "my-quilt-bucket",
  *     "database": "quilt_catalog",
- *     "queueArn": "arn:aws:sqs:...",
+ *     "queueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-queue",
  *     "region": "us-east-1"
  *   },
  *   "benchling": {
@@ -110,8 +110,8 @@ export interface ProfileConfig {
 /**
  * Quilt Catalog Configuration
  *
- * Configuration for Quilt data catalog integration, including S3 bucket,
- * CloudFormation stack, and SQS queue for package creation.
+ * Configuration for Quilt data catalog integration, including CloudFormation stack
+ * and SQS queue for package creation.
  */
 export interface QuiltConfig {
     /**
@@ -129,13 +129,6 @@ export interface QuiltConfig {
     catalog: string;
 
     /**
-     * S3 bucket for Quilt package storage
-     *
-     * @example "my-quilt-bucket"
-     */
-    bucket: string;
-
-    /**
      * Athena/Glue database name for catalog metadata
      *
      * @example "quilt_catalog"
@@ -143,11 +136,11 @@ export interface QuiltConfig {
     database: string;
 
     /**
-     * SQS queue ARN for package creation jobs
+     * SQS queue URL for package creation jobs
      *
-     * @example "arn:aws:sqs:us-east-1:123456789012:quilt-package-queue"
+     * @example "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-package-queue"
      */
-    queueArn: string;
+    queueUrl: string;
 
     /**
      * AWS region for Quilt resources
@@ -547,13 +540,12 @@ export const ProfileConfigSchema = {
     properties: {
         quilt: {
             type: "object",
-            required: ["stackArn", "catalog", "bucket", "database", "queueArn", "region"],
+            required: ["stackArn", "catalog", "database", "queueUrl", "region"],
             properties: {
                 stackArn: { type: "string", pattern: "^arn:aws:cloudformation:" },
                 catalog: { type: "string", minLength: 1 },
-                bucket: { type: "string", minLength: 3 },
                 database: { type: "string", minLength: 1 },
-                queueArn: { type: "string", pattern: "^arn:aws:sqs:" },
+                queueUrl: { type: "string", pattern: "^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/\\d{12}/.+" },
                 region: { type: "string", pattern: "^[a-z]{2}-[a-z]+-[0-9]$" },
             },
         },
@@ -664,66 +656,3 @@ export const DeploymentHistorySchema = {
     additionalProperties: false,
 } as const;
 
-// ============================================================================
-// LEGACY TYPES (Temporary - for backward compatibility during Phase 2)
-// These will be removed in Phase 8 after all code is updated
-// ============================================================================
-
-/**
- * @deprecated Legacy type from v0.6.x - use ProfileConfig instead
- */
-export type ConfigType = "user" | "derived" | "deploy" | "complete";
-
-/**
- * @deprecated Legacy interface from v0.6.x - use ProfileConfig instead
- */
-export interface UserConfig {
-    [key: string]: unknown;
-}
-
-/**
- * @deprecated Legacy interface from v0.6.x - use ProfileConfig instead
- */
-export interface DerivedConfig extends UserConfig {
-    [key: string]: unknown;
-}
-
-/**
- * @deprecated Legacy interface from v0.6.x - use DeploymentRecord instead
- */
-export interface LegacyDeploymentConfig extends DerivedConfig {
-    [key: string]: unknown;
-}
-
-/**
- * @deprecated Legacy type from v0.6.x - use ProfileConfig instead
- */
-export type CompleteConfig = LegacyDeploymentConfig;
-
-/**
- * @deprecated Legacy interface from v0.6.x - no longer used
- */
-export interface ConfigSet {
-    user?: UserConfig;
-    derived?: DerivedConfig;
-    deploy?: LegacyDeploymentConfig;
-}
-
-/**
- * @deprecated Legacy interface from v0.6.x - no longer used
- */
-export interface ConfigProfile {
-    name: ProfileName;
-    user?: UserConfig;
-    derived?: DerivedConfig;
-    deploy?: LegacyDeploymentConfig;
-}
-
-/**
- * @deprecated Legacy interface from v0.6.x - no longer used
- */
-export interface XDGConfigPaths {
-    userConfig: string;
-    derivedConfig: string;
-    deployConfig: string;
-}
