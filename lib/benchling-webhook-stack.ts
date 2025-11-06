@@ -5,7 +5,6 @@ import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
 import { AlbApiGateway } from "./alb-api-gateway";
-import { EcrRepository } from "./ecr-repository";
 import { ProfileConfig } from "./types/config";
 import packageJson from "../package.json";
 
@@ -21,13 +20,6 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
      * This replaces the previous secrets-only mode parameters.
      */
     readonly config: ProfileConfig;
-
-    /**
-     * Whether to create a new ECR repository
-     * If false, uses existing repository specified in config.deployment.ecrRepository
-     * @default false
-     */
-    readonly createEcrRepository?: boolean;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
@@ -118,26 +110,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
             isDefault: true,
         });
 
-        // Get or create ECR repository
-        let ecrRepo: ecr.IRepository;
-        let ecrImageUri: string;
+        // HARDCODED: Always use the quiltdata AWS account for ECR images
+        const account = "712023778557";
+        const region = "us-east-1";
         const repoName = config.deployment.ecrRepository || "quiltdata/benchling";
-
-        if (props.createEcrRepository) {
-            const newRepo = new EcrRepository(this, "EcrRepository", {
-                repositoryName: repoName,
-                publicReadAccess: true,
-            });
-            ecrRepo = newRepo.repository;
-            ecrImageUri = `${newRepo.repositoryUri}:${imageTagValue}`;
-        } else {
-            // HARDCODED: Always use the quiltdata AWS account for ECR images
-            const account = "712023778557";
-            const region = "us-east-1";
-            const ecrArn = `arn:aws:ecr:${region}:${account}:repository/${repoName}`;
-            ecrRepo = ecr.Repository.fromRepositoryArn(this, "ExistingEcrRepository", ecrArn);
-            ecrImageUri = `${account}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTagValue}`;
-        }
+        const ecrArn = `arn:aws:ecr:${region}:${account}:repository/${repoName}`;
+        const ecrRepo = ecr.Repository.fromRepositoryArn(this, "ExistingEcrRepository", ecrArn);
+        const ecrImageUri = `${account}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTagValue}`;
 
         // Create the Fargate service
         // Use imageTag for stackVersion if it looks like a timestamped dev version
