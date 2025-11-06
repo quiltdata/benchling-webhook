@@ -1,5 +1,5 @@
 import * as cdk from "aws-cdk-lib";
-import { Template } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
 import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/mock-config";
 
@@ -275,11 +275,12 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             // Verify the DockerImageUri output contains the hardcoded ECR repository
             template.hasOutput("DockerImageUri", {
                 Value: {
-                    "Fn::Join": Match.arrayWith([
+                    "Fn::Join": [
+                        "",
                         Match.arrayWith([
-                            "712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:",
+                            Match.stringLikeRegexp("712023778557\\.dkr\\.ecr\\.us-east-1\\.amazonaws\\.com/quiltdata/benchling:.*"),
                         ]),
-                    ]),
+                    ],
                 },
             });
         });
