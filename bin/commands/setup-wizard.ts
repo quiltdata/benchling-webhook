@@ -506,17 +506,10 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             message: "AWS Deployment Region:",
             default: config.deployment?.region || config.quilt?.region || "us-east-1",
         },
-        {
-            type: "input",
-            name: "imageTag",
-            message: "Docker image tag:",
-            default: config.deployment?.imageTag || "latest",
-        },
     ]);
 
     config.deployment = {
         region: deploymentAnswers.region,
-        imageTag: deploymentAnswers.imageTag,
     };
 
     // Optional: Logging configuration
@@ -531,12 +524,6 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             default: config.logging?.level || "INFO",
         },
         {
-            type: "confirm",
-            name: "enableVerification",
-            message: "Enable webhook signature verification:",
-            default: config.security?.enableVerification !== false,
-        },
-        {
             type: "input",
             name: "webhookAllowList",
             message: "Webhook IP allowlist (comma-separated, empty for none):",
@@ -549,7 +536,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     };
 
     config.security = {
-        enableVerification: optionalAnswers.enableVerification,
+        enableVerification: true,
         webhookAllowList: optionalAnswers.webhookAllowList,
     };
 
