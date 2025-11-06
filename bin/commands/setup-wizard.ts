@@ -751,9 +751,13 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
     console.log("Next steps:");
-    console.log("  1. Sync secrets to AWS: npm run setup:sync-secrets");
-    console.log("  2. Deploy to AWS: npm run deploy:dev");
-    console.log("  3. Test integration: npm run test:dev\n");
+    if (profile === "default") {
+        console.log("  1. Deploy to AWS: npm run deploy");
+        console.log("  2. Test integration: npm run test\n");
+    } else {
+        console.log(`  1. Deploy to AWS: npx benchling-webhook deploy --profile ${profile} --stage ${profile}`);
+        console.log(`  2. Test integration: npm run test:${profile}\n`);
+    }
 
     return config;
 }
