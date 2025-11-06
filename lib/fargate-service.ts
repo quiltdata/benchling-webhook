@@ -28,6 +28,7 @@ export interface FargateServiceProps {
     readonly stackArn: string;
     readonly benchlingSecret: string;
     readonly packageBucket: string;
+    readonly quiltDatabase: string;
     readonly logLevel?: string;
 }
 
@@ -149,7 +150,9 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Grant wildcard Glue access (database name will be resolved at runtime)
+        // Grant Glue access for the specific Quilt database
+        const account = config.deployment.account || cdk.Aws.ACCOUNT_ID;
+        const region = config.deployment.region;
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
@@ -158,9 +161,9 @@ export class FargateService extends Construct {
                     "glue:GetPartitions",
                 ],
                 resources: [
-                    `arn:aws:glue:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:catalog`,
-                    `arn:aws:glue:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:database/*`,
-                    `arn:aws:glue:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:table/*`,
+                    `arn:aws:glue:${region}:${account}:catalog`,
+                    `arn:aws:glue:${region}:${account}:database/${props.quiltDatabase}`,
+                    `arn:aws:glue:${region}:${account}:table/${props.quiltDatabase}/*`,
                 ],
             }),
         );

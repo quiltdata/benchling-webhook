@@ -151,7 +151,7 @@ export async function deployCommand(options: {
     }
 
     // Deploy (both parameters validated above)
-    return await deploy(quiltStackArn!, benchlingSecret!, {
+    return await deploy(quiltStackArn!, benchlingSecret!, config, {
         ...options,
         imageTag,
         profileName,
@@ -165,6 +165,7 @@ export async function deployCommand(options: {
 async function deploy(
     stackArn: string,
     benchlingSecret: string,
+    config: ProfileConfig,
     options: {
         yes?: boolean;
         bootstrapCheck?: boolean;
@@ -306,6 +307,9 @@ async function deploy(
             `QuiltStackARN=${stackArn}`,
             `BenchlingSecretARN=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
+            `PackageBucket=${config.packages.bucket}`,
+            `QuiltDatabase=${config.quilt.database || ""}`,
+            `LogLevel=${config.logging?.level || "INFO"}`,
         ];
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
