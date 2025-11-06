@@ -137,7 +137,6 @@ export function createStack(config: Config): DeploymentResult {
             region: config.cdkRegion,
         },
         config: profileConfig,
-        createEcrRepository: config.createEcrRepository === "true",
     });
 
     return {
@@ -201,6 +200,5 @@ if (require.main === module) {
             region: process.env.CDK_DEFAULT_REGION,
         },
         config: profileConfig,
-        createEcrRepository: process.env.CREATE_ECR_REPOSITORY === "true",
     });
 }
