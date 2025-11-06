@@ -16,6 +16,7 @@
 
 import * as https from "https";
 import inquirer from "inquirer";
+import chalk from "chalk";
 import { S3Client, HeadBucketCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { XDGConfig } from "../../lib/xdg-config";
@@ -768,5 +769,18 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
  * @returns Promise that resolves when wizard completes
  */
 export async function setupWizardCommand(options: InstallWizardOptions = {}): Promise<void> {
-    await runInstallWizard(options);
+    try {
+        await runInstallWizard(options);
+    } catch (error) {
+        // Handle user cancellation (Ctrl+C) gracefully
+        const err = error as Error & { code?: string };
+        if (err &&
+            (err.message?.includes("User force closed") ||
+             err.message?.includes("ERR_USE_AFTER_CLOSE") ||
+             err.code === "ERR_USE_AFTER_CLOSE")) {
+            console.log(chalk.yellow("\n✖ Setup cancelled by user"));
+            process.exit(0);
+        }
+        throw error;
+    }
 }
