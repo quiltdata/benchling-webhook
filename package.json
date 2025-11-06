@@ -41,6 +41,7 @@
     "test:python": "make -C docker test-unit",
     "test:ts": "cross-env NODE_ENV=test jest --maxWorkers=50%",
     "version": "ts-node scripts/version.ts",
+    "version:dev": "ts-node scripts/get-dev-version.ts",
     "version:tag": "ts-node scripts/version.ts tag",
     "version:tag:dev": "ts-node scripts/version.ts tag dev"
   },

@@ -14,6 +14,36 @@ import { ProfileConfig } from "../../lib/types/config";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 
 /**
+ * Get the most recent dev version tag (without 'v' prefix)
+ * Returns null if no dev tags found
+ */
+function getLatestDevVersion(): string | null {
+    try {
+        // Get all tags matching dev pattern: v{version}-{timestamp}Z
+        const tags = execSync("git tag --list", { encoding: "utf8" })
+            .trim()
+            .split("\n")
+            .filter(tag => /^v\d+\.\d+\.\d+-\d{8}T\d{6}Z$/.test(tag));
+
+        if (tags.length === 0) {
+            return null;
+        }
+
+        // Sort by timestamp (newest first)
+        tags.sort((a, b) => {
+            const timestampA = a.match(/(\d{8}T\d{6}Z)$/)?.[1] || "";
+            const timestampB = b.match(/(\d{8}T\d{6}Z)$/)?.[1] || "";
+            return timestampB.localeCompare(timestampA);
+        });
+
+        // Return latest tag without 'v' prefix
+        return tags[0].substring(1);
+    } catch {
+        return null;
+    }
+}
+
+/**
  * Deploy command for v0.7.0 configuration architecture
  *
  * Uses new profile-based configuration with deployment tracking.
@@ -73,7 +103,29 @@ export async function deployCommand(options: {
     // Get required parameters with priority: CLI options > Profile config
     const quiltStackArn = options. stackArn || config.quilt.stackArn;
     const benchlingSecret = options.benchlingSecret || config.benchling.secretArn;
-    const imageTag = options.imageTag || config.deployment.imageTag || "latest";
+
+    // Auto-detect image tag based on profile
+    // For dev profiles, use the latest dev tag (without 'v' prefix)
+    // For prod profiles, use config or "latest"
+    let imageTag: string;
+    if (options.imageTag) {
+        // CLI option takes highest priority
+        imageTag = options.imageTag;
+    } else if (profileName === "dev") {
+        // Auto-detect latest dev tag for dev profile
+        const devVersion = getLatestDevVersion();
+        if (devVersion) {
+            imageTag = devVersion;
+            console.log(chalk.dim(`✓ Auto-detected dev image tag: ${imageTag}\n`));
+        } else {
+            console.error(chalk.yellow("⚠️  No dev tags found, using 'latest'"));
+            console.error(chalk.yellow("   Create a dev tag with: npm run version:tag:dev\n"));
+            imageTag = "latest";
+        }
+    } else {
+        // Use config or default to "latest"
+        imageTag = config.deployment.imageTag || "latest";
+    }
 
     // Validate required parameters
     const missingParams: string[] = [];
@@ -249,9 +301,10 @@ async function deploy(
 
     try {
         // Build CloudFormation parameters
+        // Parameter names must match the CfnParameter IDs in BenchlingWebhookStack
         const parameters = [
-            `stackArn=${stackArn}`,
-            `BenchlingSecret=${benchlingSecret}`,
+            `QuiltStackARN=${stackArn}`,
+            `BenchlingSecretARN=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
         ];
 
