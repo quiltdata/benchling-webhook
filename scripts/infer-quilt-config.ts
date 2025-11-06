@@ -16,7 +16,7 @@ import { execSync } from "child_process";
 import * as readline from "readline";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
-import { toQueueUrl, isQueueUrl } from "../lib/utils/sqs";
+import { isQueueUrl } from "../lib/utils/sqs";
 import { QuiltConfig } from "../lib/types/config";
 
 /**
@@ -140,9 +140,8 @@ async function findQuiltStacks(region: string, profile?: string): Promise<QuiltS
                     } else if (key === "UserAthenaDatabaseName" || key.includes("Database")) {
                         stackInfo.database = value;
                     } else if (key.includes("Queue")) {
-                        const normalizedQueue = toQueueUrl(value);
-                        if (normalizedQueue && isQueueUrl(normalizedQueue)) {
-                            stackInfo.queueUrl = normalizedQueue;
+                        if (isQueueUrl(value)) {
+                            stackInfo.queueUrl = value;
                         }
                     }
                 }

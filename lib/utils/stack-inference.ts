@@ -4,7 +4,7 @@
  */
 
 import { execSync } from "child_process";
-import { toQueueUrl, isQueueUrl } from "./sqs";
+import { isQueueUrl } from "./sqs";
 
 export interface QuiltCatalogConfig {
     region: string;
@@ -206,11 +206,8 @@ export function buildInferredConfig(
         stackDetails.outputs.find((o) => o.OutputKey === "QueueUrl") ||
         stackDetails.outputs.find((o) => o.OutputKey === "PackagerQueueArn");
 
-    if (queueOutput) {
-        const normalizedQueue = toQueueUrl(queueOutput.OutputValue);
-        if (normalizedQueue && isQueueUrl(normalizedQueue)) {
-            vars.QUEUE_URL = normalizedQueue;
-        }
+    if (queueOutput && queueOutput.OutputValue && isQueueUrl(queueOutput.OutputValue)) {
+        vars.QUEUE_URL = queueOutput.OutputValue;
     }
 
     // Additional useful info
