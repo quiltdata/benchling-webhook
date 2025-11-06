@@ -39,7 +39,7 @@ function getLatestDevVersion(): string | null {
 
         // Return latest tag without 'v' prefix
         return tags[0].substring(1);
-    } catch (error) {
+    } catch {
         return null;
     }
 }

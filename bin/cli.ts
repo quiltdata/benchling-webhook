@@ -18,10 +18,18 @@ const program = new Command();
 
 program
     .name("benchling-webhook")
-    .description("Benchling Webhook Integration for Quilt - Deploy lab notebook integration to AWS")
+    .description("Benchling Webhook Integration for Quilt - Deploy lab notebook integration to AWS\n\n" +
+                 "Run without arguments for interactive setup wizard")
     .version(pkg.version, "-v, --version", "Display version number")
     .helpOption("-h, --help", "Display help for command")
     .addHelpText("after", `
+
+Quick Start:
+  1. Run interactive setup:
+     $ npx @quiltdata/benchling-webhook
+
+  2. Deploy to AWS:
+     $ npx @quiltdata/benchling-webhook deploy
 
 v0.7.0 Changes:
   - New unified configuration architecture with profile support
@@ -32,9 +40,9 @@ v0.7.0 Changes:
 For upgrade instructions: https://github.com/quiltdata/benchling-webhook/blob/main/MIGRATION.md
 `);
 
-// Deploy command (default)
+// Deploy command
 program
-    .command("deploy", { isDefault: true })
+    .command("deploy")
     .description("Deploy the CDK stack to AWS")
     .option("--quilt-stack-arn <arn>", "ARN of Quilt CloudFormation stack")
     .option("--benchling-secret <name>", "Name or ARN of Benchling secret in Secrets Manager")
@@ -74,14 +82,10 @@ For more information: https://github.com/quiltdata/benchling-webhook#deployment
         }
     });
 
-// Init command
+// Init command (legacy - redirects to setup wizard)
 program
     .command("init")
-    .description("Initialize configuration interactively")
-    .option("--output <path>", "Output file path", ".env")
-    .option("--force", "Overwrite existing file")
-    .option("--minimal", "Only prompt for required values")
-    .option("--infer", "Attempt to infer values from catalog")
+    .description("Interactive setup wizard (alias for running without arguments)")
     .action(async (options) => {
         try {
             await initCommand(options);
@@ -180,10 +184,12 @@ program
         }
     });
 
-// Run setup wizard when no command provided
-if (!process.argv.slice(2).length || (process.argv.slice(2).length > 0 && process.argv[2].startsWith("--"))) {
+// Run setup wizard when no command provided (but not for help/version flags)
+const args = process.argv.slice(2);
+const isHelpOrVersion = args.some(arg => arg === "--help" || arg === "-h" || arg === "--version" || arg === "-v");
+
+if ((!args.length || (args.length > 0 && args[0].startsWith("--") && !isHelpOrVersion))) {
     // Parse options for setup wizard
-    const args = process.argv.slice(2);
     const options: { nonInteractive?: boolean; profile?: string; inheritFrom?: string; awsRegion?: string; awsProfile?: string } = {};
 
     for (let i = 0; i < args.length; i++) {

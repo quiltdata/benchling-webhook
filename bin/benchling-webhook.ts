@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import "dotenv/config";
 import * as cdk from "aws-cdk-lib";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
 import { execSync } from "child_process";
@@ -138,7 +137,6 @@ export function createStack(config: Config): DeploymentResult {
             region: config.cdkRegion,
         },
         config: profileConfig,
-        createEcrRepository: config.createEcrRepository === "true",
     });
 
     return {
@@ -202,6 +200,5 @@ if (require.main === module) {
             region: process.env.CDK_DEFAULT_REGION,
         },
         config: profileConfig,
-        createEcrRepository: process.env.CREATE_ECR_REPOSITORY === "true",
     });
 }
