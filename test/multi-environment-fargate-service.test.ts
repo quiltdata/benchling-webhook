@@ -185,6 +185,9 @@ describe("FargateService - Multi-Environment Support", () => {
                 stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 imageTag: "v0.6.3",
+                packageBucket: config.packages.bucket,
+                quiltDatabase: config.quilt.database || "test-database",
+                logLevel: "DEBUG",
             });
 
             const template = Template.fromStack(stack);
@@ -271,6 +274,9 @@ describe("FargateService - Multi-Environment Support", () => {
                 ecrRepository,
                 stackArn: devConfig.quilt.stackArn,
                 benchlingSecret: devConfig.benchling.secretArn!,
+                packageBucket: devConfig.packages.bucket,
+                quiltDatabase: devConfig.quilt.database || "test-database",
+                logLevel: "DEBUG",
             });
 
             // Create prod service
@@ -281,6 +287,9 @@ describe("FargateService - Multi-Environment Support", () => {
                 ecrRepository,
                 stackArn: prodConfig.quilt.stackArn,
                 benchlingSecret: prodConfig.benchling.secretArn!,
+                packageBucket: prodConfig.packages.bucket,
+                quiltDatabase: prodConfig.quilt.database || "test-database",
+                logLevel: "DEBUG",
             });
 
             // Both services should be created
@@ -301,6 +310,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
+                logLevel: "DEBUG",
             });
 
             const template = Template.fromStack(stack);
@@ -322,6 +332,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
+                logLevel: "DEBUG",
             });
 
             const template = Template.fromStack(stack);
@@ -344,6 +355,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
+                logLevel: "DEBUG",
             });
 
             const template = Template.fromStack(stack);
@@ -367,6 +379,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
+                logLevel: "DEBUG",
             });
 
             const template = Template.fromStack(stack);
@@ -393,6 +406,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
+                logLevel: "DEBUG",
             });
 
             const template = Template.fromStack(stack);
@@ -421,6 +435,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
+                logLevel: "DEBUG",
             });
 
             const template = Template.fromStack(stack);
