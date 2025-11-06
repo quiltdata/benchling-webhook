@@ -12,7 +12,7 @@ interface InitOptions {
  * Init command - redirects to setup wizard (the modern way)
  * This command is kept for backward compatibility
  */
-export async function initCommand(options: InitOptions): Promise<void> {
+export async function initCommand(_options: InitOptions): Promise<void> {
     console.log(chalk.yellow("Note: 'init' command has been replaced with an interactive setup wizard."));
     console.log(chalk.dim("Starting setup wizard...\n"));
 
