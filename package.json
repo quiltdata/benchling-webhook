@@ -22,6 +22,7 @@
     "deploy:prod": "ts-node bin/cli.ts deploy --stage prod",
     "deploy:notes": "bash scripts/release-notes.sh",
     "logs": "ts-node scripts/check-logs.ts",
+    "logs:watch": "ts-node scripts/check-logs.ts --type=ecs --follow",
     "lint": "eslint . --ext .ts --fix && make -C docker lint",
     "postbuild": "chmod +x dist/bin/cli.js",
     "prebuild": "rm -rf dist",

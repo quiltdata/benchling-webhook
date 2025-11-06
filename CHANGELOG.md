@@ -3,6 +3,74 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Manifest functionality in setup wizard** - Added conditional app definition flow
+  - Prompts whether user has an App Definition ID
+  - If missing, generates manifest and shows installation instructions
+  - Allows continuation after app installation
+  - Reuses existing manifest command logic
+
+### Changed
+
+- **Centralized ECR image management** - All deployments now use hardcoded quiltdata ECR repository
+  - ECR Account: `712023778557`
+  - ECR Region: `us-east-1`
+  - Repository: `quiltdata/benchling`
+  - Full URI: `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest`
+  - Removes need for per-account ECR repositories
+  - Simplified deployment architecture using centralized container images
+
+- **Enhanced deployment plan display** - Shows complete container image details
+  - ECR Account ID (clarifies cross-account scenarios)
+  - ECR Repository name
+  - Image Tag
+  - Full Image URI for complete transparency
+
+- **Cross-account ECR support** - Added `ecrAccount` configuration field
+  - Enables deployment from Quilt public ECR to customer accounts
+  - Uses `fromRepositoryArn` for explicit cross-account ECR access
+  - Prevents accidental pulls from deployment account's ECR
+
+- **Improved setup wizard credential flow** - Reordered prompts for better UX
+  - Order: tenant → app_definition_id → OAuth credentials
+  - Clarifies that OAuth credentials must come from the app definition
+  - Always shows app_definition_id prompt to prevent credential mismatches
+
+- **Cleaner console output** - Removed auto-loading dotenv imports
+  - Eliminates verbose "[dotenv] injecting env" messages
+  - Only loads dotenv where explicitly needed for backward compatibility
+
+### Fixed
+
+- **Profile-aware testing** - Post-deploy tests now receive PROFILE environment variable
+  - Tests run against correct profile's deployment
+  - Fixes issue where `--profile sales` would test default profile
+
+- **Profile-aware log monitoring** - `check-logs` script respects `--profile` flag
+  - All AWS CLI commands now use correct profile
+  - Added `npm run logs` script for easier access
+
+- **Setup wizard next steps** - Instructions now match user's profile
+  - Default profile shows simplified commands
+  - Non-default profiles show full commands with profile flags
+  - Removed redundant secrets sync step (happens automatically during deploy)
+
+- **ESLint errors resolved** - Clean codebase with proper linting
+  - Fixed unused variable errors with catch binding
+  - Fixed unused parameters
+  - Corrected npm run command syntax in error messages
+  - Applied consistent formatting
+
+### Removed
+
+- **ECR repository creation** - Stack no longer creates ECR repositories
+  - Removed `EcrRepository` construct from CDK stack
+  - Removed `createEcrRepository` prop from stack props
+  - Exclusively uses hardcoded quiltdata ECR repository
+
 ## [0.7.3] - 2025-11-06
 
 ### Changed
