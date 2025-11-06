@@ -98,16 +98,19 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
         const listResponse = await client.send(listCommand);
         const stacks = listResponse.StackSummaries || [];
 
-        // Filter for Quilt stacks (containing "quilt" in the name)
-        const quiltStacks = stacks.filter(
+        // Get detailed information for each stack and filter for Quilt stacks
+        // We can't filter by name alone as stacks like "sales-prod" may be Quilt catalogs
+        const stackInfos: QuiltStackInfo[] = [];
+
+        // First pass: check stacks with "quilt" or "catalog" in the name (fast path)
+        const likelyQuiltStacks = stacks.filter(
             (stack) =>
                 stack.StackName?.toLowerCase().includes("quilt") ||
                 stack.StackName?.toLowerCase().includes("catalog"),
         );
 
-        // Get detailed information for each stack
-        const stackInfos: QuiltStackInfo[] = [];
-        for (const stack of quiltStacks) {
+        // Process likely Quilt stacks first
+        for (const stack of likelyQuiltStacks) {
             if (!stack.StackName) continue;
 
             try {
@@ -153,6 +156,69 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
                 stackInfos.push(stackInfo);
             } catch (describeError) {
                 console.error(`Warning: Failed to describe stack ${stack.StackName}: ${(describeError as Error).message}`);
+            }
+        }
+
+        // Second pass: check remaining stacks for QuiltWebHost output (slower but more thorough)
+        // This catches stacks like "sales-prod" that don't have "quilt" in the name
+        const remainingStacks = stacks.filter(
+            (stack) =>
+                !likelyQuiltStacks.includes(stack) &&
+                stack.StackName &&
+                !stackInfos.some((info) => info.stackName === stack.StackName),
+        );
+
+        for (const stack of remainingStacks) {
+            if (!stack.StackName) continue;
+
+            try {
+                const describeCommand = new DescribeStacksCommand({
+                    StackName: stack.StackName,
+                });
+
+                const describeResponse = await client.send(describeCommand);
+                const stackDetail = describeResponse.Stacks?.[0];
+
+                if (!stackDetail) continue;
+
+                const outputs = stackDetail.Outputs || [];
+
+                // Only include this stack if it has QuiltWebHost output
+                const hasQuiltWebHost = outputs.some((output) => output.OutputKey === "QuiltWebHost");
+                if (!hasQuiltWebHost) continue;
+
+                const stackInfo: QuiltStackInfo = {
+                    stackName: stack.StackName,
+                    stackArn: stackDetail.StackId || "",
+                    region: region,
+                };
+
+                // Extract AWS Account ID from Stack ARN
+                const arnMatch = stackInfo.stackArn.match(/^arn:aws:cloudformation:[^:]+:(\d{12}):/);
+                if (arnMatch) {
+                    stackInfo.account = arnMatch[1];
+                }
+
+                // Extract outputs
+                for (const output of outputs) {
+                    const key = output.OutputKey || "";
+                    const value = output.OutputValue || "";
+
+                    if (key === "QuiltWebHost") {
+                        stackInfo.catalogUrl = value;
+                    } else if (key === "UserAthenaDatabaseName" || key.includes("Database")) {
+                        stackInfo.database = value;
+                    } else if (key.includes("Queue")) {
+                        if (isQueueUrl(value)) {
+                            stackInfo.queueUrl = value;
+                        }
+                    }
+                }
+
+                stackInfos.push(stackInfo);
+            } catch {
+                // Silently skip stacks that can't be described in the second pass
+                // to avoid overwhelming users with warnings for non-Quilt stacks
             }
         }
 

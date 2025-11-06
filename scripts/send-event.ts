@@ -3,7 +3,6 @@
  * Send a test event to the deployed Benchling webhook endpoint
  */
 
-import "dotenv/config";
 import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
@@ -11,13 +10,13 @@ import * as path from "path";
 const STACK_NAME = "BenchlingWebhookStack";
 
 // Validate required environment variables
-if (!process.env.CDK_DEFAULT_REGION) {
-    console.error("Error: CDK_DEFAULT_REGION is not set in .env file");
-    console.error("Please set CDK_DEFAULT_REGION in your .env file");
+if (!process.env.CDK_DEFAULT_REGION && !process.env.AWS_REGION) {
+    console.error("Error: AWS_REGION or CDK_DEFAULT_REGION environment variable not set");
+    console.error("Please set AWS_REGION in your environment");
     process.exit(1);
 }
 
-const AWS_REGION: string = process.env.CDK_DEFAULT_REGION;
+const AWS_REGION: string = process.env.AWS_REGION || process.env.CDK_DEFAULT_REGION!;
 
 interface StackOutput {
     OutputKey: string;

@@ -248,17 +248,17 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             template.resourceCountIs("AWS::ApiGateway::RestApi", 0);
         });
 
-        test("creates ECR repository when requested", () => {
+        test("uses hardcoded quiltdata ECR repository", () => {
             const config = createMockConfig({
                 deployment: {
                     region: "us-east-1",
-                    ecrRepository: "test-repo",
+                    ecrRepository: "quiltdata/benchling",
+                    imageTag: "0.7.3",
                 },
             });
 
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
-                createEcrRepository: true,
                 env: {
                     account: "123456789012",
                     region: "us-east-1",
@@ -267,8 +267,20 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ECR::Repository", {
-                RepositoryName: "test-repo",
+            // Verify the stack does NOT create an ECR repository
+            expect(() => {
+                template.hasResourceProperties("AWS::ECR::Repository", {});
+            }).toThrow();
+
+            // Verify the DockerImageUri output contains the hardcoded ECR repository
+            template.hasOutput("DockerImageUri", {
+                Value: {
+                    "Fn::Join": Match.arrayWith([
+                        Match.arrayWith([
+                            "712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:",
+                        ]),
+                    ]),
+                },
             });
         });
     });

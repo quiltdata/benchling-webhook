@@ -16,12 +16,14 @@
 
 import * as https from "https";
 import inquirer from "inquirer";
+import chalk from "chalk";
 import { S3Client, HeadBucketCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { XDGConfig } from "../../lib/xdg-config";
-import { ProfileConfig, ValidationResult, QuiltConfig } from "../../lib/types/config";
+import { ProfileConfig, ValidationResult } from "../../lib/types/config";
 import { inferQuiltConfig } from "../commands/infer-quilt-config";
 import { isQueueUrl } from "../../lib/utils/sqs";
+import { manifestCommand } from "./manifest";
 
 // =============================================================================
 // VALIDATION FUNCTIONS (from scripts/config/validator.ts)
@@ -392,7 +394,8 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     // Prompt for Benchling configuration
     console.log("\nStep 2: Benchling Configuration\n");
 
-    const benchlingAnswers = await inquirer.prompt([
+    // First, get tenant
+    const tenantAnswer = await inquirer.prompt([
         {
             type: "input",
             name: "tenant",
@@ -401,10 +404,64 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             validate: (input: string): boolean | string =>
                 input.trim().length > 0 || "Tenant is required",
         },
+    ]);
+
+    // Ask if they have an app_definition_id BEFORE asking for credentials
+    const hasAppDefId = await inquirer.prompt([
+        {
+            type: "confirm",
+            name: "hasIt",
+            message: "Do you have a Benchling App Definition ID for this app?",
+            default: !!config.benchling?.appDefinitionId,
+        },
+    ]);
+
+    let appDefinitionId: string;
+
+    if (hasAppDefId.hasIt) {
+        // They have it, ask for it
+        const appDefAnswer = await inquirer.prompt([
+            {
+                type: "input",
+                name: "appDefinitionId",
+                message: "Benchling App Definition ID:",
+                default: config.benchling?.appDefinitionId,
+                validate: (input: string): boolean | string =>
+                    input.trim().length > 0 || "App definition ID is required",
+            },
+        ]);
+        appDefinitionId = appDefAnswer.appDefinitionId;
+    } else {
+        // They don't have it, create the manifest and show instructions
+        console.log("\n" + chalk.blue("Creating app manifest...") + "\n");
+
+        // Create manifest using the existing command
+        await manifestCommand({
+            catalog: config.quilt?.catalog,
+            output: "app-manifest.yaml",
+        });
+
+        console.log("\n" + chalk.yellow("After you have installed the app in Benchling and have the App Definition ID, you can continue.") + "\n");
+
+        // Now ask for the app definition ID
+        const appDefAnswer = await inquirer.prompt([
+            {
+                type: "input",
+                name: "appDefinitionId",
+                message: "Benchling App Definition ID:",
+                validate: (input: string): boolean | string =>
+                    input.trim().length > 0 || "App definition ID is required",
+            },
+        ]);
+        appDefinitionId = appDefAnswer.appDefinitionId;
+    }
+
+    // Now ask for OAuth credentials (which must come from the app)
+    const credentialAnswers = await inquirer.prompt([
         {
             type: "input",
             name: "clientId",
-            message: "Benchling OAuth Client ID:",
+            message: "Benchling OAuth Client ID (from the app above):",
             default: config.benchling?.clientId,
             validate: (input: string): boolean | string =>
                 input.trim().length > 0 || "Client ID is required",
@@ -414,7 +471,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             name: "clientSecret",
             message: config.benchling?.clientSecret
                 ? "Benchling OAuth Client Secret (press Enter to keep existing):"
-                : "Benchling OAuth Client Secret:",
+                : "Benchling OAuth Client Secret (from the app above):",
             validate: (input: string): boolean | string => {
                 // If there's an existing secret and input is empty, we'll keep the existing one
                 if (config.benchling?.clientSecret && input.trim().length === 0) {
@@ -423,14 +480,10 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
                 return input.trim().length > 0 || "Client secret is required";
             },
         },
-        {
-            type: "input",
-            name: "appDefinitionId",
-            message: "Benchling App Definition ID:",
-            default: config.benchling?.appDefinitionId,
-            validate: (input: string): boolean | string =>
-                input.trim().length > 0 || "App definition ID is required",
-        },
+    ]);
+
+    // Ask for optional test entry ID
+    const testEntryAnswer = await inquirer.prompt([
         {
             type: "input",
             name: "testEntryId",
@@ -440,19 +493,19 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     ]);
 
     // Handle empty password input - keep existing secret if user pressed Enter
-    if (benchlingAnswers.clientSecret.trim().length === 0 && config.benchling?.clientSecret) {
-        benchlingAnswers.clientSecret = config.benchling.clientSecret;
+    if (credentialAnswers.clientSecret.trim().length === 0 && config.benchling?.clientSecret) {
+        credentialAnswers.clientSecret = config.benchling.clientSecret;
     }
 
     config.benchling = {
-        tenant: benchlingAnswers.tenant,
-        clientId: benchlingAnswers.clientId,
-        clientSecret: benchlingAnswers.clientSecret,
-        appDefinitionId: benchlingAnswers.appDefinitionId,
+        tenant: tenantAnswer.tenant,
+        clientId: credentialAnswers.clientId,
+        clientSecret: credentialAnswers.clientSecret,
+        appDefinitionId: appDefinitionId,
     };
 
-    if (benchlingAnswers.testEntryId && benchlingAnswers.testEntryId.trim() !== "") {
-        config.benchling.testEntryId = benchlingAnswers.testEntryId;
+    if (testEntryAnswer.testEntryId && testEntryAnswer.testEntryId.trim() !== "") {
+        config.benchling!.testEntryId = testEntryAnswer.testEntryId;
     }
 
     // Prompt for package configuration
@@ -750,9 +803,13 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
     console.log("Next steps:");
-    console.log("  1. Sync secrets to AWS: npm run setup:sync-secrets");
-    console.log("  2. Deploy to AWS: npm run deploy:dev");
-    console.log("  3. Test integration: npm run test:dev\n");
+    if (profile === "default") {
+        console.log("  1. Deploy to AWS: npm run deploy");
+        console.log("  2. Test integration: npm run test\n");
+    } else {
+        console.log(`  1. Deploy to AWS: npx benchling-webhook deploy --profile ${profile} --stage ${profile}`);
+        console.log(`  2. Test integration: npm run test:${profile}\n`);
+    }
 
     return config;
 }
@@ -768,5 +825,18 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
  * @returns Promise that resolves when wizard completes
  */
 export async function setupWizardCommand(options: InstallWizardOptions = {}): Promise<void> {
-    await runInstallWizard(options);
+    try {
+        await runInstallWizard(options);
+    } catch (error) {
+        // Handle user cancellation (Ctrl+C) gracefully
+        const err = error as Error & { code?: string };
+        if (err &&
+            (err.message?.includes("User force closed") ||
+             err.message?.includes("ERR_USE_AFTER_CLOSE") ||
+             err.code === "ERR_USE_AFTER_CLOSE")) {
+            console.log(chalk.yellow("\n✖ Setup cancelled by user"));
+            process.exit(0);
+        }
+        throw error;
+    }
 }

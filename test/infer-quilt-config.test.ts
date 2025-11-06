@@ -153,6 +153,79 @@ describe("infer-quilt-config", () => {
             expect(result.source).toBe("cloudformation");
         });
 
+        it("should find Quilt stacks without 'quilt' in the name", async () => {
+            mockedExecSync.mockImplementation(() => {
+                throw new Error("No quilt3");
+            });
+
+            cfMock.on(ListStacksCommand).resolves({
+                StackSummaries: [
+                    { StackName: "random-stack", StackStatus: "CREATE_COMPLETE", CreationTime: new Date() },
+                    { StackName: "sales-prod", StackStatus: "CREATE_COMPLETE", CreationTime: new Date() },
+                    { StackName: "another-stack", StackStatus: "CREATE_COMPLETE", CreationTime: new Date() },
+                ],
+            });
+
+            // Mock random-stack (no QuiltWebHost)
+            cfMock
+                .on(DescribeStacksCommand, { StackName: "random-stack" })
+                .resolves({
+                    Stacks: [
+                        {
+                            StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/random-stack/abc-123",
+                            StackName: "random-stack",
+                            StackStatus: "CREATE_COMPLETE",
+                            CreationTime: new Date(),
+                            Outputs: [{ OutputKey: "SomeOtherOutput", OutputValue: "value" }],
+                        },
+                    ],
+                });
+
+            // Mock sales-prod (has QuiltWebHost)
+            cfMock
+                .on(DescribeStacksCommand, { StackName: "sales-prod" })
+                .resolves({
+                    Stacks: [
+                        {
+                            StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/sales-prod/xyz-789",
+                            StackName: "sales-prod",
+                            StackStatus: "CREATE_COMPLETE",
+                            CreationTime: new Date(),
+                            Outputs: [
+                                { OutputKey: "QuiltWebHost", OutputValue: "https://sales.example.com" },
+                                { OutputKey: "UserAthenaDatabaseName", OutputValue: "sales_db" },
+                            ],
+                        },
+                    ],
+                });
+
+            // Mock another-stack (no QuiltWebHost)
+            cfMock
+                .on(DescribeStacksCommand, { StackName: "another-stack" })
+                .resolves({
+                    Stacks: [
+                        {
+                            StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/another-stack/def-456",
+                            StackName: "another-stack",
+                            StackStatus: "CREATE_COMPLETE",
+                            CreationTime: new Date(),
+                            Outputs: [],
+                        },
+                    ],
+                });
+
+            const result = await inferQuiltConfig({
+                region: "us-east-1",
+                interactive: false,
+            });
+
+            expect(result.stackArn).toContain("sales-prod");
+            expect(result.catalog).toBe("https://sales.example.com");
+            expect(result.database).toBe("sales_db");
+            expect(result.account).toBe("123456789012");
+            expect(result.source).toBe("cloudformation");
+        });
+
         it("should extract AWS account ID from stack ARN", async () => {
             mockedExecSync.mockImplementation(() => {
                 throw new Error("No quilt3");
