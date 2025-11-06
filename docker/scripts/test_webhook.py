@@ -223,10 +223,18 @@ if __name__ == "__main__":
     import sys
 
     server_url = "http://localhost:5001"
-    if len(sys.argv) > 1 and sys.argv[1].startswith("http"):
-        server_url = sys.argv[1]
+    health_only = False
+
+    # Parse arguments
+    for arg in sys.argv[1:]:
+        if arg.startswith("http"):
+            server_url = arg
+        elif arg == "--health-only":
+            health_only = True
 
     print(f"🔧 Testing server: {server_url}")
+    if health_only:
+        print("🏥 Health check mode (skipping webhook/canvas/lifecycle tests)")
     print()
 
     # Track all test results
@@ -238,26 +246,27 @@ if __name__ == "__main__":
     all_results.extend(health_results)
     print()
 
-    # Test webhook endpoints
-    print("=== Webhook Tests ===")
-    for payload_type in _get_test_payloads():
-        success = test_webhook(server_url, payload_type)
-        all_results.append((f"webhook_{payload_type}", success))
-        print("-" * 50)
+    if not health_only:
+        # Test webhook endpoints
+        print("=== Webhook Tests ===")
+        for payload_type in _get_test_payloads():
+            success = test_webhook(server_url, payload_type)
+            all_results.append((f"webhook_{payload_type}", success))
+            print("-" * 50)
 
-    # Test Canvas endpoints
-    print("\n=== Canvas Tests ===")
-    for payload_type in CANVAS_PAYLOADS:
-        success = test_canvas_endpoint(server_url, payload_type)
-        all_results.append((f"canvas_{payload_type}", success))
-        print("-" * 50)
+        # Test Canvas endpoints
+        print("\n=== Canvas Tests ===")
+        for payload_type in CANVAS_PAYLOADS:
+            success = test_canvas_endpoint(server_url, payload_type)
+            all_results.append((f"canvas_{payload_type}", success))
+            print("-" * 50)
 
-    # Test Lifecycle endpoints
-    print("\n=== Lifecycle Tests ===")
-    for payload_type in _get_lifecycle_payloads():
-        success = test_lifecycle_endpoint(server_url, payload_type)
-        all_results.append((f"lifecycle_{payload_type}", success))
-        print("-" * 50)
+        # Test Lifecycle endpoints
+        print("\n=== Lifecycle Tests ===")
+        for payload_type in _get_lifecycle_payloads():
+            success = test_lifecycle_endpoint(server_url, payload_type)
+            all_results.append((f"lifecycle_{payload_type}", success))
+            print("-" * 50)
 
     # Print summary
     print("\n" + "=" * 50)

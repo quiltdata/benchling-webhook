@@ -19,8 +19,9 @@ import inquirer from "inquirer";
 import { S3Client, HeadBucketCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { XDGConfig } from "../../lib/xdg-config";
-import { ProfileConfig, ValidationResult } from "../../lib/types/config";
+import { ProfileConfig, ValidationResult, QuiltConfig } from "../../lib/types/config";
 import { inferQuiltConfig } from "../commands/infer-quilt-config";
+import { isQueueUrl } from "../../lib/utils/sqs";
 
 // =============================================================================
 // VALIDATION FUNCTIONS (from scripts/config/validator.ts)
@@ -295,6 +296,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     }
 
     const config: Partial<ProfileConfig> = { ...existingConfig };
+    let awsAccountId: string | undefined;
 
     // If non-interactive, validate that all required fields are present
     if (nonInteractive) {
@@ -303,13 +305,27 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
                 "Non-interactive mode requires benchlingTenant, benchlingClientId, and benchlingClientSecret to be already configured",
             );
         }
-        return config as ProfileConfig;
+
+        // Add metadata and inheritance marker before returning
+        const now = new Date().toISOString();
+        const finalConfig = config as ProfileConfig;
+        finalConfig._metadata = {
+            version: "0.7.0",
+            createdAt: config._metadata?.createdAt || now,
+            updatedAt: now,
+            source: "wizard",
+        };
+
+        if (inheritFrom) {
+            finalConfig._inherits = inheritFrom;
+        }
+
+        return finalConfig;
     }
 
     // Prompt for Quilt configuration (if not inherited)
     if (!inheritFrom) {
         console.log("Step 1: Quilt Configuration\n");
-        console.log("Note: Run 'npm run setup:infer' first to auto-detect Quilt stack\n");
 
         const quiltAnswers = await inquirer.prompt([
             {
@@ -340,14 +356,6 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             },
             {
                 type: "input",
-                name: "bucket",
-                message: "Quilt S3 Bucket:",
-                default: config.quilt?.bucket,
-                validate: (input: string): boolean | string =>
-                    input.trim().length > 0 || "Bucket name is required",
-            },
-            {
-                type: "input",
                 name: "database",
                 message: "Quilt Athena Database:",
                 default: config.quilt?.database || "quilt_catalog",
@@ -356,25 +364,27 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             },
             {
                 type: "input",
-                name: "queueArn",
-                message: "SQS Queue ARN:",
-                default: config.quilt?.queueArn,
-                validate: (input: string): boolean | string =>
-                    input.trim().length > 0 && input.startsWith("arn:aws:sqs:") ||
-                    "Queue ARN is required and must start with arn:aws:sqs:",
+                name: "queueUrl",
+                message: "SQS Queue URL:",
+                default: config.quilt?.queueUrl,
+                validate: (input: string): boolean | string => {
+                    return isQueueUrl(input) ||
+                        "Queue URL is required and must look like https://sqs.<region>.amazonaws.com/<account>/<queue>";
+                },
             },
         ]);
 
-        // Extract region from stack ARN
-        const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([^:]+):/);
+        // Extract region and account ID from stack ARN
+        // ARN format: arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/STACK_NAME/STACK_ID
+        const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([^:]+):(\d{12}):/);
         const quiltRegion = arnMatch ? arnMatch[1] : "us-east-1";
+        awsAccountId = arnMatch ? arnMatch[2] : undefined;
 
         config.quilt = {
             stackArn: quiltAnswers.stackArn,
             catalog: quiltAnswers.catalog,
-            bucket: quiltAnswers.bucket,
             database: quiltAnswers.database,
-            queueArn: quiltAnswers.queueArn,
+            queueUrl: quiltAnswers.queueUrl,
             region: quiltRegion,
         };
     }
@@ -453,7 +463,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             type: "input",
             name: "bucket",
             message: "Package S3 Bucket:",
-            default: config.packages?.bucket || config.quilt?.bucket,
+            default: config.packages?.bucket,
             validate: (input: string): boolean | string =>
                 input.trim().length > 0 || "Bucket name is required",
         },
@@ -489,15 +499,24 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
         },
         {
             type: "input",
-            name: "imageTag",
-            message: "Docker image tag:",
-            default: config.deployment?.imageTag || "latest",
+            name: "account",
+            message: "AWS Account ID:",
+            default: config.deployment?.account || awsAccountId || config.quilt?.stackArn?.match(/:(\d{12}):/)?.[1],
+            validate: (input: string): boolean | string => {
+                if (!input || input.trim().length === 0) {
+                    return "AWS Account ID is required";
+                }
+                if (!/^\d{12}$/.test(input.trim())) {
+                    return "AWS Account ID must be a 12-digit number";
+                }
+                return true;
+            },
         },
     ]);
 
     config.deployment = {
         region: deploymentAnswers.region,
-        imageTag: deploymentAnswers.imageTag,
+        account: deploymentAnswers.account,
     };
 
     // Optional: Logging configuration
@@ -512,12 +531,6 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             default: config.logging?.level || "INFO",
         },
         {
-            type: "confirm",
-            name: "enableVerification",
-            message: "Enable webhook signature verification:",
-            default: config.security?.enableVerification !== false,
-        },
-        {
             type: "input",
             name: "webhookAllowList",
             message: "Webhook IP allowlist (comma-separated, empty for none):",
@@ -530,7 +543,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     };
 
     config.security = {
-        enableVerification: optionalAnswers.enableVerification,
+        enableVerification: true,
         webhookAllowList: optionalAnswers.webhookAllowList,
     };
 
@@ -597,36 +610,45 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     // Step 1: Load existing configuration (if profile exists)
     let existingConfig: Partial<ProfileConfig> | undefined;
 
+    // Determine if we should inherit from 'default' when profile is not 'default'
+    const shouldInheritFromDefault = profile !== "default" && !inheritFrom;
+    const effectiveInheritFrom = inheritFrom || (shouldInheritFromDefault ? "default" : undefined);
+
     if (xdg.profileExists(profile)) {
         console.log(`Loading existing configuration for profile: ${profile}\n`);
         try {
-            existingConfig = inheritFrom
-                ? xdg.readProfileWithInheritance(profile, inheritFrom)
+            existingConfig = effectiveInheritFrom
+                ? xdg.readProfileWithInheritance(profile, effectiveInheritFrom)
                 : xdg.readProfile(profile);
         } catch (error) {
             console.warn(`Warning: Could not load existing config: ${(error as Error).message}`);
         }
-    } else if (inheritFrom) {
-        console.log(`Creating new profile '${profile}' inheriting from '${inheritFrom}'\n`);
+    } else if (effectiveInheritFrom) {
+        // If profile doesn't exist but we should inherit, load base profile
+        console.log(`Creating new profile '${profile}' inheriting from '${effectiveInheritFrom}'\n`);
         try {
-            existingConfig = xdg.readProfile(inheritFrom);
+            existingConfig = xdg.readProfile(effectiveInheritFrom);
         } catch (error) {
-            throw new Error(`Base profile '${inheritFrom}' not found: ${(error as Error).message}`);
+            throw new Error(`Base profile '${effectiveInheritFrom}' not found: ${(error as Error).message}`);
         }
     }
 
     // Step 2: Infer Quilt configuration (unless inheriting from another profile)
     let quiltConfig: Partial<ProfileConfig["quilt"]> = existingConfig?.quilt || {};
+    let inferredAccountId: string | undefined;
 
-    if (!inheritFrom || !existingConfig?.quilt) {
+    if (!effectiveInheritFrom || !existingConfig?.quilt) {
         console.log("Step 1: Inferring Quilt configuration from AWS...\n");
 
         try {
-            quiltConfig = await inferQuiltConfig({
+            const inferenceResult = await inferQuiltConfig({
                 region: awsRegion,
                 profile: awsProfile,
                 interactive: !nonInteractive,
             });
+
+            quiltConfig = inferenceResult;
+            inferredAccountId = inferenceResult.account;
 
             console.log("✓ Quilt configuration inferred\n");
         } catch (error) {
@@ -658,13 +680,18 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
             ...existingConfig?.quilt,
             ...quiltConfig,
         } as ProfileConfig["quilt"],
+        // Pass through inferred account ID for deployment config
+        deployment: {
+            ...existingConfig?.deployment,
+            account: existingConfig?.deployment?.account || inferredAccountId,
+        } as ProfileConfig["deployment"],
     };
 
     // Step 3: Run interactive wizard for remaining configuration
     const config = await runConfigWizard({
         existingConfig: partialConfig,
         nonInteractive,
-        inheritFrom,
+        inheritFrom: effectiveInheritFrom,
     });
 
     // Step 4: Validate configuration

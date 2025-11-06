@@ -60,7 +60,7 @@ class TestConfigWithSecretsOnlyMode:
         assert config.quilt_catalog == "test.quiltdata.com"
         assert config.quilt_database == "test_database"
         assert config.s3_bucket_name == "test-bucket"
-        assert config.queue_arn == "arn:aws:sqs:us-east-1:123456789012:test-queue"
+        assert config.queue_url == "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue"
         assert config.s3_prefix == "benchling"
         assert config.package_key == "experiment_id"
         assert config.benchling_tenant == "test-tenant"
@@ -156,6 +156,7 @@ def test_cdk_environment_variables_match_config():
 
     # Verify legacy mode variables are NOT present
     legacy_vars = [
+        "QUEUE_URL",
         "QUEUE_ARN",
         "QUILT_USER_BUCKET",
         "PKG_PREFIX",

@@ -44,7 +44,7 @@ export async function loadConfig(): Promise<ResolvedConfig> {
 
     const resolver = new ConfigResolver();
     return await resolver.resolve({
-        quiltStackArn,
+        stackArn: quiltStackArn,
         benchlingSecret,
     });
 }
@@ -81,7 +81,8 @@ export function loadConfigForTesting(): Partial<ResolvedConfig> {
         quiltCatalog: process.env.QUILT_CATALOG || "test.catalog.com",
         quiltDatabase: process.env.QUILT_DATABASE || "test_db",
         quiltUserBucket: process.env.QUILT_USER_BUCKET || "test-bucket",
-        queueArn: process.env.QUEUE_ARN || "arn:aws:sqs:us-east-1:123456789012:test-queue",
+        queueUrl: process.env.QUEUE_URL ||
+            "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
 
         // Benchling
         benchlingTenant: process.env.BENCHLING_TENANT || "test-tenant",

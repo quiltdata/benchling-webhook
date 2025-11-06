@@ -2,7 +2,7 @@ import { jest } from "@jest/globals";
 import { execSync } from "child_process";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { mockClient } from "aws-sdk-client-mock";
-import { inferQuiltConfig, inferenceResultToDerivedConfig } from "../bin/commands/infer-quilt-config";
+import { inferQuiltConfig } from "../bin/commands/infer-quilt-config";
 
 // Mock child_process
 jest.mock("child_process");
@@ -37,7 +37,7 @@ describe("infer-quilt-config", () => {
                 interactive: false,
             });
 
-            expect(result.catalogUrl).toBe("https://nightly.quilttest.com");
+            expect(result.catalog).toBe("https://nightly.quilttest.com");
             expect(result.source).toBe("quilt3-cli");
         });
 
@@ -53,7 +53,7 @@ describe("infer-quilt-config", () => {
                 interactive: false,
             });
 
-            expect(result.catalogUrl).toBeUndefined();
+            expect(result.catalog).toBeUndefined();
             expect(result.source).toBe("none");
         });
 
@@ -67,7 +67,7 @@ describe("infer-quilt-config", () => {
                 interactive: false,
             });
 
-            expect(result.catalogUrl).toBeUndefined();
+            expect(result.catalog).toBeUndefined();
             expect(result.source).toBe("none");
         });
     });
@@ -98,7 +98,7 @@ describe("infer-quilt-config", () => {
                         CreationTime: new Date(),
                         Outputs: [
                             { OutputKey: "UserBucket", OutputValue: "my-bucket" },
-                            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123456789012:my-queue" },
+                            { OutputKey: "PackagerQueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/my-queue" },
                             { OutputKey: "QuiltWebHost", OutputValue: "https://catalog.example.com" },
                         ],
                     },
@@ -110,11 +110,11 @@ describe("infer-quilt-config", () => {
                 interactive: false,
             });
 
-            expect(result.quiltStackArn).toBe("arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-staging/abc-123");
-            expect(result.quiltUserBucket).toBe("my-bucket");
-            expect(result.queueArn).toBe("arn:aws:sqs:us-east-1:123456789012:my-queue");
-            expect(result.catalogUrl).toBe("https://catalog.example.com");
-            expect(result.quiltRegion).toBe("us-east-1");
+            expect(result.stackArn).toBe("arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-staging/abc-123");
+            expect(result.account).toBe("123456789012");
+            expect(result.queueUrl).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/my-queue");
+            expect(result.catalog).toBe("https://catalog.example.com");
+            expect(result.region).toBe("us-east-1");
             expect(result.source).toBe("cloudformation");
         });
 
@@ -148,8 +148,47 @@ describe("infer-quilt-config", () => {
                 interactive: false,
             });
 
-            expect(result.quiltStackArn).toBeDefined();
+            expect(result.stackArn).toBeDefined();
+            expect(result.account).toBe("123456789012");
             expect(result.source).toBe("cloudformation");
+        });
+
+        it("should extract AWS account ID from stack ARN", async () => {
+            mockedExecSync.mockImplementation(() => {
+                throw new Error("No quilt3");
+            });
+
+            cfMock.on(ListStacksCommand).resolves({
+                StackSummaries: [
+                    {
+                        StackName: "quilt-test",
+                        StackId: "arn:aws:cloudformation:us-west-2:999888777666:stack/quilt-test/abc-123",
+                        StackStatus: "CREATE_COMPLETE",
+                        CreationTime: new Date(),
+                    },
+                ],
+            });
+
+            cfMock.on(DescribeStacksCommand).resolves({
+                Stacks: [
+                    {
+                        StackId: "arn:aws:cloudformation:us-west-2:999888777666:stack/quilt-test/abc-123",
+                        StackName: "quilt-test",
+                        StackStatus: "CREATE_COMPLETE",
+                        CreationTime: new Date(),
+                        Outputs: [],
+                    },
+                ],
+            });
+
+            const result = await inferQuiltConfig({
+                region: "us-west-2",
+                interactive: false,
+            });
+
+            expect(result.account).toBe("999888777666");
+            expect(result.region).toBe("us-west-2");
+            expect(result.stackArn).toBe("arn:aws:cloudformation:us-west-2:999888777666:stack/quilt-test/abc-123");
         });
     });
 
@@ -206,9 +245,8 @@ describe("infer-quilt-config", () => {
             });
 
             // Should auto-select quilt-production because it matches quilt3 catalog
-            expect(result.catalogUrl).toBe("https://nightly.quilttest.com");
-            expect(result.quiltUserBucket).toBe("production-bucket");
-            expect(result.quiltStackArn).toContain("quilt-production");
+            expect(result.catalog).toBe("https://nightly.quilttest.com");
+            expect(result.stackArn).toContain("quilt-production");
             expect(result.source).toBe("quilt3-cli+cloudformation");
         });
 
@@ -240,7 +278,7 @@ describe("infer-quilt-config", () => {
             });
 
             // Should have selected first option (mocked to always select 1)
-            expect(result.quiltStackArn).toBeDefined();
+            expect(result.stackArn).toBeDefined();
             expect(result.source).toBe("quilt3-cli+cloudformation");
         });
 
@@ -272,8 +310,7 @@ describe("infer-quilt-config", () => {
             });
 
             // Should use the single stack even though catalog URLs don't match
-            expect(result.catalogUrl).toBe("https://nightly.quilttest.com"); // Prefers quilt3 CLI
-            expect(result.quiltUserBucket).toBe("staging-bucket");
+            expect(result.catalog).toBe("https://nightly.quilttest.com"); // Prefers quilt3 CLI
             expect(result.source).toBe("quilt3-cli+cloudformation");
         });
     });
@@ -308,50 +345,8 @@ describe("infer-quilt-config", () => {
                 interactive: false,
             });
 
-            expect(result.quiltStackArn).toContain("quilt-stack-1");
+            expect(result.stackArn).toContain("quilt-stack-1");
         });
     });
 
-    describe("inferenceResultToDerivedConfig", () => {
-        it("should convert inference result to DerivedConfig", () => {
-            const inferenceResult = {
-                catalogUrl: "https://catalog.example.com",
-                quiltUserBucket: "my-bucket",
-                quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/abc-123",
-                quiltRegion: "us-east-1",
-                queueArn: "arn:aws:sqs:us-east-1:123456789012:my-queue",
-                source: "quilt3-cli+cloudformation",
-            };
-
-            const config = inferenceResultToDerivedConfig(inferenceResult);
-
-            expect(config.catalogUrl).toBe("https://catalog.example.com");
-            expect(config.quiltCatalog).toBe("https://catalog.example.com");
-            expect(config.quiltUserBucket).toBe("my-bucket");
-            expect(config.quiltStackArn).toBe("arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/abc-123");
-            expect(config.quiltRegion).toBe("us-east-1");
-            expect(config.queueArn).toBe("arn:aws:sqs:us-east-1:123456789012:my-queue");
-
-            // Type assertion for _metadata access
-            const metadata = config._metadata as any;
-            expect(metadata.inferredFrom).toBe("quilt3-cli+cloudformation");
-            expect(metadata.source).toBe("infer-quilt-config");
-            expect(metadata.version).toBe("0.6.0");
-        });
-
-        it("should handle minimal inference result", () => {
-            const inferenceResult = {
-                source: "none",
-            };
-
-            const config = inferenceResultToDerivedConfig(inferenceResult);
-
-            expect(config.catalogUrl).toBeUndefined();
-            expect(config.quiltUserBucket).toBeUndefined();
-
-            // Type assertion for _metadata access
-            const metadata = config._metadata as any;
-            expect(metadata.inferredFrom).toBe("none");
-        });
-    });
 });

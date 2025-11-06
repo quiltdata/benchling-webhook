@@ -28,13 +28,12 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
             quilt: {
                 stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
                 catalog: "quilt.example.com",
-                bucket: "my-quilt-bucket",
                 database: "quilt_catalog",
-                queueArn: "arn:aws:sqs:us-east-1:123456789012:quilt-queue",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-queue",
                 region: "us-east-1",
             },
             packages: {
-                bucket: "test-bucket",
+                bucket: "test-packages-bucket",
                 prefix: "benchling",
                 metadataKey: "experiment_id",
             },
@@ -224,9 +223,8 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/custom-stack/xyz789",
                     catalog: "https://quilt.example.com",
-                    bucket: "custom-quilt-bucket",
                     database: "quilt_catalog",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:custom-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/custom-queue",
                     region: "us-east-1",
                 },
                 packages: {

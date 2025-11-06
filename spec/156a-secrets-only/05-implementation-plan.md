@@ -511,7 +511,7 @@ export function loadConfigForTesting(): Partial<ResolvedConfig> {
     quiltCatalog: process.env.QUILT_CATALOG || 'test.catalog.com',
     quiltDatabase: process.env.QUILT_DATABASE || 'test_db',
     quiltUserBucket: process.env.QUILT_USER_BUCKET || 'test-bucket',
-    queueArn: process.env.QUEUE_ARN || 'arn:aws:sqs:us-east-1:123:test-queue',
+    queueArn: process.env.QUEUE_ARN || 'J3456789012:test-queue',
     benchlingTenant: process.env.BENCHLING_TENANT || 'test',
     benchlingClientId: process.env.BENCHLING_CLIENT_ID || 'test-id',
     benchlingClientSecret: process.env.BENCHLING_CLIENT_SECRET || 'test-secret',
