@@ -394,7 +394,8 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     // Prompt for Benchling configuration
     console.log("\nStep 2: Benchling Configuration\n");
 
-    const benchlingAnswers = await inquirer.prompt([
+    // First, get tenant
+    const tenantAnswer = await inquirer.prompt([
         {
             type: "input",
             name: "tenant",
@@ -403,31 +404,9 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             validate: (input: string): boolean | string =>
                 input.trim().length > 0 || "Tenant is required",
         },
-        {
-            type: "input",
-            name: "clientId",
-            message: "Benchling OAuth Client ID:",
-            default: config.benchling?.clientId,
-            validate: (input: string): boolean | string =>
-                input.trim().length > 0 || "Client ID is required",
-        },
-        {
-            type: "password",
-            name: "clientSecret",
-            message: config.benchling?.clientSecret
-                ? "Benchling OAuth Client Secret (press Enter to keep existing):"
-                : "Benchling OAuth Client Secret:",
-            validate: (input: string): boolean | string => {
-                // If there's an existing secret and input is empty, we'll keep the existing one
-                if (config.benchling?.clientSecret && input.trim().length === 0) {
-                    return true;
-                }
-                return input.trim().length > 0 || "Client secret is required";
-            },
-        },
     ]);
 
-    // Ask if they have an app_definition_id
+    // Ask if they have an app_definition_id BEFORE asking for credentials
     const hasAppDefId = await inquirer.prompt([
         {
             type: "confirm",
@@ -437,7 +416,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
         },
     ]);
 
-    let appDefinitionId = config.benchling?.appDefinitionId;
+    let appDefinitionId: string;
 
     if (hasAppDefId.hasIt) {
         // They have it, ask for it
@@ -477,6 +456,32 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
         appDefinitionId = appDefAnswer.appDefinitionId;
     }
 
+    // Now ask for OAuth credentials (which must come from the app)
+    const credentialAnswers = await inquirer.prompt([
+        {
+            type: "input",
+            name: "clientId",
+            message: "Benchling OAuth Client ID (from the app above):",
+            default: config.benchling?.clientId,
+            validate: (input: string): boolean | string =>
+                input.trim().length > 0 || "Client ID is required",
+        },
+        {
+            type: "password",
+            name: "clientSecret",
+            message: config.benchling?.clientSecret
+                ? "Benchling OAuth Client Secret (press Enter to keep existing):"
+                : "Benchling OAuth Client Secret (from the app above):",
+            validate: (input: string): boolean | string => {
+                // If there's an existing secret and input is empty, we'll keep the existing one
+                if (config.benchling?.clientSecret && input.trim().length === 0) {
+                    return true;
+                }
+                return input.trim().length > 0 || "Client secret is required";
+            },
+        },
+    ]);
+
     // Ask for optional test entry ID
     const testEntryAnswer = await inquirer.prompt([
         {
@@ -488,15 +493,15 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     ]);
 
     // Handle empty password input - keep existing secret if user pressed Enter
-    if (benchlingAnswers.clientSecret.trim().length === 0 && config.benchling?.clientSecret) {
-        benchlingAnswers.clientSecret = config.benchling.clientSecret;
+    if (credentialAnswers.clientSecret.trim().length === 0 && config.benchling?.clientSecret) {
+        credentialAnswers.clientSecret = config.benchling.clientSecret;
     }
 
     config.benchling = {
-        tenant: benchlingAnswers.tenant,
-        clientId: benchlingAnswers.clientId,
-        clientSecret: benchlingAnswers.clientSecret,
-        appDefinitionId: appDefinitionId!,
+        tenant: tenantAnswer.tenant,
+        clientId: credentialAnswers.clientId,
+        clientSecret: credentialAnswers.clientSecret,
+        appDefinitionId: appDefinitionId,
     };
 
     if (testEntryAnswer.testEntryId && testEntryAnswer.testEntryId.trim() !== "") {
