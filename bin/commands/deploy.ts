@@ -14,6 +14,36 @@ import { ProfileConfig } from "../../lib/types/config";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 
 /**
+ * Get the most recent dev version tag (without 'v' prefix)
+ * Returns null if no dev tags found
+ */
+function getLatestDevVersion(): string | null {
+    try {
+        // Get all tags matching dev pattern: v{version}-{timestamp}Z
+        const tags = execSync("git tag --list", { encoding: "utf8" })
+            .trim()
+            .split("\n")
+            .filter(tag => /^v\d+\.\d+\.\d+-\d{8}T\d{6}Z$/.test(tag));
+
+        if (tags.length === 0) {
+            return null;
+        }
+
+        // Sort by timestamp (newest first)
+        tags.sort((a, b) => {
+            const timestampA = a.match(/(\d{8}T\d{6}Z)$/)?.[1] || "";
+            const timestampB = b.match(/(\d{8}T\d{6}Z)$/)?.[1] || "";
+            return timestampB.localeCompare(timestampA);
+        });
+
+        // Return latest tag without 'v' prefix
+        return tags[0].substring(1);
+    } catch {
+        return null;
+    }
+}
+
+/**
  * Deploy command for v0.7.0 configuration architecture
  *
  * Uses new profile-based configuration with deployment tracking.
@@ -28,7 +58,7 @@ export async function deployCommand(options: {
     requireApproval?: string;
     profile?: string;           // Profile name (default: "default")
     stage?: "dev" | "prod";     // API Gateway stage (independent of profile)
-    quiltStackArn?: string;
+    stackArn?: string;
     benchlingSecret?: string;
     imageTag?: string;
     region?: string;
@@ -62,15 +92,40 @@ export async function deployCommand(options: {
         console.error(chalk.red((error as Error).message));
         console.log();
         console.log(chalk.yellow("Run setup wizard to create configuration:"));
-        console.log(chalk.cyan("  npm run setup"));
+        // Suggest stage-specific setup command
+        const setupCmd = stage === "dev" ? "setup:dev" : stage === "prod" ? "setup:prod" : "setup";
+        const profileArg = profileName !== "default" ? ` --profile ${profileName}` : "";
+        console.log(chalk.cyan(`  npm run ${setupCmd}${profileArg}`));
         console.log();
         process.exit(1);
     }
 
     // Get required parameters with priority: CLI options > Profile config
-    const quiltStackArn = options.quiltStackArn || config.quilt.stackArn;
+    const quiltStackArn = options. stackArn || config.quilt.stackArn;
     const benchlingSecret = options.benchlingSecret || config.benchling.secretArn;
-    const imageTag = options.imageTag || config.deployment.imageTag || "latest";
+
+    // Auto-detect image tag based on profile
+    // For dev profiles, use the latest dev tag (without 'v' prefix)
+    // For prod profiles, use config or "latest"
+    let imageTag: string;
+    if (options.imageTag) {
+        // CLI option takes highest priority
+        imageTag = options.imageTag;
+    } else if (profileName === "dev") {
+        // Auto-detect latest dev tag for dev profile
+        const devVersion = getLatestDevVersion();
+        if (devVersion) {
+            imageTag = devVersion;
+            console.log(chalk.dim(`✓ Auto-detected dev image tag: ${imageTag}\n`));
+        } else {
+            console.error(chalk.yellow("⚠️  No dev tags found, using 'latest'"));
+            console.error(chalk.yellow("   Create a dev tag with: npm run version:tag:dev\n"));
+            imageTag = "latest";
+        }
+    } else {
+        // Use config or default to "latest"
+        imageTag = config.deployment.imageTag || "latest";
+    }
 
     // Validate required parameters
     const missingParams: string[] = [];
@@ -96,7 +151,7 @@ export async function deployCommand(options: {
     }
 
     // Deploy (both parameters validated above)
-    return await deploy(quiltStackArn!, benchlingSecret!, {
+    return await deploy(quiltStackArn!, benchlingSecret!, config, {
         ...options,
         imageTag,
         profileName,
@@ -108,8 +163,9 @@ export async function deployCommand(options: {
  * Deploy the Benchling webhook stack
  */
 async function deploy(
-    quiltStackArn: string,
+    stackArn: string,
     benchlingSecret: string,
+    config: ProfileConfig,
     options: {
         yes?: boolean;
         bootstrapCheck?: boolean;
@@ -126,7 +182,7 @@ async function deploy(
     // Parse stack ARN to extract region/account
     let parsed;
     try {
-        parsed = parseStackArn(quiltStackArn);
+        parsed = parseStackArn(stackArn);
         spinner.succeed("Stack ARN validated");
     } catch (error) {
         spinner.fail("Invalid Stack ARN");
@@ -215,7 +271,7 @@ async function deploy(
     console.log(`  ${chalk.bold("Profile:")}                   ${options.profileName}`);
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
-    console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(quiltStackArn)}`);
+    console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)}`);
     console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
     console.log(`    ${chalk.bold("Docker Image Tag:")}        ${options.imageTag}`);
     console.log();
@@ -246,10 +302,14 @@ async function deploy(
 
     try {
         // Build CloudFormation parameters
+        // Parameter names must match the CfnParameter IDs in BenchlingWebhookStack
         const parameters = [
-            `QuiltStackARN=${quiltStackArn}`,
-            `BenchlingSecret=${benchlingSecret}`,
+            `QuiltStackARN=${stackArn}`,
+            `BenchlingSecretARN=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
+            `PackageBucket=${config.packages.bucket}`,
+            `QuiltDatabase=${config.quilt.database || ""}`,
+            `LogLevel=${config.logging?.level || "INFO"}`,
         ];
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
@@ -261,7 +321,7 @@ async function deploy(
                 ...process.env,
                 CDK_DEFAULT_ACCOUNT: deployAccount,
                 CDK_DEFAULT_REGION: deployRegion,
-                QUILT_STACK_ARN: quiltStackArn,
+                QUILT_STACK_ARN: stackArn,
                 BENCHLING_SECRET: benchlingSecret,
             },
         });

@@ -83,9 +83,8 @@ function legacyConfigToProfileConfig(config: Config): ProfileConfig {
         quilt: {
             stackArn: config.quiltStackArn || "",
             catalog: config.quiltCatalog,
-            bucket: config.quiltUserBucket,
             database: config.quiltDatabase,
-            queueArn: config.queueArn,
+            queueUrl: config.queueUrl,
             region: config.cdkRegion,
         },
         benchling: {
@@ -161,9 +160,8 @@ if (require.main === module) {
         quilt: {
             stackArn: process.env.QUILT_STACK_ARN || "",
             catalog: process.env.QUILT_CATALOG || "",
-            bucket: process.env.QUILT_USER_BUCKET || "",
             database: process.env.QUILT_DATABASE || "",
-            queueArn: process.env.QUEUE_ARN || "",
+            queueUrl: process.env.QUEUE_URL || "",
             region: process.env.CDK_DEFAULT_REGION || "us-east-1",
         },
         benchling: {

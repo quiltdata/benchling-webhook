@@ -18,7 +18,6 @@ export interface ConfigMetadata {
 export interface SaveOptions {
     xdgConfig?: XDGConfig;
     source?: string;
-    skipValidation?: boolean;
     merge?: boolean;
     profile?: string;
 }
@@ -56,15 +55,9 @@ export class ConfigurationSaver {
         const {
             xdgConfig = ConfigurationSaver.getDefaultXDGConfig(),
             source = "wizard",
-            skipValidation = false,
             merge: shouldMerge = false,
             profile = "default",
         } = options;
-
-        // Validate configuration if not skipped
-        if (!skipValidation) {
-            ConfigurationSaver.validateConfig(config);
-        }
 
         // Merge with existing config if requested
         let finalConfig = { ...config };
@@ -120,20 +113,5 @@ export class ConfigurationSaver {
         // For now, return a static version
         // In production, this would read from package.json
         return "0.7.0";
-    }
-
-    /**
-     * Validate configuration before saving
-     *
-     * @param config - Configuration to validate
-     * @throws {Error} If configuration is invalid
-     */
-    private static validateConfig(config: Partial<ProfileConfig>): void {
-        // Check if config is empty
-        if (Object.keys(config).length === 0) {
-            throw new Error("Configuration validation failed: Configuration cannot be empty");
-        }
-
-        // Basic validation passed
     }
 }

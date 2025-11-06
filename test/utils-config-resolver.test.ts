@@ -92,7 +92,6 @@ describe("extractStackOutputs", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "test_db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:queue" },
             { OutputKey: "UserBucket", OutputValue: "test-bucket" },
             { OutputKey: "Catalog", OutputValue: "test.catalog.com" },
           ],
@@ -103,7 +102,6 @@ describe("extractStackOutputs", () => {
     const outputs = await extractStackOutputs(cfnMock as any, "TestStack");
 
     expect(outputs.UserAthenaDatabaseName).toBe("test_db");
-    expect(outputs.PackagerQueueArn).toBe("arn:aws:sqs:us-east-1:123:queue");
     expect(outputs.UserBucket).toBe("test-bucket");
     expect(outputs.Catalog).toBe("test.catalog.com");
   });
@@ -289,9 +287,9 @@ describe("ConfigResolver", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "quilt_test_db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:queue" },
             { OutputKey: "UserBucket", OutputValue: "test-user-bucket" },
             { OutputKey: "Catalog", OutputValue: "test.quilt.com" },
+            { OutputKey: "PackagerQueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue" },
           ],
         },
       ],
@@ -312,7 +310,7 @@ describe("ConfigResolver", () => {
 
     const resolver = new ConfigResolver();
     const config = await resolver.resolve({
-      quiltStackArn:
+      stackArn:
         "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
       benchlingSecret: "my-benchling-secret",
       mockCloudFormation: cfnMock as any,
@@ -327,7 +325,7 @@ describe("ConfigResolver", () => {
     expect(config.quiltCatalog).toBe("test.quilt.com");
     expect(config.quiltDatabase).toBe("quilt_test_db");
     expect(config.quiltUserBucket).toBe("test-user-bucket");
-    expect(config.queueArn).toBe("arn:aws:sqs:us-east-1:123:queue");
+    expect(config.queueUrl).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/test-queue");
 
     // Benchling
     expect(config.benchlingTenant).toBe("benchling-tenant");
@@ -349,7 +347,7 @@ describe("ConfigResolver", () => {
 
     // First call
     const config1 = await resolver.resolve({
-      quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
+      stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
       benchlingSecret: "secret",
       mockCloudFormation: cfnMock as any,
       mockSecretsManager: smMock as any,
@@ -357,7 +355,7 @@ describe("ConfigResolver", () => {
 
     // Second call should return cached config
     const config2 = await resolver.resolve({
-      quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
+      stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
       benchlingSecret: "secret",
       mockCloudFormation: cfnMock as any,
       mockSecretsManager: smMock as any,
@@ -373,7 +371,7 @@ describe("ConfigResolver", () => {
 
     // First resolve
     await resolver.resolve({
-      quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
+      stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
       benchlingSecret: "secret",
       mockCloudFormation: cfnMock as any,
       mockSecretsManager: smMock as any,
@@ -388,7 +386,7 @@ describe("ConfigResolver", () => {
     setupSuccessfulMocks();
 
     await resolver.resolve({
-      quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
+      stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
       benchlingSecret: "secret",
       mockCloudFormation: cfnMock as any,
       mockSecretsManager: smMock as any,
@@ -424,7 +422,7 @@ describe("ConfigResolver", () => {
 
     await expect(
       resolver.resolve({
-        quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
+        stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
         benchlingSecret: "secret",
         mockCloudFormation: cfnMock as any,
         mockSecretsManager: smMock as any,
@@ -432,41 +430,6 @@ describe("ConfigResolver", () => {
     ).rejects.toThrow(/Missing required CloudFormation outputs/);
   });
 
-  it("should accept BucketName instead of UserBucket", async () => {
-    cfnMock.on(DescribeStacksCommand).resolves({
-      Stacks: [
-        {
-          StackName: "Stack",
-          CreationTime: new Date(),
-          StackStatus: "CREATE_COMPLETE",
-          Outputs: [
-            { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:q" },
-            { OutputKey: "BucketName", OutputValue: "my-bucket" }, // Using BucketName
-            { OutputKey: "Catalog", OutputValue: "catalog.com" },
-          ],
-        },
-      ],
-    });
-
-    smMock.on(GetSecretValueCommand).resolves({
-      SecretString: JSON.stringify({
-        client_id: "id",
-        client_secret: "secret",
-        tenant: "tenant",
-      }),
-    });
-
-    const resolver = new ConfigResolver();
-    const config = await resolver.resolve({
-      quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
-      benchlingSecret: "secret",
-      mockCloudFormation: cfnMock as any,
-      mockSecretsManager: smMock as any,
-    });
-
-    expect(config.quiltUserBucket).toBe("my-bucket");
-  });
 
   it("should resolve catalog from CatalogDomain", async () => {
     cfnMock.on(DescribeStacksCommand).resolves({
@@ -477,9 +440,8 @@ describe("ConfigResolver", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:q" },
-            { OutputKey: "UserBucket", OutputValue: "bucket" },
             { OutputKey: "CatalogDomain", OutputValue: "https://my.catalog.com/" },
+            { OutputKey: "PackagerQueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue" },
           ],
         },
       ],
@@ -495,7 +457,7 @@ describe("ConfigResolver", () => {
 
     const resolver = new ConfigResolver();
     const config = await resolver.resolve({
-      quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
+      stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
       benchlingSecret: "secret",
       mockCloudFormation: cfnMock as any,
       mockSecretsManager: smMock as any,
@@ -552,12 +514,11 @@ describe("ConfigResolver", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:q" },
-            { OutputKey: "UserBucket", OutputValue: "bucket" },
             {
               OutputKey: "ApiGatewayEndpoint",
               OutputValue: "https://abc123.execute-api.us-east-1.amazonaws.com/prod",
             },
+            { OutputKey: "PackagerQueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue" },
           ],
         },
       ],
@@ -573,7 +534,7 @@ describe("ConfigResolver", () => {
 
     const resolver = new ConfigResolver();
     const config = await resolver.resolve({
-      quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
+      stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
       benchlingSecret: "secret",
       mockCloudFormation: cfnMock as any,
       mockSecretsManager: smMock as any,
@@ -591,9 +552,8 @@ describe("ConfigResolver", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:q" },
-            { OutputKey: "UserBucket", OutputValue: "bucket" },
-            // No Catalog, CatalogDomain, WebhookEndpoint, or ApiGatewayEndpoint
+            { OutputKey: "PackagerQueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue" },
+            // No Catalog, CatalogDomain, or ApiGatewayEndpoint
           ],
         },
       ],
@@ -611,7 +571,7 @@ describe("ConfigResolver", () => {
 
     await expect(
       resolver.resolve({
-        quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
+        stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
         benchlingSecret: "secret",
         mockCloudFormation: cfnMock as any,
         mockSecretsManager: smMock as any,

@@ -20,6 +20,7 @@ import {
     validateSecretData,
     type BenchlingSecretData,
 } from "./secrets";
+import { isQueueUrl } from "./sqs";
 
 /**
  * Complete resolved configuration for the application
@@ -33,7 +34,7 @@ export interface ResolvedConfig {
   quiltCatalog: string;
   quiltDatabase: string;
   quiltUserBucket: string;
-  queueArn: string;
+  queueUrl: string;
 
   // Benchling
   benchlingTenant: string;
@@ -54,8 +55,9 @@ export interface ResolvedConfig {
  * Options for ConfigResolver
  */
 export interface ConfigResolverOptions {
-  quiltStackArn: string;
+  stackArn: string;
   benchlingSecret: string;
+  // packagerQueueUrl: string;
   // For testing: inject mocked clients
   mockCloudFormation?: CloudFormationClient;
   mockSecretsManager?: SecretsManagerClient;
@@ -289,7 +291,7 @@ export class ConfigResolver {
         }
 
         // Step 1: Parse stack ARN
-        const parsed = parseStackArn(options.quiltStackArn);
+        const parsed = parseStackArn(options.stackArn);
 
         // Step 2: Create AWS clients (or use mocks for testing)
         const cfnClient =
@@ -305,6 +307,17 @@ export class ConfigResolver {
 
         // Step 4: Validate required outputs
         this.validateRequiredOutputs(outputs);
+
+        // Extract queue URL
+        const queueUrl = outputs.PackagerQueueUrl || outputs.QueueUrl;
+
+        if (!queueUrl || !isQueueUrl(queueUrl)) {
+            throw new ConfigResolverError(
+                "Missing SQS queue URL in CloudFormation outputs",
+                "Ensure your Quilt stack exports PackagerQueueUrl or QueueUrl",
+                `Available outputs: ${Object.keys(outputs).join(", ")}`,
+            );
+        }
 
         // Step 5: Fetch Benchling secret
         const secret = await resolveAndFetchSecret(
@@ -326,7 +339,7 @@ export class ConfigResolver {
             quiltCatalog: catalog,
             quiltDatabase: outputs.UserAthenaDatabaseName,
             quiltUserBucket: outputs.UserBucket || outputs.BucketName,
-            queueArn: outputs.PackagerQueueArn,
+            queueUrl,
 
             // Benchling
             benchlingTenant: secret.tenant,
@@ -355,14 +368,15 @@ export class ConfigResolver {
    * @throws ConfigResolverError if required outputs are missing
    */
     private validateRequiredOutputs(outputs: Record<string, string>): void {
-        const required = ["UserAthenaDatabaseName", "PackagerQueueArn"];
+        const missing: string[] = [];
 
-        // UserBucket or BucketName (at least one required)
-        if (!outputs.UserBucket && !outputs.BucketName) {
-            required.push("UserBucket or BucketName");
+        if (!outputs.UserAthenaDatabaseName) {
+            missing.push("UserAthenaDatabaseName");
         }
 
-        const missing = required.filter((key) => !outputs[key]);
+        if (!outputs.PackagerQueueUrl) {
+            missing.push("PackagerQueueUrl");
+        }
 
         if (missing.length > 0) {
             throw new ConfigResolverError(

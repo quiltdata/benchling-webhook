@@ -4,6 +4,7 @@
  */
 
 import { execSync } from "child_process";
+import { isQueueUrl } from "./sqs";
 
 export interface QuiltCatalogConfig {
     region: string;
@@ -200,12 +201,13 @@ export function buildInferredConfig(
         vars.QUILT_DATABASE = `${dbGuess} # VERIFY THIS - inferred from catalog name`;
     }
 
-    // SQS Queue ARN - this is what the application actually uses
-    const queueArnOutput = stackDetails.outputs.find(
-        (o) => o.OutputKey === "PackagerQueueArn",
-    );
-    if (queueArnOutput) {
-        vars.QUEUE_ARN = queueArnOutput.OutputValue;
+    // SQS Queue URL (normalize from URL or ARN)
+    const queueOutput =
+        stackDetails.outputs.find((o) => o.OutputKey === "PackagerQueueUrl") ||
+        stackDetails.outputs.find((o) => o.OutputKey === "QueueUrl");
+
+    if (queueOutput && queueOutput.OutputValue && isQueueUrl(queueOutput.OutputValue)) {
+        vars.QUEUE_URL = queueOutput.OutputValue;
     }
 
     // Additional useful info
@@ -351,8 +353,8 @@ export async function inferStackConfig(
         if (inferredVars.QUILT_DATABASE) {
             console.log(`Database:         ${inferredVars.QUILT_DATABASE}`);
         }
-        if (inferredVars.QUEUE_ARN) {
-            console.log(`Queue ARN:        ${inferredVars.QUEUE_ARN}`);
+        if (inferredVars.QUEUE_URL) {
+            console.log(`Queue URL:        ${inferredVars.QUEUE_URL}`);
         }
         if (inferredVars.CDK_DEFAULT_ACCOUNT) {
             console.log(`AWS Account:      ${inferredVars.CDK_DEFAULT_ACCOUNT}`);
