@@ -383,6 +383,10 @@ async function deploy(
                         execSync(testCommand, {
                             stdio: "inherit",
                             cwd: process.cwd(),
+                            env: {
+                                ...process.env,
+                                PROFILE: options.profileName,
+                            },
                         });
                         console.log();
                         console.log(`✅ ${options.stage.charAt(0).toUpperCase() + options.stage.slice(1)} deployment and tests completed successfully!`);
