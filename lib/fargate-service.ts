@@ -359,6 +359,7 @@ export class FargateService extends Construct {
             port: 80,
             protocol: elbv2.ApplicationProtocol.HTTP,
             defaultAction: elbv2.ListenerAction.forward([targetGroup]),
+            open: false,
         });
 
         // Create Security Group for Fargate tasks

@@ -121,13 +121,18 @@ describe("FargateService - Multi-Environment Support", () => {
             });
 
             const template = Template.fromStack(stack);
-            const ingressRules = template.findResources("AWS::EC2::SecurityGroupIngress");
-            const ingressValues = Object.values(ingressRules);
+            const securityGroups = template.findResources("AWS::EC2::SecurityGroup");
+            const standaloneIngress = template.findResources("AWS::EC2::SecurityGroupIngress");
 
-            const albIpv4Rule = ingressValues.find((rule: any) => rule.Properties?.CidrIp === "203.0.113.10/32");
-            const albIpv6Rule = ingressValues.find((rule: any) => rule.Properties?.CidrIpv6 === "2001:db8::1/128");
-            const allowAllIpv4 = ingressValues.find((rule: any) => rule.Properties?.CidrIp === "0.0.0.0/0");
-            const allowAllIpv6 = ingressValues.find((rule: any) => rule.Properties?.CidrIpv6 === "::/0");
+            const ingressValues = [
+                ...Object.values(standaloneIngress).map((rule: any) => rule.Properties ?? {}),
+                ...Object.values(securityGroups).flatMap((resource: any) => resource.Properties?.SecurityGroupIngress ?? []),
+            ];
+
+            const albIpv4Rule = ingressValues.find((rule: any) => rule.CidrIp === "203.0.113.10/32");
+            const albIpv6Rule = ingressValues.find((rule: any) => rule.CidrIpv6 === "2001:db8::1/128");
+            const allowAllIpv4 = ingressValues.find((rule: any) => rule.CidrIp === "0.0.0.0/0");
+            const allowAllIpv6 = ingressValues.find((rule: any) => rule.CidrIpv6 === "::/0");
 
             expect(albIpv4Rule).toBeDefined();
             expect(albIpv6Rule).toBeDefined();
@@ -153,11 +158,16 @@ describe("FargateService - Multi-Environment Support", () => {
             });
 
             const template = Template.fromStack(stack);
-            const ingressRules = template.findResources("AWS::EC2::SecurityGroupIngress");
-            const ingressValues = Object.values(ingressRules);
+            const securityGroups = template.findResources("AWS::EC2::SecurityGroup");
+            const standaloneIngress = template.findResources("AWS::EC2::SecurityGroupIngress");
 
-            const allowAllIpv4 = ingressValues.find((rule: any) => rule.Properties?.CidrIp === "0.0.0.0/0");
-            const allowAllIpv6 = ingressValues.find((rule: any) => rule.Properties?.CidrIpv6 === "::/0");
+            const ingressValues = [
+                ...Object.values(standaloneIngress).map((rule: any) => rule.Properties ?? {}),
+                ...Object.values(securityGroups).flatMap((resource: any) => resource.Properties?.SecurityGroupIngress ?? []),
+            ];
+
+            const allowAllIpv4 = ingressValues.find((rule: any) => rule.CidrIp === "0.0.0.0/0");
+            const allowAllIpv6 = ingressValues.find((rule: any) => rule.CidrIpv6 === "::/0");
 
             expect(allowAllIpv4).toBeDefined();
             expect(allowAllIpv6).toBeDefined();
