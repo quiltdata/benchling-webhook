@@ -419,7 +419,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             expect(outputs.WebhookEndpoint).toBeDefined();
         });
 
-        test("exports Load Balancer DNS", () => {
+        test("exports Webhook Endpoint", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -431,8 +431,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasOutput("LoadBalancerDNS", {
-                Description: "Application Load Balancer DNS name for direct testing",
+            template.hasOutput("WebhookEndpoint", {
+                Description: "Webhook endpoint URL - use this in Benchling app configuration",
             });
         });
     });

@@ -122,8 +122,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
+                packageBucket: config.packages.bucket,
+                quiltDatabase: config.quilt.database || "test-database",
             });
 
             const template = Template.fromStack(stack);
@@ -159,8 +161,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
+                packageBucket: config.packages.bucket,
+                quiltDatabase: config.quilt.database || "test-database",
             });
 
             const template = Template.fromStack(stack);

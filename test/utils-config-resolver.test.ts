@@ -475,7 +475,8 @@ describe("ConfigResolver", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:q" },
+            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123456789012:q" },
+            { OutputKey: "PackagerQueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/q" },
             { OutputKey: "UserBucket", OutputValue: "bucket" },
             {
               OutputKey: "WebhookEndpoint",
@@ -496,7 +497,7 @@ describe("ConfigResolver", () => {
 
     const resolver = new ConfigResolver();
     const config = await resolver.resolve({
-      quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
+      stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
       benchlingSecret: "secret",
       mockCloudFormation: cfnMock as any,
       mockSecretsManager: smMock as any,
