@@ -185,8 +185,6 @@ export class FargateService extends Construct {
         );
 
         // Grant S3 access for Athena query results
-        const account = config.deployment.account || cdk.Aws.ACCOUNT_ID;
-        const region = config.deployment.region;
         const athenaResultsBucketArn = `arn:aws:s3:::aws-athena-query-results-${account}-${region}`;
         taskRole.addToPolicy(
             new iam.PolicyStatement({
