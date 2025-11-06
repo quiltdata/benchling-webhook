@@ -3,7 +3,7 @@ import { expand as dotenvExpand } from "dotenv-expand";
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { execSync } from "child_process";
-import { toQueueUrl, isQueueUrl } from "./sqs";
+import { isQueueUrl } from "./sqs";
 
 export interface Config {
   // Secrets-Only Mode (v0.6.0+)
@@ -248,7 +248,7 @@ export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
         awsProfile: options.profile || envVars.AWS_PROFILE,
 
         // SQS
-        queueUrl: toQueueUrl(envVars.QUEUE_URL || envVars.QUEUE_ARN),
+        queueUrl: envVars.QUEUE_URL,
 
         // Optional
         pkgPrefix: envVars.PKG_PREFIX || "benchling",
@@ -278,7 +278,7 @@ export function mergeInferredConfig(
     return {
         cdkAccount: config.cdkAccount || inferredVars.CDK_DEFAULT_ACCOUNT,
         cdkRegion: config.cdkRegion || inferredVars.CDK_DEFAULT_REGION,
-        queueUrl: config.queueUrl || toQueueUrl(inferredVars.QUEUE_URL || inferredVars.QUEUE_ARN),
+        queueUrl: config.queueUrl || inferredVars.QUEUE_URL,
         quiltDatabase: config.quiltDatabase || inferredVars.QUILT_DATABASE,
         ...config, // User values always take precedence
     };

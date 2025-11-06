@@ -284,7 +284,6 @@ export async function inferQuiltConfig(options: InferenceOptions = {}): Promise<
 
     // Populate result from selected stack
     result.stackArn = selectedStack.stackArn;
-    result.bucket = selectedStack.bucket;
     result.database = selectedStack.database || "quilt_catalog";
     result.queueUrl = selectedStack.queueUrl;
     result.region = selectedStack.region;
@@ -327,7 +326,6 @@ async function main(): Promise<void> {
     console.log("=== Inference Results ===");
     console.log(`Stack ARN: ${result.stackArn || "Not found"}`);
     console.log(`Catalog URL: ${result.catalog || "Not found"}`);
-    console.log(`Bucket: ${result.bucket || "Not found"}`);
     console.log(`Database: ${result.database || "Not found"}`);
     console.log(`Queue URL: ${result.queueUrl || "Not found"}`);
     console.log(`Region: ${result.region || "Not found"}`);
