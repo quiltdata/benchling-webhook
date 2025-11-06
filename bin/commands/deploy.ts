@@ -261,10 +261,11 @@ async function deploy(
     }
 
     // Build ECR image URI for display
-    // Use ecrAccount if specified (for cross-account ECR access), otherwise use deployment account
-    const ecrAccount = (config.deployment as any).ecrAccount || config.deployment.account || deployAccount;
+    // HARDCODED: Always use the quiltdata AWS account for ECR images
+    const ecrAccount = "712023778557";
+    const ecrRegion = "us-east-1";
     const ecrRepository = config.deployment.ecrRepository || "quiltdata/benchling";
-    const ecrImageUri = `${ecrAccount}.dkr.ecr.${deployRegion}.amazonaws.com/${ecrRepository}:${options.imageTag}`;
+    const ecrImageUri = `${ecrAccount}.dkr.ecr.${ecrRegion}.amazonaws.com/${ecrRepository}:${options.imageTag}`;
 
     // Display deployment plan
     console.log();
