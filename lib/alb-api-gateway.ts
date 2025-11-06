@@ -7,36 +7,17 @@ import { Construct } from "constructs";
 import { ProfileConfig } from "./types/config";
 
 /**
- * Environment configuration for multi-stage API Gateway
- */
-export interface ApiGatewayEnvironment {
-    /** Stage name (e.g., "dev", "prod") */
-    readonly stageName: string;
-    /** ALB target group to route this stage's traffic to */
-    readonly targetGroup: elbv2.IApplicationTargetGroup;
-}
-
-/**
  * Properties for AlbApiGateway construct (v0.7.0+)
  *
- * Supports multiple API Gateway stages routing to different ALB target groups.
  * Uses ProfileConfig to access security settings like webhook allow list.
  */
 export interface AlbApiGatewayProps {
     readonly loadBalancer: elbv2.ApplicationLoadBalancer;
     readonly config: ProfileConfig;
-    /**
-     * Array of environments to create API Gateway stages for.
-     * Each environment gets its own stage that routes to a specific target group.
-     * If not provided, creates a single "prod" stage (backward compatible).
-     * @default Single prod stage
-     */
-    readonly environments?: ReadonlyArray<ApiGatewayEnvironment>;
 }
 
 export class AlbApiGateway {
     public readonly api: apigateway.RestApi;
-    public readonly stages: Map<string, apigateway.Stage>;
     public readonly logGroup: logs.ILogGroup;
 
     constructor(
@@ -80,59 +61,33 @@ export class AlbApiGateway {
         // Only create policy if we have IPs and they're not from an empty parameter
         const policyDocument = this.createResourcePolicy(allowedIps, webhookAllowList);
 
-        // Create API Gateway without automatic deployment
-        // We'll manually create stages to support multiple environments
         this.api = new apigateway.RestApi(scope, "BenchlingWebhookAPI", {
             restApiName: "BenchlingWebhookAPI",
             policy: policyDocument,
-            deploy: false,  // Manual deployment for multi-stage support
+            deployOptions: {
+                stageName: "prod",
+                accessLogDestination: new apigateway.LogGroupLogDestination(this.logGroup),
+                methodOptions: {
+                    "/*/*": {
+                        loggingLevel: apigateway.MethodLoggingLevel.INFO,
+                        dataTraceEnabled: true,
+                    },
+                },
+            },
         });
 
-        // Add webhook endpoints (routes to ALB)
         this.addWebhookEndpoints(props.loadBalancer);
-
-        // Create stages for each environment
-        this.stages = new Map();
-
-        // If environments provided, use multi-stage mode; otherwise use legacy single-stage mode
-        const environments = props.environments || [{ stageName: "prod", targetGroup: undefined as any }];
-
-        for (const env of environments) {
-            // Create deployment
-            const deployment = new apigateway.Deployment(scope, `${env.stageName}Deployment`, {
-                api: this.api,
-                description: `Deployment for ${env.stageName} stage`,
-            });
-
-            // Create stage
-            const stage = new apigateway.Stage(scope, `${env.stageName}Stage`, {
-                deployment,
-                stageName: env.stageName,
-                accessLogDestination: new apigateway.LogGroupLogDestination(this.logGroup),
-                loggingLevel: apigateway.MethodLoggingLevel.INFO,
-                dataTraceEnabled: true,
-            });
-
-            this.stages.set(env.stageName, stage);
-
-            // Output stage endpoint
-            new cdk.CfnOutput(scope, `${env.stageName}WebhookEndpoint`, {
-                value: stage.urlForPath("/"),
-                description: `${env.stageName} webhook endpoint URL`,
-                exportName: `BenchlingWebhook-${env.stageName}-Endpoint`,
-            });
-
-            // Output execution log group for this stage
-            new cdk.CfnOutput(scope, `${env.stageName}ApiGatewayExecutionLogGroup`, {
-                value: `API-Gateway-Execution-Logs_${this.api.restApiId}/${env.stageName}`,
-                description: `API Gateway execution log group for ${env.stageName} stage`,
-            });
-        }
 
         // Output API Gateway ID for execution logs
         new cdk.CfnOutput(scope, "ApiGatewayId", {
             value: this.api.restApiId,
             description: "API Gateway REST API ID",
+        });
+
+        // Output execution log group name
+        new cdk.CfnOutput(scope, "ApiGatewayExecutionLogGroup", {
+            value: `API-Gateway-Execution-Logs_${this.api.restApiId}/prod`,
+            description: "API Gateway execution log group for detailed request/response logs",
         });
 
         // Output ALB DNS for direct testing

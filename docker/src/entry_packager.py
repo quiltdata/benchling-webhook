@@ -703,10 +703,9 @@ For questions about the data, refer to the original Benchling entry.
         }
 
         try:
-            # Get queue URL from ARN using boto3 (cleaner than manual parsing)
-            queue_name = self.config.queue_arn.split(":")[-1]
-            queue_url_response = self.sqs_client.get_queue_url(QueueName=queue_name)
-            queue_url = queue_url_response["QueueUrl"]
+            queue_url = self.config.queue_url
+            if not queue_url:
+                raise ValueError("Missing SQS queue URL in configuration")
 
             response = self.sqs_client.send_message(QueueUrl=queue_url, MessageBody=json.dumps(message_body))
 

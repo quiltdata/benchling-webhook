@@ -5,6 +5,7 @@ import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
 import { execSync } from "child_process";
 import type { Config } from "../lib/utils/config";
 import type { ProfileConfig } from "../lib/types/config";
+import { toQueueUrl } from "../lib/utils/sqs";
 
 /**
  * Result of CDK bootstrap check
@@ -85,7 +86,7 @@ function legacyConfigToProfileConfig(config: Config): ProfileConfig {
             catalog: config.quiltCatalog,
             bucket: config.quiltUserBucket,
             database: config.quiltDatabase,
-            queueArn: config.queueArn,
+            queueUrl: toQueueUrl(config.queueUrl) || config.queueUrl,
             region: config.cdkRegion,
         },
         benchling: {
@@ -163,7 +164,7 @@ if (require.main === module) {
             catalog: process.env.QUILT_CATALOG || "",
             bucket: process.env.QUILT_USER_BUCKET || "",
             database: process.env.QUILT_DATABASE || "",
-            queueArn: process.env.QUEUE_ARN || "",
+            queueUrl: toQueueUrl(process.env.QUEUE_URL || process.env.QUEUE_ARN || "") || "",
             region: process.env.CDK_DEFAULT_REGION || "us-east-1",
         },
         benchling: {

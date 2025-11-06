@@ -36,7 +36,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -73,7 +73,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -124,7 +124,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -164,7 +164,7 @@ describe("Profile Validation", () => {
                         catalog: "https://quilt.example.com",
                         bucket: "test-bucket",
                         database: "test_db",
-                        queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                        queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                         region: "us-east-1",
                     },
                     benchling: {
@@ -206,7 +206,7 @@ describe("Profile Validation", () => {
                         catalog: "https://quilt.example.com",
                         bucket: "test-bucket",
                         database: "test_db",
-                        queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                        queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                         region: "us-east-1",
                     },
                     benchling: {
@@ -273,7 +273,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 packages: {
@@ -305,7 +305,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -337,7 +337,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -371,7 +371,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -400,7 +400,7 @@ describe("Profile Validation", () => {
                 quilt: {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
-                    // Missing stackArn, database, queueArn, region
+                    // Missing stackArn, database, queueUrl, region
                 },
                 benchling: {
                     tenant: "test-tenant",
@@ -434,7 +434,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -471,7 +471,7 @@ describe("Profile Validation", () => {
                     catalog: "",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -508,7 +508,7 @@ describe("Profile Validation", () => {
                     catalog: "quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "invalid-region",
                 },
                 benchling: {
@@ -544,7 +544,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "ab",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -580,7 +580,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -618,7 +618,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -660,7 +660,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -697,7 +697,7 @@ describe("Profile Validation", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {

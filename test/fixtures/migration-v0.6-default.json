@@ -15,7 +15,7 @@
   "cdkAccount": "123456789012",
   "cdkRegion": "us-east-1",
   "awsProfile": "default",
-  "queueArn": "arn:aws:sqs:us-east-1:123456789012:quilt-package-queue",
+  "queueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-package-queue",
   "pkgPrefix": "benchling",
   "pkgKey": "experiment_id",
   "logLevel": "INFO",

@@ -99,7 +99,7 @@ class ProfileManager {
                 catalog: "https://placeholder.quilt.com",
                 bucket: "placeholder-bucket",
                 database: "placeholder_db",
-                queueArn: "arn:aws:sqs:us-east-1:123456789012:placeholder",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/placeholder",
                 region: "us-east-1",
             },
             benchling: {

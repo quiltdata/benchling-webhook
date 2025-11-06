@@ -33,7 +33,7 @@ describe("AlbApiGateway", () => {
                 catalog: "https://catalog.example.org",
                 bucket: "test-bucket",
                 database: "test_db",
-                queueArn: "arn:aws:sqs:us-west-2:987654321098:test-queue",
+                queueUrl: "https://sqs.us-west-2.amazonaws.com/987654321098/test-queue",
                 region: "us-west-2",
             },
             benchling: {
@@ -393,11 +393,10 @@ describe("AlbApiGateway", () => {
             const template = Template.fromStack(stack);
 
             // Just verify the output exists with the right description
-            // In legacy mode (no environments), creates "prod" stage by default
             const outputs = template.toJSON().Outputs;
-            expect(outputs.prodApiGatewayExecutionLogGroup).toBeDefined();
-            expect(outputs.prodApiGatewayExecutionLogGroup.Description).toBe(
-                "API Gateway execution log group for prod stage",
+            expect(outputs.ApiGatewayExecutionLogGroup).toBeDefined();
+            expect(outputs.ApiGatewayExecutionLogGroup.Description).toBe(
+                "API Gateway execution log group for detailed request/response logs",
             );
         });
 

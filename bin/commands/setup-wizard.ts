@@ -15,39 +15,13 @@
  */
 
 import * as https from "https";
-import { existsSync, writeFileSync } from "fs";
-import { join } from "path";
 import inquirer from "inquirer";
-import chalk from "chalk";
-import boxen from "boxen";
-import ora from "ora";
 import { S3Client, HeadBucketCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { XDGConfig } from "../../lib/xdg-config";
-import { ProfileConfig, ValidationResult } from "../../lib/types/config";
+import { ProfileConfig, ValidationResult, QuiltConfig } from "../../lib/types/config";
 import { inferQuiltConfig } from "../commands/infer-quilt-config";
-import { generateBenchlingManifest } from "./manifest";
-import { syncSecretsToAWS } from "./sync-secrets";
-import { deployCommand } from "./deploy";
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pkg = require("../../package.json");
-
-const MANIFEST_FILENAME = "benchling-app-manifest.yaml";
-
-function getAccountFromStackArn(stackArn?: string): string | undefined {
-    if (!stackArn) {
-        return undefined;
-    }
-
-    const parts = stackArn.split(":");
-    if (parts.length < 5) {
-        return undefined;
-    }
-
-    const account = parts[4];
-    return /^[0-9]{12}$/.test(account) ? account : undefined;
-}
+import { toQueueUrl, isQueueUrl } from "../../lib/utils/sqs";
 
 // =============================================================================
 // VALIDATION FUNCTIONS (from scripts/config/validator.ts)
@@ -323,6 +297,21 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
 
     const config: Partial<ProfileConfig> = { ...existingConfig };
 
+    // Normalize legacy queue ARN to URL
+    if (config.quilt) {
+        const quiltConfig = config.quilt as QuiltConfig & { queueArn?: string };
+        const normalizedQueue =
+            toQueueUrl(quiltConfig.queueUrl ?? quiltConfig.queueArn) ?? quiltConfig.queueUrl;
+
+        if (normalizedQueue) {
+            quiltConfig.queueUrl = normalizedQueue;
+        }
+
+        if (quiltConfig.queueArn) {
+            delete quiltConfig.queueArn;
+        }
+    }
+
     // If non-interactive, validate that all required fields are present
     if (nonInteractive) {
         if (!config.benchling?.tenant || !config.benchling?.clientId || !config.benchling?.clientSecret) {
@@ -335,350 +324,148 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
 
     // Prompt for Quilt configuration (if not inherited)
     if (!inheritFrom) {
-        // Check if all required Quilt fields are already present (from inference)
-        // Note: bucket is optional and can be inferred from other sources if missing
-        const hasAllQuiltFields =
-            config.quilt?.stackArn &&
-            config.quilt?.catalog &&
-            config.quilt?.database &&
-            config.quilt?.queueArn;
+        console.log("Step 1: Quilt Configuration\n");
+        console.log("Note: Run 'npm run setup:infer' first to auto-detect Quilt stack\n");
 
-        let shouldPromptForQuilt = !hasAllQuiltFields;
-
-        if (hasAllQuiltFields) {
-            console.log("Step 1: Quilt Configuration (inferred from AWS)\n");
-            console.log(`  Stack ARN: ${config.quilt!.stackArn}`);
-            console.log(`  Catalog: ${config.quilt!.catalog}`);
-            console.log(`  Database: ${config.quilt!.database}`);
-            console.log(`  Queue ARN: ${config.quilt!.queueArn}`);
-            if (config.quilt!.bucket) {
-                console.log(`  Bucket: ${config.quilt!.bucket}`);
-            }
-            console.log("");
-
-            const { confirmQuilt } = await inquirer.prompt([
-                {
-                    type: "confirm",
-                    name: "confirmQuilt",
-                    message: "Use these inferred Quilt settings?",
-                    default: true,
-                },
-            ]);
-
-            if (!confirmQuilt) {
-                console.log("\nPlease enter Quilt configuration manually:\n");
-                shouldPromptForQuilt = true;
-            }
-        }
-
-        // Only prompt for Quilt fields if not all are present OR user chose to enter manually
-        if (shouldPromptForQuilt) {
-            if (!hasAllQuiltFields) {
-                console.log("Step 1: Quilt Configuration\n");
-                console.log("Note: Run 'npm run setup:infer' first to auto-detect Quilt stack\n");
-            }
-
-            const quiltAnswers = await inquirer.prompt([
-                {
-                    type: "input",
-                    name: "stackArn",
-                    message: "Quilt Stack ARN:",
-                    default: config.quilt?.stackArn,
-                    validate: (input: string): boolean | string =>
-                        input.trim().length > 0 && input.startsWith("arn:aws:cloudformation:") ||
-                    "Stack ARN is required and must start with arn:aws:cloudformation:",
-                },
-                {
-                    type: "input",
-                    name: "catalog",
-                    message: "Quilt Catalog URL (domain or full URL):",
-                    default: config.quilt?.catalog,
-                    validate: (input: string): boolean | string => {
-                        const trimmed = input.trim();
-                        if (trimmed.length === 0) {
-                            return "Catalog URL is required";
-                        }
-                        return true;
-                    },
-                    filter: (input: string): string => {
-                    // Strip protocol if present, store only domain
-                        return input.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
-                    },
-                },
-                {
-                    type: "input",
-                    name: "bucket",
-                    message: "Quilt S3 Bucket:",
-                    default: config.quilt?.bucket,
-                    validate: (input: string): boolean | string =>
-                        input.trim().length > 0 || "Bucket name is required",
-                },
-                {
-                    type: "input",
-                    name: "database",
-                    message: "Quilt Athena Database:",
-                    default: config.quilt?.database || "quilt_catalog",
-                    validate: (input: string): boolean | string =>
-                        input.trim().length > 0 || "Database name is required",
-                },
-                {
-                    type: "input",
-                    name: "queueArn",
-                    message: "SQS Queue ARN:",
-                    default: config.quilt?.queueArn,
-                    validate: (input: string): boolean | string =>
-                        input.trim().length > 0 && input.startsWith("arn:aws:sqs:") ||
-                    "Queue ARN is required and must start with arn:aws:sqs:",
-                },
-            ]);
-
-            // Extract region from stack ARN
-            const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([^:]+):/);
-            const quiltRegion = arnMatch ? arnMatch[1] : "us-east-1";
-
-            config.quilt = {
-                stackArn: quiltAnswers.stackArn,
-                catalog: quiltAnswers.catalog,
-                bucket: quiltAnswers.bucket,
-                database: quiltAnswers.database,
-                queueArn: quiltAnswers.queueArn,
-                region: quiltRegion,
-            };
-        }
-    }
-
-    // Prompt for Benchling configuration & guide app setup
-    console.log("\nStep 2: Create Benchling App\n");
-
-    let benchlingTenant = config.benchling?.tenant?.trim();
-    benchlingTenant = benchlingTenant && benchlingTenant.length > 0 ? benchlingTenant : undefined;
-
-    if (nonInteractive) {
-        if (!benchlingTenant) {
-            throw new Error("Benchling tenant must be provided in non-interactive mode");
-        }
-    } else {
-        while (!benchlingTenant) {
-            const tenantAnswer = await inquirer.prompt([
-                {
-                    type: "input",
-                    name: "tenant",
-                    message: "Benchling tenant (e.g., 'acme' for acme.benchling.com):",
-                    default: config.benchling?.tenant || "",
-                    filter: (value: string): string => value.trim(),
-                    validate: (input: string): boolean | string =>
-                        input.trim().length > 0 || "Tenant is required",
-                },
-            ]);
-
-            const candidateTenant = tenantAnswer.tenant.trim();
-            const tenantValidation = await validateBenchlingTenant(candidateTenant);
-
-            if (tenantValidation.isValid) {
-                benchlingTenant = candidateTenant;
-                if (tenantValidation.warnings && tenantValidation.warnings.length > 0) {
-                    console.warn("");
-                    console.warn("⚠ Tenant validation warnings:");
-                    tenantValidation.warnings.forEach((warning) => console.warn(`  - ${warning}`));
-                    console.warn("");
-                }
-            } else {
-                console.error("\n❌ Benchling tenant validation failed:");
-                tenantValidation.errors.forEach((err) => console.error(`  - ${err}`));
-                console.log("");
-            }
-        }
-    }
-
-    let manifestPath = join(process.cwd(), MANIFEST_FILENAME);
-
-    if (!nonInteractive) {
-        const manifestContent = generateBenchlingManifest({
-            catalogDomain: config.quilt?.catalog,
-            version: pkg.version,
-        });
-
-        let shouldWriteManifest = true;
-
-        if (existsSync(manifestPath)) {
-            const { overwrite } = await inquirer.prompt([
-                {
-                    type: "confirm",
-                    name: "overwrite",
-                    message: `A manifest already exists at ${manifestPath}. Overwrite it?`,
-                    default: false,
-                },
-            ]);
-
-            shouldWriteManifest = overwrite;
-
-            if (!overwrite) {
-                console.log(`\nUsing existing manifest: ${manifestPath}`);
-            }
-        }
-
-        if (shouldWriteManifest) {
-            writeFileSync(manifestPath, manifestContent, "utf-8");
-            console.log(`\n✓ Generated app manifest: ${manifestPath}`);
-        }
-
-        const manifestAppName =
-            config.quilt?.catalog && config.quilt.catalog.length > 0
-                ? config.quilt.catalog.replace(/[.:]/g, "-")
-                : "Quilt Integration";
-
-        const instructions =
-            chalk.bold("Create your Benchling app:\n\n") +
-            `1. Open ${chalk.cyan(`https://${benchlingTenant}.benchling.com/admin/apps`)}\n` +
-            "2. Click 'Create New App'\n" +
-            `3. Upload the manifest: ${chalk.cyan(manifestPath)}\n` +
-            "4. Create OAuth credentials and copy the Client ID / Secret\n" +
-            "5. Install the app (leave webhook URL blank for now)\n" +
-            "6. Copy the App Definition ID from the overview page\n";
-
-        console.log();
-        console.log(
-            boxen(instructions, {
-                padding: 1,
-                borderColor: "blue",
-                borderStyle: "round",
-            }),
-        );
-
-        console.log();
-        const { ready } = await inquirer.prompt([
+        const quiltAnswers = await inquirer.prompt([
             {
-                type: "confirm",
-                name: "ready",
-                message: "Have you created and installed the Benchling app?",
-                default: true,
+                type: "input",
+                name: "stackArn",
+                message: "Quilt Stack ARN:",
+                default: config.quilt?.stackArn,
+                validate: (input: string): boolean | string =>
+                    input.trim().length > 0 && input.startsWith("arn:aws:cloudformation:") ||
+                    "Stack ARN is required and must start with arn:aws:cloudformation:",
+            },
+            {
+                type: "input",
+                name: "catalog",
+                message: "Quilt Catalog URL (domain or full URL):",
+                default: config.quilt?.catalog,
+                validate: (input: string): boolean | string => {
+                    const trimmed = input.trim();
+                    if (trimmed.length === 0) {
+                        return "Catalog URL is required";
+                    }
+                    return true;
+                },
+                filter: (input: string): string => {
+                    // Strip protocol if present, store only domain
+                    return input.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
+                },
+            },
+            {
+                type: "input",
+                name: "bucket",
+                message: "Quilt S3 Bucket:",
+                default: config.quilt?.bucket,
+                validate: (input: string): boolean | string =>
+                    input.trim().length > 0 || "Bucket name is required",
+            },
+            {
+                type: "input",
+                name: "database",
+                message: "Quilt Athena Database:",
+                default: config.quilt?.database || "quilt_catalog",
+                validate: (input: string): boolean | string =>
+                    input.trim().length > 0 || "Database name is required",
+            },
+            {
+                type: "input",
+                name: "queueUrl",
+                message: "SQS Queue URL:",
+                default: config.quilt?.queueUrl,
+                validate: (input: string): boolean | string => {
+                    const normalized = toQueueUrl(input);
+                    return normalized && isQueueUrl(normalized) ||
+                        "Queue URL is required and must look like https://sqs.<region>.amazonaws.com/<account>/<queue>";
+                },
+                filter: (input: string): string => toQueueUrl(input) || input.trim(),
             },
         ]);
 
-        if (!ready) {
-            console.log("\n⏸  Setup paused. Re-run when ready:\n");
-            console.log(`  ${chalk.cyan("npx @quiltdata/benchling-webhook setup")}\n`);
-            process.exit(0);
-        }
+        // Extract region from stack ARN
+        const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([^:]+):/);
+        const quiltRegion = arnMatch ? arnMatch[1] : "us-east-1";
 
-        console.log(`Using manifest app name: ${manifestAppName}\n`);
+        config.quilt = {
+            stackArn: quiltAnswers.stackArn,
+            catalog: quiltAnswers.catalog,
+            bucket: quiltAnswers.bucket,
+            database: quiltAnswers.database,
+            queueUrl: quiltAnswers.queueUrl,
+            region: quiltRegion,
+        };
     }
 
-    let benchlingClientId = config.benchling?.clientId?.trim();
-    let benchlingClientSecret = config.benchling?.clientSecret?.trim();
-    let benchlingAppDefinitionId = config.benchling?.appDefinitionId?.trim();
-    let benchlingTestEntryId = config.benchling?.testEntryId?.trim();
+    // Prompt for Benchling configuration
+    console.log("\nStep 2: Benchling Configuration\n");
 
-    if (nonInteractive) {
-        if (!benchlingClientId || !benchlingClientSecret || !benchlingAppDefinitionId) {
-            throw new Error(
-                "Non-interactive mode requires Benchling clientId, clientSecret, and appDefinitionId to be configured",
-            );
-        }
-    } else {
-        let credentialsValid = false;
-
-        while (!credentialsValid) {
-            const credentialAnswers = await inquirer.prompt([
-                {
-                    type: "input",
-                    name: "clientId",
-                    message: "Benchling OAuth Client ID:",
-                    default: benchlingClientId || "",
-                    filter: (value: string): string => value.trim(),
-                    validate: (input: string): boolean | string =>
-                        input.trim().length > 0 || "Client ID is required",
-                },
-                {
-                    type: "password",
-                    name: "clientSecret",
-                    message: benchlingClientSecret
-                        ? "Benchling OAuth Client Secret (press Enter to keep existing):"
-                        : "Benchling OAuth Client Secret:",
-                },
-                {
-                    type: "input",
-                    name: "appDefinitionId",
-                    message: "Benchling App Definition ID:",
-                    default: benchlingAppDefinitionId || "",
-                    filter: (value: string): string => value.trim(),
-                    validate: (input: string): boolean | string =>
-                        input.trim().length > 0 || "App Definition ID is required",
-                },
-                {
-                    type: "input",
-                    name: "testEntryId",
-                    message: "Benchling Test Entry ID (optional):",
-                    default: benchlingTestEntryId || "",
-                    filter: (value: string): string => value.trim(),
-                },
-            ]);
-
-            const candidateSecret =
-                credentialAnswers.clientSecret.trim().length === 0 && benchlingClientSecret
-                    ? benchlingClientSecret
-                    : credentialAnswers.clientSecret.trim();
-
-            if (!candidateSecret) {
-                console.error("\n❌ Benchling OAuth client secret is required\n");
-                continue;
-            }
-
-            const spinner = ora("Validating Benchling credentials...").start();
-            const validation = await validateBenchlingCredentials(
-                benchlingTenant as string,
-                credentialAnswers.clientId.trim(),
-                candidateSecret,
-            );
-
-            if (validation.isValid) {
-                spinner.succeed("Benchling credentials validated");
-                if (validation.warnings && validation.warnings.length > 0) {
-                    console.warn("\n⚠ Credential validation warnings:");
-                    validation.warnings.forEach((warn) => console.warn(`  - ${warn}`));
-                    console.warn("");
+    const benchlingAnswers = await inquirer.prompt([
+        {
+            type: "input",
+            name: "tenant",
+            message: "Benchling Tenant:",
+            default: config.benchling?.tenant,
+            validate: (input: string): boolean | string =>
+                input.trim().length > 0 || "Tenant is required",
+        },
+        {
+            type: "input",
+            name: "clientId",
+            message: "Benchling OAuth Client ID:",
+            default: config.benchling?.clientId,
+            validate: (input: string): boolean | string =>
+                input.trim().length > 0 || "Client ID is required",
+        },
+        {
+            type: "password",
+            name: "clientSecret",
+            message: config.benchling?.clientSecret
+                ? "Benchling OAuth Client Secret (press Enter to keep existing):"
+                : "Benchling OAuth Client Secret:",
+            validate: (input: string): boolean | string => {
+                // If there's an existing secret and input is empty, we'll keep the existing one
+                if (config.benchling?.clientSecret && input.trim().length === 0) {
+                    return true;
                 }
+                return input.trim().length > 0 || "Client secret is required";
+            },
+        },
+        {
+            type: "input",
+            name: "appDefinitionId",
+            message: "Benchling App Definition ID:",
+            default: config.benchling?.appDefinitionId,
+            validate: (input: string): boolean | string =>
+                input.trim().length > 0 || "App definition ID is required",
+        },
+        {
+            type: "input",
+            name: "testEntryId",
+            message: "Benchling Test Entry ID (optional):",
+            default: config.benchling?.testEntryId || "",
+        },
+    ]);
 
-                benchlingClientId = credentialAnswers.clientId.trim();
-                benchlingClientSecret = candidateSecret;
-                benchlingAppDefinitionId = credentialAnswers.appDefinitionId.trim();
-                benchlingTestEntryId = credentialAnswers.testEntryId || undefined;
-                credentialsValid = true;
-            } else {
-                spinner.fail("Benchling credential validation failed");
-                console.error("");
-                validation.errors.forEach((err) => console.error(`  - ${err}`));
-                console.error("");
-
-                const { retry } = await inquirer.prompt([
-                    {
-                        type: "confirm",
-                        name: "retry",
-                        message: "Credentials invalid. Try again?",
-                        default: true,
-                    },
-                ]);
-
-                if (!retry) {
-                    throw new Error("Setup aborted due to invalid Benchling credentials");
-                }
-            }
-        }
+    // Handle empty password input - keep existing secret if user pressed Enter
+    if (benchlingAnswers.clientSecret.trim().length === 0 && config.benchling?.clientSecret) {
+        benchlingAnswers.clientSecret = config.benchling.clientSecret;
     }
 
     config.benchling = {
-        tenant: benchlingTenant as string,
-        clientId: benchlingClientId as string,
-        clientSecret: benchlingClientSecret,
-        appDefinitionId: benchlingAppDefinitionId as string,
+        tenant: benchlingAnswers.tenant,
+        clientId: benchlingAnswers.clientId,
+        clientSecret: benchlingAnswers.clientSecret,
+        appDefinitionId: benchlingAnswers.appDefinitionId,
     };
 
-    if (benchlingTestEntryId && benchlingTestEntryId.length > 0) {
-        config.benchling.testEntryId = benchlingTestEntryId;
+    if (benchlingAnswers.testEntryId && benchlingAnswers.testEntryId.trim() !== "") {
+        config.benchling.testEntryId = benchlingAnswers.testEntryId;
     }
 
     // Prompt for package configuration
-    console.log("\nPackage Storage Configuration\n");
+    console.log("\nStep 3: Package Configuration\n");
 
     const packageAnswers = await inquirer.prompt([
         {
@@ -710,20 +497,9 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     };
 
     // Prompt for deployment configuration
-    console.log("\nDeployment Defaults\n");
-
-    const defaultAccount = config.deployment?.account || getAccountFromStackArn(config.quilt?.stackArn);
+    console.log("\nStep 4: Deployment Configuration\n");
 
     const deploymentAnswers = await inquirer.prompt([
-        {
-            type: "input",
-            name: "account",
-            message: "AWS Account ID:",
-            default: defaultAccount || "",
-            filter: (value: string): string => value.trim(),
-            validate: (input: string): boolean | string =>
-                input.trim().length === 0 || /^[0-9]{12}$/.test(input.trim()) || "Account ID must be a 12 digit number",
-        },
         {
             type: "input",
             name: "region",
@@ -739,13 +515,12 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     ]);
 
     config.deployment = {
-        ...(deploymentAnswers.account ? { account: deploymentAnswers.account } : {}),
         region: deploymentAnswers.region,
         imageTag: deploymentAnswers.imageTag,
     };
 
     // Optional: Logging configuration
-    console.log("\nSecurity and Logging Options\n");
+    console.log("\nStep 5: Optional Configuration\n");
 
     const optionalAnswers = await inquirer.prompt([
         {
@@ -781,7 +556,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     // Add metadata
     const now = new Date().toISOString();
     config._metadata = {
-        version: pkg.version,
+        version: "0.7.0",
         createdAt: config._metadata?.createdAt || now,
         updatedAt: now,
         source: "wizard",
@@ -808,8 +583,6 @@ export interface InstallWizardOptions {
     nonInteractive?: boolean;
     skipValidation?: boolean;
     skipSecretsSync?: boolean;
-    skipDeployment?: boolean;
-    deployStage?: "dev" | "prod";
     awsProfile?: string;
     awsRegion?: string;
 }
@@ -830,9 +603,6 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         inheritFrom,
         nonInteractive = false,
         skipValidation = false,
-        skipSecretsSync = false,
-        skipDeployment = false,
-        deployStage = "prod",
         awsProfile,
         awsRegion = "us-east-1",
     } = options;
@@ -840,8 +610,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     const xdg = new XDGConfig();
 
     console.log("\n╔═══════════════════════════════════════════════════════════╗");
-    const headerLine = `║   Benchling Webhook Setup (v${pkg.version})`;
-    console.log(`${headerLine.padEnd(59, " ")}║`);
+    console.log("║   Benchling Webhook Setup (v0.7.0)                        ║");
     console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
     // Step 1: Load existing configuration (if profile exists)
@@ -872,35 +641,11 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         console.log("Step 1: Inferring Quilt configuration from AWS...\n");
 
         try {
-            const inferenceResult = await inferQuiltConfig({
+            quiltConfig = await inferQuiltConfig({
                 region: awsRegion,
                 profile: awsProfile,
                 interactive: !nonInteractive,
             });
-
-            // Map InferenceResult to QuiltConfig fields
-            if (inferenceResult.quiltStackArn) {
-                quiltConfig.stackArn = inferenceResult.quiltStackArn;
-            }
-            if (inferenceResult.catalogUrl) {
-                // Strip protocol and trailing slash to store only domain
-                quiltConfig.catalog = inferenceResult.catalogUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
-            }
-            if (inferenceResult.quiltUserBucket) {
-                quiltConfig.bucket = inferenceResult.quiltUserBucket;
-            }
-            if (inferenceResult.quiltDatabase) {
-                quiltConfig.database = inferenceResult.quiltDatabase;
-            }
-            if (inferenceResult.queueArn) {
-                const queueArn = inferenceResult.queueArn;
-                if (queueArn.startsWith("arn:aws:sqs:") || !quiltConfig.queueArn) {
-                    quiltConfig.queueArn = queueArn;
-                }
-            }
-            if (inferenceResult.quiltRegion) {
-                quiltConfig.region = inferenceResult.quiltRegion;
-            }
 
             console.log("✓ Quilt configuration inferred\n");
         } catch (error) {
@@ -935,7 +680,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     };
 
     // Step 3: Run interactive wizard for remaining configuration
-    let config = await runConfigWizard({
+    const config = await runConfigWizard({
         existingConfig: partialConfig,
         nonInteractive,
         inheritFrom,
@@ -981,79 +726,25 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         }
     }
 
-    // Step 5: Persist configuration locally
+    // Step 5: Save configuration
     console.log(`Saving configuration to profile: ${profile}...\n`);
 
     try {
         xdg.writeProfile(profile, config);
-        console.log(chalk.green(`✓ Configuration saved: ~/.config/benchling-webhook/${profile}/config.json\n`));
+        console.log(`✓ Configuration saved to: ~/.config/benchling-webhook/${profile}/config.json\n`);
     } catch (error) {
         throw new Error(`Failed to save configuration: ${(error as Error).message}`);
     }
 
-    // Step 6: Sync secrets and deploy (unless skipped)
-    console.log(chalk.bold("Step 3: Deploy Stack and Return Webhook URL\n"));
+    // Step 6: Display next steps
+    console.log("╔═══════════════════════════════════════════════════════════╗");
+    console.log("║   Setup Complete!                                         ║");
+    console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
-    if (skipSecretsSync) {
-        console.log(chalk.yellow("Skipping secrets sync (--skip-secrets-sync)."));
-        console.log(chalk.yellow(`Run \`npm run setup:sync-secrets -- --profile ${profile}\` when ready.\n`));
-    } else {
-        console.log("Syncing secrets to AWS Secrets Manager...\n");
-        try {
-            await syncSecretsToAWS({
-                profile,
-                awsProfile,
-                region: config.deployment.region,
-                force: true,
-            });
-            console.log(chalk.green("\n✓ Secrets synced to AWS Secrets Manager\n"));
-            // Reload config to capture secret ARN written by sync
-            config = xdg.readProfile(profile);
-        } catch (error) {
-            throw new Error(`Secrets sync failed: ${(error as Error).message}`);
-        }
-    }
-
-    if (skipDeployment) {
-        console.log(chalk.yellow("Skipping deployment (--skip-deployment)."));
-        console.log(
-            chalk.yellow(`Run \`npm run deploy -- --profile ${profile} --stage ${deployStage}\` to deploy later.\n`),
-        );
-        return config;
-    }
-
-    if (!nonInteractive) {
-        console.log(
-            `Deploy target: profile=${chalk.cyan(profile)}, stage=${chalk.cyan(deployStage)}, region=${chalk.cyan(
-                config.deployment.region,
-            )}\n`,
-        );
-        const { confirmDeploy } = await inquirer.prompt([
-            {
-                type: "confirm",
-                name: "confirmDeploy",
-                message: "Deploy AWS infrastructure now? (takes ~5-10 minutes)",
-                default: true,
-            },
-        ]);
-
-        if (!confirmDeploy) {
-            console.log(chalk.yellow("\nDeployment skipped by user."));
-            console.log(
-                chalk.yellow(`Re-run with \`npm run deploy -- --profile ${profile} --stage ${deployStage}\` when ready.\n`),
-            );
-            return config;
-        }
-    }
-
-    console.log("Deploying AWS infrastructure. This can take several minutes...\n");
-
-    await deployCommand({
-        profile,
-        stage: deployStage,
-        requireApproval: "never",
-        yes: true,
-    });
+    console.log("Next steps:");
+    console.log("  1. Sync secrets to AWS: npm run setup:sync-secrets");
+    console.log("  2. Deploy to AWS: npm run deploy:dev");
+    console.log("  3. Test integration: npm run test:dev\n");
 
     return config;
 }

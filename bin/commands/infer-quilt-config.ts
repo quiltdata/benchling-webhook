@@ -14,6 +14,7 @@ import { execSync } from "child_process";
 import * as readline from "readline";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
+import { toQueueUrl, isQueueUrl } from "../../lib/utils/sqs";
 import { DerivedConfig } from "../../lib/types/config";
 
 /**
@@ -32,7 +33,7 @@ interface QuiltStackInfo {
     region: string;
     bucket?: string;
     database?: string;
-    queueArn?: string;
+    queueUrl?: string;
     catalogUrl?: string;
 }
 
@@ -45,7 +46,7 @@ interface InferenceResult {
     quiltDatabase?: string;
     quiltStackArn?: string;
     quiltRegion?: string;
-    queueArn?: string;
+    queueUrl?: string;
     registryUrl?: string;
     source: string;
 }
@@ -140,7 +141,10 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
                     } else if (key === "UserAthenaDatabaseName" || key.includes("Database")) {
                         stackInfo.database = value;
                     } else if (key.includes("Queue")) {
-                        stackInfo.queueArn = value;
+                        const normalizedQueue = toQueueUrl(value);
+                        if (normalizedQueue && isQueueUrl(normalizedQueue)) {
+                            stackInfo.queueUrl = normalizedQueue;
+                        }
                     }
                 }
 
@@ -277,11 +281,8 @@ export async function inferQuiltConfig(options: {
     if (selectedStack.bucket) {
         result.quiltUserBucket = selectedStack.bucket;
     }
-    if (selectedStack.database) {
-        result.quiltDatabase = selectedStack.database;
-    }
-    if (selectedStack.queueArn) {
-        result.queueArn = selectedStack.queueArn;
+    if (selectedStack.queueUrl) {
+        result.queueUrl = selectedStack.queueUrl;
     }
     if (selectedStack.catalogUrl && !result.catalogUrl) {
         result.catalogUrl = selectedStack.catalogUrl;
@@ -332,8 +333,8 @@ export function inferenceResultToDerivedConfig(result: InferenceResult): Derived
         config.quiltRegion = result.quiltRegion;
     }
 
-    if (result.queueArn) {
-        config.queueArn = result.queueArn;
+    if (result.queueUrl) {
+        config.queueUrl = result.queueUrl;
     }
 
     return config;
@@ -371,7 +372,7 @@ async function main(): Promise<void> {
     if (result.quiltUserBucket) console.log(`User Bucket: ${result.quiltUserBucket}`);
     if (result.quiltStackArn) console.log(`Stack ARN: ${result.quiltStackArn}`);
     if (result.quiltRegion) console.log(`Region: ${result.quiltRegion}`);
-    if (result.queueArn) console.log(`Queue ARN: ${result.queueArn}`);
+    if (result.queueUrl) console.log(`Queue URL: ${result.queueUrl}`);
 
     const derivedConfig = inferenceResultToDerivedConfig(result);
     console.log("\n=== Derived Configuration ===");

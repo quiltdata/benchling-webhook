@@ -209,7 +209,7 @@ export class XDGConfig {
         // Write to temporary file first (atomic write)
         const tempPath = join(
             profileDir,
-            `.config.json.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            `.config.json.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`
         );
         const configJson = JSON.stringify(config, null, 4);
 
@@ -430,7 +430,7 @@ export class XDGConfig {
         // Write to temporary file first (atomic write)
         const tempPath = join(
             profileDir,
-            `.deployments.json.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            `.deployments.json.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`
         );
         const deploymentsJson = JSON.stringify(deployments, null, 4);
 

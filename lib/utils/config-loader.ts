@@ -6,6 +6,7 @@
  */
 
 import { ConfigResolver, type ResolvedConfig, ConfigResolverError } from "./config-resolver";
+import { toQueueUrl } from "./sqs";
 
 /**
  * Load configuration for production (from AWS CloudFormation and Secrets Manager)
@@ -81,7 +82,11 @@ export function loadConfigForTesting(): Partial<ResolvedConfig> {
         quiltCatalog: process.env.QUILT_CATALOG || "test.catalog.com",
         quiltDatabase: process.env.QUILT_DATABASE || "test_db",
         quiltUserBucket: process.env.QUILT_USER_BUCKET || "test-bucket",
-        queueArn: process.env.QUEUE_ARN || "arn:aws:sqs:us-east-1:123456789012:test-queue",
+        queueUrl: toQueueUrl(
+            process.env.QUEUE_URL ||
+            process.env.QUEUE_ARN ||
+            "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+        )!,
 
         // Benchling
         benchlingTenant: process.env.BENCHLING_TENANT || "test-tenant",
