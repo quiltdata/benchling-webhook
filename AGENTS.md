@@ -331,14 +331,12 @@ Each profile's `deployments.json` tracks deployment history:
 
 When running `npm run setup` for the first time:
 
-
 - Wizard prompts for all required configuration
 - Attempts to infer Quilt configuration from AWS
 - Validates Benchling credentials in real-time
 - Saves all settings to `~/.config/benchling-webhook/{profile}/config.json`
 
 #### Re-running Setup (Idempotent)
-
 
 When running `npm run setup` on an existing profile:
 
@@ -347,7 +345,6 @@ When running `npm run setup` on an existing profile:
 - Allows you to accept existing values (press Enter) or override them
 - Updates only the fields you change
 - Preserves `_metadata.createdAt` but updates `_metadata.updatedAt`
-
 
 **Example workflow:**
 
