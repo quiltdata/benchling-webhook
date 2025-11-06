@@ -893,7 +893,10 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
                 quiltConfig.database = inferenceResult.quiltDatabase;
             }
             if (inferenceResult.queueArn) {
-                quiltConfig.queueArn = inferenceResult.queueArn;
+                const queueArn = inferenceResult.queueArn;
+                if (queueArn.startsWith("arn:aws:sqs:") || !quiltConfig.queueArn) {
+                    quiltConfig.queueArn = queueArn;
+                }
             }
             if (inferenceResult.quiltRegion) {
                 quiltConfig.region = inferenceResult.quiltRegion;
