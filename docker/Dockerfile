@@ -28,7 +28,7 @@
 # It creates a complete Python virtual environment with all production
 # dependencies compiled for Amazon Linux 2023.
 #
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023@sha256:30fe896e1f3e2bad0c0e39a4803cfe0fd5c4e7e421e88b93c2f5ba6b9a3dba45 AS builder
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023@sha256:b0f8d1179ea5555f33163cbd33ad91ac5c553d334da210741171fa5e40cbefa9 AS builder
 
 # Install Python 3.11 and build dependencies
 # - python3.11: Python interpreter
@@ -36,12 +36,15 @@ FROM public.ecr.aws/amazonlinux/amazonlinux:2023@sha256:30fe896e1f3e2bad0c0e39a4
 # - python3.11-pip: Package installer for Python
 # - gcc: C compiler for native extensions (e.g., cryptography, lxml)
 # - make: Build automation tool
+# - tar, gzip: Required by uv installer script
 RUN dnf install -y \
     python3.11 \
     python3.11-devel \
     python3.11-pip \
     gcc \
     make \
+    tar \
+    gzip \
     && dnf clean all
 
 # Install uv package manager (builder stage only)
@@ -62,7 +65,7 @@ COPY pyproject.toml uv.lock ./
 # - --frozen: Use lockfile without updating (reproducible builds)
 # - --no-dev: Exclude development dependencies (pytest, black, etc.)
 # Creates .venv directory with all production dependencies
-RUN . $HOME/.cargo/env && uv sync --frozen --no-dev
+RUN $HOME/.local/bin/uv sync --frozen --no-dev
 
 # Copy application source code
 # Placed after dependency installation for optimal layer caching
@@ -77,14 +80,15 @@ COPY src/ ./src/
 # Build tools, compilers, and uv are NOT included.
 # This significantly reduces image size and attack surface.
 #
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023@sha256:30fe896e1f3e2bad0c0e39a4803cfe0fd5c4e7e421e88b93c2f5ba6b9a3dba45
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023@sha256:b0f8d1179ea5555f33163cbd33ad91ac5c553d334da210741171fa5e40cbefa9
 
 # Install minimal runtime dependencies
 # - python3.11: Python runtime (no -devel headers)
-# - curl: Required for Docker HEALTHCHECK command
+# - shadow-utils: Provides useradd/groupadd for creating non-root user
+# Note: curl-minimal is already present in base image and sufficient for HEALTHCHECK
 RUN dnf install -y \
     python3.11 \
-    curl \
+    shadow-utils \
     && dnf clean all
 
 # Create non-root user for security (principle of least privilege)
