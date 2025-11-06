@@ -13,7 +13,7 @@ import { ProfileConfig } from "./types/config";
  * Properties for FargateService construct (v0.7.0+)
  *
  * Uses ProfileConfig for structured configuration access.
- * Runtime-configurable parameters (quiltStackArn, benchlingSecret, logLevel)
+ * Runtime-configurable parameters (quiltStackArn, benchlingSecret, logLevel, packageBucket)
  * can be overridden via CloudFormation parameters.
  */
 export interface FargateServiceProps {
@@ -27,6 +27,7 @@ export interface FargateServiceProps {
     // Runtime-configurable parameters (from CloudFormation)
     readonly stackArn: string;
     readonly benchlingSecret: string;
+    readonly packageBucket: string;
     readonly logLevel?: string;
 }
 
@@ -106,17 +107,30 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Grant wildcard S3 access (bucket name will be resolved at runtime)
-        // Includes both config.packages.bucket
+        // Grant S3 access for the specific package bucket
+        // Full Quilt-required permissions for versioned S3 objects
+        const packageBucketArn = `arn:aws:s3:::${props.packageBucket}`;
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
                     "s3:GetObject",
-                    "s3:PutObject",
+                    "s3:GetObjectAttributes",
+                    "s3:GetObjectTagging",
+                    "s3:GetObjectVersion",
+                    "s3:GetObjectVersionAttributes",
+                    "s3:GetObjectVersionTagging",
                     "s3:ListBucket",
+                    "s3:ListBucketVersions",
+                    "s3:DeleteObject",
+                    "s3:DeleteObjectVersion",
+                    "s3:PutObject",
+                    "s3:PutObjectTagging",
+                    "s3:GetBucketNotification",
+                    "s3:PutBucketNotification",
                 ],
                 resources: [
-                    "arn:aws:s3:::*",
+                    packageBucketArn,
+                    `${packageBucketArn}/*`,
                 ],
             }),
         );
