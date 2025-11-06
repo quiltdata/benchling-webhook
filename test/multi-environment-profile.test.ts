@@ -30,7 +30,7 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
                 catalog: "quilt.example.com",
                 bucket: "my-quilt-bucket",
                 database: "quilt_catalog",
-                queueArn: "arn:aws:sqs:us-east-1:123456789012:quilt-queue",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-queue",
                 region: "us-east-1",
             },
             packages: {
@@ -226,7 +226,7 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "custom-quilt-bucket",
                     database: "quilt_catalog",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:custom-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/custom-queue",
                     region: "us-east-1",
                 },
                 packages: {

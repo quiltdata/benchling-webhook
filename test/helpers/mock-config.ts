@@ -20,7 +20,7 @@ export function createMockConfig(overrides?: Partial<ProfileConfig>): ProfileCon
             catalog: "quilt.example.com",
             bucket: "test-quilt-bucket",
             database: "quilt_catalog",
-            queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+            queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
             region: "us-east-1",
         },
         benchling: {
@@ -68,7 +68,7 @@ export function createDevConfig(overrides?: Partial<ProfileConfig>): ProfileConf
             catalog: "dev.quilt.example.com",
             bucket: "dev-quilt-bucket",
             database: "dev_quilt_catalog",
-            queueArn: "arn:aws:sqs:us-east-1:123456789012:dev-queue",
+            queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/dev-queue",
             region: "us-east-1",
         },
         benchling: {
@@ -98,7 +98,7 @@ export function createProdConfig(overrides?: Partial<ProfileConfig>): ProfileCon
             catalog: "prod.quilt.example.com",
             bucket: "prod-quilt-bucket",
             database: "prod_quilt_catalog",
-            queueArn: "arn:aws:sqs:us-east-1:123456789012:prod-queue",
+            queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/prod-queue",
             region: "us-east-1",
         },
         benchling: {

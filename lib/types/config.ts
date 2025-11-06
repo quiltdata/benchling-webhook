@@ -33,7 +33,7 @@ export type ProfileName = string;
  *     "catalog": "https://quilt.example.com",
  *     "bucket": "my-quilt-bucket",
  *     "database": "quilt_catalog",
- *     "queueArn": "arn:aws:sqs:...",
+ *     "queueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-queue",
  *     "region": "us-east-1"
  *   },
  *   "benchling": {
@@ -143,11 +143,11 @@ export interface QuiltConfig {
     database: string;
 
     /**
-     * SQS queue ARN for package creation jobs
+     * SQS queue URL for package creation jobs
      *
-     * @example "arn:aws:sqs:us-east-1:123456789012:quilt-package-queue"
+     * @example "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-package-queue"
      */
-    queueArn: string;
+    queueUrl: string;
 
     /**
      * AWS region for Quilt resources
@@ -547,13 +547,13 @@ export const ProfileConfigSchema = {
     properties: {
         quilt: {
             type: "object",
-            required: ["stackArn", "catalog", "bucket", "database", "queueArn", "region"],
+            required: ["stackArn", "catalog", "bucket", "database", "queueUrl", "region"],
             properties: {
                 stackArn: { type: "string", pattern: "^arn:aws:cloudformation:" },
                 catalog: { type: "string", minLength: 1 },
                 bucket: { type: "string", minLength: 3 },
                 database: { type: "string", minLength: 1 },
-                queueArn: { type: "string", pattern: "^arn:aws:sqs:" },
+                queueUrl: { type: "string", pattern: "^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/\\d{12}/.+" },
                 region: { type: "string", pattern: "^[a-z]{2}-[a-z]+-[0-9]$" },
             },
         },

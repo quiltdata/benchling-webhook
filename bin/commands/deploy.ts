@@ -248,7 +248,7 @@ async function deploy(
         // Build CloudFormation parameters
         const parameters = [
             `QuiltStackARN=${quiltStackArn}`,
-            `BenchlingSecretARN=${benchlingSecret}`,
+            `BenchlingSecret=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
         ];
 

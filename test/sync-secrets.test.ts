@@ -60,7 +60,7 @@ describe("sync-secrets CLI", () => {
                 catalog: "quilt.example.com",
                 bucket: "quilt-bucket",
                 database: "quilt_db",
-                queueArn: "arn:aws:sqs:us-east-1:123456789012:queue/test",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue/test",
                 region: "us-east-1",
             },
             packages: {

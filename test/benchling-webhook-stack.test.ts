@@ -109,7 +109,7 @@ describe("BenchlingWebhookStack", () => {
                 catalog: "https://quilt.example.com",
                 bucket: "test-bucket",
                 database: "test_db",
-                queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 region: "us-east-1",
             },
         });
@@ -281,7 +281,7 @@ describe("BenchlingWebhookStack", () => {
 
         // Verify old queue/catalog variables are NOT present (now resolved at runtime via CloudFormation)
         const removedVars = [
-            "QUEUE_ARN",
+            "QUEUE_URL",
             "QUILT_USER_BUCKET",
             "QUILT_CATALOG",
             "QUILT_DATABASE",

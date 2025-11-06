@@ -37,7 +37,7 @@ describe("Multi-Profile Integration", () => {
                     catalog: "https://quilt.prod.example.com",
                     bucket: "prod-quilt-bucket",
                     database: "prod_catalog",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:prod-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/prod-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -71,7 +71,7 @@ describe("Multi-Profile Integration", () => {
                     catalog: "https://quilt.dev.example.com",
                     bucket: "dev-quilt-bucket",
                     database: "dev_catalog",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:dev-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/dev-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -124,7 +124,7 @@ describe("Multi-Profile Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "shared-quilt-bucket",
                     database: "shared_catalog",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:shared-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/shared-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -159,7 +159,7 @@ describe("Multi-Profile Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "shared-quilt-bucket",
                     database: "shared_catalog",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:shared-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/shared-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -211,7 +211,7 @@ describe("Multi-Profile Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "prod-bucket",
                     database: "prod_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:prod-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/prod-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -244,7 +244,7 @@ describe("Multi-Profile Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "dev-bucket",
                     database: "dev_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:dev-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/dev-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -317,7 +317,7 @@ describe("Multi-Profile Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -399,7 +399,7 @@ describe("Multi-Profile Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "default-bucket",
                     database: "default_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:default-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/default-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -429,7 +429,7 @@ describe("Multi-Profile Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "dev-bucket",
                     database: "dev_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:dev-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/dev-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -497,7 +497,7 @@ describe("Multi-Profile Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "profile1-bucket",
                     database: "profile1_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:profile1-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/profile1-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -527,7 +527,7 @@ describe("Multi-Profile Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "profile2-bucket",
                     database: "profile2_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:profile2-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/profile2-queue",
                     region: "us-east-1",
                 },
                 benchling: {

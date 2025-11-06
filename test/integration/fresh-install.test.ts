@@ -40,7 +40,7 @@ describe("Fresh Install Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "prod-quilt-bucket",
                     database: "prod_catalog",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:prod-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/prod-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -99,7 +99,7 @@ describe("Fresh Install Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -156,7 +156,7 @@ describe("Fresh Install Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -199,7 +199,7 @@ describe("Fresh Install Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -243,7 +243,7 @@ describe("Fresh Install Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "initial-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -288,7 +288,7 @@ describe("Fresh Install Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "bucket-v1",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -342,7 +342,7 @@ describe("Fresh Install Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -386,7 +386,7 @@ describe("Fresh Install Integration", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {

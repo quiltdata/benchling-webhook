@@ -50,7 +50,7 @@ describe('ConfigResolver', () => {
       Stacks: [{
         Outputs: [
           { OutputKey: 'UserAthenaDatabaseName', OutputValue: 'test_db' },
-          { OutputKey: 'PackagerQueueArn', OutputValue: 'arn:aws:sqs:us-east-1:123:queue' },
+          { OutputKey: 'PackagerQueueArn', OutputValue: 'J3456789012:queue' },
           { OutputKey: 'UserBucket', OutputValue: 'test-bucket' },
           { OutputKey: 'Catalog', OutputValue: 'test.catalog.com' }
         ]

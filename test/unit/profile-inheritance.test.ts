@@ -37,7 +37,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "default-bucket",
                     database: "default_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:default-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/default-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -81,7 +81,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "default-bucket",
                     database: "default_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:default-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/default-queue",
                     region: "us-east-1",
                 },
                 packages: {
@@ -122,7 +122,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -154,7 +154,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -193,7 +193,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "standalone-bucket",
                     database: "standalone_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:standalone-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/standalone-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -233,7 +233,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -275,7 +275,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -329,7 +329,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -366,7 +366,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -412,7 +412,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -449,7 +449,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -480,7 +480,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -519,7 +519,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -550,7 +550,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -581,7 +581,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "test-bucket",
                     database: "test_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:test-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -622,7 +622,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -657,7 +657,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {
@@ -692,7 +692,7 @@ describe("Profile Inheritance", () => {
                     catalog: "https://quilt.example.com",
                     bucket: "base-bucket",
                     database: "base_db",
-                    queueArn: "arn:aws:sqs:us-east-1:123456789012:base-queue",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/base-queue",
                     region: "us-east-1",
                 },
                 benchling: {

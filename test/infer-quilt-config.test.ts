@@ -112,7 +112,7 @@ describe("infer-quilt-config", () => {
 
             expect(result.quiltStackArn).toBe("arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-staging/abc-123");
             expect(result.quiltUserBucket).toBe("my-bucket");
-            expect(result.queueArn).toBe("arn:aws:sqs:us-east-1:123456789012:my-queue");
+            expect(result.queueUrl).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/my-queue");
             expect(result.catalogUrl).toBe("https://catalog.example.com");
             expect(result.quiltRegion).toBe("us-east-1");
             expect(result.source).toBe("cloudformation");
@@ -319,7 +319,7 @@ describe("infer-quilt-config", () => {
                 quiltUserBucket: "my-bucket",
                 quiltStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/abc-123",
                 quiltRegion: "us-east-1",
-                queueArn: "arn:aws:sqs:us-east-1:123456789012:my-queue",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/my-queue",
                 source: "quilt3-cli+cloudformation",
             };
 
@@ -330,7 +330,7 @@ describe("infer-quilt-config", () => {
             expect(config.quiltUserBucket).toBe("my-bucket");
             expect(config.quiltStackArn).toBe("arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/abc-123");
             expect(config.quiltRegion).toBe("us-east-1");
-            expect(config.queueArn).toBe("arn:aws:sqs:us-east-1:123456789012:my-queue");
+            expect(config.queueUrl).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/my-queue");
 
             // Type assertion for _metadata access
             const metadata = config._metadata as any;

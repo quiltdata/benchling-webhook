@@ -234,7 +234,7 @@ Each profile's `config.json` contains:
     "catalog": "https://example.quiltdata.com",
     "bucket": "quilt-example",
     "database": "quilt_example",
-    "queueArn": "arn:aws:sqs:...",
+    "queueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-queue",
     "region": "us-east-1"
   },
   "benchling": {
@@ -417,7 +417,7 @@ Stored in AWS Secrets Manager and referenced in profile config:
 | `quilt.catalog` | Yes | - | Quilt catalog URL |
 | `quilt.bucket` | Yes | - | S3 bucket for packages |
 | `quilt.database` | Yes | - | Glue Data Catalog database |
-| `quilt.queueArn` | Yes | - | SQS queue ARN |
+| `quilt.queueUrl` | Yes | - | SQS queue URL |
 | `packages.bucket` | Yes | - | S3 bucket for package storage |
 | `packages.prefix` | No | `benchling` | S3 key prefix |
 | `packages.metadataKey` | No | `experiment_id` | Package metadata key |
