@@ -65,13 +65,11 @@ describe("XDG_CONFIG_HOME Isolation", () => {
             quilt: {
                 stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                 catalog: "test.example.com",
-                bucket: "test-bucket",
                 database: "test_db",
                 queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 region: "us-east-1",
             },
             packages: {
-                bucket: "test-bucket",
                 prefix: "test",
                 metadataKey: "test_id",
             },

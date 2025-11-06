@@ -139,7 +139,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             imageTag: imageTagValue,
             stackVersion: stackVersion,
             // Runtime-configurable parameters
-            quiltStackArn: quiltStackArnValue,
+            stackArn: quiltStackArnValue,
             benchlingSecret: benchlingSecretValue,
             logLevel: logLevelValue,
         });

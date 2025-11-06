@@ -34,7 +34,6 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
                 region: "us-east-1",
             },
             packages: {
-                bucket: "test-bucket",
                 prefix: "benchling",
                 metadataKey: "experiment_id",
             },

@@ -73,9 +73,9 @@ export class ConfigurationValidator {
         }
 
         // Validate catalog URL format
-        if (config.catalogUrl && !ConfigurationValidator.validateCatalogUrl(config.catalogUrl)) {
+        if (config.catalog && !ConfigurationValidator.validateCatalogUrl(config.catalog)) {
             errors.push("Invalid catalog URL");
-        } else if (!config.catalogUrl) {
+        } else if (!config.catalog) {
             errors.push("Invalid catalog URL");
         }
 
@@ -114,11 +114,11 @@ export class ConfigurationValidator {
         }
 
         // Validate S3 bucket access
-        if (!options.skipS3Validation && config.quiltUserBucket && config.quiltRegion) {
+        if (!options.skipS3Validation && config.quiltUserBucket && config.region) {
             try {
                 const s3Config: S3BucketConfig = {
                     bucketName: config.quiltUserBucket,
-                    region: config.quiltRegion,
+                    region: config.region,
                 };
 
                 const s3Result = await S3BucketValidator.validate(s3Config);

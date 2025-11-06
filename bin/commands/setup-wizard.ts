@@ -296,6 +296,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     }
 
     const config: Partial<ProfileConfig> = { ...existingConfig };
+    let awsAccountId: string | undefined;
 
     // If non-interactive, validate that all required fields are present
     if (nonInteractive) {
@@ -359,9 +360,11 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             },
         ]);
 
-        // Extract region from stack ARN
-        const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([^:]+):/);
+        // Extract region and account ID from stack ARN
+        // ARN format: arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/STACK_NAME/STACK_ID
+        const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([^:]+):(\d{12}):/);
         const quiltRegion = arnMatch ? arnMatch[1] : "us-east-1";
+        awsAccountId = arnMatch ? arnMatch[2] : undefined;
 
         config.quilt = {
             stackArn: quiltAnswers.stackArn,
@@ -480,10 +483,26 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             message: "AWS Deployment Region:",
             default: config.deployment?.region || config.quilt?.region || "us-east-1",
         },
+        {
+            type: "input",
+            name: "account",
+            message: "AWS Account ID:",
+            default: config.deployment?.account || awsAccountId || config.quilt?.stackArn?.match(/:(\d{12}):/)?.[1],
+            validate: (input: string): boolean | string => {
+                if (!input || input.trim().length === 0) {
+                    return "AWS Account ID is required";
+                }
+                if (!/^\d{12}$/.test(input.trim())) {
+                    return "AWS Account ID must be a 12-digit number";
+                }
+                return true;
+            },
+        },
     ]);
 
     config.deployment = {
         region: deploymentAnswers.region,
+        account: deploymentAnswers.account,
     };
 
     // Optional: Logging configuration
@@ -597,16 +616,20 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
 
     // Step 2: Infer Quilt configuration (unless inheriting from another profile)
     let quiltConfig: Partial<ProfileConfig["quilt"]> = existingConfig?.quilt || {};
+    let inferredAccountId: string | undefined;
 
     if (!inheritFrom || !existingConfig?.quilt) {
         console.log("Step 1: Inferring Quilt configuration from AWS...\n");
 
         try {
-            quiltConfig = await inferQuiltConfig({
+            const inferenceResult = await inferQuiltConfig({
                 region: awsRegion,
                 profile: awsProfile,
                 interactive: !nonInteractive,
             });
+
+            quiltConfig = inferenceResult;
+            inferredAccountId = inferenceResult.account;
 
             console.log("✓ Quilt configuration inferred\n");
         } catch (error) {
@@ -638,6 +661,11 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
             ...existingConfig?.quilt,
             ...quiltConfig,
         } as ProfileConfig["quilt"],
+        // Pass through inferred account ID for deployment config
+        deployment: {
+            ...existingConfig?.deployment,
+            account: existingConfig?.deployment?.account || inferredAccountId,
+        } as ProfileConfig["deployment"],
     };
 
     // Step 3: Run interactive wizard for remaining configuration

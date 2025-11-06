@@ -35,7 +35,6 @@ describe("stack-inference utility", () => {
         const mockStackDetails: StackDetails = {
             outputs: [
                 { OutputKey: "UserAthenaDatabaseName", OutputValue: "my_catalog_db" },
-                { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123456789012:my-queue" },
             ],
             parameters: [],
         };
@@ -90,42 +89,6 @@ describe("stack-inference utility", () => {
 
             expect(vars.QUILT_DATABASE).toContain("catalog_example_com_db");
             expect(vars.QUILT_DATABASE).toContain("VERIFY THIS");
-        });
-
-        it("should extract queue URL from PackagerQueueArn output", () => {
-            const vars = buildInferredConfig(
-                mockConfig,
-                "my-stack",
-                mockStackDetails,
-                "us-east-1",
-                "123456789012",
-                "https://catalog.example.com",
-            );
-
-            expect(vars.QUEUE_URL).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/my-queue");
-        });
-
-        it("should handle queue ARN conversion to URL", () => {
-            const stackDetails: StackDetails = {
-                outputs: [
-                    {
-                        OutputKey: "PackagerQueueArn",
-                        OutputValue: "arn:aws:sqs:us-east-1:123456789012:my-queue-name",
-                    },
-                ],
-                parameters: [],
-            };
-
-            const vars = buildInferredConfig(
-                mockConfig,
-                "my-stack",
-                stackDetails,
-                "us-east-1",
-                "123456789012",
-                "https://catalog.example.com",
-            );
-
-            expect(vars.QUEUE_URL).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/my-queue-name");
         });
 
         it("should not infer user bucket - user must provide it", () => {

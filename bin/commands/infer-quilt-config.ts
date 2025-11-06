@@ -30,7 +30,7 @@ interface QuiltStackInfo {
     stackName: string;
     stackArn: string;
     region: string;
-    bucket?: string;
+    account?: string;
     database?: string;
     queueUrl?: string;
     catalogUrl?: string;
@@ -44,6 +44,7 @@ interface InferenceResult {
     database?: string;
     stackArn?: string;
     region?: string;
+    account?: string;
     queueUrl?: string;
     source: string;
 }
@@ -126,6 +127,13 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
                     region: region,
                 };
 
+                // Extract AWS Account ID from Stack ARN
+                // ARN format: arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/STACK_NAME/STACK_ID
+                const arnMatch = stackInfo.stackArn.match(/^arn:aws:cloudformation:[^:]+:(\d{12}):/);
+                if (arnMatch) {
+                    stackInfo.account = arnMatch[1];
+                }
+
                 // Extract outputs
                 for (const output of outputs) {
                     const key = output.OutputKey || "";
@@ -133,8 +141,6 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
 
                     if (key === "QuiltWebHost") {
                         stackInfo.catalogUrl = value;
-                    } else if (key.includes("ucket")) {
-                        stackInfo.bucket = value;
                     } else if (key === "UserAthenaDatabaseName" || key.includes("Database")) {
                         stackInfo.database = value;
                     } else if (key.includes("Queue")) {
@@ -274,6 +280,9 @@ export async function inferQuiltConfig(options: {
     if (selectedStack.stackArn) {
         result.stackArn = selectedStack.stackArn;
     }
+    if (selectedStack.account) {
+        result.account = selectedStack.account;
+    }
     if (selectedStack.database) {
         result.database = selectedStack.database;
     }
@@ -329,6 +338,7 @@ async function main(): Promise<void> {
     if (result.database) console.log(`Database: ${result.database}`);
     if (result.stackArn) console.log(`Stack ARN: ${result.stackArn}`);
     if (result.region) console.log(`Region: ${result.region}`);
+    if (result.account) console.log(`AWS Account ID: ${result.account}`);
     if (result.queueUrl) console.log(`Queue URL: ${result.queueUrl}`);
 }
 
