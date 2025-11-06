@@ -356,14 +356,6 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             },
             {
                 type: "input",
-                name: "bucket",
-                message: "Quilt S3 Bucket:",
-                default: config.quilt?.bucket,
-                validate: (input: string): boolean | string =>
-                    input.trim().length > 0 || "Bucket name is required",
-            },
-            {
-                type: "input",
                 name: "database",
                 message: "Quilt Athena Database:",
                 default: config.quilt?.database || "quilt_catalog",
@@ -472,7 +464,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             type: "input",
             name: "bucket",
             message: "Package S3 Bucket:",
-            default: config.packages?.bucket || config.quilt?.bucket,
+            default: config.packages?.bucket,
             validate: (input: string): boolean | string =>
                 input.trim().length > 0 || "Bucket name is required",
         },
