@@ -133,9 +133,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
         } else {
             // Reference existing ECR repository
             ecrRepo = ecr.Repository.fromRepositoryName(this, "ExistingEcrRepository", repoName);
-            // Use ecrAccount if specified (for cross-account ECR access), otherwise use deployment account
-            const account = (config.deployment as any).ecrAccount || config.deployment.account || this.account;
-            const region = config.deployment.region;
+            // HARDCODED: Always use the quiltdata AWS account for ECR images
+            const account = "712023778557";
+            const region = "us-east-1";
             ecrImageUri = `${account}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTagValue}`;
         }
 
