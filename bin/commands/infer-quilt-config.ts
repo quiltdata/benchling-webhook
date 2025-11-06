@@ -41,13 +41,12 @@ interface QuiltStackInfo {
  * Result of Quilt configuration inference
  */
 interface InferenceResult {
-    catalogUrl?: string;
-    quiltUserBucket?: string;
-    quiltDatabase?: string;
-    quiltStackArn?: string;
-    quiltRegion?: string;
+    catalog?: string;
+    bucket?: string;
+    database?: string;
+    stackArn?: string;
+    region?: string;
     queueUrl?: string;
-    registryUrl?: string;
     source: string;
 }
 
@@ -219,7 +218,7 @@ export async function inferQuiltConfig(options: {
     const quilt3Config = getQuilt3Catalog();
 
     if (quilt3Config?.catalogUrl) {
-        result.catalogUrl = quilt3Config.catalogUrl;
+        result.catalog = quilt3Config.catalogUrl;
         result.source = "quilt3-cli";
     } else {
         console.log("No quilt3 CLI configuration found.");
@@ -239,10 +238,10 @@ export async function inferQuiltConfig(options: {
     let selectedStack: QuiltStackInfo;
 
     // If we have a catalog URL from quilt3, try to find matching stack
-    if (result.catalogUrl && stacks.length > 1) {
+    if (result.catalog && stacks.length > 1) {
         // Normalize URLs for comparison (remove protocol and trailing slashes)
         const normalizeUrl = (url: string): string => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
-        const targetUrl = normalizeUrl(result.catalogUrl);
+        const targetUrl = normalizeUrl(result.catalog);
 
         const matchingStack = stacks.find((s) => s.catalogUrl && normalizeUrl(s.catalogUrl) === targetUrl);
         if (matchingStack) {
@@ -250,7 +249,7 @@ export async function inferQuiltConfig(options: {
             console.log(`Auto-selected stack matching catalog URL: ${selectedStack.stackName}`);
         } else {
             // No match found, prompt user
-            console.log(`No stack found matching catalog URL: ${result.catalogUrl}`);
+            console.log(`No stack found matching catalog URL: ${result.catalog}`);
             if (interactive) {
                 const options = stacks.map((s) => `${s.stackName} (${s.region})`);
                 const selectedIndex = await promptCatalogSelection(options);
@@ -276,19 +275,22 @@ export async function inferQuiltConfig(options: {
 
     // Populate result from selected stack
     if (selectedStack.stackArn) {
-        result.quiltStackArn = selectedStack.stackArn;
+        result.stackArn = selectedStack.stackArn;
     }
     if (selectedStack.bucket) {
-        result.quiltUserBucket = selectedStack.bucket;
+        result.bucket = selectedStack.bucket;
+    }
+    if (selectedStack.database) {
+        result.database = selectedStack.database;
     }
     if (selectedStack.queueUrl) {
         result.queueUrl = selectedStack.queueUrl;
     }
-    if (selectedStack.catalogUrl && !result.catalogUrl) {
-        result.catalogUrl = selectedStack.catalogUrl;
+    if (selectedStack.catalogUrl && !result.catalog) {
+        result.catalog = selectedStack.catalogUrl;
     }
     if (selectedStack.region) {
-        result.quiltRegion = selectedStack.region;
+        result.region = selectedStack.region;
     }
 
     if (result.source === "quilt3-cli") {
@@ -316,21 +318,21 @@ export function inferenceResultToDerivedConfig(result: InferenceResult): Derived
         },
     };
 
-    if (result.catalogUrl) {
-        config.catalogUrl = result.catalogUrl;
-        config.quiltCatalog = result.catalogUrl;
+    if (result.catalog) {
+        config.catalogUrl = result.catalog;
+        config.quiltCatalog = result.catalog;
     }
 
-    if (result.quiltUserBucket) {
-        config.quiltUserBucket = result.quiltUserBucket;
+    if (result.bucket) {
+        config.quiltUserBucket = result.bucket;
     }
 
-    if (result.quiltStackArn) {
-        config.quiltStackArn = result.quiltStackArn;
+    if (result.stackArn) {
+        config.quiltStackArn = result.stackArn;
     }
 
-    if (result.quiltRegion) {
-        config.quiltRegion = result.quiltRegion;
+    if (result.region) {
+        config.quiltRegion = result.region;
     }
 
     if (result.queueUrl) {
@@ -368,10 +370,11 @@ async function main(): Promise<void> {
 
     console.log("\n=== Inference Results ===");
     console.log(`Source: ${result.source}`);
-    if (result.catalogUrl) console.log(`Catalog URL: ${result.catalogUrl}`);
-    if (result.quiltUserBucket) console.log(`User Bucket: ${result.quiltUserBucket}`);
-    if (result.quiltStackArn) console.log(`Stack ARN: ${result.quiltStackArn}`);
-    if (result.quiltRegion) console.log(`Region: ${result.quiltRegion}`);
+    if (result.catalog) console.log(`Catalog URL: ${result.catalog}`);
+    if (result.bucket) console.log(`User Bucket: ${result.bucket}`);
+    if (result.database) console.log(`Database: ${result.database}`);
+    if (result.stackArn) console.log(`Stack ARN: ${result.stackArn}`);
+    if (result.region) console.log(`Region: ${result.region}`);
     if (result.queueUrl) console.log(`Queue URL: ${result.queueUrl}`);
 
     const derivedConfig = inferenceResultToDerivedConfig(result);
