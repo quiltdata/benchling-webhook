@@ -124,11 +124,19 @@ def parse_secrets_json(json_str: str) -> BenchlingSecrets:
     except json.JSONDecodeError as e:
         raise SecretsResolutionError(f"Invalid JSON in BENCHLING_SECRETS: {str(e)}")
 
-    # Map from JSON camelCase to Python snake_case
+    def _get_field(*names: str) -> str:
+        """Return the first non-empty string value for the provided keys."""
+        for name in names:
+            value = data.get(name)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
+
+    # Map from JSON keys (camelCase or snake_case) to dataclass fields
     secrets = BenchlingSecrets(
-        tenant=data.get("tenant", ""),
-        client_id=data.get("clientId", ""),
-        client_secret=data.get("clientSecret", ""),
+        tenant=_get_field("tenant"),
+        client_id=_get_field("clientId", "client_id"),
+        client_secret=_get_field("clientSecret", "client_secret"),
     )
 
     # Validate all required fields are present and non-empty

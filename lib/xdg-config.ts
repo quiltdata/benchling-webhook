@@ -29,7 +29,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, copyFileSync, unlinkSync, readdirSync, rmSync } from "fs";
 import { resolve, join, dirname } from "path";
 import { homedir } from "os";
-import { tmpdir } from "os";
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import merge from "lodash.merge";
@@ -207,7 +206,10 @@ export class XDGConfig {
         }
 
         // Write to temporary file first (atomic write)
-        const tempPath = resolve(tmpdir(), `benchling-webhook-config-${Date.now()}.json`);
+        const tempPath = join(
+            profileDir,
+            `.config.json.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+        );
         const configJson = JSON.stringify(config, null, 4);
 
         try {
@@ -425,7 +427,10 @@ export class XDGConfig {
         }
 
         // Write to temporary file first (atomic write)
-        const tempPath = resolve(tmpdir(), `benchling-webhook-deployments-${Date.now()}.json`);
+        const tempPath = join(
+            profileDir,
+            `.deployments.json.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+        );
         const deploymentsJson = JSON.stringify(deployments, null, 4);
 
         try {

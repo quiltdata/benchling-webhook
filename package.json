@@ -1,6 +1,6 @@
 {
   "name": "@quiltdata/benchling-webhook",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "AWS CDK deployment for Benchling webhook processing using Fargate - Deploy directly with npx",
   "main": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
@@ -91,7 +91,7 @@
     "adm-zip": "^0.5.10",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
-    "aws-cdk-lib": "2.221.1",
+    "aws-cdk-lib": "2.222.0",
     "aws-sdk": "^2.1574.0",
     "boxen": "^8.0.0",
     "chalk": "^5.0.0",
