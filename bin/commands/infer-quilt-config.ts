@@ -216,7 +216,7 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
                 }
 
                 stackInfos.push(stackInfo);
-            } catch (describeError) {
+            } catch {
                 // Silently skip stacks that can't be described in the second pass
                 // to avoid overwhelming users with warnings for non-Quilt stacks
             }

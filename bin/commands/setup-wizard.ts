@@ -20,7 +20,7 @@ import chalk from "chalk";
 import { S3Client, HeadBucketCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { XDGConfig } from "../../lib/xdg-config";
-import { ProfileConfig, ValidationResult, QuiltConfig } from "../../lib/types/config";
+import { ProfileConfig, ValidationResult } from "../../lib/types/config";
 import { inferQuiltConfig } from "../commands/infer-quilt-config";
 import { isQueueUrl } from "../../lib/utils/sqs";
 

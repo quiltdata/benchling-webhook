@@ -527,9 +527,7 @@ class ConfigResolver:
 
         # Step 6.5: Normalize queue identifier
         queue_identifier = (
-            outputs.get("PackagerQueueUrl")
-            or outputs.get("QueueUrl")
-            or outputs.get("PackagerQueueArn")
+            outputs.get("PackagerQueueUrl") or outputs.get("QueueUrl") or outputs.get("PackagerQueueArn")
         )
 
         queue_url = to_queue_url(queue_identifier)
@@ -587,11 +585,7 @@ class ConfigResolver:
         if "UserAthenaDatabaseName" not in outputs or not outputs.get("UserAthenaDatabaseName"):
             missing.append("UserAthenaDatabaseName")
 
-        if not (
-            outputs.get("PackagerQueueUrl")
-            or outputs.get("QueueUrl")
-            or outputs.get("PackagerQueueUrl")
-        ):
+        if not (outputs.get("PackagerQueueUrl") or outputs.get("QueueUrl") or outputs.get("PackagerQueueUrl")):
             missing.append("PackagerQueueUrl or PackagerQueueUrl")
 
         if missing:
