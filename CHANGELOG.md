@@ -3,7 +3,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.3] - 2025-11-06
+
+### Added
+
+- Manifest generation in setup wizard for users without App Definition ID
+
+### Changed
+
+- Centralized ECR image management - all deployments use quiltdata ECR (`712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling`)
+- Enhanced deployment plan display with complete container image details
+- Improved setup wizard credential flow - reordered prompts for better UX
+
+### Fixed
+
+- Profile-aware testing and log monitoring - commands now respect `--profile` flag
+- Setup wizard instructions now match user's selected profile
+
 ## [0.7.2] - 2025-11-06
+
+### Changed
+
+- **Improved CLI UX** - Running without arguments now launches interactive setup wizard
+  - Help and version flags (-h, --help, -v, --version) work as expected
+  - Command descriptions clarified (deploy, init)
+  - Init command redirects to setup wizard with helpful message
+
+- **Enhanced setup wizard next steps** - Post-setup instructions are now profile-aware
+  - Default profile shows simplified commands (npm run deploy, npm run test)
+  - Non-default profiles show full commands with profile flags
+  - Improved command suggestions in deploy error messages
+
+### Fixed
+
+- **Quilt stack detection** - Now finds stacks without 'quilt' in the name
+  - Two-pass detection: fast path for stacks with 'quilt' or 'catalog' in name
+  - Thorough pass checks remaining stacks for QuiltWebHost output
+  - Correctly identifies production stacks like "sales-prod"
+  - Comprehensive test coverage for edge cases
+
+- **CLI argument parsing** - Fixed issue where help/version flags triggered setup wizard
+- **Deploy error messages** - Corrected profile argument syntax in error messages
+
 
 ### Fixed
 

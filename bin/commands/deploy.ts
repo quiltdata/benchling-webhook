@@ -94,7 +94,7 @@ export async function deployCommand(options: {
         console.log(chalk.yellow("Run setup wizard to create configuration:"));
         // Suggest stage-specific setup command
         const setupCmd = stage === "dev" ? "setup:dev" : stage === "prod" ? "setup:prod" : "setup";
-        const profileArg = profileName !== "default" ? ` --profile ${profileName}` : "";
+        const profileArg = profileName !== "default" ? ` -- --profile ${profileName}` : "";
         console.log(chalk.cyan(`  npm run ${setupCmd}${profileArg}`));
         console.log();
         process.exit(1);
@@ -260,6 +260,13 @@ async function deploy(
         }
     }
 
+    // Build ECR image URI for display
+    // HARDCODED: Always use the quiltdata AWS account for ECR images
+    const ecrAccount = "712023778557";
+    const ecrRegion = "us-east-1";
+    const ecrRepository = config.deployment.ecrRepository || "quiltdata/benchling";
+    const ecrImageUri = `${ecrAccount}.dkr.ecr.${ecrRegion}.amazonaws.com/${ecrRepository}:${options.imageTag}`;
+
     // Display deployment plan
     console.log();
     console.log(chalk.bold("Deployment Plan"));
@@ -273,7 +280,12 @@ async function deploy(
     console.log(chalk.bold("  Stack Parameters:"));
     console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)}`);
     console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
-    console.log(`    ${chalk.bold("Docker Image Tag:")}        ${options.imageTag}`);
+    console.log();
+    console.log(chalk.bold("  Container Image:"));
+    console.log(`    ${chalk.bold("ECR Account:")}             ${ecrAccount}`);
+    console.log(`    ${chalk.bold("ECR Repository:")}          ${ecrRepository}`);
+    console.log(`    ${chalk.bold("Image Tag:")}               ${options.imageTag}`);
+    console.log(`    ${chalk.bold("Full Image URI:")}          ${ecrImageUri}`);
     console.log();
     console.log(chalk.dim("  ℹ️  All other configuration will be resolved from AWS at runtime"));
     console.log(chalk.gray("─".repeat(80)));
@@ -371,6 +383,10 @@ async function deploy(
                         execSync(testCommand, {
                             stdio: "inherit",
                             cwd: process.cwd(),
+                            env: {
+                                ...process.env,
+                                PROFILE: options.profileName,
+                            },
                         });
                         console.log();
                         console.log(`✅ ${options.stage.charAt(0).toUpperCase() + options.stage.slice(1)} deployment and tests completed successfully!`);
