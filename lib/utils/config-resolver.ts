@@ -57,6 +57,7 @@ export interface ResolvedConfig {
 export interface ConfigResolverOptions {
   stackArn: string;
   benchlingSecret: string;
+  // packagerQueueUrl: string;
   // For testing: inject mocked clients
   mockCloudFormation?: CloudFormationClient;
   mockSecretsManager?: SecretsManagerClient;
@@ -373,11 +374,7 @@ export class ConfigResolver {
             missing.push("UserAthenaDatabaseName");
         }
 
-        if (!outputs.UserBucket && !outputs.BucketName) {
-            missing.push("UserBucket or BucketName");
-        }
-
-        if (!outputs.PackagerQueueUrl && !outputs.QueueUrln) {
+        if (!outputs.PackagerQueueUrl) {
             missing.push("PackagerQueueUrl");
         }
 

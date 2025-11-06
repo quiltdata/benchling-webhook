@@ -58,7 +58,6 @@ describe("sync-secrets CLI", () => {
             quilt: {
                 stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
                 catalog: "quilt.example.com",
-                bucket: "quilt-bucket",
                 database: "quilt_db",
                 queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue/test",
                 region: "us-east-1",
