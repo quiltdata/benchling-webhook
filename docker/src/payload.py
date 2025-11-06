@@ -143,11 +143,7 @@ class Payload:
             return button_id
 
         # Standard extraction: resourceId or entryId from message or payload root
-        entry_id = (
-            self._message.get("resourceId")
-            or self._message.get("entryId")
-            or self._payload.get("resourceId")
-        )
+        entry_id = self._message.get("resourceId") or self._message.get("entryId") or self._payload.get("resourceId")
 
         if entry_id:
             self._cached_entry_id = entry_id
@@ -157,9 +153,7 @@ class Payload:
         # Canvas initialization payloads provide entryId inside context (no message wrapper)
         if not entry_id:
             context_entry_id = (
-                self._context.get("entryId")
-                or self._context.get("resourceId")
-                or self._payload.get("entryId")
+                self._context.get("entryId") or self._context.get("resourceId") or self._payload.get("entryId")
             )
             if context_entry_id:
                 self._cached_entry_id = context_entry_id

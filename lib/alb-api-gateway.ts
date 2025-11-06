@@ -28,8 +28,10 @@ export interface AlbApiGatewayProps {
     /**
      * Array of environments to create API Gateway stages for.
      * Each environment gets its own stage that routes to a specific target group.
+     * If not provided, creates a single "prod" stage (backward compatible).
+     * @default Single prod stage
      */
-    readonly environments: ReadonlyArray<ApiGatewayEnvironment>;
+    readonly environments?: ReadonlyArray<ApiGatewayEnvironment>;
 }
 
 export class AlbApiGateway {
@@ -91,7 +93,11 @@ export class AlbApiGateway {
 
         // Create stages for each environment
         this.stages = new Map();
-        for (const env of props.environments) {
+
+        // If environments provided, use multi-stage mode; otherwise use legacy single-stage mode
+        const environments = props.environments || [{ stageName: "prod", targetGroup: undefined as any }];
+
+        for (const env of environments) {
             // Create deployment
             const deployment = new apigateway.Deployment(scope, `${env.stageName}Deployment`, {
                 api: this.api,

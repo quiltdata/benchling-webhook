@@ -393,10 +393,11 @@ describe("AlbApiGateway", () => {
             const template = Template.fromStack(stack);
 
             // Just verify the output exists with the right description
+            // In legacy mode (no environments), creates "prod" stage by default
             const outputs = template.toJSON().Outputs;
-            expect(outputs.ApiGatewayExecutionLogGroup).toBeDefined();
-            expect(outputs.ApiGatewayExecutionLogGroup.Description).toBe(
-                "API Gateway execution log group for detailed request/response logs",
+            expect(outputs.prodApiGatewayExecutionLogGroup).toBeDefined();
+            expect(outputs.prodApiGatewayExecutionLogGroup.Description).toBe(
+                "API Gateway execution log group for prod stage",
             );
         });
 
