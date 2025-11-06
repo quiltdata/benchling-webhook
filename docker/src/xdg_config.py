@@ -2,10 +2,9 @@
 XDG Configuration Management for Python
 
 Provides read-only XDG-compliant configuration file reading for the Benchling Webhook system.
-Implements the same three-file configuration model as the TypeScript library:
-- User configuration: User-provided default settings
-- Derived configuration: CLI-inferred configuration
-- Deployment configuration: Deployment-specific artifacts
+Implements the v0.7.0+ profile-based configuration model:
+- Profile configuration: {profile}/config.json - All configuration for a profile
+- Deployment tracking: {profile}/deployments.json - Deployment history
 
 This module is read-only and does NOT support environment variable fallback,
 ensuring strict configuration management and consistency with the TypeScript implementation.
@@ -14,34 +13,22 @@ Usage:
     from xdg_config import XDGConfig
 
     config = XDGConfig()
-    user_config = config.read_config("user")
-    complete_config = config.load_complete_config()
+    profile_config = config.read_profile()  # Read default profile
+    complete_config = config.load_complete_config()  # For backward compat
 
 Module: xdg_config
 """
 
 import json
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional
-
-ConfigType = Literal["user", "derived", "deploy"]
-
-
-@dataclass
-class XDGConfigPaths:
-    """Configuration file paths for XDG-compliant storage"""
-
-    user_config: Path
-    derived_config: Path
-    deploy_config: Path
+from typing import Any, Dict, Optional
 
 
 class XDGConfig:
     """
-    XDG Configuration Manager for Python
+    XDG Configuration Manager for Python (v0.7.0+)
 
-    Provides read-only access to XDG-compliant configuration files.
+    Provides read-only access to XDG-compliant profile-based configuration files.
     Supports multiple named profiles (e.g., "default", "dev", "prod").
     """
 
@@ -75,56 +62,36 @@ class XDGConfig:
             profile_name: Profile name (defaults to instance profile)
 
         Returns:
-            Profile directory path
+            Profile directory path (~/.config/benchling-webhook/{profile}/)
         """
         profile = profile_name or self.profile
+        return self.base_dir / profile
 
-        if profile == "default":
-            return self.base_dir
-        return self.base_dir / "profiles" / profile
-
-    def get_profile_paths(self, profile_name: Optional[str] = None) -> XDGConfigPaths:
+    def get_config_path(self, profile_name: Optional[str] = None) -> Path:
         """
-        Gets configuration file paths for a specific profile
+        Gets the configuration file path for a profile
 
         Args:
             profile_name: Profile name (defaults to instance profile)
 
         Returns:
-            Configuration file paths for the profile
+            Path to config.json
         """
         profile_dir = self.get_profile_dir(profile_name)
+        return profile_dir / "config.json"
 
-        return XDGConfigPaths(
-            user_config=profile_dir / "default.json",
-            derived_config=profile_dir / "config" / "default.json",
-            deploy_config=profile_dir / "deploy" / "default.json",
-        )
-
-    def get_config_path(self, config_type: ConfigType, profile_name: Optional[str] = None) -> Path:
+    def get_deployments_path(self, profile_name: Optional[str] = None) -> Path:
         """
-        Gets the file path for a specific configuration type
+        Gets the deployments file path for a profile
 
         Args:
-            config_type: Type of configuration ("user", "derived", or "deploy")
             profile_name: Profile name (defaults to instance profile)
 
         Returns:
-            Absolute path to the configuration file
-
-        Raises:
-            ValueError: If config_type is invalid
+            Path to deployments.json
         """
-        paths = self.get_profile_paths(profile_name)
-
-        if config_type == "user":
-            return paths.user_config
-        elif config_type == "derived":
-            return paths.derived_config
-        elif config_type == "deploy":
-            return paths.deploy_config
-        else:
-            raise ValueError(f"Unknown configuration type: {config_type}")
+        profile_dir = self.get_profile_dir(profile_name)
+        return profile_dir / "deployments.json"
 
     def profile_exists(self, profile_name: Optional[str] = None) -> bool:
         """
@@ -134,10 +101,10 @@ class XDGConfig:
             profile_name: Profile name to check (defaults to instance profile)
 
         Returns:
-            True if profile exists, False otherwise
+            True if profile exists (has a config.json), False otherwise
         """
-        profile_dir = self.get_profile_dir(profile_name)
-        return profile_dir.exists() and profile_dir.is_dir()
+        config_path = self.get_config_path(profile_name)
+        return config_path.exists() and config_path.is_file()
 
     def list_profiles(self) -> list[str]:
         """
@@ -146,35 +113,34 @@ class XDGConfig:
         Returns:
             List of profile names
         """
-        profiles = ["default"]
+        if not self.base_dir.exists():
+            return []
 
-        profiles_dir = self.base_dir / "profiles"
-        if profiles_dir.exists():
-            profile_dirs = [d.name for d in profiles_dir.iterdir() if d.is_dir()]
-            profiles.extend(profile_dirs)
+        profiles = []
+        for profile_dir in self.base_dir.iterdir():
+            if profile_dir.is_dir():
+                config_path = profile_dir / "config.json"
+                if config_path.exists():
+                    profiles.append(profile_dir.name)
 
-        return profiles
+        return sorted(profiles)
 
-    def read_config(
-        self, config_type: ConfigType, profile_name: Optional[str] = None, raise_if_missing: bool = True
-    ) -> Optional[Dict[str, Any]]:
+    def read_profile(self, profile_name: Optional[str] = None, raise_if_missing: bool = True) -> Optional[Dict[str, Any]]:
         """
-        Reads and parses a configuration file
+        Reads a profile configuration
 
         Args:
-            config_type: Type of configuration to read ("user", "derived", or "deploy")
             profile_name: Profile name (defaults to instance profile)
             raise_if_missing: Whether to raise an error if file is missing
 
         Returns:
-            Parsed configuration dictionary, or None if file doesn't exist and raise_if_missing is False
+            Profile configuration dictionary, or None if file doesn't exist and raise_if_missing is False
 
         Raises:
             FileNotFoundError: If file not found and raise_if_missing is True
             json.JSONDecodeError: If file contains invalid JSON
-            ValueError: If config_type is invalid
         """
-        config_path = self.get_config_path(config_type, profile_name)
+        config_path = self.get_config_path(profile_name)
 
         if not config_path.exists():
             if raise_if_missing:
@@ -191,77 +157,57 @@ class XDGConfig:
 
         return config
 
-    def load_complete_config(self, profile_name: Optional[str] = None) -> Dict[str, Any]:
+    def read_deployments(self, profile_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
-        Loads and merges all configuration files for a profile
-
-        Merges configurations in priority order (user → derived → deploy),
-        where later configurations override earlier ones.
+        Reads deployment tracking information
 
         Args:
             profile_name: Profile name (defaults to instance profile)
 
         Returns:
-            Merged configuration dictionary
-
-        Raises:
-            FileNotFoundError: If no configuration files exist for the profile
+            Deployments dictionary, or None if file doesn't exist
         """
-        configs = []
+        deployments_path = self.get_deployments_path(profile_name)
 
-        # Load user config (optional)
-        user_config = self.read_config("user", profile_name, raise_if_missing=False)
-        if user_config:
-            configs.append(user_config)
+        if not deployments_path.exists():
+            return None
 
-        # Load derived config (optional)
-        derived_config = self.read_config("derived", profile_name, raise_if_missing=False)
-        if derived_config:
-            configs.append(derived_config)
+        try:
+            with open(deployments_path, "r", encoding="utf-8") as f:
+                deployments = json.load(f)
+        except json.JSONDecodeError as e:
+            raise json.JSONDecodeError(f"Invalid JSON in deployments file: {deployments_path}", e.doc, e.pos)
+        except Exception as e:
+            raise RuntimeError(f"Failed to read deployments file: {deployments_path}. {str(e)}")
 
-        # Load deploy config (optional)
-        deploy_config = self.read_config("deploy", profile_name, raise_if_missing=False)
-        if deploy_config:
-            configs.append(deploy_config)
+        return deployments
 
-        if not configs:
-            raise FileNotFoundError(f"No configuration files found for profile: {profile_name or self.profile}")
-
-        # Merge configurations (deep merge)
-        merged = {}
-        for config in configs:
-            merged = self._deep_merge(merged, config)
-
-        return merged
-
-    @staticmethod
-    def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    def load_complete_config(self, profile_name: Optional[str] = None) -> Dict[str, Any]:
         """
-        Deep merge two dictionaries
+        Loads complete configuration for a profile
+
+        This method provides backward compatibility with the old three-file model.
+        In v0.7.0+, there is only one config file per profile.
 
         Args:
-            base: Base dictionary
-            override: Override dictionary
+            profile_name: Profile name (defaults to instance profile)
 
         Returns:
-            Merged dictionary
+            Profile configuration dictionary
+
+        Raises:
+            FileNotFoundError: If no configuration file exists for the profile
         """
-        result = base.copy()
-
-        for key, value in override.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = XDGConfig._deep_merge(result[key], value)
-            else:
-                result[key] = value
-
-        return result
+        return self.read_profile(profile_name, raise_if_missing=True)
 
     def get_config_value(self, key: str, default: Any = None, profile_name: Optional[str] = None) -> Any:
         """
-        Gets a specific configuration value from the merged configuration
+        Gets a specific configuration value from the profile configuration
+
+        Supports nested keys using dot notation (e.g., "benchling.tenant")
 
         Args:
-            key: Configuration key to retrieve
+            key: Configuration key to retrieve (supports dot notation)
             default: Default value if key not found
             profile_name: Profile name (defaults to instance profile)
 
@@ -269,8 +215,20 @@ class XDGConfig:
             Configuration value or default
         """
         try:
-            config = self.load_complete_config(profile_name)
-            return config.get(key, default)
+            config = self.read_profile(profile_name, raise_if_missing=True)
+
+            # Support dot notation for nested keys
+            keys = key.split(".")
+            value = config
+            for k in keys:
+                if isinstance(value, dict):
+                    value = value.get(k)
+                    if value is None:
+                        return default
+                else:
+                    return default
+
+            return value if value is not None else default
         except FileNotFoundError:
             return default
 
@@ -282,22 +240,31 @@ class XDGConfig:
 
         Args:
             config: Configuration dictionary to validate
-            required_fields: List of required field names
+            required_fields: List of required field paths (supports dot notation)
 
         Returns:
             Tuple of (is_valid, list of missing fields)
         """
         if required_fields is None:
             required_fields = [
-                "benchlingTenant",
-                "benchlingClientId",
-                "quiltCatalog",
-                "quiltUserBucket",
+                "benchling.tenant",
+                "benchling.clientId",
+                "quilt.catalog",
+                "quilt.bucket",
             ]
 
         missing_fields = []
         for field in required_fields:
-            if field not in config or not config[field]:
+            keys = field.split(".")
+            value = config
+            for key in keys:
+                if isinstance(value, dict):
+                    value = value.get(key)
+                else:
+                    value = None
+                    break
+
+            if value is None or (isinstance(value, str) and not value):
                 missing_fields.append(field)
 
         is_valid = len(missing_fields) == 0
@@ -305,30 +272,15 @@ class XDGConfig:
 
 
 # Convenience functions for backward compatibility
-def load_config(config_type: ConfigType = "user", profile: str = "default") -> Optional[Dict[str, Any]]:
-    """
-    Convenience function to load a specific configuration type
-
-    Args:
-        config_type: Type of configuration to load
-        profile: Profile name
-
-    Returns:
-        Configuration dictionary or None
-    """
-    xdg = XDGConfig(profile=profile)
-    return xdg.read_config(config_type, raise_if_missing=False)
-
-
 def load_complete_config(profile: str = "default") -> Dict[str, Any]:
     """
-    Convenience function to load complete merged configuration
+    Convenience function to load complete profile configuration
 
     Args:
         profile: Profile name
 
     Returns:
-        Merged configuration dictionary
+        Profile configuration dictionary
     """
     xdg = XDGConfig(profile=profile)
     return xdg.load_complete_config()

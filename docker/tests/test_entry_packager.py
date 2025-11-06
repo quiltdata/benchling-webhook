@@ -510,9 +510,13 @@ class TestEntryPackager:
     @pytest.mark.local
     def test_send_to_sqs_success(self, orchestrator):
         """Test successful SQS message send."""
+        mock_queue_url_response = {"QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue"}
         mock_response = {"MessageId": "msg_123"}
 
-        with patch.object(orchestrator.sqs_client, "send_message", return_value=mock_response):
+        with (
+            patch.object(orchestrator.sqs_client, "get_queue_url", return_value=mock_queue_url_response),
+            patch.object(orchestrator.sqs_client, "send_message", return_value=mock_response),
+        ):
             result = orchestrator._send_to_sqs(
                 package_name="benchling/EXP0001",  # Now uses display_id
                 timestamp="2025-10-02T10:00:00Z",
@@ -554,10 +558,12 @@ class TestEntryPackager:
             "files_uploaded": [],
             "total_files": 5,
         }
+        mock_queue_url_response = {"QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue"}
         mock_sqs_response = {"MessageId": "msg_123"}
 
         with (
             patch.object(orchestrator, "_process_export", return_value=mock_process_result),
+            patch.object(orchestrator.sqs_client, "get_queue_url", return_value=mock_queue_url_response),
             patch.object(orchestrator.sqs_client, "send_message", return_value=mock_sqs_response),
         ):
             payload = Payload(
