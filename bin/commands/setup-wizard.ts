@@ -305,13 +305,27 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
                 "Non-interactive mode requires benchlingTenant, benchlingClientId, and benchlingClientSecret to be already configured",
             );
         }
-        return config as ProfileConfig;
+
+        // Add metadata and inheritance marker before returning
+        const now = new Date().toISOString();
+        const finalConfig = config as ProfileConfig;
+        finalConfig._metadata = {
+            version: "0.7.0",
+            createdAt: config._metadata?.createdAt || now,
+            updatedAt: now,
+            source: "wizard",
+        };
+
+        if (inheritFrom) {
+            finalConfig._inherits = inheritFrom;
+        }
+
+        return finalConfig;
     }
 
     // Prompt for Quilt configuration (if not inherited)
     if (!inheritFrom) {
         console.log("Step 1: Quilt Configuration\n");
-        console.log("Note: Run 'npm run setup:infer' first to auto-detect Quilt stack\n");
 
         const quiltAnswers = await inquirer.prompt([
             {
@@ -596,21 +610,26 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     // Step 1: Load existing configuration (if profile exists)
     let existingConfig: Partial<ProfileConfig> | undefined;
 
+    // Determine if we should inherit from 'default' when profile is not 'default'
+    const shouldInheritFromDefault = profile !== "default" && !inheritFrom;
+    const effectiveInheritFrom = inheritFrom || (shouldInheritFromDefault ? "default" : undefined);
+
     if (xdg.profileExists(profile)) {
         console.log(`Loading existing configuration for profile: ${profile}\n`);
         try {
-            existingConfig = inheritFrom
-                ? xdg.readProfileWithInheritance(profile, inheritFrom)
+            existingConfig = effectiveInheritFrom
+                ? xdg.readProfileWithInheritance(profile, effectiveInheritFrom)
                 : xdg.readProfile(profile);
         } catch (error) {
             console.warn(`Warning: Could not load existing config: ${(error as Error).message}`);
         }
-    } else if (inheritFrom) {
-        console.log(`Creating new profile '${profile}' inheriting from '${inheritFrom}'\n`);
+    } else if (effectiveInheritFrom) {
+        // If profile doesn't exist but we should inherit, load base profile
+        console.log(`Creating new profile '${profile}' inheriting from '${effectiveInheritFrom}'\n`);
         try {
-            existingConfig = xdg.readProfile(inheritFrom);
+            existingConfig = xdg.readProfile(effectiveInheritFrom);
         } catch (error) {
-            throw new Error(`Base profile '${inheritFrom}' not found: ${(error as Error).message}`);
+            throw new Error(`Base profile '${effectiveInheritFrom}' not found: ${(error as Error).message}`);
         }
     }
 
@@ -618,7 +637,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     let quiltConfig: Partial<ProfileConfig["quilt"]> = existingConfig?.quilt || {};
     let inferredAccountId: string | undefined;
 
-    if (!inheritFrom || !existingConfig?.quilt) {
+    if (!effectiveInheritFrom || !existingConfig?.quilt) {
         console.log("Step 1: Inferring Quilt configuration from AWS...\n");
 
         try {
@@ -672,7 +691,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     const config = await runConfigWizard({
         existingConfig: partialConfig,
         nonInteractive,
-        inheritFrom,
+        inheritFrom: effectiveInheritFrom,
     });
 
     // Step 4: Validate configuration

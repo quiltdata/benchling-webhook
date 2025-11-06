@@ -107,7 +107,7 @@ export class FargateService extends Construct {
         );
 
         // Grant wildcard S3 access (bucket name will be resolved at runtime)
-        // Includes both config.packages.bucket and config.quilt.bucket
+        // Includes both config.packages.bucket
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [

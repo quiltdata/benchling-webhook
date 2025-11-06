@@ -70,6 +70,7 @@ describe("XDG_CONFIG_HOME Isolation", () => {
                 region: "us-east-1",
             },
             packages: {
+                bucket: "test-packages-bucket",
                 prefix: "test",
                 metadataKey: "test_id",
             },

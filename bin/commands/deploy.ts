@@ -62,7 +62,10 @@ export async function deployCommand(options: {
         console.error(chalk.red((error as Error).message));
         console.log();
         console.log(chalk.yellow("Run setup wizard to create configuration:"));
-        console.log(chalk.cyan("  npm run setup"));
+        // Suggest stage-specific setup command
+        const setupCmd = stage === "dev" ? "setup:dev" : stage === "prod" ? "setup:prod" : "setup";
+        const profileArg = profileName !== "default" ? ` --profile ${profileName}` : "";
+        console.log(chalk.cyan(`  npm run ${setupCmd}${profileArg}`));
         console.log();
         process.exit(1);
     }

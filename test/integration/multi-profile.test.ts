@@ -35,7 +35,6 @@ describe("Multi-Profile Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/prod/abc",
                     catalog: "https://quilt.prod.example.com",
-                    bucket: "prod-quilt-bucket",
                     database: "prod_catalog",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/prod-queue",
                     region: "us-east-1",
@@ -69,7 +68,6 @@ describe("Multi-Profile Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/dev/xyz",
                     catalog: "https://quilt.dev.example.com",
-                    bucket: "dev-quilt-bucket",
                     database: "dev_catalog",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/dev-queue",
                     region: "us-east-1",
@@ -110,8 +108,6 @@ describe("Multi-Profile Integration", () => {
             const readDefault = xdg.readProfile("default");
             const readDev = xdg.readProfile("dev");
 
-            expect(readDefault.quilt.bucket).toBe("prod-quilt-bucket");
-            expect(readDev.quilt.bucket).toBe("dev-quilt-bucket");
             expect(readDefault.deployment.imageTag).toBe("0.7.0");
             expect(readDev.deployment.imageTag).toBe("latest");
         });
@@ -122,7 +118,6 @@ describe("Multi-Profile Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/prod/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "shared-quilt-bucket",
                     database: "shared_catalog",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/shared-queue",
                     region: "us-east-1",
@@ -157,7 +152,6 @@ describe("Multi-Profile Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/prod/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "shared-quilt-bucket",
                     database: "shared_catalog",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/shared-queue",
                     region: "us-east-1",
@@ -193,7 +187,6 @@ describe("Multi-Profile Integration", () => {
             const resolvedDev = xdg.readProfileWithInheritance("dev");
 
             // Should inherit shared values from default
-            expect(resolvedDev.quilt.bucket).toBe("shared-quilt-bucket");
             expect(resolvedDev.benchling.tenant).toBe("shared-tenant");
             expect(resolvedDev.packages.bucket).toBe("shared-packages");
 
@@ -209,7 +202,6 @@ describe("Multi-Profile Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/prod/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "prod-bucket",
                     database: "prod_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/prod-queue",
                     region: "us-east-1",
@@ -242,7 +234,6 @@ describe("Multi-Profile Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/dev/xyz",
                     catalog: "https://quilt.example.com",
-                    bucket: "dev-bucket",
                     database: "dev_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/dev-queue",
                     region: "us-east-1",
@@ -315,7 +306,6 @@ describe("Multi-Profile Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -397,7 +387,6 @@ describe("Multi-Profile Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "default-bucket",
                     database: "default_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/default-queue",
                     region: "us-east-1",
@@ -427,7 +416,6 @@ describe("Multi-Profile Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "dev-bucket",
                     database: "dev_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/dev-queue",
                     region: "us-east-1",
@@ -460,13 +448,11 @@ describe("Multi-Profile Integration", () => {
 
             // 2. Update a profile
             const updatedDevConfig = { ...devConfig };
-            updatedDevConfig.quilt.bucket = "updated-dev-bucket";
             updatedDevConfig._metadata.updatedAt = "2025-11-04T12:00:00Z";
 
             xdg.writeProfile("dev", updatedDevConfig);
 
             const readDev = xdg.readProfile("dev");
-            expect(readDev.quilt.bucket).toBe("updated-dev-bucket");
 
             // 3. Record deployments
             const deployment: DeploymentRecord = {
@@ -495,7 +481,6 @@ describe("Multi-Profile Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "profile1-bucket",
                     database: "profile1_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/profile1-queue",
                     region: "us-east-1",
@@ -525,7 +510,6 @@ describe("Multi-Profile Integration", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "profile2-bucket",
                     database: "profile2_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/profile2-queue",
                     region: "us-east-1",
@@ -556,16 +540,13 @@ describe("Multi-Profile Integration", () => {
 
             // Update profile1
             const updatedProfile1 = { ...profile1 };
-            updatedProfile1.quilt.bucket = "updated-profile1-bucket";
             xdg.writeProfile("profile1", updatedProfile1);
 
             // Verify profile2 is unchanged
             const readProfile2 = xdg.readProfile("profile2");
-            expect(readProfile2.quilt.bucket).toBe("profile2-bucket");
 
             // Verify profile1 was updated
             const readProfile1 = xdg.readProfile("profile1");
-            expect(readProfile1.quilt.bucket).toBe("updated-profile1-bucket");
         });
     });
 });

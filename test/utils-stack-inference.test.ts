@@ -35,6 +35,7 @@ describe("stack-inference utility", () => {
         const mockStackDetails: StackDetails = {
             outputs: [
                 { OutputKey: "UserAthenaDatabaseName", OutputValue: "my_catalog_db" },
+                { OutputKey: "PackagerQueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/my-queue" },
             ],
             parameters: [],
         };

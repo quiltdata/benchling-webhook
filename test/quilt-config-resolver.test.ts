@@ -10,7 +10,7 @@ describe("QuiltConfigResolver", () => {
             // Expect at least these fields if quilt3 is configured
             if (result) {
                 expect(result).toHaveProperty("catalogUrl");
-                expect(typeof result.catalog).toBe("string");
+                expect(typeof result.catalogUrl).toBe("string");
             }
         });
 
@@ -28,7 +28,7 @@ describe("QuiltConfigResolver", () => {
             };
 
             const result = await QuiltConfigResolver.resolve(manualConfig);
-            expect(result.catalog).toBe("https://custom.quilt.com");
+            expect(result.catalogUrl).toBe("https://custom.quilt.com");
             expect(result.userBucket).toBe("override-bucket");
         });
 
@@ -37,7 +37,7 @@ describe("QuiltConfigResolver", () => {
             const mockOutput = "https://quilt.example.com";
 
             const result = resolver.parseQuilt3Config(mockOutput);
-            expect(result.catalog).toBe("quilt.example.com");
+            expect(result.catalogUrl).toBe("quilt.example.com");
         });
 
         it("should handle URL with protocol in quilt3 config", async () => {
@@ -45,7 +45,7 @@ describe("QuiltConfigResolver", () => {
             const mockOutput = "https://nightly.quilttest.com";
 
             const result = resolver.parseQuilt3Config(mockOutput);
-            expect(result.catalog).toBe("nightly.quilttest.com");
+            expect(result.catalogUrl).toBe("nightly.quilttest.com");
         });
 
         it("should handle URL without protocol", async () => {
@@ -53,7 +53,7 @@ describe("QuiltConfigResolver", () => {
             const mockOutput = "catalog.example.com";
 
             const result = resolver.parseQuilt3Config(mockOutput);
-            expect(result.catalog).toBe("catalog.example.com");
+            expect(result.catalogUrl).toBe("catalog.example.com");
         });
     });
 });

@@ -18,7 +18,6 @@ export function createMockConfig(overrides?: Partial<ProfileConfig>): ProfileCon
         quilt: {
             stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-quilt-stack/abc123",
             catalog: "quilt.example.com",
-            bucket: "test-quilt-bucket",
             database: "quilt_catalog",
             queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
             region: "us-east-1",
@@ -66,7 +65,6 @@ export function createDevConfig(overrides?: Partial<ProfileConfig>): ProfileConf
         quilt: {
             stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/dev-quilt-stack/xyz789",
             catalog: "dev.quilt.example.com",
-            bucket: "dev-quilt-bucket",
             database: "dev_quilt_catalog",
             queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/dev-queue",
             region: "us-east-1",
@@ -96,7 +94,6 @@ export function createProdConfig(overrides?: Partial<ProfileConfig>): ProfileCon
         quilt: {
             stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/prod-quilt-stack/abc123",
             catalog: "prod.quilt.example.com",
-            bucket: "prod-quilt-bucket",
             database: "prod_quilt_catalog",
             queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/prod-queue",
             region: "us-east-1",
