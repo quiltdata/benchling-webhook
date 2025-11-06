@@ -3,6 +3,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.3] - 2025-11-06
+
+### Changed
+
+- Simplified webhook architecture by removing API Gateway and exposing ALB directly
+- ALB webhook endpoint now accessible via CloudFormation output `WebhookEndpoint`
+- Default security group ingress disabled when webhook IP allowlist is provided
+
+### Fixed
+
+- XDG_CONFIG_HOME environment variable handling now consistent with tests
+- Canvas entry payloads with context entry IDs now properly accepted
+
 ## [0.7.2] - 2025-11-06
 
 ### Fixed
