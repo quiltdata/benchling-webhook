@@ -55,7 +55,7 @@ export interface ResolvedConfig {
  * Options for ConfigResolver
  */
 export interface ConfigResolverOptions {
-  quiltStackArn: string;
+  stackArn: string;
   benchlingSecret: string;
   // For testing: inject mocked clients
   mockCloudFormation?: CloudFormationClient;
@@ -290,7 +290,7 @@ export class ConfigResolver {
         }
 
         // Step 1: Parse stack ARN
-        const parsed = parseStackArn(options.quiltStackArn);
+        const parsed = parseStackArn(options.stackArn);
 
         // Step 2: Create AWS clients (or use mocks for testing)
         const cfnClient =
@@ -377,8 +377,8 @@ export class ConfigResolver {
             missing.push("UserBucket or BucketName");
         }
 
-        if (!outputs.PackagerQueueUrl && !outputs.QueueUrl && !outputs.PackagerQueueArn) {
-            missing.push("PackagerQueueUrl or PackagerQueueArn");
+        if (!outputs.PackagerQueueUrl && !outputs.QueueUrln) {
+            missing.push("PackagerQueueUrl");
         }
 
         if (missing.length > 0) {

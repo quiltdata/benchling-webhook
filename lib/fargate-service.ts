@@ -25,7 +25,7 @@ export interface FargateServiceProps {
     readonly stackVersion?: string;
 
     // Runtime-configurable parameters (from CloudFormation)
-    readonly quiltStackArn: string;
+    readonly stackArn: string;
     readonly benchlingSecret: string;
     readonly logLevel?: string;
 }
@@ -86,7 +86,7 @@ export class FargateService extends Construct {
                     "cloudformation:DescribeStacks",
                     "cloudformation:DescribeStackResources",
                 ],
-                resources: [props.quiltStackArn],
+                resources: [props. stackArn],
             }),
         );
 
@@ -205,7 +205,7 @@ export class FargateService extends Construct {
             ENABLE_WEBHOOK_VERIFICATION: config.security?.enableVerification !== false ? "true" : "false",
             BENCHLING_WEBHOOK_VERSION: props.stackVersion || props.imageTag || "latest",
             // Runtime-configurable parameters (from CloudFormation)
-            QuiltStackARN: props.quiltStackArn,
+            QuiltStackARN: props. stackArn,
             BenchlingSecret: props.benchlingSecret,
             // Static config values (for reference)
             BENCHLING_TENANT: config.benchling.tenant,

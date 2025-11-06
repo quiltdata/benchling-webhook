@@ -53,7 +53,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -71,7 +71,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -90,7 +90,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -112,7 +112,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -142,7 +142,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 logLevel: "DEBUG",
             });
@@ -172,7 +172,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 imageTag: "v0.6.3",
             });
@@ -193,7 +193,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -221,7 +221,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -255,7 +255,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config: devConfig,
                 ecrRepository,
-                quiltStackArn: devConfig.quilt.stackArn,
+                stackArn: devConfig.quilt.stackArn,
                 benchlingSecret: devConfig.benchling.secretArn!,
             });
 
@@ -265,7 +265,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config: prodConfig,
                 ecrRepository,
-                quiltStackArn: prodConfig.quilt.stackArn,
+                stackArn: prodConfig.quilt.stackArn,
                 benchlingSecret: prodConfig.benchling.secretArn!,
             });
 
@@ -283,7 +283,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -302,7 +302,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -322,7 +322,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -343,7 +343,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -367,7 +367,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -393,7 +393,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -422,7 +422,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -451,7 +451,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -482,7 +482,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 
@@ -505,7 +505,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                quiltStackArn: config.quilt.stackArn,
+                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
             });
 

@@ -144,7 +144,7 @@ export async function setupProfileCommand(
     // Optionally prompt for custom Quilt stack ARN
     let quiltStackArn = baseConfig.quilt.stackArn;
     if (answers.customizeQuiltStack) {
-        const stackAnswer = await inquirer.prompt<{ quiltStackArn: string }>([
+        const stackAnswer = await inquirer.prompt<{ stackArn: string }>([
             {
                 type: "input",
                 name: "quiltStackArn",
@@ -161,7 +161,7 @@ export async function setupProfileCommand(
                 },
             },
         ]);
-        quiltStackArn = stackAnswer.quiltStackArn;
+        quiltStackArn = stackAnswer.stackArn;
     }
 
     // Optionally prompt for custom secret ARN

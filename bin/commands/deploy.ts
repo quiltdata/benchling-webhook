@@ -28,7 +28,7 @@ export async function deployCommand(options: {
     requireApproval?: string;
     profile?: string;           // Profile name (default: "default")
     stage?: "dev" | "prod";     // API Gateway stage (independent of profile)
-    quiltStackArn?: string;
+    stackArn?: string;
     benchlingSecret?: string;
     imageTag?: string;
     region?: string;
@@ -68,7 +68,7 @@ export async function deployCommand(options: {
     }
 
     // Get required parameters with priority: CLI options > Profile config
-    const quiltStackArn = options.quiltStackArn || config.quilt.stackArn;
+    const quiltStackArn = options. stackArn || config.quilt.stackArn;
     const benchlingSecret = options.benchlingSecret || config.benchling.secretArn;
     const imageTag = options.imageTag || config.deployment.imageTag || "latest";
 
@@ -108,7 +108,7 @@ export async function deployCommand(options: {
  * Deploy the Benchling webhook stack
  */
 async function deploy(
-    quiltStackArn: string,
+    stackArn: string,
     benchlingSecret: string,
     options: {
         yes?: boolean;
@@ -126,7 +126,7 @@ async function deploy(
     // Parse stack ARN to extract region/account
     let parsed;
     try {
-        parsed = parseStackArn(quiltStackArn);
+        parsed = parseStackArn(stackArn);
         spinner.succeed("Stack ARN validated");
     } catch (error) {
         spinner.fail("Invalid Stack ARN");
@@ -215,7 +215,7 @@ async function deploy(
     console.log(`  ${chalk.bold("Profile:")}                   ${options.profileName}`);
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
-    console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(quiltStackArn)}`);
+    console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)}`);
     console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
     console.log(`    ${chalk.bold("Docker Image Tag:")}        ${options.imageTag}`);
     console.log();
@@ -247,7 +247,7 @@ async function deploy(
     try {
         // Build CloudFormation parameters
         const parameters = [
-            `QuiltStackARN=${quiltStackArn}`,
+            `stackArn=${stackArn}`,
             `BenchlingSecret=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
         ];
@@ -261,7 +261,7 @@ async function deploy(
                 ...process.env,
                 CDK_DEFAULT_ACCOUNT: deployAccount,
                 CDK_DEFAULT_REGION: deployRegion,
-                QUILT_STACK_ARN: quiltStackArn,
+                QUILT_STACK_ARN: stackArn,
                 BENCHLING_SECRET: benchlingSecret,
             },
         });
