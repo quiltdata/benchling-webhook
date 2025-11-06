@@ -34,7 +34,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -71,7 +70,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -122,7 +120,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -162,8 +159,7 @@ describe("Profile Validation", () => {
                     quilt: {
                         stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                         catalog: "https://quilt.example.com",
-                        bucket: "test-bucket",
-                        database: "test_db",
+                            database: "test_db",
                         queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                         region: "us-east-1",
                     },
@@ -204,8 +200,7 @@ describe("Profile Validation", () => {
                     quilt: {
                         stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                         catalog: "https://quilt.example.com",
-                        bucket: "test-bucket",
-                        database: "test_db",
+                            database: "test_db",
                         queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                         region: "us-east-1",
                     },
@@ -271,7 +266,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -303,7 +297,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -335,7 +328,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -369,7 +361,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -399,7 +390,6 @@ describe("Profile Validation", () => {
             const invalidConfig = {
                 quilt: {
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     // Missing stackArn, database, queueUrl, region
                 },
                 benchling: {
@@ -432,7 +422,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "not-an-arn",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -469,7 +458,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -506,46 +494,9 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "invalid-region",
-                },
-                benchling: {
-                    tenant: "test-tenant",
-                    clientId: "test-client",
-                    appDefinitionId: "test-app",
-                },
-                packages: {
-                    bucket: "test-packages",
-                    prefix: "benchling",
-                    metadataKey: "experiment_id",
-                },
-                deployment: {
-                    region: "us-east-1",
-                },
-                _metadata: {
-                    version: "0.7.0",
-                    createdAt: "2025-11-04T10:00:00Z",
-                    updatedAt: "2025-11-04T10:00:00Z",
-                    source: "wizard",
-                },
-            };
-
-            const result = xdg.validateProfile(invalidConfig);
-
-            expect(result.isValid).toBe(false);
-        });
-
-        it("should reject bucket name too short", () => {
-            const invalidConfig: ProfileConfig = {
-                quilt: {
-                    stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-                    catalog: "https://quilt.example.com",
-                    bucket: "ab",
-                    database: "test_db",
-                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-                    region: "us-east-1",
                 },
                 benchling: {
                     tenant: "test-tenant",
@@ -578,7 +529,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -616,7 +566,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -658,7 +607,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
@@ -695,7 +643,6 @@ describe("Profile Validation", () => {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
                     catalog: "https://quilt.example.com",
-                    bucket: "test-bucket",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",

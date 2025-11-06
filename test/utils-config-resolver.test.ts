@@ -289,6 +289,7 @@ describe("ConfigResolver", () => {
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "quilt_test_db" },
             { OutputKey: "UserBucket", OutputValue: "test-user-bucket" },
             { OutputKey: "Catalog", OutputValue: "test.quilt.com" },
+            { OutputKey: "PackagerQueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue" },
           ],
         },
       ],
@@ -309,7 +310,7 @@ describe("ConfigResolver", () => {
 
     const resolver = new ConfigResolver();
     const config = await resolver.resolve({
-      quiltStackArn:
+      stackArn:
         "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
       benchlingSecret: "my-benchling-secret",
       mockCloudFormation: cfnMock as any,
@@ -429,40 +430,6 @@ describe("ConfigResolver", () => {
     ).rejects.toThrow(/Missing required CloudFormation outputs/);
   });
 
-  it("should accept BucketName instead of UserBucket", async () => {
-    cfnMock.on(DescribeStacksCommand).resolves({
-      Stacks: [
-        {
-          StackName: "Stack",
-          CreationTime: new Date(),
-          StackStatus: "CREATE_COMPLETE",
-          Outputs: [
-            { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
-            { OutputKey: "BucketName", OutputValue: "my-bucket" }, // Using BucketName
-            { OutputKey: "Catalog", OutputValue: "catalog.com" },
-          ],
-        },
-      ],
-    });
-
-    smMock.on(GetSecretValueCommand).resolves({
-      SecretString: JSON.stringify({
-        client_id: "id",
-        client_secret: "secret",
-        tenant: "tenant",
-      }),
-    });
-
-    const resolver = new ConfigResolver();
-    const config = await resolver.resolve({
-      stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/Stack/abc",
-      benchlingSecret: "secret",
-      mockCloudFormation: cfnMock as any,
-      mockSecretsManager: smMock as any,
-    });
-
-    expect(config.quiltUserBucket).toBe("my-bucket");
-  });
 
   it("should resolve catalog from CatalogDomain", async () => {
     cfnMock.on(DescribeStacksCommand).resolves({
@@ -474,6 +441,7 @@ describe("ConfigResolver", () => {
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
             { OutputKey: "CatalogDomain", OutputValue: "https://my.catalog.com/" },
+            { OutputKey: "PackagerQueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue" },
           ],
         },
       ],
@@ -511,6 +479,7 @@ describe("ConfigResolver", () => {
               OutputKey: "ApiGatewayEndpoint",
               OutputValue: "https://abc123.execute-api.us-east-1.amazonaws.com/prod",
             },
+            { OutputKey: "PackagerQueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue" },
           ],
         },
       ],
@@ -544,6 +513,7 @@ describe("ConfigResolver", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
+            { OutputKey: "PackagerQueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue" },
             // No Catalog, CatalogDomain, or ApiGatewayEndpoint
           ],
         },
