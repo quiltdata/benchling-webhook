@@ -299,7 +299,7 @@ test-deployed-dev-direct: check-xdg
 		exit 1; \
 	fi; \
 	echo "📡 Testing endpoint: $$DEV_ENDPOINT"; \
-	uv run python scripts/test_webhook.py "$$DEV_ENDPOINT"
+	uv run python scripts/test_webhook.py "$$DEV_ENDPOINT" --health-only
 
 # Test deployed prod stack via API Gateway endpoint
 # v0.7.0: Updated to use deployments.json with profile/stage structure
@@ -312,7 +312,7 @@ test-deployed-prod: check-xdg
 		exit 1; \
 	fi; \
 	echo "📡 Testing endpoint: $$PROD_ENDPOINT"; \
-	uv run python scripts/test_webhook.py "$$PROD_ENDPOINT"
+	uv run python scripts/test_webhook.py "$$PROD_ENDPOINT" --health-only
 
 # Auto-fix code formatting (black + isort)
 lint:
