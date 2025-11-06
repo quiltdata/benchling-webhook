@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import "dotenv/config";
 import * as cdk from "aws-cdk-lib";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
 import { execSync } from "child_process";
