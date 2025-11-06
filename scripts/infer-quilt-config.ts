@@ -16,6 +16,7 @@ import { execSync } from "child_process";
 import * as readline from "readline";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
+import { toQueueUrl, isQueueUrl } from "../lib/utils/sqs";
 import { QuiltConfig } from "../lib/types/config";
 
 /**
@@ -34,7 +35,7 @@ interface QuiltStackInfo {
     region: string;
     bucket?: string;
     database?: string;
-    queueArn?: string;
+    queueUrl?: string;
     catalogUrl?: string;
 }
 
@@ -139,7 +140,10 @@ async function findQuiltStacks(region: string, profile?: string): Promise<QuiltS
                     } else if (key === "UserAthenaDatabaseName" || key.includes("Database")) {
                         stackInfo.database = value;
                     } else if (key.includes("Queue")) {
-                        stackInfo.queueArn = value;
+                        const normalizedQueue = toQueueUrl(value);
+                        if (normalizedQueue && isQueueUrl(normalizedQueue)) {
+                            stackInfo.queueUrl = normalizedQueue;
+                        }
                     }
                 }
 
@@ -282,7 +286,7 @@ export async function inferQuiltConfig(options: InferenceOptions = {}): Promise<
     result.stackArn = selectedStack.stackArn;
     result.bucket = selectedStack.bucket;
     result.database = selectedStack.database || "quilt_catalog";
-    result.queueArn = selectedStack.queueArn;
+    result.queueUrl = selectedStack.queueUrl;
     result.region = selectedStack.region;
 
     if (selectedStack.catalogUrl) {
@@ -325,7 +329,7 @@ async function main(): Promise<void> {
     console.log(`Catalog URL: ${result.catalog || "Not found"}`);
     console.log(`Bucket: ${result.bucket || "Not found"}`);
     console.log(`Database: ${result.database || "Not found"}`);
-    console.log(`Queue ARN: ${result.queueArn || "Not found"}`);
+    console.log(`Queue URL: ${result.queueUrl || "Not found"}`);
     console.log(`Region: ${result.region || "Not found"}`);
 }
 

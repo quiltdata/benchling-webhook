@@ -306,8 +306,8 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
     };
 
     // Add optional fields
-    if (config.quilt.queueArn) {
-        Object.assign(secretData, { queue_arn: config.quilt.queueArn });
+    if (config.quilt.queueUrl) {
+        Object.assign(secretData, { queue_url: config.quilt.queueUrl });
     }
 
     return JSON.stringify(secretData, null, 2);

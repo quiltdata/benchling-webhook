@@ -85,7 +85,7 @@ class UserConfig(BaseModel):
     aws_profile: Optional[str] = Field(None, alias="awsProfile", description="AWS profile to use")
 
     # Package Configuration
-    queue_arn: Optional[str] = Field(None, alias="queueArn", description="SQS queue ARN for package creation")
+    queue_url: Optional[str] = Field(None, alias="queueUrl", description="SQS queue URL for package creation")
     pkg_prefix: Optional[str] = Field(
         "benchling", alias="pkgPrefix", description="S3 key prefix for Benchling packages"
     )
@@ -180,7 +180,7 @@ class BenchlingSecret(BaseModel):
     log_level: str = Field("INFO", description="Logging level")
     enable_webhook_verification: str = Field("true", description="Enable webhook signature verification")
     webhook_allow_list: str = Field("", description="Comma-separated IP allowlist")
-    queue_arn: Optional[str] = Field(None, description="SQS queue ARN (optional)")
+    queue_url: Optional[str] = Field(None, description="SQS queue URL (optional)")
 
     class Config:
         extra = "forbid"

@@ -35,21 +35,17 @@ class Payload:
         """
         logger.debug("Initializing Payload", payload_keys=list(payload.keys()))
         self._payload = payload
-        raw_message = self._payload.get("message")
-        self._message = raw_message if isinstance(raw_message, dict) else {}
-        self._context = self._payload.get("context", {})
+        self._message = self._payload.get("message", {})
         self._benchling = benchling
         self._cached_entry_id: Optional[str] = None
         self._display_id: Optional[str] = display_id
 
         logger.info(
             "Payload initialized",
-            event_type=self._message.get("type") or self._payload.get("type"),
-            has_canvas_id=("canvasId" in self._message) or ("canvasId" in self._payload),
-            has_resource_id=("resourceId" in self._message)
-            or ("resourceId" in self._payload)
-            or ("resourceId" in self._context),
-            has_entry_id=("entryId" in self._message) or ("entryId" in self._context),
+            event_type=self._message.get("type"),
+            has_canvas_id="canvasId" in self._message,
+            has_resource_id="resourceId" in self._message,
+            has_entry_id="entryId" in self._message,
             has_button_id="buttonId" in self._message,
         )
 
@@ -100,7 +96,7 @@ class Payload:
             logger.debug("Using cached entry_id", entry_id=self._cached_entry_id)
             return self._cached_entry_id
 
-        event_type = self._message.get("type") or self._payload.get("type")
+        event_type = self._message.get("type")
         button_id = self._message.get("buttonId")
 
         logger.debug(
@@ -150,16 +146,6 @@ class Payload:
             logger.info("Extracted entry_id from standard fields", entry_id=entry_id)
             return entry_id
 
-        # Canvas initialization payloads provide entryId inside context (no message wrapper)
-        if not entry_id:
-            context_entry_id = (
-                self._context.get("entryId") or self._context.get("resourceId") or self._payload.get("entryId")
-            )
-            if context_entry_id:
-                self._cached_entry_id = context_entry_id
-                logger.info("Extracted entry_id from context", entry_id=context_entry_id)
-                return context_entry_id
-
         # If no entry_id but we have canvas_id and Benchling client, get resource_id from canvas
         if not entry_id and self.canvas_id and self._benchling:
             logger.info("No entry_id in payload, fetching resource_id from canvas", canvas_id=self.canvas_id)
@@ -203,7 +189,7 @@ class Payload:
         Returns:
             Canvas ID if present, None otherwise
         """
-        return self._message.get("canvasId") or self._payload.get("canvasId")
+        return self._message.get("canvasId")
 
     @property
     def timestamp(self) -> Optional[str]:
@@ -223,7 +209,7 @@ class Payload:
         Returns:
             Event type string
         """
-        return self._message.get("type") or self._payload.get("type", "")
+        return self._message.get("type", "")
 
     @property
     def base_url(self) -> str:

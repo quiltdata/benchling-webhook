@@ -92,7 +92,7 @@ describe("extractStackOutputs", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "test_db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:queue" },
+            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123456789012:test-queue" },
             { OutputKey: "UserBucket", OutputValue: "test-bucket" },
             { OutputKey: "Catalog", OutputValue: "test.catalog.com" },
           ],
@@ -103,7 +103,7 @@ describe("extractStackOutputs", () => {
     const outputs = await extractStackOutputs(cfnMock as any, "TestStack");
 
     expect(outputs.UserAthenaDatabaseName).toBe("test_db");
-    expect(outputs.PackagerQueueArn).toBe("arn:aws:sqs:us-east-1:123:queue");
+    expect(outputs.PackagerQueueArn).toBe("arn:aws:sqs:us-east-1:123456789012:test-queue");
     expect(outputs.UserBucket).toBe("test-bucket");
     expect(outputs.Catalog).toBe("test.catalog.com");
   });
@@ -289,7 +289,7 @@ describe("ConfigResolver", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "quilt_test_db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:queue" },
+            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123456789012:test-queue" },
             { OutputKey: "UserBucket", OutputValue: "test-user-bucket" },
             { OutputKey: "Catalog", OutputValue: "test.quilt.com" },
           ],
@@ -327,7 +327,7 @@ describe("ConfigResolver", () => {
     expect(config.quiltCatalog).toBe("test.quilt.com");
     expect(config.quiltDatabase).toBe("quilt_test_db");
     expect(config.quiltUserBucket).toBe("test-user-bucket");
-    expect(config.queueArn).toBe("arn:aws:sqs:us-east-1:123:queue");
+    expect(config.queueUrl).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/test-queue");
 
     // Benchling
     expect(config.benchlingTenant).toBe("benchling-tenant");
@@ -441,7 +441,7 @@ describe("ConfigResolver", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:q" },
+            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123456789012:test-queue" },
             { OutputKey: "BucketName", OutputValue: "my-bucket" }, // Using BucketName
             { OutputKey: "Catalog", OutputValue: "catalog.com" },
           ],
@@ -477,7 +477,7 @@ describe("ConfigResolver", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:q" },
+            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123456789012:test-queue" },
             { OutputKey: "UserBucket", OutputValue: "bucket" },
             { OutputKey: "CatalogDomain", OutputValue: "https://my.catalog.com/" },
           ],
@@ -513,7 +513,7 @@ describe("ConfigResolver", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:q" },
+            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123456789012:test-queue" },
             { OutputKey: "UserBucket", OutputValue: "bucket" },
             {
               OutputKey: "ApiGatewayEndpoint",
@@ -552,7 +552,7 @@ describe("ConfigResolver", () => {
           StackStatus: "CREATE_COMPLETE",
           Outputs: [
             { OutputKey: "UserAthenaDatabaseName", OutputValue: "db" },
-            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123:q" },
+            { OutputKey: "PackagerQueueArn", OutputValue: "arn:aws:sqs:us-east-1:123456789012:test-queue" },
             { OutputKey: "UserBucket", OutputValue: "bucket" },
             // No Catalog, CatalogDomain, or ApiGatewayEndpoint
           ],

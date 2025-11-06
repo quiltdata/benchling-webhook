@@ -20,6 +20,7 @@ import {
     validateSecretData,
     type BenchlingSecretData,
 } from "./secrets";
+import { toQueueUrl, isQueueUrl } from "./sqs";
 
 /**
  * Complete resolved configuration for the application
@@ -33,7 +34,7 @@ export interface ResolvedConfig {
   quiltCatalog: string;
   quiltDatabase: string;
   quiltUserBucket: string;
-  queueArn: string;
+  queueUrl: string;
 
   // Benchling
   benchlingTenant: string;
@@ -306,6 +307,22 @@ export class ConfigResolver {
         // Step 4: Validate required outputs
         this.validateRequiredOutputs(outputs);
 
+        // Extract queue identifier (URL preferred, fallback to ARN)
+        const queueIdentifier =
+      outputs.PackagerQueueUrl ||
+      outputs.QueueUrl ||
+      outputs.PackagerQueueArn;
+
+        const queueUrl = toQueueUrl(queueIdentifier);
+
+        if (!queueUrl || !isQueueUrl(queueUrl)) {
+            throw new ConfigResolverError(
+                "Missing SQS queue URL in CloudFormation outputs",
+                "Ensure your Quilt stack exports PackagerQueueUrl or PackagerQueueArn",
+                `Available outputs: ${Object.keys(outputs).join(", ")}`,
+            );
+        }
+
         // Step 5: Fetch Benchling secret
         const secret = await resolveAndFetchSecret(
             smClient,
@@ -326,7 +343,7 @@ export class ConfigResolver {
             quiltCatalog: catalog,
             quiltDatabase: outputs.UserAthenaDatabaseName,
             quiltUserBucket: outputs.UserBucket || outputs.BucketName,
-            queueArn: outputs.PackagerQueueArn,
+            queueUrl,
 
             // Benchling
             benchlingTenant: secret.tenant,
@@ -355,14 +372,19 @@ export class ConfigResolver {
    * @throws ConfigResolverError if required outputs are missing
    */
     private validateRequiredOutputs(outputs: Record<string, string>): void {
-        const required = ["UserAthenaDatabaseName", "PackagerQueueArn"];
+        const missing: string[] = [];
 
-        // UserBucket or BucketName (at least one required)
-        if (!outputs.UserBucket && !outputs.BucketName) {
-            required.push("UserBucket or BucketName");
+        if (!outputs.UserAthenaDatabaseName) {
+            missing.push("UserAthenaDatabaseName");
         }
 
-        const missing = required.filter((key) => !outputs[key]);
+        if (!outputs.UserBucket && !outputs.BucketName) {
+            missing.push("UserBucket or BucketName");
+        }
+
+        if (!outputs.PackagerQueueUrl && !outputs.QueueUrl && !outputs.PackagerQueueArn) {
+            missing.push("PackagerQueueUrl or PackagerQueueArn");
+        }
 
         if (missing.length > 0) {
             throw new ConfigResolverError(

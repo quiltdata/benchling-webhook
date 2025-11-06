@@ -17,7 +17,7 @@ class TestFlaskApp:
         config.benchling_client_secret = "test-secret"
         config.s3_bucket_name = "test-bucket"
         config.s3_prefix = "benchling"
-        config.queue_arn = "https://sqs.us-west-2.amazonaws.com/123456789012/test"
+        config.queue_url = "https://sqs.us-west-2.amazonaws.com/123456789012/test"
         config.quilt_catalog = "test.quiltdata.com"
         config.benchling_app_definition_id = ""
         config.enable_webhook_verification = False  # Disable verification for tests
@@ -263,7 +263,7 @@ class TestFlaskApp:
             aws_account="123456789012",
             quilt_catalog="test.quiltdata.com",
             quilt_database="test-db",
-            queue_arn="arn:aws:sqs:us-east-2:123456789012:test-queue",
+            queue_url="https://sqs.us-east-2.amazonaws.com/123456789012/test-queue",
             benchling_tenant="test-tenant",
             benchling_client_id="test-id",
             benchling_client_secret="test-secret",
@@ -314,7 +314,7 @@ class TestFlaskApp:
             aws_account="123456789012",
             quilt_catalog="test.quiltdata.com",
             quilt_database="test-db",
-            queue_arn="arn:aws:sqs:us-east-2:123456789012:test-queue",
+            queue_url="https://sqs.us-east-2.amazonaws.com/123456789012/test-queue",
             benchling_tenant="test-tenant",
             benchling_client_id="test-id",
             benchling_client_secret="test-secret",
