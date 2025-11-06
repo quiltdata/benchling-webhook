@@ -9,7 +9,6 @@
  * @version 0.7.0
  */
 
-import "dotenv/config";
 import { execSync } from "child_process";
 import { XDGConfig } from "../lib/xdg-config";
 
