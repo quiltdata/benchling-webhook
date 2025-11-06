@@ -507,6 +507,7 @@ class TestEntryPackager:
                 )
 
     # Episode 6: SendToSQS tests
+    @pytest.mark.local
     def test_send_to_sqs_success(self, orchestrator):
         """Test successful SQS message send."""
         mock_response = {"MessageId": "msg_123"}
@@ -522,6 +523,7 @@ class TestEntryPackager:
     # Episode 7: Canvas tests removed - now handled by CanvasManager class
 
     # Episode 8: Main execution tests
+    @pytest.mark.local
     def test_execute_workflow_success(self, orchestrator, mock_benchling):
         """Test complete workflow execution."""
         # Mock SDK calls
