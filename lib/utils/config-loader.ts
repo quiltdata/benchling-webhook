@@ -44,7 +44,7 @@ export async function loadConfig(): Promise<ResolvedConfig> {
 
     const resolver = new ConfigResolver();
     return await resolver.resolve({
-        quiltStackArn,
+        stackArn: quiltStackArn,
         benchlingSecret,
     });
 }
