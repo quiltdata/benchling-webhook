@@ -1,15 +1,15 @@
 /**
  * XDG Configuration Management (v0.7.0 - BREAKING CHANGE)
  *
- * Complete rewrite with NO backward compatibility with v0.6.x.
+ * Filesystem implementation of XDGBase for XDG-compliant configuration management.
  *
- * This module provides XDG-compliant configuration management for the Benchling Webhook system
- * with a simplified, profile-first architecture:
+ * This module provides filesystem-specific storage primitives for the Benchling Webhook system:
+ * - Filesystem-based profile storage in ~/.config/benchling-webhook/
+ * - Per-profile deployment tracking
+ * - Legacy configuration detection
+ * - Atomic writes with automatic backups
  *
- * - Single unified configuration file per profile (`config.json`)
- * - Per-profile deployment tracking (`deployments.json`)
- * - Profile inheritance support with deep merging
- * - Comprehensive validation and helpful error messages
+ * All business logic (validation, inheritance, deployment tracking) is handled by XDGBase.
  *
  * Directory Structure:
  * ```
@@ -29,21 +29,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, copyFileSync, unlinkSync, readdirSync, rmSync } from "fs";
 import { resolve, join, dirname } from "path";
 import { homedir } from "os";
-import Ajv from "ajv";
-import addFormats from "ajv-formats";
-import merge from "lodash.merge";
-import {
-    ProfileConfig,
-    DeploymentHistory,
-    DeploymentRecord,
-    ValidationResult,
-    ProfileConfigSchema,
-    DeploymentHistorySchema,
-} from "./types/config";
+import { ProfileConfig, DeploymentHistory } from "./types/config";
+import { XDGBase } from "./xdg-base";
 
 /**
  * XDG Configuration Manager (v0.7.0)
  *
+ * Filesystem-based implementation extending XDGBase.
  * Manages profile-based configuration with deployment tracking.
  * NO backward compatibility with v0.6.x configuration files.
  *
@@ -68,7 +60,7 @@ import {
  * });
  * ```
  */
-export class XDGConfig {
+export class XDGConfig extends XDGBase {
     private readonly baseDir: string;
 
     /**
@@ -77,60 +69,24 @@ export class XDGConfig {
      * @param baseDir - Base configuration directory (defaults to ~/.config/benchling-webhook)
      */
     constructor(baseDir?: string) {
+        super();
         this.baseDir = baseDir || this.getDefaultBaseDir();
         this.ensureBaseDirectoryExists();
     }
 
-    /**
-     * Gets the default XDG base directory
-     *
-     * Respects XDG_CONFIG_HOME environment variable per XDG Base Directory spec.
-     *
-     * @returns The default base directory path (~/.config/benchling-webhook or $XDG_CONFIG_HOME/benchling-webhook)
-     */
-    private getDefaultBaseDir(): string {
-        const xdgConfigHome = process.env.XDG_CONFIG_HOME;
-        if (xdgConfigHome) {
-            return resolve(xdgConfigHome, "benchling-webhook");
-        }
-        const home = homedir();
-        return resolve(home, ".config", "benchling-webhook");
-    }
-
-    /**
-     * Ensures the base configuration directory exists
-     *
-     * @throws {Error} If directory creation fails
-     */
-    private ensureBaseDirectoryExists(): void {
-        if (!existsSync(this.baseDir)) {
-            mkdirSync(this.baseDir, { recursive: true });
-        }
-    }
-
     // ====================================================================
-    // Configuration Management
+    // Abstract Storage Primitives Implementation (Filesystem)
     // ====================================================================
 
     /**
-     * Reads configuration for a profile
+     * Reads raw profile configuration from filesystem without validation
      *
-     * @param profile - Profile name (e.g., "default", "dev", "prod")
-     * @returns Parsed configuration object
-     * @throws {Error} If profile not found or configuration is invalid
-     *
-     * @example
-     * ```typescript
-     * const config = xdg.readProfile("default");
-     * console.log(config.benchling.tenant);
-     * ```
+     * @param profile - Profile name
+     * @returns Raw profile configuration
+     * @throws {Error} If profile cannot be read
      */
-    public readProfile(profile: string): ProfileConfig {
+    protected readProfileRaw(profile: string): ProfileConfig {
         const configPath = this.getProfileConfigPath(profile);
-
-        if (!existsSync(configPath)) {
-            throw new Error(this.buildProfileNotFoundError(profile));
-        }
 
         let fileContent: string;
         try {
@@ -146,50 +102,22 @@ export class XDGConfig {
             throw new Error(`Invalid JSON in configuration file: ${configPath}. ${(error as Error).message}`);
         }
 
-        // Validate schema
-        const validation = this.validateProfile(config);
-        if (!validation.isValid) {
-            throw new Error(`Invalid configuration in ${configPath}:\n${validation.errors.join("\n")}`);
-        }
-
         return config;
     }
 
     /**
-     * Writes configuration for a profile
+     * Writes raw profile configuration to filesystem without validation
      *
      * Creates the profile directory if it doesn't exist.
      * Performs atomic write with automatic backup.
      *
      * @param profile - Profile name
-     * @param config - Configuration object to write
-     * @throws {Error} If validation fails or write operation fails
-     *
-     * @example
-     * ```typescript
-     * xdg.writeProfile("default", {
-     *   quilt: { ... },
-     *   benchling: { ... },
-     *   packages: { ... },
-     *   deployment: { ... },
-     *   _metadata: {
-     *     version: "0.7.0",
-     *     createdAt: new Date().toISOString(),
-     *     updatedAt: new Date().toISOString(),
-     *     source: "wizard"
-     *   }
-     * });
-     * ```
+     * @param config - Configuration to write
+     * @throws {Error} If write fails
      */
-    public writeProfile(profile: string, config: ProfileConfig): void {
-        // Validate configuration before writing
-        const validation = this.validateProfile(config);
-        if (!validation.isValid) {
-            throw new Error(`Invalid configuration:\n${validation.errors.join("\n")}`);
-        }
-
+    protected writeProfileRaw(profile: string, config: ProfileConfig): void {
         // Ensure profile directory exists
-        const profileDir = this.getProfileDir(profile);
+        const profileDir = this.getProfilePath(profile);
         if (!existsSync(profileDir)) {
             mkdirSync(profileDir, { recursive: true });
         }
@@ -235,48 +163,26 @@ export class XDGConfig {
     }
 
     /**
-     * Deletes a profile and all its files
+     * Deletes profile and all associated data from filesystem
      *
-     * WARNING: This is a destructive operation!
-     * Cannot delete the "default" profile.
-     *
-     * @param profile - Profile name to delete
-     * @throws {Error} If attempting to delete default profile or if deletion fails
-     *
-     * @example
-     * ```typescript
-     * xdg.deleteProfile("dev");
-     * ```
+     * @param profile - Profile name
+     * @throws {Error} If deletion fails
      */
-    public deleteProfile(profile: string): void {
-        if (profile === "default") {
-            throw new Error("Cannot delete the default profile");
-        }
-
-        const profileDir = this.getProfileDir(profile);
-        if (!existsSync(profileDir)) {
-            throw new Error(`Profile does not exist: ${profile}`);
-        }
-
+    protected deleteProfileRaw(profile: string): void {
+        const profileDir = this.getProfilePath(profile);
         try {
             rmSync(profileDir, { recursive: true, force: true });
         } catch (error) {
-            throw new Error(`Failed to delete profile: ${(error as Error).message}`);
+            throw new Error(`Failed to delete profile directory: ${(error as Error).message}`);
         }
     }
 
     /**
-     * Lists all available profiles
+     * Lists all profile names from filesystem
      *
      * @returns Array of profile names
-     *
-     * @example
-     * ```typescript
-     * const profiles = xdg.listProfiles();
-     * console.log(profiles); // ["default", "dev", "prod"]
-     * ```
      */
-    public listProfiles(): string[] {
+    protected listProfilesRaw(): string[] {
         if (!existsSync(this.baseDir)) {
             return [];
         }
@@ -293,50 +199,28 @@ export class XDGConfig {
     }
 
     /**
-     * Checks if a profile exists
+     * Checks if profile exists on filesystem
      *
-     * @param profile - Profile name to check
-     * @returns True if profile exists and has valid config.json, false otherwise
-     *
-     * @example
-     * ```typescript
-     * if (xdg.profileExists("dev")) {
-     *   const config = xdg.readProfile("dev");
-     * }
-     * ```
+     * @param profile - Profile name
+     * @returns True if profile exists
      */
-    public profileExists(profile: string): boolean {
+    protected profileExistsRaw(profile: string): boolean {
         const configPath = this.getProfileConfigPath(profile);
         return existsSync(configPath);
     }
 
-    // ====================================================================
-    // Deployment Tracking
-    // ====================================================================
-
     /**
-     * Gets deployment history for a profile
-     *
-     * Returns empty history if deployments.json doesn't exist.
+     * Reads raw deployment history from filesystem without validation
      *
      * @param profile - Profile name
-     * @returns Deployment history with active deployments and full history
-     *
-     * @example
-     * ```typescript
-     * const deployments = xdg.getDeployments("default");
-     * console.log(deployments.active["prod"]); // Active prod deployment
-     * console.log(deployments.history[0]); // Most recent deployment
-     * ```
+     * @returns Deployment history or null if none exists
+     * @throws {Error} If read fails
      */
-    public getDeployments(profile: string): DeploymentHistory {
-        const deploymentsPath = this.getProfileDeploymentsPath(profile);
+    protected readDeploymentsRaw(profile: string): DeploymentHistory | null {
+        const deploymentsPath = this.getDeploymentsPath(profile);
 
         if (!existsSync(deploymentsPath)) {
-            return {
-                active: {},
-                history: [],
-            };
+            return null;
         }
 
         let fileContent: string;
@@ -353,69 +237,24 @@ export class XDGConfig {
             throw new Error(`Invalid JSON in deployments file: ${deploymentsPath}. ${(error as Error).message}`);
         }
 
-        // Validate schema
-        const ajv = new Ajv();
-        addFormats(ajv);
-        const validate = ajv.compile(DeploymentHistorySchema);
-        const valid = validate(deployments);
-
-        if (!valid) {
-            const errors = validate.errors?.map((err) => `${err.instancePath} ${err.message}`).join(", ");
-            throw new Error(`Invalid deployments schema in ${deploymentsPath}: ${errors}`);
-        }
-
         return deployments;
     }
 
     /**
-     * Records a new deployment for a profile
-     *
-     * Adds deployment to history and updates active deployment for the stage.
-     * Creates deployments.json if it doesn't exist.
+     * Writes raw deployment history to filesystem without validation
      *
      * @param profile - Profile name
-     * @param deployment - Deployment record to add
-     *
-     * @example
-     * ```typescript
-     * xdg.recordDeployment("default", {
-     *   stage: "prod",
-     *   timestamp: new Date().toISOString(),
-     *   imageTag: "0.7.0",
-     *   endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/prod",
-     *   stackName: "BenchlingWebhookStack",
-     *   region: "us-east-1",
-     *   deployedBy: "ernest@example.com",
-     *   commit: "abc123f"
-     * });
-     * ```
+     * @param history - Deployment history to write
+     * @throws {Error} If write fails
      */
-    public recordDeployment(profile: string, deployment: DeploymentRecord): void {
+    protected writeDeploymentsRaw(profile: string, history: DeploymentHistory): void {
         // Ensure profile directory exists
-        const profileDir = this.getProfileDir(profile);
+        const profileDir = this.getProfilePath(profile);
         if (!existsSync(profileDir)) {
             mkdirSync(profileDir, { recursive: true });
         }
 
-        // Load existing deployments or create new
-        let deployments: DeploymentHistory;
-        try {
-            deployments = this.getDeployments(profile);
-        } catch {
-            deployments = {
-                active: {},
-                history: [],
-            };
-        }
-
-        // Add to history (newest first)
-        deployments.history.unshift(deployment);
-
-        // Update active deployment for this stage
-        deployments.active[deployment.stage] = deployment;
-
-        // Write deployments file
-        const deploymentsPath = this.getProfileDeploymentsPath(profile);
+        const deploymentsPath = this.getDeploymentsPath(profile);
         const backupPath = `${deploymentsPath}.backup`;
 
         // Create backup if file exists
@@ -432,7 +271,7 @@ export class XDGConfig {
             profileDir,
             `.deployments.json.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         );
-        const deploymentsJson = JSON.stringify(deployments, null, 4);
+        const deploymentsJson = JSON.stringify(history, null, 4);
 
         try {
             writeFileSync(tempPath, deploymentsJson, "utf-8");
@@ -455,166 +294,36 @@ export class XDGConfig {
         }
     }
 
+    // ====================================================================
+    // Filesystem Path Helpers
+    // ====================================================================
+
     /**
-     * Gets the active deployment for a specific stage
+     * Gets the default XDG base directory
      *
-     * @param profile - Profile name
-     * @param stage - Stage name (e.g., "dev", "prod")
-     * @returns Active deployment record for the stage, or null if none exists
+     * Respects XDG_CONFIG_HOME environment variable per XDG Base Directory spec.
      *
-     * @example
-     * ```typescript
-     * const prodDeployment = xdg.getActiveDeployment("default", "prod");
-     * if (prodDeployment) {
-     *   console.log("Prod endpoint:", prodDeployment.endpoint);
-     * }
-     * ```
+     * @returns The default base directory path (~/.config/benchling-webhook or $XDG_CONFIG_HOME/benchling-webhook)
      */
-    public getActiveDeployment(profile: string, stage: string): DeploymentRecord | null {
-        try {
-            const deployments = this.getDeployments(profile);
-            return deployments.active[stage] || null;
-        } catch {
-            return null;
+    private getDefaultBaseDir(): string {
+        const xdgConfigHome = process.env.XDG_CONFIG_HOME;
+        if (xdgConfigHome) {
+            return resolve(xdgConfigHome, "benchling-webhook");
+        }
+        const home = homedir();
+        return resolve(home, ".config", "benchling-webhook");
+    }
+
+    /**
+     * Ensures the base configuration directory exists
+     *
+     * @throws {Error} If directory creation fails
+     */
+    private ensureBaseDirectoryExists(): void {
+        if (!existsSync(this.baseDir)) {
+            mkdirSync(this.baseDir, { recursive: true });
         }
     }
-
-    // ====================================================================
-    // Profile Inheritance
-    // ====================================================================
-
-    /**
-     * Reads profile configuration with inheritance support
-     *
-     * If the profile has an `_inherits` field, loads the base profile first
-     * and deep merges the current profile on top.
-     *
-     * Detects and prevents circular inheritance chains.
-     *
-     * @param profile - Profile name to read
-     * @param baseProfile - Optional explicit base profile (overrides `_inherits`)
-     * @returns Merged configuration with inheritance applied
-     * @throws {Error} If circular inheritance is detected
-     *
-     * @example
-     * ```typescript
-     * // dev/config.json has "_inherits": "default"
-     * const devConfig = xdg.readProfileWithInheritance("dev");
-     * // Returns default config deep-merged with dev overrides
-     * ```
-     */
-    public readProfileWithInheritance(profile: string, baseProfile?: string): ProfileConfig {
-        const visited = new Set<string>();
-        return this.readProfileWithInheritanceInternal(profile, baseProfile, visited);
-    }
-
-    /**
-     * Internal recursive implementation of profile inheritance
-     *
-     * @param profile - Current profile name
-     * @param explicitBase - Explicitly specified base profile
-     * @param visited - Set of visited profiles (for circular detection)
-     * @returns Merged configuration
-     * @throws {Error} If circular inheritance is detected
-     */
-    private readProfileWithInheritanceInternal(
-        profile: string,
-        explicitBase: string | undefined,
-        visited: Set<string>,
-    ): ProfileConfig {
-        // Detect circular inheritance
-        if (visited.has(profile)) {
-            const chain = Array.from(visited).join(" -> ");
-            throw new Error(`Circular inheritance detected: ${chain} -> ${profile}`);
-        }
-
-        visited.add(profile);
-
-        // Read current profile
-        const config = this.readProfile(profile);
-
-        // Determine base profile
-        const baseProfileName = explicitBase || config._inherits;
-
-        // No inheritance - return as-is
-        if (!baseProfileName) {
-            return config;
-        }
-
-        // Load base profile with inheritance
-        const baseConfig = this.readProfileWithInheritanceInternal(baseProfileName, undefined, visited);
-
-        // Deep merge: base config first, then current profile overrides
-        const merged = this.deepMergeConfigs(baseConfig, config);
-
-        // Remove _inherits from final result (it's already applied)
-        delete merged._inherits;
-
-        return merged;
-    }
-
-    /**
-     * Deep merges two profile configurations
-     *
-     * Nested objects are merged recursively.
-     * Arrays are replaced (not concatenated).
-     * Current config takes precedence over base config.
-     *
-     * @param base - Base configuration
-     * @param current - Current configuration (takes precedence)
-     * @returns Merged configuration
-     */
-    private deepMergeConfigs(base: ProfileConfig, current: ProfileConfig): ProfileConfig {
-        return merge({}, base, current);
-    }
-
-    // ====================================================================
-    // Validation
-    // ====================================================================
-
-    /**
-     * Validates a profile configuration against the schema
-     *
-     * @param config - Configuration object to validate
-     * @returns Validation result with errors and warnings
-     *
-     * @example
-     * ```typescript
-     * const validation = xdg.validateProfile(config);
-     * if (!validation.isValid) {
-     *   console.error("Validation errors:", validation.errors);
-     * }
-     * ```
-     */
-    public validateProfile(config: ProfileConfig): ValidationResult {
-        const ajv = new Ajv({ allErrors: true, strict: false });
-        addFormats(ajv);
-        const validate = ajv.compile(ProfileConfigSchema);
-        const valid = validate(config);
-
-        if (valid) {
-            return {
-                isValid: true,
-                errors: [],
-                warnings: [],
-            };
-        }
-
-        const errors = validate.errors?.map((err) => {
-            const path = err.instancePath || "(root)";
-            return `${path}: ${err.message}`;
-        }) || [];
-
-        return {
-            isValid: false,
-            errors,
-            warnings: [],
-        };
-    }
-
-    // ====================================================================
-    // Path Helpers
-    // ====================================================================
 
     /**
      * Gets the directory path for a profile
@@ -622,7 +331,7 @@ export class XDGConfig {
      * @param profile - Profile name
      * @returns Absolute path to profile directory
      */
-    private getProfileDir(profile: string): string {
+    private getProfilePath(profile: string): string {
         return join(this.baseDir, profile);
     }
 
@@ -633,7 +342,7 @@ export class XDGConfig {
      * @returns Absolute path to config.json
      */
     private getProfileConfigPath(profile: string): string {
-        return join(this.getProfileDir(profile), "config.json");
+        return join(this.getProfilePath(profile), "config.json");
     }
 
     /**
@@ -642,32 +351,39 @@ export class XDGConfig {
      * @param profile - Profile name
      * @returns Absolute path to deployments.json
      */
-    private getProfileDeploymentsPath(profile: string): string {
-        return join(this.getProfileDir(profile), "deployments.json");
+    private getDeploymentsPath(profile: string): string {
+        return join(this.getProfilePath(profile), "deployments.json");
     }
 
     // ====================================================================
-    // Error Messages
+    // Filesystem-Specific Features
     // ====================================================================
 
     /**
-     * Builds a helpful error message when a profile is not found
+     * Detects legacy v0.6.x configuration files
      *
-     * Detects legacy v0.6.x configuration files and provides upgrade guidance.
-     *
-     * @param profile - Profile name that was not found
-     * @returns Formatted error message
+     * @returns True if legacy files are detected
      */
-    private buildProfileNotFoundError(profile: string): string {
+    public detectLegacyConfiguration(): boolean {
         const legacyFiles = [
             join(this.baseDir, "default.json"),
             join(this.baseDir, "deploy.json"),
             join(this.baseDir, "profiles"),
         ];
 
-        const hasLegacyFiles = legacyFiles.some((f) => existsSync(f));
+        return legacyFiles.some((f) => existsSync(f));
+    }
 
-        if (hasLegacyFiles) {
+    /**
+     * Builds a helpful error message when a profile is not found
+     *
+     * Overrides base class to add legacy configuration detection.
+     *
+     * @param profile - Profile name that was not found
+     * @returns Formatted error message
+     */
+    protected buildProfileNotFoundError(profile: string): string {
+        if (this.detectLegacyConfiguration()) {
             return `
 Profile not found: ${profile}
 
@@ -685,15 +401,6 @@ You can manually reference these files to re-enter your settings.
             `.trim();
         }
 
-        return `
-Profile not found: ${profile}
-
-No configuration found for profile: ${profile}
-
-Run setup wizard to create configuration:
-  npx @quiltdata/benchling-webhook@latest setup
-
-Available profiles: ${this.listProfiles().join(", ") || "(none)"}
-        `.trim();
+        return super.buildProfileNotFoundError(profile);
     }
 }

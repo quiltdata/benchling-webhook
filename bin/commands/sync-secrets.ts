@@ -25,6 +25,7 @@ import {
     ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 import { XDGConfig } from "../../lib/xdg-config";
+import type { XDGBase } from "../../lib/xdg-base";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { ProfileConfig, ProfileName } from "../../lib/types/config";
 import { generateSecretName } from "../../lib/utils/secrets";
@@ -38,6 +39,7 @@ interface SyncSecretsOptions {
     region?: string;
     dryRun?: boolean;
     force?: boolean;
+    configStorage?: XDGBase; // Dependency injection for testing
 }
 
 /**
@@ -320,13 +322,13 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
  * @returns Array of sync results
  */
 export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promise<SyncResult[]> {
-    const { profile = "default", awsProfile, region = "us-east-1", dryRun = false, force = false } = options;
+    const { profile = "default", awsProfile, region = "us-east-1", dryRun = false, force = false, configStorage } = options;
 
     const results: SyncResult[] = [];
 
     // Step 1: Load configuration
     console.log(`Loading configuration from profile: ${profile}...`);
-    const xdgConfig = new XDGConfig();
+    const xdgConfig = configStorage || new XDGConfig();
 
     let config: ProfileConfig;
     try {
@@ -439,11 +441,12 @@ export async function getSecretsFromAWS(options: {
     profile?: ProfileName;
     awsProfile?: string;
     region?: string;
+    configStorage?: XDGBase;
 }): Promise<Record<string, string>> {
-    const { profile = "default", awsProfile, region = "us-east-1" } = options;
+    const { profile = "default", awsProfile, region = "us-east-1", configStorage } = options;
 
     // Load configuration
-    const xdgConfig = new XDGConfig();
+    const xdgConfig = configStorage || new XDGConfig();
     const config = xdgConfig.readProfile(profile);
 
     if (!config.benchling.secretArn) {
@@ -470,6 +473,7 @@ export async function validateSecretsAccess(options: {
     profile?: ProfileName;
     awsProfile?: string;
     region?: string;
+    configStorage?: XDGBase;
 }): Promise<boolean> {
     try {
         await getSecretsFromAWS(options);

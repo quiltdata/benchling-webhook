@@ -1,8 +1,5 @@
-import { XDGConfig } from "../lib/xdg-config";
+import { XDGTest } from "./helpers/xdg-test";
 import { ProfileConfig } from "../lib/types/config";
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
 
 /**
  * Multi-Environment Profile Tests
@@ -11,10 +8,8 @@ import * as os from "os";
  * Related: Issue #176 - Test Production Deployments
  * Spec: spec/176-test-prod/13-multi-environment-architecture-spec.md
  */
-describe("XDGConfig - Multi-Environment Profile Support", () => {
-    let xdg: XDGConfig;
-    let testConfigDir: string;
-    let originalXdgConfigHome: string | undefined;
+describe("XDGTest - Multi-Environment Profile Support", () => {
+    let mockStorage: XDGTest;
 
     // Helper function to create a valid test config
     const createTestConfig = (overrides: Partial<ProfileConfig> = {}): ProfileConfig => {
@@ -77,38 +72,21 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
     };
 
     beforeEach(() => {
-        // Save original XDG_CONFIG_HOME
-        originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
-
-        // Create temporary config directory for testing
-        testConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), "benchling-webhook-test-"));
-        process.env.XDG_CONFIG_HOME = testConfigDir;
-
-        xdg = new XDGConfig();
+        mockStorage = new XDGTest();
     });
 
     afterEach(() => {
-        // Restore original XDG_CONFIG_HOME
-        if (originalXdgConfigHome) {
-            process.env.XDG_CONFIG_HOME = originalXdgConfigHome;
-        } else {
-            delete process.env.XDG_CONFIG_HOME;
-        }
-
-        // Clean up test directory
-        if (fs.existsSync(testConfigDir)) {
-            fs.rmSync(testConfigDir, { recursive: true, force: true });
-        }
+        mockStorage.clear();
     });
 
     describe("Configuration Management", () => {
         test("writes configuration to default profile", () => {
             const config = createTestConfig();
 
-            xdg.writeProfile("default", config);
+            mockStorage.writeProfile("default", config);
 
             // Verify file was created by reading it back
-            const readConfig = xdg.readProfile("default");
+            const readConfig = mockStorage.readProfile("default");
             expect(readConfig.benchling.tenant).toBe("test-tenant");
         });
 
@@ -126,8 +104,8 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
                 },
             });
 
-            xdg.writeProfile("default", config);
-            const readConfig = xdg.readProfile("default");
+            mockStorage.writeProfile("default", config);
+            const readConfig = mockStorage.readProfile("default");
 
             expect(readConfig.benchling.tenant).toBe("dev-tenant");
             expect(readConfig.benchling.appDefinitionId).toBe("app_DEV_456");
@@ -136,7 +114,7 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
 
         test("handles missing configuration gracefully", () => {
             expect(() => {
-                xdg.readProfile("nonexistent");
+                mockStorage.readProfile("nonexistent");
             }).toThrow(/Profile not found: nonexistent/);
         });
     });
@@ -145,27 +123,27 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
         test("creates profile directory", () => {
             const config = createTestConfig();
 
-            xdg.writeProfile("default", config);
+            mockStorage.writeProfile("default", config);
 
             // XDGConfig creates profiles under ~/.config/benchling-webhook/<profile>/
             // Since we set XDG_CONFIG_HOME to testConfigDir, the profile dir will be:
             // testConfigDir/.config/benchling-webhook/default OR testConfigDir/benchling-webhook/default
             // Let's check if the profile exists using the API instead
-            expect(xdg.profileExists("default")).toBe(true);
+            expect(mockStorage.profileExists("default")).toBe(true);
         });
 
         test("supports multiple profile directories", () => {
             const baseConfig = createTestConfig();
 
-            xdg.writeProfile("default", baseConfig);
-            xdg.writeProfile("dev", baseConfig);
+            mockStorage.writeProfile("default", baseConfig);
+            mockStorage.writeProfile("dev", baseConfig);
 
             // Verify both profiles exist using the API
-            expect(xdg.profileExists("default")).toBe(true);
-            expect(xdg.profileExists("dev")).toBe(true);
+            expect(mockStorage.profileExists("default")).toBe(true);
+            expect(mockStorage.profileExists("dev")).toBe(true);
 
             // Verify they are listed
-            const profiles = xdg.listProfiles();
+            const profiles = mockStorage.listProfiles();
             expect(profiles).toContain("default");
             expect(profiles).toContain("dev");
         });
@@ -184,8 +162,8 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
                 },
             });
 
-            xdg.writeProfile("dev", config);
-            const readConfig = xdg.readProfile("dev");
+            mockStorage.writeProfile("dev", config);
+            const readConfig = mockStorage.readProfile("dev");
 
             expect(readConfig.benchling.tenant).toBe("dev-tenant");
             expect(readConfig.deployment.imageTag).toBe("latest");
@@ -194,10 +172,10 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
         test("lists available profiles", () => {
             const baseConfig = createTestConfig();
 
-            xdg.writeProfile("default", baseConfig);
-            xdg.writeProfile("dev", baseConfig);
+            mockStorage.writeProfile("default", baseConfig);
+            mockStorage.writeProfile("dev", baseConfig);
 
-            const profiles = xdg.listProfiles();
+            const profiles = mockStorage.listProfiles();
 
             expect(profiles).toContain("default");
             expect(profiles).toContain("dev");
@@ -206,10 +184,10 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
         test("checks if profile exists", () => {
             const config = createTestConfig();
 
-            xdg.writeProfile("custom", config);
+            mockStorage.writeProfile("custom", config);
 
-            expect(xdg.profileExists("custom")).toBe(true);
-            expect(xdg.profileExists("nonexistent")).toBe(false);
+            expect(mockStorage.profileExists("custom")).toBe(true);
+            expect(mockStorage.profileExists("nonexistent")).toBe(false);
         });
 
         test("reads profile by name", () => {
@@ -238,8 +216,8 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
                 },
             });
 
-            xdg.writeProfile("custom", config);
-            const loadedProfile = xdg.readProfile("custom");
+            mockStorage.writeProfile("custom", config);
+            const loadedProfile = mockStorage.readProfile("custom");
 
             expect(loadedProfile.benchling.tenant).toBe("custom-tenant");
             expect(loadedProfile.quilt.stackArn).toContain("custom-stack");
@@ -247,11 +225,11 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
 
         test("profile config paths are different for different profiles", () => {
             // This test verifies the structure without hard-coding paths
-            xdg.writeProfile("default", createTestConfig());
-            xdg.writeProfile("dev", createTestConfig());
+            mockStorage.writeProfile("default", createTestConfig());
+            mockStorage.writeProfile("dev", createTestConfig());
 
-            const defaultConfig = xdg.readProfile("default");
-            const devConfig = xdg.readProfile("dev");
+            const defaultConfig = mockStorage.readProfile("default");
+            const devConfig = mockStorage.readProfile("dev");
 
             // Both should be readable independently
             expect(defaultConfig).toBeDefined();
@@ -303,10 +281,10 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
         test("deployments.json supports both dev and prod sections", () => {
             const config = createTestConfig();
 
-            xdg.writeProfile("default", config);
+            mockStorage.writeProfile("default", config);
 
             // Record both dev and prod deployments
-            xdg.recordDeployment("default", {
+            mockStorage.recordDeployment("default", {
                 stage: "dev",
                 timestamp: new Date().toISOString(),
                 imageTag: "latest",
@@ -315,7 +293,7 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
                 region: "us-east-1",
             });
 
-            xdg.recordDeployment("default", {
+            mockStorage.recordDeployment("default", {
                 stage: "prod",
                 timestamp: new Date().toISOString(),
                 imageTag: "v0.6.3",
@@ -324,7 +302,7 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
                 region: "us-east-1",
             });
 
-            const deployments = xdg.getDeployments("default");
+            const deployments = mockStorage.getDeployments("default");
 
             // Verify structure supports both environments
             expect(deployments.active["dev"]).toBeDefined();
@@ -338,8 +316,8 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
         test("default configuration works as expected", () => {
             const config = createTestConfig();
 
-            xdg.writeProfile("default", config);
-            const readConfig = xdg.readProfile("default");
+            mockStorage.writeProfile("default", config);
+            const readConfig = mockStorage.readProfile("default");
 
             expect(readConfig.benchling.tenant).toBe("test-tenant");
         });
@@ -347,23 +325,15 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
         test("handles missing optional dev profile gracefully", () => {
             const config = createTestConfig();
 
-            // Create a completely fresh directory for this test
-            const freshConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), "benchling-webhook-isolated-"));
-            const freshXdg = new XDGConfig(path.join(freshConfigDir, "benchling-webhook"));
+            // Create a fresh mock storage for this test
+            const freshStorage = new XDGTest();
 
-            try {
-                // Only create default profile
-                freshXdg.writeProfile("default", config);
+            // Only create default profile
+            freshStorage.writeProfile("default", config);
 
-                const profiles = freshXdg.listProfiles();
-                expect(profiles).toContain("default");
-                expect(profiles.length).toBe(1);
-            } finally {
-                // Clean up the isolated directory
-                if (fs.existsSync(freshConfigDir)) {
-                    fs.rmSync(freshConfigDir, { recursive: true, force: true });
-                }
-            }
+            const profiles = freshStorage.listProfiles();
+            expect(profiles).toContain("default");
+            expect(profiles.length).toBe(1);
         });
     });
 
@@ -371,22 +341,22 @@ describe("XDGConfig - Multi-Environment Profile Support", () => {
         test("can delete a profile", () => {
             const config = createTestConfig();
 
-            xdg.writeProfile("temp", config);
+            mockStorage.writeProfile("temp", config);
 
-            expect(xdg.profileExists("temp")).toBe(true);
+            expect(mockStorage.profileExists("temp")).toBe(true);
 
-            xdg.deleteProfile("temp");
+            mockStorage.deleteProfile("temp");
 
-            expect(xdg.profileExists("temp")).toBe(false);
+            expect(mockStorage.profileExists("temp")).toBe(false);
         });
 
         test("cannot delete default profile", () => {
             const config = createTestConfig();
 
-            xdg.writeProfile("default", config);
+            mockStorage.writeProfile("default", config);
 
             expect(() => {
-                xdg.deleteProfile("default");
+                mockStorage.deleteProfile("default");
             }).toThrow(/Cannot delete the default profile/);
         });
     });

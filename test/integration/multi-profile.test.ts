@@ -4,28 +4,18 @@
  * Tests complete workflow with multiple profiles and deployment tracking.
  */
 
-import { XDGConfig } from "../../lib/xdg-config";
+import { XDGTest } from "../helpers/xdg-test";
 import { ProfileConfig, DeploymentRecord } from "../../lib/types/config";
-import { mkdirSync, existsSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
 
 describe("Multi-Profile Integration", () => {
-    let testBaseDir: string;
-    let xdg: XDGConfig;
+    let mockStorage: XDGTest;
 
     beforeEach(() => {
-        // Create temporary test directory for each test
-        testBaseDir = join(tmpdir(), `xdg-multi-test-${Date.now()}-${Math.random().toString(36).substring(7)}`);
-        mkdirSync(testBaseDir, { recursive: true });
-        xdg = new XDGConfig(testBaseDir);
+        mockStorage = new XDGTest();
     });
 
     afterEach(() => {
-        // Clean up test directory after each test
-        if (existsSync(testBaseDir)) {
-            rmSync(testBaseDir, { recursive: true, force: true });
-        }
+        mockStorage.clear();
     });
 
     describe("multi-profile setup workflow", () => {
@@ -61,7 +51,7 @@ describe("Multi-Profile Integration", () => {
                 },
             };
 
-            xdg.writeProfile("default", defaultConfig);
+            mockStorage.writeProfile("default", defaultConfig);
 
             // Create dev profile
             const devConfig: ProfileConfig = {
@@ -97,16 +87,16 @@ describe("Multi-Profile Integration", () => {
                 },
             };
 
-            xdg.writeProfile("dev", devConfig);
+            mockStorage.writeProfile("dev", devConfig);
 
             // Verify both profiles exist
-            const profiles = xdg.listProfiles();
+            const profiles = mockStorage.listProfiles();
             expect(profiles).toContain("default");
             expect(profiles).toContain("dev");
 
             // Verify they are independent
-            const readDefault = xdg.readProfile("default");
-            const readDev = xdg.readProfile("dev");
+            const readDefault = mockStorage.readProfile("default");
+            const readDev = mockStorage.readProfile("dev");
 
             expect(readDefault.deployment.imageTag).toBe("0.7.0");
             expect(readDev.deployment.imageTag).toBe("latest");
@@ -144,7 +134,7 @@ describe("Multi-Profile Integration", () => {
                 },
             };
 
-            xdg.writeProfile("default", defaultConfig);
+            mockStorage.writeProfile("default", defaultConfig);
 
             // Create dev profile that inherits from default
             const devConfig: ProfileConfig = {
@@ -181,10 +171,10 @@ describe("Multi-Profile Integration", () => {
                 },
             };
 
-            xdg.writeProfile("dev", devConfig);
+            mockStorage.writeProfile("dev", devConfig);
 
             // Read with inheritance
-            const resolvedDev = xdg.readProfileWithInheritance("dev");
+            const resolvedDev = mockStorage.readProfileWithInheritance("dev");
 
             // Should inherit shared values from default
             expect(resolvedDev.benchling.tenant).toBe("shared-tenant");
@@ -227,7 +217,7 @@ describe("Multi-Profile Integration", () => {
                 },
             };
 
-            xdg.writeProfile("default", defaultConfig);
+            mockStorage.writeProfile("default", defaultConfig);
 
             // Create dev profile
             const devConfig: ProfileConfig = {
@@ -259,7 +249,7 @@ describe("Multi-Profile Integration", () => {
                 },
             };
 
-            xdg.writeProfile("dev", devConfig);
+            mockStorage.writeProfile("dev", devConfig);
 
             // Deploy default profile to prod stage
             const prodDeployment: DeploymentRecord = {
@@ -273,7 +263,7 @@ describe("Multi-Profile Integration", () => {
                 commit: "abc123",
             };
 
-            xdg.recordDeployment("default", prodDeployment);
+            mockStorage.recordDeployment("default", prodDeployment);
 
             // Deploy dev profile to dev stage
             const devDeployment: DeploymentRecord = {
@@ -287,11 +277,11 @@ describe("Multi-Profile Integration", () => {
                 commit: "xyz789",
             };
 
-            xdg.recordDeployment("dev", devDeployment);
+            mockStorage.recordDeployment("dev", devDeployment);
 
             // Verify deployments are tracked independently
-            const defaultDeployments = xdg.getDeployments("default");
-            const devDeployments = xdg.getDeployments("dev");
+            const defaultDeployments = mockStorage.getDeployments("default");
+            const devDeployments = mockStorage.getDeployments("dev");
 
             expect(defaultDeployments.active["prod"]).toEqual(prodDeployment);
             expect(devDeployments.active["dev"]).toEqual(devDeployment);
@@ -331,7 +321,7 @@ describe("Multi-Profile Integration", () => {
                 },
             };
 
-            xdg.writeProfile("default", defaultConfig);
+            mockStorage.writeProfile("default", defaultConfig);
 
             // Deploy to dev stage
             const devDeployment: DeploymentRecord = {
@@ -343,7 +333,7 @@ describe("Multi-Profile Integration", () => {
                 region: "us-east-1",
             };
 
-            xdg.recordDeployment("default", devDeployment);
+            mockStorage.recordDeployment("default", devDeployment);
 
             // Deploy to staging stage
             const stagingDeployment: DeploymentRecord = {
@@ -355,7 +345,7 @@ describe("Multi-Profile Integration", () => {
                 region: "us-east-1",
             };
 
-            xdg.recordDeployment("default", stagingDeployment);
+            mockStorage.recordDeployment("default", stagingDeployment);
 
             // Deploy to prod stage
             const prodDeployment: DeploymentRecord = {
@@ -367,10 +357,10 @@ describe("Multi-Profile Integration", () => {
                 region: "us-east-1",
             };
 
-            xdg.recordDeployment("default", prodDeployment);
+            mockStorage.recordDeployment("default", prodDeployment);
 
             // Verify all stages are tracked
-            const deployments = xdg.getDeployments("default");
+            const deployments = mockStorage.getDeployments("default");
 
             expect(Object.keys(deployments.active)).toEqual(["dev", "staging", "prod"]);
             expect(deployments.active["dev"]).toEqual(devDeployment);
@@ -441,18 +431,18 @@ describe("Multi-Profile Integration", () => {
                 },
             };
 
-            xdg.writeProfile("default", defaultConfig);
-            xdg.writeProfile("dev", devConfig);
+            mockStorage.writeProfile("default", defaultConfig);
+            mockStorage.writeProfile("dev", devConfig);
 
-            expect(xdg.listProfiles().length).toBe(2);
+            expect(mockStorage.listProfiles().length).toBe(2);
 
             // 2. Update a profile
             const updatedDevConfig = { ...devConfig };
             updatedDevConfig._metadata.updatedAt = "2025-11-04T12:00:00Z";
 
-            xdg.writeProfile("dev", updatedDevConfig);
+            mockStorage.writeProfile("dev", updatedDevConfig);
 
-            const readDev = xdg.readProfile("dev");
+            const readDev = mockStorage.readProfile("dev");
 
             // 3. Record deployments
             const deployment: DeploymentRecord = {
@@ -464,16 +454,16 @@ describe("Multi-Profile Integration", () => {
                 region: "us-east-1",
             };
 
-            xdg.recordDeployment("dev", deployment);
+            mockStorage.recordDeployment("dev", deployment);
 
-            const deployments = xdg.getDeployments("dev");
+            const deployments = mockStorage.getDeployments("dev");
             expect(deployments.active["dev"]).toBeDefined();
 
             // 4. Delete a profile
-            xdg.deleteProfile("dev");
+            mockStorage.deleteProfile("dev");
 
-            expect(xdg.profileExists("dev")).toBe(false);
-            expect(xdg.listProfiles()).toEqual(["default"]);
+            expect(mockStorage.profileExists("dev")).toBe(false);
+            expect(mockStorage.listProfiles()).toEqual(["default"]);
         });
 
         it("should isolate profile updates from each other", () => {
@@ -535,18 +525,18 @@ describe("Multi-Profile Integration", () => {
                 },
             };
 
-            xdg.writeProfile("profile1", profile1);
-            xdg.writeProfile("profile2", profile2);
+            mockStorage.writeProfile("profile1", profile1);
+            mockStorage.writeProfile("profile2", profile2);
 
             // Update profile1
             const updatedProfile1 = { ...profile1 };
-            xdg.writeProfile("profile1", updatedProfile1);
+            mockStorage.writeProfile("profile1", updatedProfile1);
 
             // Verify profile2 is unchanged
-            const readProfile2 = xdg.readProfile("profile2");
+            const readProfile2 = mockStorage.readProfile("profile2");
 
             // Verify profile1 was updated
-            const readProfile1 = xdg.readProfile("profile1");
+            const readProfile1 = mockStorage.readProfile("profile1");
         });
     });
 });

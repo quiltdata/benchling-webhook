@@ -7,35 +7,22 @@ import {
     CreateSecretCommand,
 } from "@aws-sdk/client-secrets-manager";
 import type { UpdateSecretCommandInput } from "@aws-sdk/client-secrets-manager";
-import { XDGConfig } from "../lib/xdg-config";
+import { XDGTest } from "./helpers/xdg-test";
 import type { ProfileConfig } from "../lib/types/config";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
 
 describe("sync-secrets CLI", () => {
-    const originalHome = process.env.HOME;
-    let tempHomeDir: string;
+    let mockStorage: XDGTest;
     let sendMock: jest.SpyInstance;
 
     beforeEach(() => {
-        tempHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "benchling-sync-secrets-"));
-        process.env.HOME = tempHomeDir;
+        // Create a fresh mock storage for each test
+        mockStorage = new XDGTest();
         sendMock = jest.spyOn(SecretsManagerClient.prototype, "send");
     });
 
     afterEach(() => {
         sendMock.mockRestore();
-
-        if (originalHome !== undefined) {
-            process.env.HOME = originalHome;
-        } else {
-            delete process.env.HOME;
-        }
-
-        if (tempHomeDir && fs.existsSync(tempHomeDir)) {
-            fs.rmSync(tempHomeDir, { recursive: true, force: true });
-        }
+        mockStorage.clear();
     });
 
     test("updates secret with actual client_secret value instead of secret name placeholder", async () => {
@@ -45,7 +32,6 @@ describe("sync-secrets CLI", () => {
         const existingSecretArn =
             "arn:aws:secretsmanager:us-east-1:123456789012:secret:existing-secret-abc123";
 
-        const xdg = new XDGConfig();
         const timestamp = new Date().toISOString();
         const profileConfig: ProfileConfig = {
             benchling: {
@@ -86,7 +72,8 @@ describe("sync-secrets CLI", () => {
             },
         };
 
-        xdg.writeProfile(profileName, profileConfig);
+        // Write to mock storage instead of filesystem
+        mockStorage.writeProfile(profileName, profileConfig);
 
         const existingSecretValue = {
             tenant,
@@ -120,7 +107,12 @@ describe("sync-secrets CLI", () => {
             throw new Error(`Unexpected command: ${command.constructor.name}`);
         });
 
-        const results = await syncSecretsToAWS({ profile: profileName, region: "us-east-1", force: true });
+        const results = await syncSecretsToAWS({
+            profile: profileName,
+            region: "us-east-1",
+            force: true,
+            configStorage: mockStorage
+        });
 
         expect(results).toHaveLength(1);
         expect(results[0].action).toBe("updated");
