@@ -5,13 +5,13 @@
  */
 
 import { ProfileConfig, DeploymentRecord } from "../../lib/types/config";
-import { MockConfigStorage } from "../mocks";
+import { XDGTest } from "../helpers/xdg-test";
 
 describe("XDGConfig", () => {
-    let mockStorage: MockConfigStorage;
+    let mockStorage: XDGTest;
 
     beforeEach(() => {
-        mockStorage = new MockConfigStorage();
+        mockStorage = new XDGTest();
     });
 
     afterEach(() => {

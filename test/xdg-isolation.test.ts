@@ -4,7 +4,7 @@
  * NOTE: This test intentionally uses the real XDGConfig with temp directories
  * to verify that the XDG_CONFIG_HOME environment variable works correctly.
  *
- * For unit tests, use MockConfigStorage instead.
+ * For unit tests, use XDGTest instead.
  */
 import { XDGConfig } from "../lib/xdg-config";
 import * as fs from "fs";
