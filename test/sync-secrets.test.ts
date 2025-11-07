@@ -112,7 +112,7 @@ describe("sync-secrets CLI", () => {
             throw new Error(`Unexpected command: ${command.constructor.name}`);
         });
 
-        const results = await syncSecretsToAWS({ profile: profileName, region: "us-east-1", force: true });
+        const results = await syncSecretsToAWS({ profile: profileName, region: "us-east-1", force: true, baseDir: testBaseDir });
 
         expect(results).toHaveLength(1);
         expect(results[0].action).toBe("updated");
