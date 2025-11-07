@@ -31,29 +31,7 @@ from botocore.exceptions import ClientError
 
 logger = structlog.get_logger(__name__)
 
-QUEUE_URL_REGEX = re.compile(r"^arn:aws:sqs:([a-z0-9-]+):(\d+):(.+)$", re.IGNORECASE)
 QUEUE_URL_REGEX = re.compile(r"^https://sqs\.[a-z0-9-]+\.amazonaws\.com/\d+/.+", re.IGNORECASE)
-
-
-def to_queue_url(identifier: Optional[str]) -> Optional[str]:
-    """Normalize an SQS queue identifier (ARN or URL) to a queue URL."""
-
-    if not identifier:
-        return identifier
-
-    trimmed = identifier.strip()
-    if not trimmed:
-        return None
-
-    if is_queue_url(trimmed):
-        return trimmed
-
-    match = QUEUE_URL_REGEX.match(trimmed)
-    if not match:
-        return trimmed
-
-    region, account, queue_name = match.groups()
-    return f"https://sqs.{region}.amazonaws.com/{account}/{queue_name}"
 
 
 def is_queue_url(value: Optional[str]) -> bool:
@@ -525,17 +503,13 @@ class ConfigResolver:
         # Step 6: Resolve catalog URL
         catalog = self._resolve_catalog_url(outputs)
 
-        # Step 6.5: Normalize queue identifier
-        queue_identifier = (
-            outputs.get("PackagerQueueUrl") or outputs.get("QueueUrl") or outputs.get("PackagerQueueArn")
-        )
-
-        queue_url = to_queue_url(queue_identifier)
+        # Step 6.5: Get queue URL
+        queue_url = outputs.get("PackagerQueueUrl")
 
         if not queue_url or not is_queue_url(queue_url):
             raise ConfigResolverError(
-                "Missing SQS queue URL in CloudFormation outputs",
-                "Ensure your Quilt stack exports PackagerQueueUrl or PackagerQueueArn",
+                "Missing PackagerQueueUrl in CloudFormation outputs",
+                "Ensure your Quilt stack exports PackagerQueueUrl",
                 f"Available outputs: {', '.join(outputs.keys())}",
             )
 
@@ -571,6 +545,7 @@ class ConfigResolver:
             region=config.aws_region,
             catalog=config.quilt_catalog,
             database=config.quilt_database,
+            queue_url=config.queue_url,
         )
 
         return config
@@ -585,8 +560,8 @@ class ConfigResolver:
         if "UserAthenaDatabaseName" not in outputs or not outputs.get("UserAthenaDatabaseName"):
             missing.append("UserAthenaDatabaseName")
 
-        if not (outputs.get("PackagerQueueUrl") or outputs.get("QueueUrl") or outputs.get("PackagerQueueUrl")):
-            missing.append("PackagerQueueUrl or PackagerQueueUrl")
+        if not outputs.get("PackagerQueueUrl"):
+            missing.append("PackagerQueueUrl")
 
         if missing:
             raise ConfigResolverError(
