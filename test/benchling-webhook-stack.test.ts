@@ -323,6 +323,51 @@ describe("BenchlingWebhookStack", () => {
         expect(param.AllowedValues).toContain("DEBUG");
     });
 
+    test("creates PackagerQueueUrl CloudFormation parameter", () => {
+        const parameters = template.toJSON().Parameters;
+        expect(parameters).toHaveProperty("PackagerQueueUrl");
+
+        const param = parameters.PackagerQueueUrl;
+        expect(param.Type).toBe("String");
+        expect(param.Description).toContain("SQS queue URL");
+    });
+
+    test("creates AthenaUserDatabase CloudFormation parameter", () => {
+        const parameters = template.toJSON().Parameters;
+        expect(parameters).toHaveProperty("AthenaUserDatabase");
+
+        const param = parameters.AthenaUserDatabase;
+        expect(param.Type).toBe("String");
+        expect(param.Description).toContain("Athena");
+    });
+
+    test("creates QuiltWebHost CloudFormation parameter", () => {
+        const parameters = template.toJSON().Parameters;
+        expect(parameters).toHaveProperty("QuiltWebHost");
+
+        const param = parameters.QuiltWebHost;
+        expect(param.Type).toBe("String");
+        expect(param.Description).toContain("catalog domain");
+    });
+
+    test("creates IcebergDatabase CloudFormation parameter", () => {
+        const parameters = template.toJSON().Parameters;
+        expect(parameters).toHaveProperty("IcebergDatabase");
+
+        const param = parameters.IcebergDatabase;
+        expect(param.Type).toBe("String");
+        expect(param.Description).toContain("Iceberg");
+        expect(param.Default).toBe("");
+    });
+
+    test("QuiltStackARN parameter is marked as deprecated", () => {
+        const parameters = template.toJSON().Parameters;
+        expect(parameters).toHaveProperty("QuiltStackARN");
+
+        const param = parameters.QuiltStackARN;
+        expect(param.Description).toContain("DEPRECATED");
+    });
+
     // ===================================================================
     // Secrets-Only Mode: IAM and Container Environment Tests
     // ===================================================================

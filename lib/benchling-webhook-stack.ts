@@ -55,10 +55,38 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // Create CloudFormation parameters for runtime-configurable values
         // These parameters can be updated via CloudFormation stack updates
 
+        // Explicit service parameters (v1.0.0+)
+        // These replace runtime resolution from QuiltStackARN
+        const packagerQueueUrlParam = new cdk.CfnParameter(this, "PackagerQueueUrl", {
+            type: "String",
+            description: "SQS queue URL for Quilt package creation jobs",
+            default: "",  // Will be resolved at deployment time
+        });
+
+        const athenaUserDatabaseParam = new cdk.CfnParameter(this, "AthenaUserDatabase", {
+            type: "String",
+            description: "Athena/Glue database name for Quilt catalog metadata",
+            default: "",  // Will be resolved at deployment time
+        });
+
+        const quiltWebHostParam = new cdk.CfnParameter(this, "QuiltWebHost", {
+            type: "String",
+            description: "Quilt catalog domain (without protocol or trailing slash)",
+            default: "",  // Will be resolved at deployment time
+        });
+
+        const icebergDatabaseParam = new cdk.CfnParameter(this, "IcebergDatabase", {
+            type: "String",
+            description: "Iceberg database name (optional, leave empty if not used)",
+            default: "",
+        });
+
+        // DEPRECATED (v1.0.0): QuiltStackARN no longer used at runtime
+        // Kept temporarily for backward compatibility during migration
         const quiltStackArnParam = new cdk.CfnParameter(this, "QuiltStackARN", {
             type: "String",
-            description: "ARN of Quilt CloudFormation stack for configuration resolution",
-            default: config.quilt.stackArn,
+            description: "DEPRECATED: Use explicit service parameters instead",
+            default: config.quilt.stackArn || "",
         });
 
         const benchlingSecretParam = new cdk.CfnParameter(this, "BenchlingSecretARN", {
@@ -94,7 +122,11 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         // Use parameter values (which have config as defaults)
         // This allows runtime updates via CloudFormation
-        const quiltStackArnValue = quiltStackArnParam.valueAsString;
+        const packagerQueueUrlValue = packagerQueueUrlParam.valueAsString;
+        const athenaUserDatabaseValue = athenaUserDatabaseParam.valueAsString;
+        const quiltWebHostValue = quiltWebHostParam.valueAsString;
+        const icebergDatabaseValue = icebergDatabaseParam.valueAsString;
+        const quiltStackArnValue = quiltStackArnParam.valueAsString;  // DEPRECATED
         const benchlingSecretValue = benchlingSecretParam.valueAsString;
         const logLevelValue = logLevelParam.valueAsString;
         const imageTagValue = imageTagParam.valueAsString;
@@ -133,7 +165,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
             imageTag: imageTagValue,
             stackVersion: stackVersion,
             // Runtime-configurable parameters
-            stackArn: quiltStackArnValue,
+            // New explicit service parameters (v1.0.0+)
+            packagerQueueUrl: packagerQueueUrlValue,
+            athenaUserDatabase: athenaUserDatabaseValue,
+            quiltWebHost: quiltWebHostValue,
+            icebergDatabase: icebergDatabaseValue,
+            // Legacy parameters
+            stackArn: quiltStackArnValue,  // DEPRECATED
             benchlingSecret: benchlingSecretValue,
             packageBucket: packageBucketValue,
             quiltDatabase: quiltDatabaseValue,
