@@ -3,6 +3,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2025-11-07
+
+### Breaking Changes
+
+**Runtime CloudFormation Dependencies Removed** (Issue #206)
+
+The container no longer makes runtime CloudFormation API calls. Service configuration is now resolved at deployment time and passed as explicit environment variables.
+
+**What Changed:**
+- Removed `QuiltStackARN` CloudFormation parameter
+- Removed `QuiltStackARN` container environment variable
+- Removed CloudFormation IAM permissions from ECS task role (`cloudformation:DescribeStacks`, `cloudformation:DescribeStackResources`)
+- Removed `stackArn` property from `FargateServiceProps` interface
+
+**New Behavior:**
+- Services resolved once at deployment time from Quilt CloudFormation stack
+- Container receives explicit service environment variables:
+  - `PACKAGER_SQS_URL` - SQS queue URL for package creation
+  - `ATHENA_USER_DATABASE` - Athena/Glue database name
+  - `QUILT_WEB_HOST` - Quilt catalog domain
+  - `ICEBERG_DATABASE` - Iceberg database name (optional)
+- No runtime CloudFormation API calls required
+- Faster container startup
+- Reduced IAM permissions (principle of least privilege)
+
+**Migration:**
+- Existing configurations in `~/.config/benchling-webhook/` do not need changes
+- The `quilt.stackArn` field is still used at deployment time to resolve services
+- Simply redeploy with `npm run deploy` - services will be automatically resolved
+- See [MIGRATION.md](./spec/206-service-envars/MIGRATION.md) for detailed migration instructions
+
+**Benefits:**
+- Faster container startup (no CloudFormation API calls at runtime)
+- Better security (reduced IAM permissions)
+- Explicit configuration (all services visible in environment variables)
+- Easier debugging (inspect environment variables without API calls)
+
 ## [0.7.4] - 2025-11-06
 
 ### Changed

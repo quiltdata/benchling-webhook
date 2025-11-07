@@ -2,6 +2,8 @@
 
 Connects Benchling lab notebook entries to Quilt data packages via webhooks.
 
+> **⚠️ Breaking Change in v1.0.0**: Runtime CloudFormation dependencies removed. Service configuration now resolved at deployment time. See [MIGRATION.md](./spec/206-service-envars/MIGRATION.md) for upgrade instructions.
+
 ## Prerequisites
 
 - Node.js 18+ with `npx` ([download](https://nodejs.org))
