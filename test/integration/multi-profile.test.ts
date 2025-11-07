@@ -4,14 +4,14 @@
  * Tests complete workflow with multiple profiles and deployment tracking.
  */
 
-import { MockConfigStorage } from "../mocks";
+import { XDGTest } from "../mocks";
 import { ProfileConfig, DeploymentRecord } from "../../lib/types/config";
 
 describe("Multi-Profile Integration", () => {
-    let mockStorage: MockConfigStorage;
+    let mockStorage: XDGTest;
 
     beforeEach(() => {
-        mockStorage = new MockConfigStorage();
+        mockStorage = new XDGTest();
     });
 
     afterEach(() => {

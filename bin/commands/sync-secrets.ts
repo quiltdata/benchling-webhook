@@ -25,7 +25,7 @@ import {
     ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 import { XDGConfig } from "../../lib/xdg-config";
-import type { IConfigStorage } from "../../lib/interfaces/config-storage";
+import type { XDGBase } from "../../lib/xdg-base";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { ProfileConfig, ProfileName } from "../../lib/types/config";
 import { generateSecretName } from "../../lib/utils/secrets";
@@ -39,7 +39,7 @@ interface SyncSecretsOptions {
     region?: string;
     dryRun?: boolean;
     force?: boolean;
-    configStorage?: IConfigStorage; // Dependency injection for testing
+    configStorage?: XDGBase; // Dependency injection for testing
 }
 
 /**
@@ -441,7 +441,7 @@ export async function getSecretsFromAWS(options: {
     profile?: ProfileName;
     awsProfile?: string;
     region?: string;
-    configStorage?: IConfigStorage;
+    configStorage?: XDGBase;
 }): Promise<Record<string, string>> {
     const { profile = "default", awsProfile, region = "us-east-1", configStorage } = options;
 
@@ -473,7 +473,7 @@ export async function validateSecretsAccess(options: {
     profile?: ProfileName;
     awsProfile?: string;
     region?: string;
-    configStorage?: IConfigStorage;
+    configStorage?: XDGBase;
 }): Promise<boolean> {
     try {
         await getSecretsFromAWS(options);

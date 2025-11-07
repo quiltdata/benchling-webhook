@@ -5,13 +5,13 @@
  */
 
 import { ProfileConfig } from "../../lib/types/config";
-import { MockConfigStorage } from "../mocks";
+import { XDGTest } from "../mocks";
 
 describe("Profile Inheritance", () => {
-    let mockStorage: MockConfigStorage;
+    let mockStorage: XDGTest;
 
     beforeEach(() => {
-        mockStorage = new MockConfigStorage();
+        mockStorage = new XDGTest();
     });
 
     afterEach(() => {

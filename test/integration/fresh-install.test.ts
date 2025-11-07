@@ -4,14 +4,14 @@
  * Tests the complete workflow of setting up a new installation from scratch.
  */
 
-import { MockConfigStorage } from "../mocks";
+import { XDGTest } from "../mocks";
 import { ProfileConfig } from "../../lib/types/config";
 
 describe("Fresh Install Integration", () => {
-    let mockStorage: MockConfigStorage;
+    let mockStorage: XDGTest;
 
     beforeEach(() => {
-        mockStorage = new MockConfigStorage();
+        mockStorage = new XDGTest();
     });
 
     afterEach(() => {

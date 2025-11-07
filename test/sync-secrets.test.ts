@@ -7,16 +7,16 @@ import {
     CreateSecretCommand,
 } from "@aws-sdk/client-secrets-manager";
 import type { UpdateSecretCommandInput } from "@aws-sdk/client-secrets-manager";
-import { MockConfigStorage } from "./mocks/mock-config-storage";
+import { XDGTest } from "./xdg-test";
 import type { ProfileConfig } from "../lib/types/config";
 
 describe("sync-secrets CLI", () => {
-    let mockStorage: MockConfigStorage;
+    let mockStorage: XDGTest;
     let sendMock: jest.SpyInstance;
 
     beforeEach(() => {
         // Create a fresh mock storage for each test
-        mockStorage = new MockConfigStorage();
+        mockStorage = new XDGTest();
         sendMock = jest.spyOn(SecretsManagerClient.prototype, "send");
     });
 

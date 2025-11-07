@@ -1,4 +1,4 @@
-import { MockConfigStorage } from "./mocks";
+import { XDGTest } from "./mocks";
 import { ProfileConfig } from "../lib/types/config";
 
 /**
@@ -8,8 +8,8 @@ import { ProfileConfig } from "../lib/types/config";
  * Related: Issue #176 - Test Production Deployments
  * Spec: spec/176-test-prod/13-multi-environment-architecture-spec.md
  */
-describe("MockConfigStorage - Multi-Environment Profile Support", () => {
-    let mockStorage: MockConfigStorage;
+describe("XDGTest - Multi-Environment Profile Support", () => {
+    let mockStorage: XDGTest;
 
     // Helper function to create a valid test config
     const createTestConfig = (overrides: Partial<ProfileConfig> = {}): ProfileConfig => {
@@ -72,7 +72,7 @@ describe("MockConfigStorage - Multi-Environment Profile Support", () => {
     };
 
     beforeEach(() => {
-        mockStorage = new MockConfigStorage();
+        mockStorage = new XDGTest();
     });
 
     afterEach(() => {
@@ -326,7 +326,7 @@ describe("MockConfigStorage - Multi-Environment Profile Support", () => {
             const config = createTestConfig();
 
             // Create a fresh mock storage for this test
-            const freshStorage = new MockConfigStorage();
+            const freshStorage = new XDGTest();
 
             // Only create default profile
             freshStorage.writeProfile("default", config);

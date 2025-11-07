@@ -5,13 +5,13 @@
  */
 
 import { ProfileConfig, DeploymentRecord, DeploymentHistory } from "../../lib/types/config";
-import { MockConfigStorage } from "../mocks";
+import { XDGTest } from "../mocks";
 
 describe("Deployment Tracking", () => {
-    let mockStorage: MockConfigStorage;
+    let mockStorage: XDGTest;
 
     beforeEach(() => {
-        mockStorage = new MockConfigStorage();
+        mockStorage = new XDGTest();
     });
 
     afterEach(() => {
@@ -212,7 +212,7 @@ describe("Deployment Tracking", () => {
             expect(deployments.history).toHaveLength(2);
         });
 
-        // Schema validation is handled at write time in MockConfigStorage
+        // Schema validation is handled at write time in XDGTest
     });
 
     describe("getActiveDeployment()", () => {
