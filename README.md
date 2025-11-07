@@ -2,12 +2,6 @@
 
 Connects Benchling lab notebook entries to Quilt data packages via webhooks.
 
-## BREAKING CHANGE: v0.7.0
-
-Version 0.7.0 introduces a completely new configuration architecture using the industry-standing XDG_CONFIG_HOME.
-If you are upgrading from an earlier version, **you must reconfigure your deployment**.
-Just run the wizard and copy the necessary values from your `.env` file, if any.
-
 ## Prerequisites
 
 - Node.js 18+ with `npx` ([download](https://nodejs.org))
@@ -44,6 +38,10 @@ The wizard will:
 4. Deploy to AWS
 
 It will list the outputs, including the webhook URL.
+
+NOTE: This version no longer reads your `.env` file.
+Instead, it stores your results in the [XDG_CONFIG_HOME](https://wiki.archlinux.org/title/XDG_Base_Directory),
+where you can have more than one profile.
 
 ### 3. Configure Webhook URL
 
