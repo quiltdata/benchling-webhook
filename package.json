@@ -37,7 +37,7 @@
     "test": "npm run build:typecheck && npm run test:ts && npm run test:python",
     "test:ci": "npm run build:typecheck && npm run test:ts",
     "test:dev": "make -C docker test-deployed-dev PROFILE=dev",
-    "test:local": "make -C docker build && make -C docker test-local",
+    "test:local": "make -C docker build && make -C docker test-local PROFILE=dev",
     "test:prod": "make -C docker test-deployed-prod",
     "test:python": "make -C docker test-unit",
     "test:ts": "cross-env NODE_ENV=test jest --maxWorkers=50%",

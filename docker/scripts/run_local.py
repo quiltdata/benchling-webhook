@@ -3,14 +3,17 @@
 Local development script for testing Benchling webhooks with real AWS credentials.
 
 Usage:
-    python scripts/run_local.py           # Normal mode
-    python scripts/run_local.py --verbose # Verbose logging
-    python scripts/run_local.py --test    # Start server, run tests, then exit
+    python scripts/run_local.py                      # Normal mode (dev profile)
+    python scripts/run_local.py --verbose            # Verbose logging
+    python scripts/run_local.py --test               # Start server, run tests, then exit
+    python scripts/run_local.py --profile sales      # Use specific profile
+    python scripts/run_local.py --test --profile dev # Test with dev profile
 
 This script pulls credentials from AWS Secrets Manager using configuration
-stored in ~/.config/benchling-webhook/default.json
+stored in ~/.config/benchling-webhook/{profile}/
 """
 
+import argparse
 import json
 import logging
 import os
@@ -33,8 +36,11 @@ LOG_DIR = Path(__file__).parent.parent / ".scratch"
 LOG_FILE = LOG_DIR / "benchling_webhook.log"
 
 
-def load_credentials_from_aws():
+def load_credentials_from_aws(profile: str = "dev"):
     """Load credentials from AWS Secrets Manager using XDG configuration.
+
+    Args:
+        profile: Profile name to use (defaults to 'dev')
 
     Returns:
         dict: Environment variables to set for the Flask app
@@ -46,34 +52,39 @@ def load_credentials_from_aws():
     """
     # Load XDG configuration
     try:
-        xdg = XDGConfig()
+        xdg = XDGConfig(profile=profile)
         config = xdg.load_complete_config()
     except FileNotFoundError as e:
-        print(f"❌ XDG configuration not found: {e}")
-        print("💡 Run 'make install' to set up configuration")
+        print(f"❌ Configuration not found for profile '{profile}': {e}")
+        print(f"💡 Run 'npm run setup -- --profile {profile}' to set up this profile")
+        print(f"💡 Or use a different profile: python scripts/run_local.py --profile <profile-name>")
         raise
 
-    # Extract required ARNs from config
-    benchling_secret_arn = config.get("benchlingSecretArn")
-    quilt_stack_arn = config.get("quiltStackArn")
+    # Extract required ARNs from config (v0.7.0 nested structure)
+    benchling_config = config.get("benchling", {})
+    quilt_config = config.get("quilt", {})
+    deployment_config = config.get("deployment", {})
+
+    benchling_secret_arn = benchling_config.get("secretArn")
+    quilt_stack_arn = quilt_config.get("stackArn")
 
     if not benchling_secret_arn:
-        raise ValueError("benchlingSecretArn not found in XDG config.\n" "Run 'make install' to configure secrets.")
+        raise ValueError("benchling.secretArn not found in XDG config.\n" "Run 'npm run setup' to configure secrets.")
 
     if not quilt_stack_arn:
-        raise ValueError("quiltStackArn not found in XDG config.\n" "Run 'make install' to configure Quilt stack.")
+        raise ValueError(
+            "quilt.stackArn not found in XDG config.\n"
+            f"Run 'npm run setup -- --profile {profile}' to configure Quilt stack."
+        )
 
-    # Extract region from ARN or config
-    # Try multiple field names for backward compatibility
+    # Extract region from config (v0.7.0 structure)
     aws_region = (
-        config.get("awsRegion")
-        or config.get("cdkRegion")
-        or config.get("quiltRegion")
-        or config.get("region")
+        deployment_config.get("region")
+        or quilt_config.get("region")
         or "us-east-1"  # Default to us-east-1 (most common AWS region)
     )
 
-    print(f"🔐 Loading credentials from AWS Secrets Manager...")
+    print(f"🔐 Loading credentials from AWS Secrets Manager (profile: {profile})...")
     print(f"   Region: {aws_region}")
     print(f"   Benchling Secret ARN: {benchling_secret_arn}")
     print(f"   Quilt Stack ARN: {quilt_stack_arn}")
@@ -133,9 +144,32 @@ def get_test_env_vars():
     }
 
 
+# Parse command line arguments early to get profile
+parser = argparse.ArgumentParser(
+    description="Local development server for Benchling webhooks",
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+)
+parser.add_argument(
+    "--profile",
+    type=str,
+    default=os.environ.get("PROFILE", "dev"),
+    help="Configuration profile to use (default: dev, or PROFILE env var)",
+)
+parser.add_argument(
+    "--verbose",
+    action="store_true",
+    help="Enable verbose logging",
+)
+parser.add_argument(
+    "--test",
+    action="store_true",
+    help="Start server, run tests, then exit",
+)
+args = parser.parse_args()
+
 # Set up environment variables from AWS before importing Flask app
 try:
-    env_vars = load_credentials_from_aws()
+    env_vars = load_credentials_from_aws(profile=args.profile)
     for key, value in env_vars.items():
         os.environ[key] = str(value)
 except Exception as e:
@@ -216,9 +250,9 @@ def run_tests():
 
 
 if __name__ == "__main__":
-    # Parse command line arguments
-    verbose = "--verbose" in sys.argv
-    test_mode = "--test" in sys.argv
+    # Use the already-parsed arguments
+    verbose = args.verbose
+    test_mode = args.test
 
     if test_mode:
         print("🚀 Starting Benchling webhook server in TEST MODE...")

@@ -1,4 +1,5 @@
 """Version utility to read from pyproject.toml"""
+
 import tomllib
 from pathlib import Path
 
