@@ -121,6 +121,11 @@ Key functions to export:
 
 ## Related Files
 
-- [scripts/list-quilt-stacks.ts](../../scripts/list-quilt-stacks.ts) - Standalone script
-- [lib/utils/stack-inference.ts](../../lib/utils/stack-inference.ts) - Existing stack inference code
-- [bin/commands/infer-quilt-config.ts](../../bin/commands/infer-quilt-config.ts) - Setup wizard stack detection
+- [scripts/list-quilt-stacks.ts](../../scripts/list-quilt-stacks.ts) - Standalone CLI tool for listing Quilt stacks
+- [lib/utils/stack-inference.ts](../../lib/utils/stack-inference.ts) - Utility functions (CLI-based):
+  - `isQuiltStack()` - Check if a single stack is a Quilt stack
+  - `findAllQuiltStacks()` - Find all Quilt stacks in a region
+  - `listAllStacks()` - List all CloudFormation stacks
+- [bin/commands/infer-quilt-config.ts](../../bin/commands/infer-quilt-config.ts) - Setup wizard stack detection (SDK-based)
+  - Uses AWS SDK v3 instead of CLI commands
+  - Implements same algorithm: check all stacks for QuiltWebHost output
