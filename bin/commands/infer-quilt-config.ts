@@ -15,6 +15,7 @@ import * as readline from "readline";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { isQueueUrl } from "../../lib/utils/sqs";
+import { fetchJson } from "../../lib/utils/stack-inference";
 
 /**
  * Quilt CLI configuration
@@ -201,8 +202,9 @@ async function promptCatalogSelection(options: string[]): Promise<number> {
  *
  * Priority order:
  * 1. quilt3 CLI command (`quilt3 config`)
- * 2. CloudFormation stack inspection
- * 3. Interactive selection if multiple options
+ * 2. Fetch catalog's config.json to get region
+ * 3. CloudFormation stack inspection in that region
+ * 4. Interactive selection if multiple options
  *
  * @param options - Inference options
  * @returns Inferred configuration
@@ -212,7 +214,7 @@ export async function inferQuiltConfig(options: {
     profile?: string;
     interactive?: boolean;
 }): Promise<InferenceResult> {
-    const { region = "us-east-1", profile, interactive = true } = options;
+    const { region, profile, interactive = true } = options;
 
     const result: InferenceResult = {
         source: "none",
@@ -229,9 +231,36 @@ export async function inferQuiltConfig(options: {
         console.log("No quilt3 CLI configuration found.");
     }
 
+    // Step 1.5: If we have a catalog URL but no region specified, fetch config.json to get the region
+    let searchRegion = region;
+
+    if (quilt3Config?.catalogUrl && !searchRegion) {
+        try {
+            console.log(`\nFetching catalog configuration from ${quilt3Config.catalogUrl}...`);
+            const configUrl = quilt3Config.catalogUrl.replace(/\/$/, "") + "/config.json";
+            const catalogConfig = (await fetchJson(configUrl)) as { region?: string; [key: string]: unknown };
+
+            if (catalogConfig.region) {
+                searchRegion = catalogConfig.region;
+                result.region = searchRegion;
+                console.log(`✓ Found catalog region: ${searchRegion}`);
+            } else {
+                console.log("⚠️  config.json does not contain region field");
+            }
+        } catch (error) {
+            console.log(`⚠️  Could not fetch config.json: ${(error as Error).message}`);
+            console.log("   Falling back to default region search...");
+        }
+    }
+
     // Step 2: Search for CloudFormation stacks
     console.log("\nSearching for Quilt CloudFormation stacks...");
-    const stacks = await findQuiltStacks(region, profile);
+
+    // Use the region from config.json if available, otherwise use provided region or default
+    const regionToSearch = searchRegion || "us-east-1";
+    console.log(`Searching in region: ${regionToSearch}`);
+
+    const stacks = await findQuiltStacks(regionToSearch, profile);
 
     if (stacks.length === 0) {
         console.log("No Quilt CloudFormation stacks found.");
