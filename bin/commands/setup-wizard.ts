@@ -828,9 +828,9 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         console.log("  1. Deploy to AWS: npm run deploy:prod");
         console.log("  2. Test integration: npm run test:prod\n");
     } else {
-        // For custom profiles, show the full command
-        console.log(`  1. Deploy to AWS: npx benchling-webhook deploy --profile ${profile} --stage ${profile}`);
-        console.log(`  2. Test integration: npm run test:${profile}\n`);
+        // For custom profiles, use npm run deploy with arguments
+        console.log(`  1. Deploy to AWS: npm run deploy -- --profile ${profile} --stage ${profile}`);
+        console.log(`  2. Check logs: npx ts-node scripts/check-logs.ts --profile ${profile}\n`);
     }
 
     return config;
