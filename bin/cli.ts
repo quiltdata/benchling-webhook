@@ -205,7 +205,7 @@ const isHelpOrVersion = args.some(arg => arg === "--help" || arg === "-h" || arg
 
 if ((!args.length || (args.length > 0 && args[0].startsWith("--") && !isHelpOrVersion))) {
     // Parse options for setup wizard
-    const options: { nonInteractive?: boolean; profile?: string; inheritFrom?: string; awsRegion?: string; awsProfile?: string } = {};
+    const options: { nonInteractive?: boolean; profile?: string; inheritFrom?: string; awsRegion?: string; awsProfile?: string; skipValidation?: boolean } = {};
 
     for (let i = 0; i < args.length; i++) {
         if (args[i] === "--yes" || args[i] === "-y") {
@@ -222,6 +222,8 @@ if ((!args.length || (args.length > 0 && args[0].startsWith("--") && !isHelpOrVe
         } else if (args[i] === "--aws-profile" && i + 1 < args.length) {
             options.awsProfile = args[i + 1];
             i++;
+        } else if (args[i] === "--skip-validation") {
+            options.skipValidation = true;
         }
     }
 

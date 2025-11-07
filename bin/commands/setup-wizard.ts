@@ -170,14 +170,38 @@ async function validateS3BucketAccess(
     }
 
     try {
-        const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region };
+        // Start with a region-agnostic client to get bucket location
+        const clientConfig: { region?: string; credentials?: AwsCredentialIdentityProvider } = {};
 
         if (awsProfile) {
             const { fromIni } = await import("@aws-sdk/credential-providers");
             clientConfig.credentials = fromIni({ profile: awsProfile });
         }
 
-        const s3Client = new S3Client(clientConfig);
+        // Use us-east-1 as the default region for GetBucketLocation
+        // S3 will automatically redirect to the correct region
+        let s3Client = new S3Client({ ...clientConfig, region: "us-east-1" });
+
+        // First, try to determine the bucket's actual region
+        let bucketRegion = region;
+        try {
+            const { GetBucketLocationCommand } = await import("@aws-sdk/client-s3");
+            const locationCommand = new GetBucketLocationCommand({ Bucket: bucketName });
+            const locationResponse = await s3Client.send(locationCommand);
+
+            // LocationConstraint is null for us-east-1, otherwise it's the region name
+            bucketRegion = locationResponse.LocationConstraint || "us-east-1";
+
+            if (bucketRegion !== region) {
+                console.log(`  ℹ Bucket is in region ${bucketRegion} (deployment region is ${region})`);
+            }
+        } catch {
+            // If we can't determine the region, try with the provided region
+            console.log(`  ℹ Using deployment region ${region} for bucket validation`);
+        }
+
+        // Now use a client with the correct region
+        s3Client = new S3Client({ ...clientConfig, region: bucketRegion });
 
         // Test HeadBucket (verify bucket exists and we have access)
         const headCommand = new HeadBucketCommand({ Bucket: bucketName });
@@ -196,8 +220,30 @@ async function validateS3BucketAccess(
 
         result.isValid = true;
     } catch (error) {
-        const err = error as Error;
-        result.errors.push(`S3 bucket validation failed: ${err.message}`);
+        const err = error as Error & { Code?: string; $metadata?: { httpStatusCode?: number } };
+
+        // Extract detailed error information from AWS SDK error
+        let errorMsg = err.message || "Unknown error";
+        const errorCode = err.Code || (err as { code?: string }).code || (err as { name?: string }).name;
+        const statusCode = err.$metadata?.httpStatusCode;
+
+        // Build detailed error message
+        const details: string[] = [errorMsg];
+        if (errorCode && errorCode !== errorMsg) {
+            details.push(`Code: ${errorCode}`);
+        }
+        if (statusCode) {
+            details.push(`Status: ${statusCode}`);
+        }
+
+        result.errors.push(`S3 bucket validation failed: ${details.join(", ")}`);
+
+        // Add helpful hints based on error type
+        if (errorCode === "NoSuchBucket" || statusCode === 404) {
+            result.errors.push(`Hint: Bucket '${bucketName}' does not exist or is not accessible`);
+        } else if (errorCode === "AccessDenied" || statusCode === 403) {
+            result.errors.push("Hint: Check that your AWS credentials have s3:GetBucketLocation, s3:HeadBucket and s3:ListBucket permissions");
+        }
     }
 
     return result;
@@ -808,7 +854,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
             await syncSecretsToAWS({
                 profile,
                 awsProfile,
-                region: awsRegion,
+                region: config.deployment.region,
                 force: true,
             });
 
