@@ -35,27 +35,6 @@ QUEUE_URL_REGEX = re.compile(r"^arn:aws:sqs:([a-z0-9-]+):(\d+):(.+)$", re.IGNORE
 QUEUE_URL_REGEX = re.compile(r"^https://sqs\.[a-z0-9-]+\.amazonaws\.com/\d+/.+", re.IGNORECASE)
 
 
-def to_queue_url(identifier: Optional[str]) -> Optional[str]:
-    """Normalize an SQS queue identifier (ARN or URL) to a queue URL."""
-
-    if not identifier:
-        return identifier
-
-    trimmed = identifier.strip()
-    if not trimmed:
-        return None
-
-    if is_queue_url(trimmed):
-        return trimmed
-
-    match = QUEUE_URL_REGEX.match(trimmed)
-    if not match:
-        return trimmed
-
-    region, account, queue_name = match.groups()
-    return f"https://sqs.{region}.amazonaws.com/{account}/{queue_name}"
-
-
 def is_queue_url(value: Optional[str]) -> bool:
     if not value:
         return False
@@ -85,16 +64,6 @@ class ConfigResolverError(Exception):
         if self.details:
             output += f"\n   ℹ️  {self.details}"
         return output
-
-
-@dataclass
-class ParsedStackArn:
-    """Components of a CloudFormation stack ARN."""
-
-    region: str
-    account: str
-    stack_name: str
-    stack_id: str
 
 
 @dataclass
@@ -526,16 +495,15 @@ class ConfigResolver:
         catalog = self._resolve_catalog_url(outputs)
 
         # Step 6.5: Normalize queue identifier
-        queue_identifier = (
-            outputs.get("PackagerQueueUrl") or outputs.get("QueueUrl") or outputs.get("PackagerQueueArn")
+        queue_url = (
+            outputs.get("PackagerQueueUrl")
         )
 
-        queue_url = to_queue_url(queue_identifier)
 
         if not queue_url or not is_queue_url(queue_url):
             raise ConfigResolverError(
                 "Missing SQS queue URL in CloudFormation outputs",
-                "Ensure your Quilt stack exports PackagerQueueUrl or PackagerQueueArn",
+                "Ensure your Quilt stack exports PackagerQueueUrl",
                 f"Available outputs: {', '.join(outputs.keys())}",
             )
 
@@ -571,6 +539,7 @@ class ConfigResolver:
             region=config.aws_region,
             catalog=config.quilt_catalog,
             database=config.quilt_database,
+            queue_url=config.queue_url,
         )
 
         return config
