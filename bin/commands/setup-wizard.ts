@@ -800,7 +800,8 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
             await syncSecretsToAWS({
                 profile,
                 awsProfile,
-                region: awsRegion,
+                // Use the deployment region from config (which defaults to Quilt stack region)
+                region: config.deployment?.region,
                 force: true,
             });
 
