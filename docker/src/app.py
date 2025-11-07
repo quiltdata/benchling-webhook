@@ -13,6 +13,7 @@ from .canvas import CanvasManager
 from .config import get_config
 from .entry_packager import EntryPackager
 from .payload import Payload
+from .version import __version__
 from .webhook_verification import require_webhook_verification
 
 # Load environment variables
@@ -91,7 +92,7 @@ def create_app():
         response = {
             "status": "healthy",
             "service": "benchling-webhook",
-            "version": "0.6.1",
+            "version": __version__,
             "config_source": config_source,
             "config_version": config_version,
         }
