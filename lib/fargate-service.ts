@@ -15,6 +15,9 @@ import { ProfileConfig } from "./types/config";
  * Uses ProfileConfig for structured configuration access.
  * Runtime-configurable parameters (quiltStackArn, benchlingSecret, logLevel, packageBucket)
  * can be overridden via CloudFormation parameters.
+ *
+ * **Breaking Change (v1.0.0)**: stackArn is deprecated in favor of explicit service environment variables.
+ * Will be removed in Episode 5-6.
  */
 export interface FargateServiceProps {
     readonly vpc: ec2.IVpc;
@@ -25,7 +28,7 @@ export interface FargateServiceProps {
     readonly stackVersion?: string;
 
     // Runtime-configurable parameters (from CloudFormation)
-    readonly stackArn: string;
+    readonly stackArn?: string; // Deprecated, will be removed in Episodes 5-6
     readonly benchlingSecret: string;
     readonly packageBucket: string;
     readonly quiltDatabase: string;
@@ -82,15 +85,18 @@ export class FargateService extends Construct {
         });
 
         // Grant CloudFormation read access (to query stack outputs)
-        taskRole.addToPolicy(
-            new iam.PolicyStatement({
-                actions: [
-                    "cloudformation:DescribeStacks",
-                    "cloudformation:DescribeStackResources",
-                ],
-                resources: [props. stackArn],
-            }),
-        );
+        // DEPRECATED: Will be removed in v1.0.0 (Episodes 5-6)
+        if (props.stackArn) {
+            taskRole.addToPolicy(
+                new iam.PolicyStatement({
+                    actions: [
+                        "cloudformation:DescribeStacks",
+                        "cloudformation:DescribeStackResources",
+                    ],
+                    resources: [props.stackArn],
+                }),
+            );
+        }
 
         // Grant Secrets Manager read access (to fetch Benchling credentials)
         // Use both config.benchling.secretArn and runtime parameter
@@ -220,7 +226,6 @@ export class FargateService extends Construct {
             ENABLE_WEBHOOK_VERIFICATION: config.security?.enableVerification !== false ? "true" : "false",
             BENCHLING_WEBHOOK_VERSION: props.stackVersion || props.imageTag || "latest",
             // Runtime-configurable parameters (from CloudFormation)
-            QuiltStackARN: props. stackArn,
             BenchlingSecret: props.benchlingSecret,
             // Static config values (for reference)
             BENCHLING_TENANT: config.benchling.tenant,
@@ -228,6 +233,11 @@ export class FargateService extends Construct {
             BENCHLING_PKG_PREFIX: config.packages.prefix,
             BENCHLING_PKG_KEY: config.packages.metadataKey,
         };
+
+        // DEPRECATED: QuiltStackARN will be removed in v1.0.0 (Episodes 5-6)
+        if (props.stackArn) {
+            environmentVars.QuiltStackARN = props.stackArn;
+        }
 
         // Add container with configured environment
         const container = taskDefinition.addContainer("BenchlingWebhookContainer", {
