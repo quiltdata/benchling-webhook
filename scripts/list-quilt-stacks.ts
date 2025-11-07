@@ -10,7 +10,7 @@ import {
     findAllQuiltStacks,
     isQuiltStack,
     listAllStacks,
-    QuiltStack
+    QuiltStack,
 } from "../lib/utils/stack-inference";
 
 /**
@@ -45,7 +45,7 @@ async function findQuiltStacks(region: string, verbose = false): Promise<QuiltSt
 /**
  * Main CLI entry point
  */
-async function main() {
+async function main(): Promise<void> {
     const args = process.argv.slice(2);
     const region = args.find(arg => arg.startsWith("--region="))?.split("=")[1] || "us-east-1";
     const verbose = args.includes("--verbose") || args.includes("-v");
