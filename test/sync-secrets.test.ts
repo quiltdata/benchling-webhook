@@ -7,17 +7,8 @@ import {
     CreateSecretCommand,
 } from "@aws-sdk/client-secrets-manager";
 import type { UpdateSecretCommandInput } from "@aws-sdk/client-secrets-manager";
-import { IConfigStorage } from "../lib/interfaces/config-storage";
 import { MockConfigStorage } from "./mocks/mock-config-storage";
 import type { ProfileConfig } from "../lib/types/config";
-
-// Mock the XDGConfig module to return our mock storage
-jest.mock("../lib/xdg-config", () => {
-    const { MockConfigStorage } = require("./mocks/mock-config-storage");
-    return {
-        XDGConfig: jest.fn().mockImplementation(() => new MockConfigStorage()),
-    };
-});
 
 describe("sync-secrets CLI", () => {
     let mockStorage: MockConfigStorage;
@@ -26,18 +17,12 @@ describe("sync-secrets CLI", () => {
     beforeEach(() => {
         // Create a fresh mock storage for each test
         mockStorage = new MockConfigStorage();
-
-        // Update the mock to return our storage instance
-        const { XDGConfig } = require("../lib/xdg-config");
-        XDGConfig.mockImplementation(() => mockStorage);
-
         sendMock = jest.spyOn(SecretsManagerClient.prototype, "send");
     });
 
     afterEach(() => {
         sendMock.mockRestore();
         mockStorage.clear();
-        jest.clearAllMocks();
     });
 
     test("updates secret with actual client_secret value instead of secret name placeholder", async () => {
@@ -122,7 +107,12 @@ describe("sync-secrets CLI", () => {
             throw new Error(`Unexpected command: ${command.constructor.name}`);
         });
 
-        const results = await syncSecretsToAWS({ profile: profileName, region: "us-east-1", force: true });
+        const results = await syncSecretsToAWS({
+            profile: profileName,
+            region: "us-east-1",
+            force: true,
+            configStorage: mockStorage
+        });
 
         expect(results).toHaveLength(1);
         expect(results[0].action).toBe("updated");
