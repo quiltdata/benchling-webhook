@@ -38,6 +38,7 @@ interface SyncSecretsOptions {
     region?: string;
     dryRun?: boolean;
     force?: boolean;
+    baseDir?: string;
 }
 
 /**
@@ -320,13 +321,13 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
  * @returns Array of sync results
  */
 export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promise<SyncResult[]> {
-    const { profile = "default", awsProfile, region = "us-east-1", dryRun = false, force = false } = options;
+    const { profile = "default", awsProfile, region = "us-east-1", dryRun = false, force = false, baseDir } = options;
 
     const results: SyncResult[] = [];
 
     // Step 1: Load configuration
     console.log(`Loading configuration from profile: ${profile}...`);
-    const xdgConfig = new XDGConfig();
+    const xdgConfig = new XDGConfig(baseDir);
 
     let config: ProfileConfig;
     try {
