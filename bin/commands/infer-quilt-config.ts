@@ -90,27 +90,20 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
 
         const client = new CloudFormationClient(clientConfig);
 
-        // List all stacks
+        // List all stacks (include rollback states as they may still be functional)
         const listCommand = new ListStacksCommand({
-            StackStatusFilter: ["CREATE_COMPLETE", "UPDATE_COMPLETE"],
+            StackStatusFilter: ["CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_ROLLBACK_COMPLETE"],
         });
 
         const listResponse = await client.send(listCommand);
         const stacks = listResponse.StackSummaries || [];
 
         // Get detailed information for each stack and filter for Quilt stacks
-        // We can't filter by name alone as stacks like "sales-prod" may be Quilt catalogs
+        // All Quilt catalog stacks have a "QuiltWebHost" output - this is the canonical identifier
+        // Stack names vary (e.g., "quilt-staging", "tf-stable", "sales-prod") so we check outputs
         const stackInfos: QuiltStackInfo[] = [];
 
-        // First pass: check stacks with "quilt" or "catalog" in the name (fast path)
-        const likelyQuiltStacks = stacks.filter(
-            (stack) =>
-                stack.StackName?.toLowerCase().includes("quilt") ||
-                stack.StackName?.toLowerCase().includes("catalog"),
-        );
-
-        // Process likely Quilt stacks first
-        for (const stack of likelyQuiltStacks) {
+        for (const stack of stacks) {
             if (!stack.StackName) continue;
 
             try {
@@ -124,6 +117,11 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
                 if (!stackDetail) continue;
 
                 const outputs = stackDetail.Outputs || [];
+
+                // Only include this stack if it has QuiltWebHost output (canonical Quilt stack identifier)
+                const hasQuiltWebHost = outputs.some((output) => output.OutputKey === "QuiltWebHost");
+                if (!hasQuiltWebHost) continue;
+
                 const stackInfo: QuiltStackInfo = {
                     stackName: stack.StackName,
                     stackArn: stackDetail.StackId || "",
@@ -154,71 +152,9 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
                 }
 
                 stackInfos.push(stackInfo);
-            } catch (describeError) {
-                console.error(`Warning: Failed to describe stack ${stack.StackName}: ${(describeError as Error).message}`);
-            }
-        }
-
-        // Second pass: check remaining stacks for QuiltWebHost output (slower but more thorough)
-        // This catches stacks like "sales-prod" that don't have "quilt" in the name
-        const remainingStacks = stacks.filter(
-            (stack) =>
-                !likelyQuiltStacks.includes(stack) &&
-                stack.StackName &&
-                !stackInfos.some((info) => info.stackName === stack.StackName),
-        );
-
-        for (const stack of remainingStacks) {
-            if (!stack.StackName) continue;
-
-            try {
-                const describeCommand = new DescribeStacksCommand({
-                    StackName: stack.StackName,
-                });
-
-                const describeResponse = await client.send(describeCommand);
-                const stackDetail = describeResponse.Stacks?.[0];
-
-                if (!stackDetail) continue;
-
-                const outputs = stackDetail.Outputs || [];
-
-                // Only include this stack if it has QuiltWebHost output
-                const hasQuiltWebHost = outputs.some((output) => output.OutputKey === "QuiltWebHost");
-                if (!hasQuiltWebHost) continue;
-
-                const stackInfo: QuiltStackInfo = {
-                    stackName: stack.StackName,
-                    stackArn: stackDetail.StackId || "",
-                    region: region,
-                };
-
-                // Extract AWS Account ID from Stack ARN
-                const arnMatch = stackInfo.stackArn.match(/^arn:aws:cloudformation:[^:]+:(\d{12}):/);
-                if (arnMatch) {
-                    stackInfo.account = arnMatch[1];
-                }
-
-                // Extract outputs
-                for (const output of outputs) {
-                    const key = output.OutputKey || "";
-                    const value = output.OutputValue || "";
-
-                    if (key === "QuiltWebHost") {
-                        stackInfo.catalogUrl = value;
-                    } else if (key === "UserAthenaDatabaseName" || key.includes("Database")) {
-                        stackInfo.database = value;
-                    } else if (key.includes("Queue")) {
-                        if (isQueueUrl(value)) {
-                            stackInfo.queueUrl = value;
-                        }
-                    }
-                }
-
-                stackInfos.push(stackInfo);
             } catch {
-                // Silently skip stacks that can't be described in the second pass
-                // to avoid overwhelming users with warnings for non-Quilt stacks
+                // Silently skip stacks that can't be described
+                // to avoid overwhelming users with warnings for non-accessible stacks
             }
         }
 
