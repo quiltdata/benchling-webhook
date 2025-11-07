@@ -1,13 +1,17 @@
 /**
- * Test to verify XDG_CONFIG_HOME isolation
- * This test proves that tests don't overwrite real user config
+ * Test to verify XDG_CONFIG_HOME isolation (Filesystem Integration Test)
+ *
+ * NOTE: This test intentionally uses the real XDGConfig with temp directories
+ * to verify that the XDG_CONFIG_HOME environment variable works correctly.
+ *
+ * For unit tests, use MockConfigStorage instead.
  */
 import { XDGConfig } from "../lib/xdg-config";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
-describe("XDG_CONFIG_HOME Isolation", () => {
+describe("XDG_CONFIG_HOME Isolation (Filesystem Integration)", () => {
     let originalXdgConfigHome: string | undefined;
     let testTempDir: string;
 

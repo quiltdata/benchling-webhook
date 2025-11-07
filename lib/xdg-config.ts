@@ -40,10 +40,12 @@ import {
     ProfileConfigSchema,
     DeploymentHistorySchema,
 } from "./types/config";
+import { IConfigStorage } from "./interfaces/config-storage";
 
 /**
  * XDG Configuration Manager (v0.7.0)
  *
+ * Filesystem-based implementation of IConfigStorage.
  * Manages profile-based configuration with deployment tracking.
  * NO backward compatibility with v0.6.x configuration files.
  *
@@ -68,7 +70,7 @@ import {
  * });
  * ```
  */
-export class XDGConfig {
+export class XDGConfig implements IConfigStorage {
     private readonly baseDir: string;
 
     /**

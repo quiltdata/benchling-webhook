@@ -7,35 +7,37 @@ import {
     CreateSecretCommand,
 } from "@aws-sdk/client-secrets-manager";
 import type { UpdateSecretCommandInput } from "@aws-sdk/client-secrets-manager";
-import { XDGConfig } from "../lib/xdg-config";
+import { IConfigStorage } from "../lib/interfaces/config-storage";
+import { MockConfigStorage } from "./mocks/mock-config-storage";
 import type { ProfileConfig } from "../lib/types/config";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
+
+// Mock the XDGConfig module to return our mock storage
+jest.mock("../lib/xdg-config", () => {
+    const { MockConfigStorage } = require("./mocks/mock-config-storage");
+    return {
+        XDGConfig: jest.fn().mockImplementation(() => new MockConfigStorage()),
+    };
+});
 
 describe("sync-secrets CLI", () => {
-    const originalHome = process.env.HOME;
-    let tempHomeDir: string;
+    let mockStorage: MockConfigStorage;
     let sendMock: jest.SpyInstance;
 
     beforeEach(() => {
-        tempHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "benchling-sync-secrets-"));
-        process.env.HOME = tempHomeDir;
+        // Create a fresh mock storage for each test
+        mockStorage = new MockConfigStorage();
+
+        // Update the mock to return our storage instance
+        const { XDGConfig } = require("../lib/xdg-config");
+        XDGConfig.mockImplementation(() => mockStorage);
+
         sendMock = jest.spyOn(SecretsManagerClient.prototype, "send");
     });
 
     afterEach(() => {
         sendMock.mockRestore();
-
-        if (originalHome !== undefined) {
-            process.env.HOME = originalHome;
-        } else {
-            delete process.env.HOME;
-        }
-
-        if (tempHomeDir && fs.existsSync(tempHomeDir)) {
-            fs.rmSync(tempHomeDir, { recursive: true, force: true });
-        }
+        mockStorage.clear();
+        jest.clearAllMocks();
     });
 
     test("updates secret with actual client_secret value instead of secret name placeholder", async () => {
@@ -45,7 +47,6 @@ describe("sync-secrets CLI", () => {
         const existingSecretArn =
             "arn:aws:secretsmanager:us-east-1:123456789012:secret:existing-secret-abc123";
 
-        const xdg = new XDGConfig();
         const timestamp = new Date().toISOString();
         const profileConfig: ProfileConfig = {
             benchling: {
@@ -86,7 +87,8 @@ describe("sync-secrets CLI", () => {
             },
         };
 
-        xdg.writeProfile(profileName, profileConfig);
+        // Write to mock storage instead of filesystem
+        mockStorage.writeProfile(profileName, profileConfig);
 
         const existingSecretValue = {
             tenant,

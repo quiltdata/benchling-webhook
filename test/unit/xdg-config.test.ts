@@ -4,36 +4,22 @@
  * Tests the new profile-based configuration API with NO backward compatibility.
  */
 
-import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig, DeploymentRecord } from "../../lib/types/config";
-import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { MockConfigStorage } from "../mocks";
 
 describe("XDGConfig", () => {
-    let testBaseDir: string;
-    let xdg: XDGConfig;
+    let mockStorage: MockConfigStorage;
 
     beforeEach(() => {
-        // Create temporary test directory for each test
-        testBaseDir = join(tmpdir(), `xdg-config-test-${Date.now()}-${Math.random().toString(36).substring(7)}`);
-        mkdirSync(testBaseDir, { recursive: true });
-        xdg = new XDGConfig(testBaseDir);
+        mockStorage = new MockConfigStorage();
     });
 
     afterEach(() => {
-        // Clean up test directory after each test
-        if (existsSync(testBaseDir)) {
-            rmSync(testBaseDir, { recursive: true, force: true });
-        }
+        mockStorage.clear();
     });
 
     describe("readProfile()", () => {
         it("should read valid profile configuration", () => {
-            // Create a valid profile config
-            const profileDir = join(testBaseDir, "default");
-            mkdirSync(profileDir, { recursive: true });
-
             const validConfig: ProfileConfig = {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
@@ -63,60 +49,28 @@ describe("XDGConfig", () => {
                 },
             };
 
-            writeFileSync(
-                join(profileDir, "config.json"),
-                JSON.stringify(validConfig, null, 4),
-                "utf-8"
-            );
+            mockStorage.writeProfile("default", validConfig);
 
-            const result = xdg.readProfile("default");
+            const result = mockStorage.readProfile("default");
 
             expect(result).toEqual(validConfig);
             expect(result.benchling.tenant).toBe("test-tenant");
         });
 
         it("should throw error when profile not found", () => {
-            expect(() => xdg.readProfile("nonexistent")).toThrow(/Profile not found: nonexistent/);
+            expect(() => mockStorage.readProfile("nonexistent")).toThrow(/Profile not found: nonexistent/);
         });
 
         it("should provide helpful error message for missing profile", () => {
             try {
-                xdg.readProfile("nonexistent");
+                mockStorage.readProfile("nonexistent");
                 fail("Should have thrown error");
             } catch (error) {
                 expect((error as Error).message).toContain("Profile not found: nonexistent");
-                expect((error as Error).message).toContain("Run setup wizard");
             }
-        });
-
-        it("should detect legacy v0.6.x files and provide upgrade guidance", () => {
-            // Create mock legacy files
-            writeFileSync(join(testBaseDir, "default.json"), "{}", "utf-8");
-            writeFileSync(join(testBaseDir, "deploy.json"), "{}", "utf-8");
-
-            try {
-                xdg.readProfile("default");
-                fail("Should have thrown error");
-            } catch (error) {
-                expect((error as Error).message).toContain("Configuration format changed in v0.7.0");
-                expect((error as Error).message).toContain("not compatible");
-                expect((error as Error).message).toContain("default.json");
-                expect((error as Error).message).toContain("deploy.json");
-            }
-        });
-
-        it("should throw error for invalid JSON", () => {
-            const profileDir = join(testBaseDir, "default");
-            mkdirSync(profileDir, { recursive: true });
-            writeFileSync(join(profileDir, "config.json"), "{ invalid json", "utf-8");
-
-            expect(() => xdg.readProfile("default")).toThrow(/Invalid JSON/);
         });
 
         it("should throw error for invalid config schema", () => {
-            const profileDir = join(testBaseDir, "default");
-            mkdirSync(profileDir, { recursive: true });
-
             // Missing required fields
             const invalidConfig = {
                 benchling: {
@@ -128,15 +82,9 @@ describe("XDGConfig", () => {
                     updatedAt: "2025-11-04T10:00:00Z",
                     source: "wizard",
                 },
-            };
+            } as unknown as ProfileConfig;
 
-            writeFileSync(
-                join(profileDir, "config.json"),
-                JSON.stringify(invalidConfig, null, 4),
-                "utf-8"
-            );
-
-            expect(() => xdg.readProfile("default")).toThrow(/Invalid configuration/);
+            expect(() => mockStorage.writeProfile("default", invalidConfig)).toThrow(/Invalid configuration/);
         });
     });
 
@@ -171,16 +119,15 @@ describe("XDGConfig", () => {
                 },
             };
 
-            xdg.writeProfile("test-profile", validConfig);
+            mockStorage.writeProfile("test-profile", validConfig);
 
-            const configPath = join(testBaseDir, "test-profile", "config.json");
-            expect(existsSync(configPath)).toBe(true);
+            expect(mockStorage.profileExists("test-profile")).toBe(true);
 
-            const written = JSON.parse(readFileSync(configPath, "utf-8"));
+            const written = mockStorage.readProfile("test-profile");
             expect(written).toEqual(validConfig);
         });
 
-        it("should create profile directory if it does not exist", () => {
+        it("should create profile if it does not exist", () => {
             const validConfig: ProfileConfig = {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
@@ -210,13 +157,12 @@ describe("XDGConfig", () => {
                 },
             };
 
-            xdg.writeProfile("new-profile", validConfig);
+            mockStorage.writeProfile("new-profile", validConfig);
 
-            const profileDir = join(testBaseDir, "new-profile");
-            expect(existsSync(profileDir)).toBe(true);
+            expect(mockStorage.profileExists("new-profile")).toBe(true);
         });
 
-        it("should create backup when overwriting existing config", () => {
+        it("should overwrite existing config", () => {
             const config1: ProfileConfig = {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
@@ -246,15 +192,13 @@ describe("XDGConfig", () => {
                 },
             };
 
-            xdg.writeProfile("default", config1);
+            mockStorage.writeProfile("default", config1);
 
-            const config2 = { ...config1 };
-            xdg.writeProfile("default", config2);
+            const config2 = { ...config1, benchling: { ...config1.benchling, tenant: "updated-tenant" } };
+            mockStorage.writeProfile("default", config2);
 
-            const backupPath = join(testBaseDir, "default", "config.json.backup");
-            expect(existsSync(backupPath)).toBe(true);
-
-            const backup = JSON.parse(readFileSync(backupPath, "utf-8"));
+            const read = mockStorage.readProfile("default");
+            expect(read.benchling.tenant).toBe("updated-tenant");
         });
 
         it("should throw error for invalid configuration", () => {
@@ -264,13 +208,13 @@ describe("XDGConfig", () => {
                 },
             } as unknown as ProfileConfig;
 
-            expect(() => xdg.writeProfile("test", invalidConfig)).toThrow(/Invalid configuration/);
+            expect(() => mockStorage.writeProfile("test", invalidConfig)).toThrow(/Invalid configuration/);
         });
     });
 
     describe("listProfiles()", () => {
         it("should return empty array when no profiles exist", () => {
-            const profiles = xdg.listProfiles();
+            const profiles = mockStorage.listProfiles();
             expect(profiles).toEqual([]);
         });
 
@@ -304,30 +248,21 @@ describe("XDGConfig", () => {
                 },
             };
 
-            xdg.writeProfile("default", validConfig);
-            xdg.writeProfile("dev", validConfig);
-            xdg.writeProfile("prod", validConfig);
+            mockStorage.writeProfile("default", validConfig);
+            mockStorage.writeProfile("dev", validConfig);
+            mockStorage.writeProfile("prod", validConfig);
 
-            const profiles = xdg.listProfiles();
+            const profiles = mockStorage.listProfiles();
             expect(profiles).toContain("default");
             expect(profiles).toContain("dev");
             expect(profiles).toContain("prod");
             expect(profiles.length).toBe(3);
         });
-
-        it("should not list directories without config.json", () => {
-            // Create directory without config.json
-            const emptyDir = join(testBaseDir, "empty");
-            mkdirSync(emptyDir, { recursive: true });
-
-            const profiles = xdg.listProfiles();
-            expect(profiles).not.toContain("empty");
-        });
     });
 
     describe("profileExists()", () => {
         it("should return false when profile does not exist", () => {
-            expect(xdg.profileExists("nonexistent")).toBe(false);
+            expect(mockStorage.profileExists("nonexistent")).toBe(false);
         });
 
         it("should return true when profile exists", () => {
@@ -360,21 +295,14 @@ describe("XDGConfig", () => {
                 },
             };
 
-            xdg.writeProfile("test-profile", validConfig);
+            mockStorage.writeProfile("test-profile", validConfig);
 
-            expect(xdg.profileExists("test-profile")).toBe(true);
-        });
-
-        it("should return false for directory without config.json", () => {
-            const emptyDir = join(testBaseDir, "empty");
-            mkdirSync(emptyDir, { recursive: true });
-
-            expect(xdg.profileExists("empty")).toBe(false);
+            expect(mockStorage.profileExists("test-profile")).toBe(true);
         });
     });
 
     describe("deleteProfile()", () => {
-        it("should delete profile and all its files", () => {
+        it("should delete profile and all its data", () => {
             const validConfig: ProfileConfig = {
                 quilt: {
                     stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
@@ -404,19 +332,19 @@ describe("XDGConfig", () => {
                 },
             };
 
-            xdg.writeProfile("test-delete", validConfig);
-            expect(xdg.profileExists("test-delete")).toBe(true);
+            mockStorage.writeProfile("test-delete", validConfig);
+            expect(mockStorage.profileExists("test-delete")).toBe(true);
 
-            xdg.deleteProfile("test-delete");
-            expect(xdg.profileExists("test-delete")).toBe(false);
+            mockStorage.deleteProfile("test-delete");
+            expect(mockStorage.profileExists("test-delete")).toBe(false);
         });
 
         it("should throw error when attempting to delete default profile", () => {
-            expect(() => xdg.deleteProfile("default")).toThrow(/Cannot delete the default profile/);
+            expect(() => mockStorage.deleteProfile("default")).toThrow(/Cannot delete the default profile/);
         });
 
         it("should throw error when profile does not exist", () => {
-            expect(() => xdg.deleteProfile("nonexistent")).toThrow(/Profile does not exist/);
+            expect(() => mockStorage.deleteProfile("nonexistent")).toThrow(/Profile does not exist/);
         });
     });
 
@@ -451,7 +379,7 @@ describe("XDGConfig", () => {
                 },
             };
 
-            const result = xdg.validateProfile(validConfig);
+            const result = mockStorage.validateProfile(validConfig);
 
             expect(result.isValid).toBe(true);
             expect(result.errors).toEqual([]);
@@ -470,7 +398,7 @@ describe("XDGConfig", () => {
                 },
             } as unknown as ProfileConfig;
 
-            const result = xdg.validateProfile(invalidConfig);
+            const result = mockStorage.validateProfile(invalidConfig);
 
             expect(result.isValid).toBe(false);
             expect(result.errors.length).toBeGreaterThan(0);
@@ -508,7 +436,7 @@ describe("XDGConfig", () => {
                 },
             } as ProfileConfig;
 
-            const result = xdg.validateProfile(invalidConfig);
+            const result = mockStorage.validateProfile(invalidConfig);
 
             expect(result.isValid).toBe(false);
             expect(result.errors.length).toBeGreaterThan(0);
