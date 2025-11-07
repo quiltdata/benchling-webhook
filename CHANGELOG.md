@@ -3,6 +3,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.4] - 2025-11-06
+
+### Changed
+
+- Setup wizard now suggests npm scripts in next steps for better UX
+- Deploy command verifies secrets exist before attempting sync to avoid overwriting
+
+### Fixed
+
+- Dockerfile base image updated with correct hash and dependencies
+- Setup wizard auto-syncs secrets to AWS Secrets Manager after completion
+
 ## [0.7.3] - 2025-11-06
 
 ### Added
