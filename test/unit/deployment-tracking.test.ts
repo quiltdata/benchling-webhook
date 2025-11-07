@@ -362,9 +362,8 @@ describe("Deployment Tracking", () => {
 
             mockStorage.recordDeployment("default", deployment);
 
-            // Create new XDGConfig instance pointing to same directory
-            const mockStorage2 = new XDGConfig(testBaseDir);
-            const deployments = mockStorage2.getDeployments("default");
+            // Read back deployments from same instance (mock storage is in-memory)
+            const deployments = mockStorage.getDeployments("default");
 
             expect(deployments.active["dev"]).toEqual(deployment);
             expect(deployments.history).toHaveLength(1);

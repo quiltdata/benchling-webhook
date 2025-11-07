@@ -198,6 +198,9 @@ Profile not found: ${profile}
 
 No configuration found for profile: ${profile}
 
+Run setup wizard to create configuration:
+  npx @quiltdata/benchling-webhook@latest setup
+
 Available profiles: ${this.listProfiles().join(", ") || "(none)"}
         `.trim();
     }
