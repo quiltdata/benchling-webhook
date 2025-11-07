@@ -53,7 +53,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -78,7 +77,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -104,7 +102,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -133,7 +130,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -150,11 +146,10 @@ describe("FargateService - Multi-Environment Support", () => {
             const containerDef = taskDef.Properties.ContainerDefinitions[0];
             const environment = containerDef.Environment || [];
 
-            // Check for QuiltStackARN and BenchlingSecret (secrets-only mode)
-            const quiltStackEnv = environment.find((e: any) => e.Name === "QuiltStackARN");
+            // Check for BenchlingSecret (secrets-only mode)
+            // QuiltStackARN removed in v1.0.0
             const benchlingSecretEnv = environment.find((e: any) => e.Name === "BenchlingSecret");
 
-            expect(quiltStackEnv).toBeDefined();
             expect(benchlingSecretEnv).toBeDefined();
         });
 
@@ -170,7 +165,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -207,7 +201,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 imageTag: "v0.6.3",
                 packageBucket: config.packages.bucket,
@@ -236,7 +229,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -271,7 +263,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -312,7 +303,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config: devConfig,
                 ecrRepository,
-                stackArn: devConfig.quilt.stackArn,
                 benchlingSecret: devConfig.benchling.secretArn!,
                 packageBucket: devConfig.packages.bucket,
                 quiltDatabase: devConfig.quilt.database || "test-database",
@@ -330,7 +320,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config: prodConfig,
                 ecrRepository,
-                stackArn: prodConfig.quilt.stackArn,
                 benchlingSecret: prodConfig.benchling.secretArn!,
                 packageBucket: prodConfig.packages.bucket,
                 quiltDatabase: prodConfig.quilt.database || "test-database",
@@ -356,7 +345,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -383,7 +371,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -411,7 +398,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -440,7 +426,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -472,7 +457,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -499,14 +483,13 @@ describe("FargateService - Multi-Environment Support", () => {
     });
 
     describe("IAM Permissions", () => {
-        test("task role has CloudFormation read permissions", () => {
+        test("task role does not have CloudFormation permissions (removed in v1.0.0)", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -533,7 +516,8 @@ describe("FargateService - Multi-Environment Support", () => {
                 });
             });
 
-            expect(foundCfnPermission).toBe(true);
+            // CloudFormation permissions removed in v1.0.0
+            expect(foundCfnPermission).toBe(false);
         });
 
         test("task role has S3 permissions", () => {
@@ -543,7 +527,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -579,7 +562,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -617,7 +599,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -647,7 +628,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 bucket,
                 config,
                 ecrRepository,
-                stackArn: config.quilt.stackArn,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",

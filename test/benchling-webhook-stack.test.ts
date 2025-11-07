@@ -104,12 +104,11 @@ describe("BenchlingWebhookStack", () => {
     test("throws error when missing required parameters", () => {
         const app = new cdk.App();
         const config = createMockConfig({
-            quilt: {
-                stackArn: "",
-                catalog: "https://quilt.example.com",
-                database: "test_db",
-                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-                region: "us-east-1",
+            benchling: {
+                secretArn: "",
+                tenant: "test-tenant",
+                clientId: "client_test123",
+                appDefinitionId: "test-app-id",
             },
         });
 
@@ -247,7 +246,6 @@ describe("BenchlingWebhookStack", () => {
 
         // Deprecated but still present for backward compatibility
         const deprecatedVars = [
-            "QuiltStackARN",
             "BenchlingSecret",  // Old name for BENCHLING_SECRET_ARN
         ];
 
@@ -309,16 +307,6 @@ describe("BenchlingWebhookStack", () => {
     // Secrets-Only Mode: CloudFormation Parameter Tests
     // ===================================================================
 
-    test("creates QuiltStackARN CloudFormation parameter (deprecated)", () => {
-        const parameters = template.toJSON().Parameters;
-        expect(parameters).toHaveProperty("QuiltStackARN");
-
-        const param = parameters.QuiltStackARN;
-        expect(param.Type).toBe("String");
-        // Parameter now marked as deprecated in v1.0.0
-        expect(param.Description).toContain("DEPRECATED");
-    });
-
     test("creates BenchlingSecret CloudFormation parameter", () => {
         const parameters = template.toJSON().Parameters;
         expect(parameters).toHaveProperty("BenchlingSecretARN");
@@ -375,14 +363,6 @@ describe("BenchlingWebhookStack", () => {
         expect(param.Default).toBe("");
     });
 
-    test("QuiltStackARN parameter is marked as deprecated", () => {
-        const parameters = template.toJSON().Parameters;
-        expect(parameters).toHaveProperty("QuiltStackARN");
-
-        const param = parameters.QuiltStackARN;
-        expect(param.Description).toContain("DEPRECATED");
-    });
-
     // ===================================================================
     // Secrets-Only Mode: IAM and Container Environment Tests
     // ===================================================================
@@ -405,7 +385,7 @@ describe("BenchlingWebhookStack", () => {
         expect(foundSecretPermission).toBe(true);
     });
 
-    test("task role has CloudFormation read permissions", () => {
+    test("task role does not have CloudFormation permissions (removed in v1.0.0)", () => {
         const policies = template.findResources("AWS::IAM::Policy");
         let foundCfnPermission = false;
 
@@ -420,18 +400,7 @@ describe("BenchlingWebhookStack", () => {
             });
         });
 
-        expect(foundCfnPermission).toBe(true);
-    });
-
-    test("container receives QuiltStackARN environment variable", () => {
-        const taskDefs = template.findResources("AWS::ECS::TaskDefinition");
-        const taskDefKeys = Object.keys(taskDefs);
-        const taskDef = taskDefs[taskDefKeys[0]];
-        const containerDef = taskDef.Properties.ContainerDefinitions[0];
-        const environment = containerDef.Environment || [];
-
-        const stackArnEnv = environment.find((e: any) => e.Name === "QuiltStackARN");
-        expect(stackArnEnv).toBeDefined();
+        expect(foundCfnPermission).toBe(false);
     });
 
     test("container receives BenchlingSecret environment variable", () => {
