@@ -251,7 +251,7 @@ def test_oauth_credentials(tenant: str, client_id: str, client_secret: str, entr
         print(f"✅ API accessible ({len(entries)} entries found)\n")
 
         # Determine which entry to test
-        test_entry_id = entry_id or os.environ.get("BENCHLING_TEST_ENTRY")
+        test_entry_id = entry_id
 
         if not test_entry_id:
             # Use most recent entry if none specified
