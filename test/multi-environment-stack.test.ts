@@ -125,7 +125,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             expect(parameters.QuiltStackARN).toBeDefined();
             expect(parameters.QuiltStackARN.Type).toBe("String");
-            expect(parameters.QuiltStackARN.Description).toContain("Quilt CloudFormation stack");
+            // Parameter now marked as deprecated in v1.0.0
+            expect(parameters.QuiltStackARN.Description).toContain("DEPRECATED");
         });
 
         test("creates BenchlingSecret parameter", () => {

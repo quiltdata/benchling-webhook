@@ -196,8 +196,32 @@ async function validateS3BucketAccess(
 
         result.isValid = true;
     } catch (error) {
-        const err = error as Error;
-        result.errors.push(`S3 bucket validation failed: ${err.message}`);
+        const err = error as Error & { Code?: string; $metadata?: { httpStatusCode?: number } };
+
+        // Extract detailed error information from AWS SDK error
+        let errorMsg = err.message || "Unknown error";
+        const errorCode = err.Code || (err as { code?: string }).code || (err as { name?: string }).name;
+        const statusCode = err.$metadata?.httpStatusCode;
+
+        // Build detailed error message
+        const details: string[] = [errorMsg];
+        if (errorCode && errorCode !== errorMsg) {
+            details.push(`Code: ${errorCode}`);
+        }
+        if (statusCode) {
+            details.push(`Status: ${statusCode}`);
+        }
+
+        result.errors.push(`S3 bucket validation failed: ${details.join(", ")}`);
+
+        // Add helpful hints based on error type
+        if (errorCode === "NoSuchBucket" || statusCode === 404) {
+            result.errors.push(`Hint: Bucket '${bucketName}' does not exist or is not accessible in region '${region}'`);
+        } else if (errorCode === "AccessDenied" || statusCode === 403) {
+            result.errors.push("Hint: Check that your AWS credentials have s3:HeadBucket and s3:ListBucket permissions");
+        } else if (errorCode === "PermanentRedirect" || statusCode === 301) {
+            result.errors.push(`Hint: Bucket '${bucketName}' may be in a different region. Try specifying the correct bucket region.`);
+        }
     }
 
     return result;
@@ -808,7 +832,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
             await syncSecretsToAWS({
                 profile,
                 awsProfile,
-                region: awsRegion,
+                region: config.deployment.region,
                 force: true,
             });
 
