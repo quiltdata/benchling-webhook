@@ -546,7 +546,8 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             type: "input",
             name: "region",
             message: "AWS Deployment Region:",
-            default: config.deployment?.region || config.quilt?.region || "us-east-1",
+            // Prefer inferred region from Quilt stack, then existing deployment config, then fallback
+            default: config.quilt?.region || config.deployment?.region || "us-east-1",
         },
         {
             type: "input",
