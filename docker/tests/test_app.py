@@ -87,13 +87,21 @@ class TestFlaskApp:
         assert data["status"] == "ready"
         assert data["orchestration"] == "python"
 
-    def test_readiness_probe_failure(self, client):
-        """Test readiness probe failure."""
-        # Create app without mocking EntryPackager to simulate failure
+    def test_readiness_probe_failure(self):
+        """Test readiness probe failure when config fails."""
+        # Create app with failing config
         with patch("src.app.get_config") as mock_get_config:
             mock_get_config.side_effect = Exception("Config failed")
-            with pytest.raises(Exception):
-                create_app()
+            app = create_app()
+            app.config["TESTING"] = True
+            client = app.test_client()
+
+            # Readiness probe should fail
+            response = client.get("/health/ready")
+            assert response.status_code == 503
+            data = json.loads(response.data)
+            assert data["status"] == "not ready"
+            assert "Config failed" in data["error"]
 
     def test_webhook_endpoint_success(self, client, mock_entry_packager):
         """Test webhook endpoint with valid payload."""
@@ -377,8 +385,8 @@ class TestFlaskApp:
 
             data = json.loads(response.data)
             assert data["status"] == "unhealthy"
-            assert data["mode"] == "legacy_or_misconfigured"
-            assert data["source"] == "not_configured"
+            assert data["mode"] == "not_configured"
+            assert data["source"] == "missing_environment_variables"
             assert data["secrets_valid"] is False
             assert data["tenant_configured"] is False
             assert data["quilt_stack_configured"] is False
