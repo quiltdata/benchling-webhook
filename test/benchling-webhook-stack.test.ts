@@ -209,9 +209,9 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
-    test("container receives v0.7.0 environment variables", () => {
-        // v0.7.0 uses structured config with static values as env vars
-        // and runtime parameters (QuiltStackARN, BenchlingSecret) from CloudFormation
+    test("container receives v1.0.0 environment variables", () => {
+        // v1.0.0 uses explicit service parameters resolved at deployment time
+        // Eliminates runtime CloudFormation API calls
         const taskDefs = template.findResources("AWS::ECS::TaskDefinition");
         const taskDefKeys = Object.keys(taskDefs);
         const taskDef = taskDefs[taskDefKeys[0]];
@@ -228,18 +228,27 @@ describe("BenchlingWebhookStack", () => {
             actualEnvVars.add(secret.Name);
         });
 
-        // v0.7.0 static config values (from ProfileConfig)
-        const expectedStaticVars = [
+        // v1.0.0 explicit service parameters (resolved at deployment time)
+        const expectedServiceVars = [
+            "PACKAGER_SQS_URL",
+            "ATHENA_USER_DATABASE",
+            "QUILT_WEB_HOST",
+            "ICEBERG_DATABASE",
+        ];
+
+        // Benchling configuration
+        const expectedBenchlingVars = [
+            "BENCHLING_SECRET_ARN",
             "BENCHLING_TENANT",
             "BENCHLING_PKG_BUCKET",
             "BENCHLING_PKG_PREFIX",
             "BENCHLING_PKG_KEY",
         ];
 
-        // Runtime parameters (from CloudFormation)
-        const expectedRuntimeVars = [
+        // Deprecated but still present for backward compatibility
+        const deprecatedVars = [
             "QuiltStackARN",
-            "BenchlingSecret",
+            "BenchlingSecret",  // Old name for BENCHLING_SECRET_ARN
         ];
 
         // Common/system variables
@@ -252,13 +261,18 @@ describe("BenchlingWebhookStack", () => {
             "BENCHLING_WEBHOOK_VERSION",
         ];
 
-        // Verify static config values are present
-        expectedStaticVars.forEach((varName) => {
+        // Verify explicit service variables are present
+        expectedServiceVars.forEach((varName) => {
             expect(actualEnvVars.has(varName)).toBe(true);
         });
 
-        // Verify runtime parameters are present
-        expectedRuntimeVars.forEach((varName) => {
+        // Verify Benchling config values are present
+        expectedBenchlingVars.forEach((varName) => {
+            expect(actualEnvVars.has(varName)).toBe(true);
+        });
+
+        // Verify deprecated variables still present (for now)
+        deprecatedVars.forEach((varName) => {
             expect(actualEnvVars.has(varName)).toBe(true);
         });
 
@@ -278,7 +292,7 @@ describe("BenchlingWebhookStack", () => {
             expect(actualEnvVars.has(varName)).toBe(false);
         });
 
-        // Verify old queue/catalog variables are NOT present (now resolved at runtime via CloudFormation)
+        // Verify old variable names are NOT present (replaced by explicit parameters)
         const removedVars = [
             "QUEUE_URL",
             "QUILT_USER_BUCKET",
@@ -295,13 +309,14 @@ describe("BenchlingWebhookStack", () => {
     // Secrets-Only Mode: CloudFormation Parameter Tests
     // ===================================================================
 
-    test("creates QuiltStackARN CloudFormation parameter", () => {
+    test("creates QuiltStackARN CloudFormation parameter (deprecated)", () => {
         const parameters = template.toJSON().Parameters;
         expect(parameters).toHaveProperty("QuiltStackARN");
 
         const param = parameters.QuiltStackARN;
         expect(param.Type).toBe("String");
-        expect(param.Description).toContain("Quilt CloudFormation stack");
+        // Parameter now marked as deprecated in v1.0.0
+        expect(param.Description).toContain("DEPRECATED");
     });
 
     test("creates BenchlingSecret CloudFormation parameter", () => {
