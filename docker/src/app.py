@@ -51,11 +51,16 @@ logger = structlog.get_logger(__name__)
 def create_app():
     app = Flask(__name__)
 
-    # Initialize configuration and clients
+    # Try to initialize configuration and clients eagerly
+    # If it fails, store the error and continue - endpoints will handle gracefully
+    config = None
+    benchling = None
+    entry_packager = None
+    config_error = None
+
     try:
         config = get_config()
-
-        logger.info("Python orchestration enabled")
+        logger.info("Configuration loaded successfully")
 
         # Initialize Benchling SDK with OAuth
         auth_method = ClientCredentialsOAuth2(
@@ -69,9 +74,11 @@ def create_app():
             config=config,
         )
 
+        logger.info("Python orchestration enabled")
+
     except Exception as e:
-        logger.error("Failed to initialize application", error=str(e))
-        raise
+        config_error = str(e)
+        logger.warning("Configuration not available - service will start but endpoints requiring config will fail", error=str(e))
 
     @app.route("/health", methods=["GET"])
     def health():
@@ -104,20 +111,19 @@ def create_app():
 
     @app.route("/health/ready", methods=["GET"])
     def readiness():
-        """Readiness probe for orchestration."""
-        try:
-            # Check Python orchestration components
-            if not entry_packager:
-                raise Exception("EntryPackager not initialized")
-            return jsonify(
-                {
-                    "status": "ready",
-                    "orchestration": "python",
-                }
-            )
-        except Exception as e:
-            logger.error("Readiness check failed", error=str(e))
-            return jsonify({"status": "not ready", "error": str(e)}), 503
+        """Readiness probe - only ready if secrets are valid."""
+        if config_error:
+            return jsonify({"status": "not ready", "error": config_error}), 503
+
+        if not entry_packager:
+            return jsonify({"status": "not ready", "error": "EntryPackager not initialized"}), 503
+
+        return jsonify(
+            {
+                "status": "ready",
+                "orchestration": "python",
+            }
+        )
 
     @app.route("/health/live", methods=["GET"])
     def liveness():
@@ -126,141 +132,148 @@ def create_app():
 
     @app.route("/health/secrets", methods=["GET"])
     def secrets_health():
-        """Report secret resolution status and source (secrets-only mode)."""
-        try:
-            # Secrets-only mode: Check for QuiltStackARN and BenchlingSecret
-            quilt_stack_arn = os.getenv("QuiltStackARN")
-            benchling_secret = os.getenv("BenchlingSecret")
+        """Report secret resolution status and source."""
+        # Secrets-only mode: Check for QuiltStackARN and BenchlingSecret
+        quilt_stack_arn = os.getenv("QuiltStackARN")
+        benchling_secret = os.getenv("BenchlingSecret")
 
-            # Determine configuration mode and source
-            if quilt_stack_arn and benchling_secret:
-                # Secrets-only mode (v0.6.0+)
-                mode = "secrets-only"
-                if benchling_secret.startswith("arn:aws:secretsmanager:"):
-                    source = "secrets_manager_arn"
-                else:
-                    source = "secrets_manager_name"
+        # Determine configuration mode and source
+        if quilt_stack_arn and benchling_secret:
+            # Secrets-only mode (v0.6.0+)
+            mode = "secrets-only"
+            if benchling_secret.startswith("arn:aws:secretsmanager:"):
+                source = "secrets_manager_arn"
             else:
-                # Legacy mode or misconfigured
-                mode = "legacy_or_misconfigured"
-                benchling_secrets_env = os.getenv("BENCHLING_SECRETS")
-                if benchling_secrets_env:
-                    if benchling_secrets_env.startswith("arn:"):
-                        source = "legacy_secrets_manager"
-                    else:
-                        source = "legacy_environment_json"
-                elif os.getenv("BENCHLING_TENANT"):
-                    source = "legacy_environment_vars"
-                else:
-                    source = "not_configured"
+                source = "secrets_manager_name"
+        else:
+            # Not configured
+            mode = "not_configured"
+            source = "missing_environment_variables"
 
-            # Check if secrets are valid
-            secrets_valid = bool(
-                config.benchling_tenant and config.benchling_client_id and config.benchling_client_secret
-            )
+        # Check if secrets are valid (only if config loaded successfully)
+        secrets_valid = config is not None and bool(
+            config.benchling_tenant and config.benchling_client_id and config.benchling_client_secret
+        )
 
-            return jsonify(
-                {
-                    "status": "healthy" if secrets_valid else "unhealthy",
-                    "mode": mode,
-                    "source": source,
-                    "secrets_valid": secrets_valid,
-                    "tenant_configured": bool(config.benchling_tenant),
-                    "quilt_stack_configured": bool(quilt_stack_arn),
-                }
-            )
-        except Exception as e:
-            logger.error("Secrets health check failed", error=str(e))
-            return jsonify({"status": "unhealthy", "error": str(e)}), 503
+        response = {
+            "status": "healthy" if secrets_valid else "unhealthy",
+            "mode": mode,
+            "source": source,
+            "secrets_valid": secrets_valid,
+            "tenant_configured": bool(config and config.benchling_tenant),
+            "quilt_stack_configured": bool(quilt_stack_arn),
+        }
+
+        if config_error:
+            response["error"] = config_error
+
+        return jsonify(response)
 
     @app.route("/config", methods=["GET"])
     def config_status():
         """Display resolved configuration (secrets masked)."""
-        try:
-            # Determine configuration mode
-            quilt_stack_arn = os.getenv("QuiltStackARN")
-            benchling_secret_name = os.getenv("BenchlingSecret")
+        if config_error:
+            return jsonify({"status": "error", "error": config_error}), 503
 
-            config_mode = "secrets-only" if (quilt_stack_arn and benchling_secret_name) else "legacy"
+        if not config:
+            return jsonify({"status": "error", "error": "Configuration not initialized"}), 503
 
-            # Mask sensitive values
-            def mask_value(value, show_last=4):
-                """Mask a value, showing only last N characters."""
-                if not value:
-                    return None
-                if len(value) <= show_last:
-                    return "***"
-                return f"***{value[-show_last:]}"
+        # Determine configuration mode
+        quilt_stack_arn = os.getenv("QuiltStackARN")
+        benchling_secret_name = os.getenv("BenchlingSecret")
 
-            def mask_arn(arn):
-                """Mask ARN account ID."""
-                if not arn or not arn.startswith("arn:"):
-                    return arn
-                parts = arn.split(":")
-                if len(parts) >= 5:
-                    # Mask account ID (5th component)
-                    parts[4] = mask_value(parts[4], 4)
-                return ":".join(parts)
+        config_mode = "secrets-only" if (quilt_stack_arn and benchling_secret_name) else "not-configured"
 
-            def mask_queue_url(url):
-                """Mask SQS queue URL account ID."""
-                if not url or not url.startswith("https://sqs."):
-                    return url
-                prefix, _, remainder = url.partition("amazonaws.com/")
-                if not remainder:
-                    return url
-                parts = remainder.split("/", 1)
-                if len(parts) != 2:
-                    return url
-                account_id, queue_path = parts
-                masked_account = mask_value(account_id, 4)
-                return f"{prefix}amazonaws.com/{masked_account}/{queue_path}"
+        # Mask sensitive values
+        def mask_value(value, show_last=4):
+            """Mask a value, showing only last N characters."""
+            if not value:
+                return None
+            if len(value) <= show_last:
+                return "***"
+            return f"***{value[-show_last:]}"
 
-            response = {
-                "config_mode": config_mode,
-                "aws": {
-                    "region": config.aws_region or os.getenv("AWS_REGION", "not-set"),
-                },
-                "quilt": {
-                    "catalog": config.quilt_catalog,
-                    "database": config.quilt_database,
-                    "bucket": config.s3_bucket_name,
-                    "queue_url": mask_queue_url(config.queue_url) if config.queue_url else None,
-                },
-                "benchling": {
-                    "tenant": config.benchling_tenant,
-                    "client_id": mask_value(config.benchling_client_id, 4),
-                    "has_client_secret": bool(config.benchling_client_secret),
-                    "has_app_definition_id": bool(config.benchling_app_definition_id),
-                },
-                "parameters": {
-                    "pkg_prefix": config.pkg_prefix,
-                    "pkg_key": config.pkg_key,
-                    "user_bucket": config.s3_bucket_name,
-                    "log_level": config.log_level,
-                    "webhook_allow_list": config.webhook_allow_list if config.webhook_allow_list else "",
-                    "enable_webhook_verification": config.enable_webhook_verification,
-                },
+        def mask_arn(arn):
+            """Mask ARN account ID."""
+            if not arn or not arn.startswith("arn:"):
+                return arn
+            parts = arn.split(":")
+            if len(parts) >= 5:
+                # Mask account ID (5th component)
+                parts[4] = mask_value(parts[4], 4)
+            return ":".join(parts)
+
+        def mask_queue_url(url):
+            """Mask SQS queue URL account ID."""
+            if not url or not url.startswith("https://sqs."):
+                return url
+            prefix, _, remainder = url.partition("amazonaws.com/")
+            if not remainder:
+                return url
+            parts = remainder.split("/", 1)
+            if len(parts) != 2:
+                return url
+            account_id, queue_path = parts
+            masked_account = mask_value(account_id, 4)
+            return f"{prefix}amazonaws.com/{masked_account}/{queue_path}"
+
+        response = {
+            "config_mode": config_mode,
+            "aws": {
+                "region": config.aws_region or os.getenv("AWS_REGION", "not-set"),
+            },
+            "quilt": {
+                "catalog": config.quilt_catalog,
+                "database": config.quilt_database,
+                "bucket": config.s3_bucket_name,
+                "queue_url": mask_queue_url(config.queue_url) if config.queue_url else None,
+            },
+            "benchling": {
+                "tenant": config.benchling_tenant,
+                "client_id": mask_value(config.benchling_client_id, 4),
+                "has_client_secret": bool(config.benchling_client_secret),
+                "has_app_definition_id": bool(config.benchling_app_definition_id),
+            },
+            "parameters": {
+                "pkg_prefix": config.pkg_prefix,
+                "pkg_key": config.pkg_key,
+                "user_bucket": config.s3_bucket_name,
+                "log_level": config.log_level,
+                "webhook_allow_list": config.webhook_allow_list if config.webhook_allow_list else "",
+                "enable_webhook_verification": config.enable_webhook_verification,
+            },
+        }
+
+        # Add secrets-only mode specific info
+        if config_mode == "secrets-only":
+            response["secrets_only_params"] = {
+                "quilt_stack_arn": mask_arn(quilt_stack_arn),
+                "benchling_secret_name": benchling_secret_name,
+                "note": "All configuration resolved from AWS CloudFormation and Secrets Manager",
             }
 
-            # Add secrets-only mode specific info
-            if config_mode == "secrets-only":
-                response["secrets_only_params"] = {
-                    "quilt_stack_arn": mask_arn(quilt_stack_arn),
-                    "benchling_secret_name": benchling_secret_name,
-                    "note": "All configuration resolved from AWS CloudFormation and Secrets Manager",
-                }
-
-            return jsonify(response)
-
-        except Exception as e:
-            logger.error("Config status check failed", error=str(e))
-            return jsonify({"status": "error", "error": str(e)}), 500
+        return jsonify(response)
 
     @app.route("/event", methods=["POST"])
-    @require_webhook_verification(config)
     def handle_event():
         """Handle Benchling webhook events."""
+        # Check if config is available
+        if config_error or not config:
+            logger.error("Webhook received but configuration not available", error=config_error)
+            return jsonify({
+                "error": "Service not configured",
+                "details": config_error or "Configuration not initialized"
+            }), 503
+
+        # Perform webhook verification inline
+        if config.enable_webhook_verification:
+            from .webhook_verification import WebhookVerificationError, verify_webhook
+            try:
+                verify_webhook(config.benchling_app_definition_id, request)
+            except WebhookVerificationError as e:
+                logger.warning("Webhook verification failed", error=str(e))
+                return jsonify({"error": "Webhook verification failed"}), 401
+
         try:
             logger.info("Received /event", headers=dict(request.headers))
             # Parse payload once
@@ -338,9 +351,25 @@ def create_app():
             return jsonify({"error": "Internal server error"}), 500
 
     @app.route("/lifecycle", methods=["POST"])
-    @require_webhook_verification(config)
     def lifecycle():
         """Handle Benchling app lifecycle events."""
+        # Check if config is available
+        if config_error or not config:
+            logger.error("Lifecycle webhook received but configuration not available", error=config_error)
+            return jsonify({
+                "error": "Service not configured",
+                "details": config_error or "Configuration not initialized"
+            }), 503
+
+        # Perform webhook verification inline
+        if config.enable_webhook_verification:
+            from .webhook_verification import WebhookVerificationError, verify_webhook
+            try:
+                verify_webhook(config.benchling_app_definition_id, request)
+            except WebhookVerificationError as e:
+                logger.warning("Webhook verification failed", error=str(e))
+                return jsonify({"error": "Webhook verification failed"}), 401
+
         try:
             logger.info("Received /lifecycle", headers=dict(request.headers))
             payload_obj = Payload.from_request(request, benchling)
@@ -414,9 +443,25 @@ def create_app():
         return jsonify({"status": "success", "message": "Configuration updated successfully"})
 
     @app.route("/canvas", methods=["POST"])
-    @require_webhook_verification(config)
     def canvas_initialize():
         """Handle /canvas webhook from Benchling."""
+        # Check if config is available
+        if config_error or not config:
+            logger.error("Canvas webhook received but configuration not available", error=config_error)
+            return jsonify({
+                "error": "Service not configured",
+                "details": config_error or "Configuration not initialized"
+            }), 503
+
+        # Perform webhook verification inline
+        if config.enable_webhook_verification:
+            from .webhook_verification import WebhookVerificationError, verify_webhook
+            try:
+                verify_webhook(config.benchling_app_definition_id, request)
+            except WebhookVerificationError as e:
+                logger.warning("Webhook verification failed", error=str(e))
+                return jsonify({"error": "Webhook verification failed"}), 401
+
         try:
             logger.info("Received /canvas", headers=dict(request.headers))
             # Parse payload once
