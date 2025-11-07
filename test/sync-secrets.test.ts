@@ -14,27 +14,19 @@ import * as os from "os";
 import * as path from "path";
 
 describe("sync-secrets CLI", () => {
-    const originalHome = process.env.HOME;
-    let tempHomeDir: string;
+    let testBaseDir: string;
     let sendMock: jest.SpyInstance;
 
     beforeEach(() => {
-        tempHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "benchling-sync-secrets-"));
-        process.env.HOME = tempHomeDir;
+        testBaseDir = fs.mkdtempSync(path.join(os.tmpdir(), "benchling-sync-secrets-"));
         sendMock = jest.spyOn(SecretsManagerClient.prototype, "send");
     });
 
     afterEach(() => {
         sendMock.mockRestore();
 
-        if (originalHome !== undefined) {
-            process.env.HOME = originalHome;
-        } else {
-            delete process.env.HOME;
-        }
-
-        if (tempHomeDir && fs.existsSync(tempHomeDir)) {
-            fs.rmSync(tempHomeDir, { recursive: true, force: true });
+        if (testBaseDir && fs.existsSync(testBaseDir)) {
+            fs.rmSync(testBaseDir, { recursive: true, force: true });
         }
     });
 
@@ -45,7 +37,7 @@ describe("sync-secrets CLI", () => {
         const existingSecretArn =
             "arn:aws:secretsmanager:us-east-1:123456789012:secret:existing-secret-abc123";
 
-        const xdg = new XDGConfig();
+        const xdg = new XDGConfig(testBaseDir);
         const timestamp = new Date().toISOString();
         const profileConfig: ProfileConfig = {
             benchling: {
