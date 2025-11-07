@@ -643,6 +643,7 @@ export interface InstallWizardOptions {
  * 3. Run interactive prompts for missing fields
  * 4. Validate configuration
  * 5. Save to XDG config directory
+ * 6. Sync secrets to AWS Secrets Manager
  */
 async function runInstallWizard(options: InstallWizardOptions = {}): Promise<ProfileConfig> {
     const {
@@ -650,6 +651,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         inheritFrom,
         nonInteractive = false,
         skipValidation = false,
+        skipSecretsSync = false,
         awsProfile,
         awsRegion = "us-east-1",
     } = options;
@@ -797,7 +799,28 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         throw new Error(`Failed to save configuration: ${(error as Error).message}`);
     }
 
-    // Step 6: Display next steps
+    // Step 6: Sync secrets to AWS Secrets Manager
+    if (!skipSecretsSync) {
+        console.log("Syncing secrets to AWS Secrets Manager...\n");
+
+        try {
+            const { syncSecretsToAWS } = await import("./sync-secrets");
+            await syncSecretsToAWS({
+                profile,
+                awsProfile,
+                region: awsRegion,
+                force: true,
+            });
+
+            console.log(`✓ Secrets synced to AWS Secrets Manager\n`);
+        } catch (error) {
+            console.warn(chalk.yellow(`⚠️  Failed to sync secrets: ${(error as Error).message}`));
+            console.warn(chalk.yellow("   You can sync secrets manually later with:"));
+            console.warn(chalk.cyan(`   npm run setup:sync-secrets -- --profile ${profile}\n`));
+        }
+    }
+
+    // Step 7: Display next steps
     console.log("╔═══════════════════════════════════════════════════════════╗");
     console.log("║   Setup Complete!                                         ║");
     console.log("╚═══════════════════════════════════════════════════════════╝\n");
