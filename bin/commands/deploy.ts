@@ -326,7 +326,7 @@ async function deploy(
     }
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
-    console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)} ${chalk.dim("(deprecated)")}`);
+    console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)} ${chalk.dim("(deployment-time resolution only)")}`);
     console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
     console.log();
     console.log(chalk.bold("  Container Image:"));
@@ -370,7 +370,6 @@ async function deploy(
             `QuiltWebHost=${services.quiltWebHost}`,
             `IcebergDatabase=${services.icebergDatabase || ""}`,
             // Legacy parameters
-            `QuiltStackARN=${stackArn}`,  // DEPRECATED
             `BenchlingSecretARN=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
             `PackageBucket=${config.packages.bucket}`,

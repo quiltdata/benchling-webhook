@@ -38,17 +38,15 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const { config } = props;
 
         // Validate required configuration fields
-        if (!config.quilt.stackArn || !config.benchling.secretArn) {
+        if (!config.benchling.secretArn) {
             throw new Error(
                 "Configuration validation failed. Required fields:\n" +
-                "  - config.quilt.stackArn: CloudFormation stack ARN\n" +
                 "  - config.benchling.secretArn: Secrets Manager secret ARN\n\n" +
                 "Run 'npm run setup' to configure your deployment.",
             );
         }
 
         console.log(`Deploying with profile configuration (v${config._metadata.version})`);
-        console.log(`  Quilt Stack: ${config.quilt.stackArn}`);
         console.log(`  Benchling Tenant: ${config.benchling.tenant}`);
         console.log(`  Region: ${config.deployment.region}`);
 
@@ -79,14 +77,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             type: "String",
             description: "Iceberg database name (optional, leave empty if not used)",
             default: "",
-        });
-
-        // DEPRECATED (v1.0.0): QuiltStackARN no longer used at runtime
-        // Kept temporarily for backward compatibility during migration
-        const quiltStackArnParam = new cdk.CfnParameter(this, "QuiltStackARN", {
-            type: "String",
-            description: "DEPRECATED: Use explicit service parameters instead",
-            default: config.quilt.stackArn || "",
         });
 
         const benchlingSecretParam = new cdk.CfnParameter(this, "BenchlingSecretARN", {
@@ -126,7 +116,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const athenaUserDatabaseValue = athenaUserDatabaseParam.valueAsString;
         const quiltWebHostValue = quiltWebHostParam.valueAsString;
         const icebergDatabaseValue = icebergDatabaseParam.valueAsString;
-        const quiltStackArnValue = quiltStackArnParam.valueAsString;  // DEPRECATED
         const benchlingSecretValue = benchlingSecretParam.valueAsString;
         const logLevelValue = logLevelParam.valueAsString;
         const imageTagValue = imageTagParam.valueAsString;
@@ -171,7 +160,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             quiltWebHost: quiltWebHostValue,
             icebergDatabase: icebergDatabaseValue,
             // Legacy parameters
-            stackArn: quiltStackArnValue,  // DEPRECATED
             benchlingSecret: benchlingSecretValue,
             packageBucket: packageBucketValue,
             quiltDatabase: quiltDatabaseValue,

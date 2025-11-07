@@ -67,12 +67,11 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
         test("throws error when missing required parameters", () => {
             const config = createMockConfig({
-                quilt: {
-                    stackArn: "",
-                    catalog: "https://quilt.example.com",
-                    database: "test_db",
-                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-                    region: "us-east-1",
+                benchling: {
+                    secretArn: "",
+                    tenant: "test-tenant",
+                    clientId: "client_test123",
+                    appDefinitionId: "test-app-id",
                 },
             });
 
@@ -110,7 +109,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
     });
 
     describe("CloudFormation Parameters", () => {
-        test("creates QuiltStackARN parameter", () => {
+        test("does not create QuiltStackARN parameter (removed in v1.0.0)", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -123,10 +122,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             const template = Template.fromStack(stack);
             const parameters = template.toJSON().Parameters;
 
-            expect(parameters.QuiltStackARN).toBeDefined();
-            expect(parameters.QuiltStackARN.Type).toBe("String");
-            // Parameter now marked as deprecated in v1.0.0
-            expect(parameters.QuiltStackARN.Description).toContain("DEPRECATED");
+            // QuiltStackARN parameter removed in v1.0.0
+            expect(parameters.QuiltStackARN).toBeUndefined();
         });
 
         test("creates BenchlingSecret parameter", () => {
@@ -415,7 +412,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             expect(hasS3Permission).toBe(true);
             expect(hasSQSPermission).toBe(true);
             expect(hasSecretsPermission).toBe(true);
-            expect(hasCfnPermission).toBe(true);
+            // CloudFormation permissions removed in v1.0.0
+            expect(hasCfnPermission).toBe(false);
         });
     });
 

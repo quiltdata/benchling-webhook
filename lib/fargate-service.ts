@@ -15,8 +15,8 @@ import { ProfileConfig } from "./types/config";
  * Uses ProfileConfig for structured configuration access.
  * Runtime-configurable parameters can be overridden via CloudFormation parameters.
  *
- * **Breaking Change (v1.0.0)**: stackArn is deprecated in favor of explicit service environment variables.
- * The new explicit service parameters (packagerQueueUrl, athenaUserDatabase, quiltWebHost, icebergDatabase)
+ * **Breaking Change (v1.0.0)**: Removed stackArn in favor of explicit service environment variables.
+ * The explicit service parameters (packagerQueueUrl, athenaUserDatabase, quiltWebHost, icebergDatabase)
  * are resolved at deployment time and passed directly to the container, eliminating runtime CloudFormation calls.
  */
 export interface FargateServiceProps {
@@ -35,7 +35,6 @@ export interface FargateServiceProps {
     readonly icebergDatabase: string;
 
     // Runtime-configurable parameters (from CloudFormation)
-    readonly stackArn?: string; // DEPRECATED: Will be removed in Episode 7
     readonly benchlingSecret: string;
     readonly packageBucket: string;
     readonly quiltDatabase: string;
@@ -90,20 +89,6 @@ export class FargateService extends Construct {
         const taskRole = new iam.Role(this, "TaskRole", {
             assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
         });
-
-        // Grant CloudFormation read access (to query stack outputs)
-        // DEPRECATED: Will be removed in v1.0.0 (Episodes 5-6)
-        if (props.stackArn) {
-            taskRole.addToPolicy(
-                new iam.PolicyStatement({
-                    actions: [
-                        "cloudformation:DescribeStacks",
-                        "cloudformation:DescribeStackResources",
-                    ],
-                    resources: [props.stackArn],
-                }),
-            );
-        }
 
         // Grant Secrets Manager read access (to fetch Benchling credentials)
         // Use both config.benchling.secretArn and runtime parameter
@@ -250,12 +235,6 @@ export class FargateService extends Construct {
             BENCHLING_PKG_PREFIX: config.packages.prefix,
             BENCHLING_PKG_KEY: config.packages.metadataKey,
         };
-
-        // DEPRECATED: QuiltStackARN will be removed in Episode 7
-        // Kept temporarily for backward compatibility during migration
-        if (props.stackArn) {
-            environmentVars.QuiltStackARN = props.stackArn;
-        }
 
         // DEPRECATED: BenchlingSecret renamed to BENCHLING_SECRET_ARN for consistency
         // Keep old name temporarily for backward compatibility

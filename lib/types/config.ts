@@ -29,7 +29,6 @@ export type ProfileName = string;
  * ```json
  * {
  *   "quilt": {
- *     "stackArn": "arn:aws:cloudformation:...",
  *     "catalog": "https://quilt.example.com",
  *     "bucket": "my-quilt-bucket",
  *     "database": "quilt_catalog",
@@ -113,11 +112,12 @@ export interface ProfileConfig {
  * Configuration for Quilt data catalog integration, including service endpoints
  * and SQS queue for package creation.
  *
- * **Breaking Change (v1.0.0)**: `stackArn` is now optional. Services are resolved
- * at deployment time and passed as explicit environment variables to the container.
+ * **Breaking Change (v1.0.0)**: `stackArn` is used at deployment time only to resolve services.
+ * Services are passed as explicit environment variables to the container.
+ * No runtime CloudFormation API calls are made.
  *
  * **Usage**:
- * - **Deployment time**: `stackArn` is used to resolve service endpoints via CloudFormation
+ * - **Deployment time**: `stackArn` used to resolve service endpoints from stack outputs
  * - **Runtime**: Explicit environment variables are used (no CloudFormation API calls)
  */
 export interface QuiltConfig {
@@ -127,9 +127,8 @@ export interface QuiltConfig {
      * Used at deployment time to resolve service endpoints from stack outputs.
      * The resolved services are then passed as explicit environment variables to the container.
      *
-     * If not provided, all service endpoints must be explicitly configured.
-     *
      * **Deployment usage only** - not passed to container runtime.
+     * **Breaking Change (v1.0.0)**: No longer passed as environment variable or CloudFormation parameter.
      *
      * @example "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-stack/..."
      */
