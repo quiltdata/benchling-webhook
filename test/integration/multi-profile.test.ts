@@ -2,10 +2,12 @@
  * Integration tests for Multi-Profile Setup (v0.7.0)
  *
  * Tests complete workflow with multiple profiles and deployment tracking.
+ * Uses explicit baseDir for XDGConfig to isolate tests from real config.
  */
 
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig, DeploymentRecord } from "../../lib/types/config";
+import { createMockConfig, createDevConfig, createProdConfig } from "../helpers/test-config";
 import { mkdirSync, existsSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";

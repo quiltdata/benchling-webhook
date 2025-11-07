@@ -4,7 +4,7 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { FargateService } from "../lib/fargate-service";
-import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/mock-config";
+import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/test-config";
 
 /**
  * Multi-Environment Fargate Service Tests

@@ -1,7 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
-import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/mock-config";
+import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/test-config";
 
 /**
  * Multi-Environment Stack Tests
