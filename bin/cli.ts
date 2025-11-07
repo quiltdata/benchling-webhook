@@ -9,6 +9,7 @@ import { manifestCommand } from "./commands/manifest";
 import { setupWizardCommand } from "./commands/setup-wizard";
 import { setupProfileCommand } from "./commands/setup-profile";
 import { healthCheckCommand } from "./commands/health-check";
+import { configShowCommand } from "./commands/config-show";
 
 // Load package.json for version
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -178,6 +179,20 @@ program
     .action(async (options) => {
         try {
             await healthCheckCommand(options);
+        } catch (error) {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        }
+    });
+
+// Config show command (for Python interop)
+program
+    .command("config")
+    .description("Show configuration for a profile as JSON")
+    .option("--profile <name>", "Configuration profile to show", "default")
+    .action(async (options) => {
+        try {
+            await configShowCommand(options);
         } catch (error) {
             console.error(chalk.red((error as Error).message));
             process.exit(1);
