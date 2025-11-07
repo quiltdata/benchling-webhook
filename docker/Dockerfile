@@ -30,6 +30,10 @@
 #
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023@sha256:b0f8d1179ea5555f33163cbd33ad91ac5c553d334da210741171fa5e40cbefa9 AS builder
 
+# Accept VERSION as build argument (e.g., from git tag in CI)
+# If not provided, version.py will fall back to pyproject.toml
+ARG VERSION
+
 # Install Python 3.11 and build dependencies
 # - python3.11: Python interpreter
 # - python3.11-devel: Headers needed for compiling native extensions
@@ -117,14 +121,19 @@ RUN chown -R appuser:appuser /app /home/appuser
 # All subsequent commands and container runtime use this user
 USER appuser
 
+# Pass VERSION build arg to runtime stage
+ARG VERSION
+
 # Configure environment for Python execution
 # - PATH: Prepend .venv/bin to activate virtual environment
 #   This allows direct Python execution without uv wrapper
 # - PYTHONPATH: Ensure Python can find application modules
 # - FLASK_APP: Flask application entry point
+# - BUILD_VERSION: Git tag version from CI (overrides pyproject.toml version)
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH="/app" \
-    FLASK_APP="src.app"
+    FLASK_APP="src.app" \
+    BUILD_VERSION="${VERSION}"
 
 # Expose application port
 # Flask default port for HTTP traffic
