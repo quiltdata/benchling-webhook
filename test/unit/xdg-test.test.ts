@@ -1,4 +1,4 @@
-import { XDGTest } from "../xdg-test";
+import { XDGTest } from "../helpers/xdg-test";
 import { ProfileConfig, DeploymentHistory } from "../../lib/types/config";
 
 describe("XDGTest In-Memory Configuration Storage", () => {

@@ -5,7 +5,7 @@
  */
 
 import { ProfileConfig, DeploymentRecord } from "../../lib/types/config";
-import { XDGTest } from "../mocks";
+import { XDGTest } from "../helpers/xdg-test";
 
 describe("XDGConfig", () => {
     let mockStorage: XDGTest;

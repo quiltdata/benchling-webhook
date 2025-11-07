@@ -7,7 +7,7 @@ import {
     CreateSecretCommand,
 } from "@aws-sdk/client-secrets-manager";
 import type { UpdateSecretCommandInput } from "@aws-sdk/client-secrets-manager";
-import { XDGTest } from "./xdg-test";
+import { XDGTest } from "./helpers/xdg-test";
 import type { ProfileConfig } from "../lib/types/config";
 
 describe("sync-secrets CLI", () => {

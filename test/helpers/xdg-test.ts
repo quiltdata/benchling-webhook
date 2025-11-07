@@ -11,8 +11,8 @@
  * @version 0.7.0
  */
 
-import { ProfileConfig, DeploymentHistory } from "../lib/types/config";
-import { XDGBase } from "../lib/xdg-base";
+import { ProfileConfig, DeploymentHistory } from "../../lib/types/config";
+import { XDGBase } from "../../lib/xdg-base";
 
 /**
  * In-memory XDG configuration storage for testing

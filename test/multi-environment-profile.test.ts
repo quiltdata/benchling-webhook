@@ -1,4 +1,4 @@
-import { XDGTest } from "./mocks";
+import { XDGTest } from "./helpers/xdg-test";
 import { ProfileConfig } from "../lib/types/config";
 
 /**

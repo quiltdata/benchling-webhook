@@ -5,7 +5,7 @@
  */
 
 import { ProfileConfig, DeploymentRecord, DeploymentHistory } from "../../lib/types/config";
-import { XDGTest } from "../mocks";
+import { XDGTest } from "../helpers/xdg-test";
 
 describe("Deployment Tracking", () => {
     let mockStorage: XDGTest;

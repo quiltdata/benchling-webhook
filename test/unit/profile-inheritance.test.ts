@@ -5,7 +5,7 @@
  */
 
 import { ProfileConfig } from "../../lib/types/config";
-import { XDGTest } from "../mocks";
+import { XDGTest } from "../helpers/xdg-test";
 
 describe("Profile Inheritance", () => {
     let mockStorage: XDGTest;

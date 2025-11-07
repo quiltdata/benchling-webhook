@@ -4,7 +4,7 @@
  * Tests complete workflow with multiple profiles and deployment tracking.
  */
 
-import { XDGTest } from "../mocks";
+import { XDGTest } from "../helpers/xdg-test";
 import { ProfileConfig, DeploymentRecord } from "../../lib/types/config";
 
 describe("Multi-Profile Integration", () => {

@@ -4,7 +4,7 @@
  * Tests the complete workflow of setting up a new installation from scratch.
  */
 
-import { XDGTest } from "../mocks";
+import { XDGTest } from "../helpers/xdg-test";
 import { ProfileConfig } from "../../lib/types/config";
 
 describe("Fresh Install Integration", () => {
