@@ -5,13 +5,10 @@ import boxen from "boxen";
 import { prompt } from "enquirer";
 import { maskArn } from "../../lib/utils/config";
 import {
-    parseStackArn,
-    ConfigResolverError,
-} from "../../lib/utils/config-resolver";
-import {
     resolveQuiltServices,
     QuiltServices,
     ServiceResolverError,
+    parseStackArn,
 } from "../../lib/utils/service-resolver";
 import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
@@ -192,8 +189,8 @@ async function deploy(
     } catch (error) {
         spinner.fail("Invalid Stack ARN");
         console.log();
-        if (error instanceof ConfigResolverError) {
-            console.error(error.format());
+        if (error instanceof ServiceResolverError) {
+            console.error(chalk.red(error.format()));
         } else {
             console.error(chalk.red((error as Error).message));
         }
