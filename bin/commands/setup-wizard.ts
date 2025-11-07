@@ -651,7 +651,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         skipValidation = false,
         skipSecretsSync = false,
         awsProfile,
-        awsRegion = "us-east-1",
+        awsRegion, // NO DEFAULT - let inferQuiltConfig fetch region from catalog's config.json
     } = options;
 
     const xdg = new XDGConfig();

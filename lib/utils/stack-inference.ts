@@ -185,7 +185,7 @@ export function listAllStacks(region: string): StackSummary[] {
     try {
         const result = execSync(
             `aws cloudformation list-stacks --region ${region} --stack-status-filter ${statusFilters} --query 'StackSummaries' --output json`,
-            { encoding: "utf-8" }
+            { encoding: "utf-8" },
         );
         return JSON.parse(result);
     } catch (error) {
@@ -202,7 +202,7 @@ export function isQuiltStack(region: string, stackName: string): boolean {
     try {
         const result = execSync(
             `aws cloudformation describe-stacks --region ${region} --stack-name "${stackName}" --query 'Stacks[0].Outputs[?OutputKey==\`QuiltWebHost\`] | length(@)' --output text 2>/dev/null`,
-            { encoding: "utf-8" }
+            { encoding: "utf-8" },
         );
         return parseInt(result.trim()) > 0;
     } catch {
