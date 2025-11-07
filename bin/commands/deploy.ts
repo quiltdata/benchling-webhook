@@ -205,11 +205,11 @@ async function deploy(
     const deployRegion = options.region || parsed.region;
     const deployAccount = parsed.account;
 
-    // Sync secrets to ensure they're up-to-date (force update)
-    spinner.start("Syncing Benchling secrets to AWS Secrets Manager...");
+    // Verify secrets exist in AWS Secrets Manager
+    spinner.start("Verifying Benchling secrets in AWS Secrets Manager...");
     try {
-        // Run sync-secrets with --force to ensure secrets are up-to-date
-        execSync(`npm run setup:sync-secrets -- --force --profile ${options.profileName}`, {
+        // Run sync-secrets without --force to verify/create but not update existing secrets
+        const syncOutput = execSync(`npm run setup:sync-secrets -- --profile ${options.profileName}`, {
             stdio: "pipe",
             encoding: "utf-8",
             env: {
@@ -218,14 +218,23 @@ async function deploy(
             },
         });
 
-        spinner.succeed(`Secrets synced to '${benchlingSecret}'`);
+        // Parse output to determine action (created/verified/skipped)
+        let message = "verified";
+        if (syncOutput.includes("Secret created:")) {
+            message = "created and verified";
+        } else if (syncOutput.includes("Secret already exists:")) {
+            message = "verified";
+        }
+
+        spinner.succeed(`Secrets ${message}: '${benchlingSecret}'`);
     } catch (error) {
-        spinner.fail("Failed to sync secrets");
+        spinner.fail("Failed to verify secrets");
         console.log();
         console.error(chalk.red((error as Error).message));
         console.log();
         console.log(chalk.yellow("To sync secrets manually, run:"));
-        console.log(chalk.cyan(`  npm run setup:sync-secrets -- --force --profile ${options.profileName} --region ${deployRegion}`));
+        console.log(chalk.cyan(`  npm run setup:sync-secrets -- --profile ${options.profileName} --region ${deployRegion}`));
+        console.log(chalk.yellow("To force update existing secrets, add --force flag"));
         console.log();
         process.exit(1);
     }
