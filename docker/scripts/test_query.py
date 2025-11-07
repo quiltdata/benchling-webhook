@@ -156,13 +156,13 @@ Environment Variables:
 
     args = parser.parse_args()
 
-    # Load configuration with priority: CLI args > Environment variables > XDG config
-    value = args.value or os.getenv("BENCHLING_TEST_ENTRY")
-    bucket = args.bucket or os.getenv("QUILT_USER_BUCKET")
-    catalog_url = args.catalog or os.getenv("QUILT_CATALOG")
-    database = args.database or os.getenv("QUILT_DATABASE")
+    # Load configuration with priority: CLI args > XDG config
+    value = args.value
+    bucket = args.bucket
+    catalog_url = args.catalog
+    database = args.database
 
-    # If not provided via CLI or environment, try XDG config
+    # If not provided via CLI, load from XDG config
     if not (bucket and catalog_url and database):
         try:
             logger.info("Loading configuration from XDG", profile=args.profile)
@@ -176,28 +176,28 @@ Environment Variables:
             value = value or config.get("benchlingTestEntry")
 
             logger.info("Loaded configuration from XDG", profile=args.profile)
-        except FileNotFoundError:
-            logger.warning("XDG configuration not found, using environment variables only")
+        except FileNotFoundError as e:
+            logger.error("XDG configuration not found", error=str(e), hint="Run 'npm run setup' to configure")
+            sys.exit(1)
         except Exception as e:
-            logger.warning("Failed to load XDG configuration", error=str(e))
+            logger.error("Failed to load XDG configuration", error=str(e))
+            sys.exit(1)
 
     # Get default value from fallback
     if not value:
-        parser.error(
-            "Must provide --value, set BENCHLING_TEST_ENTRY env var, or configure benchlingTestEntry in XDG config"
-        )
+        parser.error("Must provide --value or configure benchlingTestEntry in XDG config")
 
     # Validate required configuration
     if not bucket:
-        logger.error("No bucket specified. Provide via --bucket, QUILT_USER_BUCKET env var, or XDG config")
+        logger.error("No bucket specified. Provide via --bucket or XDG config")
         sys.exit(1)
 
     if not catalog_url:
-        logger.error("No catalog URL specified. Provide via --catalog, QUILT_CATALOG env var, or XDG config")
+        logger.error("No catalog URL specified. Provide via --catalog or XDG config")
         sys.exit(1)
 
     if not database:
-        logger.error("No database specified. Provide via --database, QUILT_DATABASE env var, or XDG config")
+        logger.error("No database specified. Provide via --database or XDG config")
         sys.exit(1)
 
     logger.info(

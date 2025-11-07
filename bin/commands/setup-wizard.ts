@@ -812,7 +812,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
                 force: true,
             });
 
-            console.log(`✓ Secrets synced to AWS Secrets Manager\n`);
+            console.log("✓ Secrets synced to AWS Secrets Manager\n");
         } catch (error) {
             console.warn(chalk.yellow(`⚠️  Failed to sync secrets: ${(error as Error).message}`));
             console.warn(chalk.yellow("   You can sync secrets manually later with:"));
