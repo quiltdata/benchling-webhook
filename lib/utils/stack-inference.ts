@@ -27,6 +27,19 @@ export interface InferredStackInfo {
     inferredVars: Record<string, string>;
 }
 
+export interface QuiltStack {
+    StackName: string;
+    StackStatus: string;
+    Outputs?: Array<{ OutputKey: string; OutputValue: string }>;
+}
+
+export interface StackSummary {
+    StackName: string;
+    StackStatus: string;
+    CreationTime: string;
+    LastUpdatedTime?: string;
+}
+
 /**
  * Fetch JSON from a URL using native Node.js modules
  */
@@ -157,6 +170,76 @@ export function findStack(
     }
 
     return stackName;
+}
+
+/**
+ * List all CloudFormation stacks in a region
+ */
+export function listAllStacks(region: string): StackSummary[] {
+    const statusFilters = [
+        "CREATE_COMPLETE",
+        "UPDATE_COMPLETE",
+        "UPDATE_ROLLBACK_COMPLETE",
+    ].join(" ");
+
+    try {
+        const result = execSync(
+            `aws cloudformation list-stacks --region ${region} --stack-status-filter ${statusFilters} --query 'StackSummaries' --output json`,
+            { encoding: "utf-8" }
+        );
+        return JSON.parse(result);
+    } catch (error) {
+        console.error(`Error listing stacks: ${(error as Error).message}`);
+        return [];
+    }
+}
+
+/**
+ * Check if a stack has the QuiltWebHost output (identifying it as a Quilt catalog stack)
+ * This is the canonical way to identify Quilt stacks vs other CloudFormation stacks.
+ */
+export function isQuiltStack(region: string, stackName: string): boolean {
+    try {
+        const result = execSync(
+            `aws cloudformation describe-stacks --region ${region} --stack-name "${stackName}" --query 'Stacks[0].Outputs[?OutputKey==\`QuiltWebHost\`] | length(@)' --output text 2>/dev/null`,
+            { encoding: "utf-8" }
+        );
+        return parseInt(result.trim()) > 0;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Find all Quilt catalog stacks in a region
+ * Returns an array of stacks that have the QuiltWebHost output
+ */
+export function findAllQuiltStacks(region: string, verbose = false): QuiltStack[] {
+    if (verbose) {
+        console.log(`Searching for Quilt stacks in ${region}...`);
+    }
+
+    const allStacks = listAllStacks(region);
+    const quiltStacks: QuiltStack[] = [];
+
+    for (const stackSummary of allStacks) {
+        if (isQuiltStack(region, stackSummary.StackName)) {
+            const details = getStackDetails(region, stackSummary.StackName);
+            if (details) {
+                quiltStacks.push({
+                    StackName: stackSummary.StackName,
+                    StackStatus: stackSummary.StackStatus,
+                    Outputs: details.outputs,
+                });
+            }
+        }
+    }
+
+    if (verbose) {
+        console.log(`Found ${quiltStacks.length} Quilt stack(s)`);
+    }
+
+    return quiltStacks;
 }
 
 /**
