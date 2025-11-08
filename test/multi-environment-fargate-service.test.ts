@@ -108,6 +108,80 @@ describe("FargateService - Multi-Environment Support", () => {
                 TargetType: "ip",
             });
         });
+
+        test("applies webhook allow list to ALB security group", () => {
+            const config = createMockConfig({
+                security: {
+                    webhookAllowList: "203.0.113.10,2001:db8::1",
+                    enableVerification: true,
+                },
+            });
+
+            new FargateService(stack, "TestFargateService", {
+                vpc,
+                bucket,
+                config,
+                ecrRepository,
+                stackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
+                packageBucket: config.packages.bucket,
+                quiltDatabase: config.quilt.database || "test-database",
+            });
+
+            const template = Template.fromStack(stack);
+            const securityGroups = template.findResources("AWS::EC2::SecurityGroup");
+            const standaloneIngress = template.findResources("AWS::EC2::SecurityGroupIngress");
+
+            const ingressValues = [
+                ...Object.values(standaloneIngress).map((rule: any) => rule.Properties ?? {}),
+                ...Object.values(securityGroups).flatMap((resource: any) => resource.Properties?.SecurityGroupIngress ?? []),
+            ];
+
+            const albIpv4Rule = ingressValues.find((rule: any) => rule.CidrIp === "203.0.113.10/32");
+            const albIpv6Rule = ingressValues.find((rule: any) => rule.CidrIpv6 === "2001:db8::1/128");
+            const allowAllIpv4 = ingressValues.find((rule: any) => rule.CidrIp === "0.0.0.0/0");
+            const allowAllIpv6 = ingressValues.find((rule: any) => rule.CidrIpv6 === "::/0");
+
+            expect(albIpv4Rule).toBeDefined();
+            expect(albIpv6Rule).toBeDefined();
+            expect(allowAllIpv4).toBeUndefined();
+            expect(allowAllIpv6).toBeUndefined();
+        });
+
+        test("allows all traffic when webhook allow list empty", () => {
+            const config = createMockConfig({
+                security: {
+                    webhookAllowList: "",
+                    enableVerification: true,
+                },
+            });
+
+            new FargateService(stack, "TestFargateService", {
+                vpc,
+                bucket,
+                config,
+                ecrRepository,
+                stackArn: config.quilt.stackArn,
+                benchlingSecret: config.benchling.secretArn!,
+                packageBucket: config.packages.bucket,
+                quiltDatabase: config.quilt.database || "test-database",
+            });
+
+            const template = Template.fromStack(stack);
+            const securityGroups = template.findResources("AWS::EC2::SecurityGroup");
+            const standaloneIngress = template.findResources("AWS::EC2::SecurityGroupIngress");
+
+            const ingressValues = [
+                ...Object.values(standaloneIngress).map((rule: any) => rule.Properties ?? {}),
+                ...Object.values(securityGroups).flatMap((resource: any) => resource.Properties?.SecurityGroupIngress ?? []),
+            ];
+
+            const allowAllIpv4 = ingressValues.find((rule: any) => rule.CidrIp === "0.0.0.0/0");
+            const allowAllIpv6 = ingressValues.find((rule: any) => rule.CidrIpv6 === "::/0");
+
+            expect(allowAllIpv4).toBeDefined();
+            expect(allowAllIpv6).toBeDefined();
+        });
     });
 
     describe("Environment Variable Configuration", () => {

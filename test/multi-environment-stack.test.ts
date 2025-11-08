@@ -1,5 +1,5 @@
 import * as cdk from "aws-cdk-lib";
-import { Template, Match } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
 import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/mock-config";
 
@@ -35,10 +35,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
                 ServiceName: "benchling-webhook-service",
             });
 
-            // Should create API Gateway with prod stage
-            template.hasResourceProperties("AWS::ApiGateway::Stage", {
-                StageName: "prod",
-            });
+            // API Gateway should no longer be present
+            template.resourceCountIs("AWS::ApiGateway::Stage", 0);
         });
 
         test("creates stack with image tag parameter", () => {
@@ -235,7 +233,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             });
         });
 
-        test("creates API Gateway REST API", () => {
+        test("does not create API Gateway", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -247,9 +245,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ApiGateway::RestApi", {
-                Name: "BenchlingWebhookAPI",
-            });
+            template.resourceCountIs("AWS::ApiGateway::RestApi", 0);
         });
 
         test("uses hardcoded quiltdata ECR repository", () => {
@@ -279,11 +275,12 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             // Verify the DockerImageUri output contains the hardcoded ECR repository
             template.hasOutput("DockerImageUri", {
                 Value: {
-                    "Fn::Join": Match.arrayWith([
+                    "Fn::Join": [
+                        "",
                         Match.arrayWith([
-                            "712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:",
+                            Match.stringLikeRegexp("712023778557\\.dkr\\.ecr\\.us-east-1\\.amazonaws\\.com/quiltdata/benchling:.*"),
                         ]),
-                    ]),
+                    ],
                 },
             });
         });
@@ -435,7 +432,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             expect(outputs.WebhookEndpoint).toBeDefined();
         });
 
-        test("exports API Gateway ID", () => {
+        test("exports Webhook Endpoint", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -447,25 +444,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasOutput("ApiGatewayId", {
-                Description: "API Gateway REST API ID",
-            });
-        });
-
-        test("exports Load Balancer DNS", () => {
-            const config = createMockConfig();
-            const stack = new BenchlingWebhookStack(app, "TestStack", {
-                config,
-                env: {
-                    account: "123456789012",
-                    region: "us-east-1",
-                },
-            });
-
-            const template = Template.fromStack(stack);
-
-            template.hasOutput("LoadBalancerDNS", {
-                Description: "Application Load Balancer DNS name for direct testing",
+            template.hasOutput("WebhookEndpoint", {
+                Description: "Webhook endpoint URL - use this in Benchling app configuration",
             });
         });
     });
@@ -511,7 +491,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             });
         });
 
-        test("creates CloudWatch log groups", () => {
+        test("creates container log group", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -523,8 +503,10 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            // Should have at least 2 log groups (API Gateway + ECS)
-            template.resourceCountIs("AWS::Logs::LogGroup", 2);
+            template.resourceCountIs("AWS::Logs::LogGroup", 1);
+            template.hasResourceProperties("AWS::Logs::LogGroup", {
+                LogGroupName: "/ecs/benchling-webhook",
+            });
         });
     });
 });

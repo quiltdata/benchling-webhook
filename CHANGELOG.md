@@ -3,6 +3,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.4] - 2025-11-06
+
+### Fixed
+
+- Test suite compatibility with ALB-based architecture (#196)
+  - Updated `FargateServiceProps` usage in tests (stackArn instead of quiltStackArn)
+  - Added missing required parameters (packageBucket, quiltDatabase) to test cases
+  - Fixed CloudFormation output assertions (WebhookEndpoint instead of LoadBalancerDNS)
+  - Corrected SQS queue URL format and CloudFormation output mocks
+
 ## [0.7.3] - 2025-11-06
 
 ### Added
@@ -14,11 +24,16 @@ All notable changes to this project will be documented in this file.
 - Centralized ECR image management - all deployments use quiltdata ECR (`712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling`)
 - Enhanced deployment plan display with complete container image details
 - Improved setup wizard credential flow - reordered prompts for better UX
+- Simplified webhook architecture by removing API Gateway and exposing ALB directly
+- ALB webhook endpoint now accessible via CloudFormation output `WebhookEndpoint`
+- Default security group ingress disabled when webhook IP allowlist is provided
 
 ### Fixed
 
 - Profile-aware testing and log monitoring - commands now respect `--profile` flag
 - Setup wizard instructions now match user's selected profile
+- XDG_CONFIG_HOME environment variable handling now consistent with tests
+- Canvas entry payloads with context entry IDs now properly accepted
 
 ## [0.7.2] - 2025-11-06
 
