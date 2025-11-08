@@ -79,6 +79,13 @@ class XDGConfig:
         """
         profile = profile_name or self.profile
 
+        # v0.7.0+ uses direct subdirectories: ~/.config/benchling-webhook/dev/
+        # Try direct profile directory first
+        direct_profile_dir = self.base_dir / profile
+        if direct_profile_dir.exists():
+            return direct_profile_dir
+
+        # Fall back to old v0.6.x structure: ~/.config/benchling-webhook/profiles/dev/
         if profile == "default":
             return self.base_dir
         return self.base_dir / "profiles" / profile
@@ -95,6 +102,16 @@ class XDGConfig:
         """
         profile_dir = self.get_profile_dir(profile_name)
 
+        # v0.7.0+ uses config.json instead of default.json
+        # Try v0.7.0 structure first
+        if (profile_dir / "config.json").exists():
+            return XDGConfigPaths(
+                user_config=profile_dir / "config.json",
+                derived_config=profile_dir / "config" / "default.json",  # May not exist
+                deploy_config=profile_dir / "deployments.json",  # v0.7.0 uses deployments.json
+            )
+
+        # Fall back to old v0.6.x structure
         return XDGConfigPaths(
             user_config=profile_dir / "default.json",
             derived_config=profile_dir / "config" / "default.json",
