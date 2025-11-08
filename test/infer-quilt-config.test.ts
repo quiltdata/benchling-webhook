@@ -150,7 +150,9 @@ describe("infer-quilt-config", () => {
                         StackName: "quilt-production",
                         StackStatus: "CREATE_COMPLETE",
                         CreationTime: new Date(),
-                        Outputs: [],
+                        Outputs: [
+                            { OutputKey: "QuiltWebHost", OutputValue: "https://production.example.com" },
+                        ],
                     },
                 ],
             });
@@ -261,7 +263,9 @@ describe("infer-quilt-config", () => {
                         StackName: "quilt-test",
                         StackStatus: "CREATE_COMPLETE",
                         CreationTime: new Date(),
-                        Outputs: [],
+                        Outputs: [
+                            { OutputKey: "QuiltWebHost", OutputValue: "https://test.quiltdata.com" },
+                        ],
                     },
                 ],
             });
@@ -420,7 +424,9 @@ describe("infer-quilt-config", () => {
                         StackName: "quilt-stack-1",
                         StackStatus: "CREATE_COMPLETE",
                         CreationTime: new Date(),
-                        Outputs: [],
+                        Outputs: [
+                            { OutputKey: "QuiltWebHost", OutputValue: "https://quilt1.example.com" },
+                        ],
                     },
                 ],
             });
