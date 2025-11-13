@@ -42,7 +42,7 @@
 
 ### 1.3 How Flags Flow Through Commands
 
-```
+```flowchart
 User runs: npm run setup -- --yes
            ↓
        bin/cli.ts parses args
@@ -65,6 +65,7 @@ User runs: npm run setup -- --yes
 ### 1.4 Current Implementation Details
 
 #### `bin/cli.ts` (lines 209-250)
+
 ```typescript
 // Parses --yes flag when no command is provided
 if ((!args.length || (args.length > 0 && args[0].startsWith("--") && !isHelpOrVersion))) {
@@ -82,6 +83,7 @@ if ((!args.length || (args.length > 0 && args[0].startsWith("--") && !isHelpOrVe
 ```
 
 #### `bin/commands/install.ts` (lines 70-103)
+
 ```typescript
 export async function installCommand(options: InstallCommandOptions = {}): Promise<void> {
     const {
@@ -112,6 +114,7 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
 ```
 
 #### `bin/commands/setup-wizard.ts` (lines 290-327)
+
 ```typescript
 async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConfig> {
     const { existingConfig = {}, nonInteractive = false, inheritFrom } = options;
@@ -153,6 +156,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
 ```
 
 #### `bin/commands/deploy.ts` (lines 320-331)
+
 ```typescript
 // ✅ CORRECT BEHAVIOR: Skips prompt when --yes is provided
 if (!options.yes) {
@@ -171,6 +175,7 @@ if (!options.yes) {
 ```
 
 #### `bin/commands/setup-profile.ts` (lines 58-142)
+
 ```typescript
 // ❌ NO FLAG SUPPORT: Always prompts, even if config exists
 if (xdg.profileExists(profileName) && !options?.force) {
@@ -202,6 +207,7 @@ if (answers.customizeSecretArn) {
 - Mapping between them is manual and error-prone
 
 **Impact**:
+
 - Developers must remember to map `yes` → `nonInteractive`
 - Easy to miss this mapping in new commands
 - Confusing when reading code (which flag controls what?)
@@ -218,6 +224,7 @@ if (!config.benchling?.tenant || !config.benchling?.clientId || !config.benchlin
 ```
 
 **Missing validations**:
+
 - `config.quilt?.stackArn` (required)
 - `config.quilt?.catalog` (required)
 - `config.quilt?.database` (required)
@@ -227,6 +234,7 @@ if (!config.benchling?.tenant || !config.benchling?.clientId || !config.benchlin
 - `config.deployment?.account` (required)
 
 **Impact**:
+
 - Passes validation with incomplete config
 - May fail during deployment with cryptic errors
 
@@ -235,11 +243,13 @@ if (!config.benchling?.tenant || !config.benchling?.clientId || !config.benchlin
 **Problem**: When `nonInteractive=false`, wizard ALWAYS prompts (lines 329-600)
 
 Even when:
+
 - Config file exists with all values
 - User just wants to re-use existing config
 - User passes `--yes` expecting to skip prompts
 
 **Impact**:
+
 - Cannot do truly automated deployments
 - CI/CD pipelines cannot use the CLI without hacks
 - Poor user experience for repeat deployments
@@ -255,16 +265,19 @@ Even when:
 ### 2.5 Missing Flag Support in Commands
 
 **Commands without any non-interactive support**:
+
 - `setup-profile`: Always prompts (58, 101, 147, 161)
 - No way to create profiles programmatically
 
 ### 2.6 Library Inconsistency
 
 **Two different prompt libraries**:
+
 - `inquirer` - Used in: setup-wizard, setup-profile, install
 - `enquirer` - Used in: deploy
 
 **Why this matters**:
+
 - Different APIs for skipping prompts
 - Different error handling
 - Maintenance burden
@@ -333,12 +346,14 @@ function validateConfigCompleteness(config: Partial<ProfileConfig>): {
 ```
 
 **Pros**:
+
 - ✅ Clear error messages about what's missing
 - ✅ Works with existing config files
 - ✅ Safe (validates before proceeding)
 - ✅ Minimal code changes
 
 **Cons**:
+
 - ⚠️ Requires complete config for `--yes` to work
 - ⚠️ First-time setup still needs interactive mode
 
@@ -360,10 +375,12 @@ if (skipPrompts) {
 ```
 
 **Pros**:
+
 - ✅ Works even with incomplete config
 - ✅ Explicit intent (separate from --yes)
 
 **Cons**:
+
 - ❌ Another flag to maintain
 - ❌ May proceed with invalid config
 - ❌ Confusing: --yes vs --skip-prompts?
@@ -383,11 +400,13 @@ export async function someCommand(options: { yes?: boolean; ... }) {
 ```
 
 **Pros**:
+
 - ✅ Simpler mental model
 - ✅ Consistent across all commands
 - ✅ Less code to maintain
 
 **Cons**:
+
 - ❌ Large refactor required
 - ❌ Breaks existing internal APIs
 - ❌ Risk of regression bugs
@@ -423,11 +442,13 @@ export async function validateCommand(options: {
 ```
 
 **Pros**:
+
 - ✅ Provides clear feedback
 - ✅ Optional fix mode
 - ✅ Works with any solution above
 
 **Cons**:
+
 - ⚠️ Adds extra step for users
 - ⚠️ Doesn't solve core problem
 
@@ -440,6 +461,7 @@ export async function validateCommand(options: {
 **Goal**: Make `npm run setup -- --yes` work correctly
 
 **Tasks**:
+
 1. ✅ **DONE**: Map `--yes` → `nonInteractive` in `install.ts` (line 96)
 2. ⏳ **TODO**: Enhance validation in `setup-wizard.ts` (line 305-310)
    - Add `validateConfigCompleteness()` helper
@@ -451,6 +473,7 @@ export async function validateCommand(options: {
    - Test with missing config → should fail
 
 **Files to modify**:
+
 - `bin/commands/setup-wizard.ts` (enhance validation)
 - `test/bin/install.test.ts` (add tests)
 
@@ -461,12 +484,14 @@ export async function validateCommand(options: {
 **Goal**: Standardize flag behavior across all commands
 
 **Tasks**:
+
 1. Add `--yes` support to `setup-profile` command
 2. Standardize on `enquirer` library (remove `inquirer`)
 3. Document flag behavior in all command help text
 4. Add `validateConfigCompleteness()` as shared utility
 
 **Files to modify**:
+
 - `bin/commands/setup-profile.ts`
 - `bin/commands/setup-wizard.ts`
 - `bin/commands/install.ts`
@@ -480,12 +505,14 @@ export async function validateCommand(options: {
 **Goal**: Provide better feedback and repair options
 
 **Tasks**:
+
 1. Enhance `validate` command with `--fix` option
 2. Add `--dry-run` to `deploy` command
 3. Improve error messages with actionable suggestions
 4. Add config health check to all commands
 
 **Files to modify**:
+
 - `bin/commands/validate.ts` (enhance)
 - `bin/commands/deploy.ts` (add dry-run)
 - `lib/utils/config-validator.ts` (enhance)
@@ -497,12 +524,14 @@ export async function validateCommand(options: {
 **Goal**: Unify flag naming and behavior
 
 **Tasks**:
+
 1. Deprecate `nonInteractive` in favor of `yes`
 2. Update all command interfaces
 3. Add migration guide for any external users
 4. Update documentation
 
 **Files to modify**:
+
 - All commands in `bin/commands/`
 - `bin/cli.ts`
 - Documentation
@@ -513,9 +542,10 @@ export async function validateCommand(options: {
 
 ## 5. Recommended Immediate Fix
 
-**Apply Option A (Smart Non-Interactive Mode) in Phase 1**
+### Apply Option A (Smart Non-Interactive Mode) in Phase 1**
 
 This provides:
+
 - ✅ Immediate fix for `--yes` not working
 - ✅ Clear error messages for users
 - ✅ Safe (validates config)
@@ -673,5 +703,3 @@ After implementing the fix, verify:
 **Total**: 8 prompts (0 skippable - NO FLAG SUPPORT)
 
 ---
-
-**END OF ANALYSIS**
