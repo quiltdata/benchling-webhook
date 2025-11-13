@@ -53,6 +53,7 @@ async function validateBenchlingTenant(tenant: string): Promise<ValidationResult
 
     // Test tenant URL accessibility
     const tenantUrl = `https://${tenant}.benchling.com`;
+    console.log(`  Testing Benchling tenant URL: ${tenantUrl}`);
 
     return new Promise((resolve) => {
         https
@@ -62,14 +63,14 @@ async function validateBenchlingTenant(tenant: string): Promise<ValidationResult
                     console.log(`  ✓ Tenant URL accessible: ${tenantUrl}`);
                 } else {
                     if (!result.warnings) result.warnings = [];
-                    result.warnings.push(`Tenant URL returned status ${res.statusCode}`);
+                    result.warnings.push(`Tenant URL ${tenantUrl} returned status ${res.statusCode}`);
                     result.isValid = true; // Consider this a warning, not an error
                 }
                 resolve(result);
             })
             .on("error", (error) => {
                 if (!result.warnings) result.warnings = [];
-                result.warnings.push(`Could not verify tenant URL: ${error.message}`);
+                result.warnings.push(`Could not verify tenant URL ${tenantUrl}: ${error.message}`);
                 result.isValid = true; // Allow proceeding with warning
                 resolve(result);
             });
@@ -105,6 +106,7 @@ async function validateBenchlingCredentials(
     // Test OAuth token endpoint
     const tokenUrl = `https://${tenant}.benchling.com/api/v2/token`;
     const authString = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+    console.log(`  Testing OAuth credentials: ${tokenUrl} (Client ID: ${clientId.substring(0, 8)}...)`);
 
     return new Promise((resolve) => {
         const postData = "grant_type=client_credentials";
@@ -131,8 +133,22 @@ async function validateBenchlingCredentials(
                     result.isValid = true;
                     console.log("  ✓ OAuth credentials validated successfully");
                 } else {
+                    let errorDetail = data.substring(0, 200);
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (parsed.error_description) {
+                            errorDetail = parsed.error_description;
+                        }
+                    } catch {
+                        // Keep the raw data if not JSON
+                    }
+
                     result.errors.push(
-                        `OAuth validation failed with status ${res.statusCode}: ${data.substring(0, 100)}`,
+                        `OAuth validation failed for tenant '${tenant}':\n` +
+                        `    Tested: POST ${tokenUrl}\n` +
+                        `    Status: ${res.statusCode}\n` +
+                        `    Error: ${errorDetail}\n` +
+                        `    Hint: Verify Client ID and Secret are correct and match the app definition`
                     );
                 }
                 resolve(result);
@@ -141,7 +157,10 @@ async function validateBenchlingCredentials(
 
         req.on("error", (error) => {
             if (!result.warnings) result.warnings = [];
-            result.warnings.push(`Could not validate OAuth credentials: ${error.message}`);
+            result.warnings.push(
+                `Could not validate OAuth credentials at ${tokenUrl}: ${error.message}\n` +
+                `    This may be a network issue. Credentials will be validated during deployment.`
+            );
             result.isValid = true; // Allow proceeding with warning
             resolve(result);
         });
@@ -181,6 +200,7 @@ async function validateS3BucketAccess(
         const s3Client = new S3Client(clientConfig);
 
         // Test HeadBucket (verify bucket exists and we have access)
+        console.log(`  Testing S3 bucket access: ${bucketName} (region: ${region}${awsProfile ? `, profile: ${awsProfile}` : ""})`);
         const headCommand = new HeadBucketCommand({ Bucket: bucketName });
         await s3Client.send(headCommand);
 
@@ -197,8 +217,28 @@ async function validateS3BucketAccess(
 
         result.isValid = true;
     } catch (error) {
-        const err = error as Error;
-        result.errors.push(`S3 bucket validation failed: ${err.message}`);
+        const err = error as Error & { Code?: string; name?: string; $metadata?: { httpStatusCode?: number } };
+        const errorCode = err.Code || err.name || "UnknownError";
+        const errorMsg = err.message || "Unknown error occurred";
+        const statusCode = err.$metadata?.httpStatusCode;
+
+        // Provide specific guidance based on error type
+        let hint = "Verify bucket exists, region is correct, and you have s3:GetBucketLocation and s3:ListBucket permissions";
+        if (errorCode === "NoSuchBucket" || errorMsg.includes("does not exist")) {
+            hint = "The bucket does not exist. Verify the bucket name is correct.";
+        } else if (errorCode === "AccessDenied" || errorCode === "403" || statusCode === 403) {
+            hint = "Access denied. Verify your AWS credentials have s3:GetBucketLocation and s3:ListBucket permissions for this bucket.";
+        } else if (errorCode === "PermanentRedirect" || errorCode === "301" || statusCode === 301) {
+            hint = `The bucket exists but is in a different region. Try specifying the correct region for bucket '${bucketName}'.`;
+        }
+
+        result.errors.push(
+            `S3 bucket validation failed for '${bucketName}' in region '${region}'${awsProfile ? ` (AWS profile: ${awsProfile})` : ""}:\n` +
+            `    Error: ${errorCode}${statusCode ? ` (HTTP ${statusCode})` : ""}\n` +
+            `    Message: ${errorMsg}\n` +
+            `    Tested: HeadBucket operation\n` +
+            `    Hint: ${hint}`
+        );
     }
 
     return result;
@@ -769,7 +809,12 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
 
         if (!validation.isValid) {
             console.error("\n❌ Configuration validation failed:");
-            validation.errors.forEach((err) => console.error(`  - ${err}`));
+            console.error(chalk.gray("   The following validations were performed:"));
+            console.error(chalk.gray(`   - Benchling tenant: ${config.benchling.tenant}`));
+            console.error(chalk.gray(`   - OAuth credentials: Client ID ${config.benchling.clientId.substring(0, 8)}...`));
+            console.error(chalk.gray(`   - S3 bucket: ${config.packages.bucket} (region: ${config.deployment.region})`));
+            console.error("");
+            validation.errors.forEach((err) => console.error(`${err}\n`));
 
             if (yes) {
                 throw new Error("Configuration validation failed");
@@ -793,8 +838,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
 
         if (validation.warnings && validation.warnings.length > 0) {
             console.warn("\n⚠ Warnings:");
-            validation.warnings.forEach((warn) => console.warn(`  - ${warn}`));
-            console.log("");
+            validation.warnings.forEach((warn) => console.warn(`  ${warn}\n`));
         }
     }
 
