@@ -187,10 +187,10 @@ describe("stack-inference utility", () => {
             expect(vars["# Stack Version"]).toBeUndefined();
         });
 
-        it("should use QueueUrl output as fallback", () => {
+        it("should only use PackagerQueueUrl (QueueUrl no longer supported)", () => {
             const stackDetails: StackDetails = {
                 outputs: [
-                    { OutputKey: "QueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/fallback-queue" },
+                    { OutputKey: "QueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/old-queue" },
                 ],
                 parameters: [],
             };
@@ -204,13 +204,13 @@ describe("stack-inference utility", () => {
                 "https://catalog.example.com",
             );
 
-            expect(vars.QUEUE_URL).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/fallback-queue");
+            // QueueUrl should no longer be used as fallback
+            expect(vars.QUEUE_URL).toBeUndefined();
         });
 
-        it("should prioritize PackagerQueueUrl over QueueUrl", () => {
+        it("should use PackagerQueueUrl when present", () => {
             const stackDetails: StackDetails = {
                 outputs: [
-                    { OutputKey: "QueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/old-queue" },
                     { OutputKey: "PackagerQueueUrl", OutputValue: "https://sqs.us-east-1.amazonaws.com/123456789012/new-queue" },
                 ],
                 parameters: [],
