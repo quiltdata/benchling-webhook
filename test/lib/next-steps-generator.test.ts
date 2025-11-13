@@ -73,17 +73,14 @@ describe('generateNextSteps', () => {
       expect(result).toBe(expected);
     });
 
-    it('should produce same output as before for custom profile (repository)', () => {
+    it('should produce output for custom profile (repository)', () => {
       const context = createRepositoryContext();
       const result = generateNextSteps({ profile: 'staging', context });
 
-      const expected = [
-        'Next steps:',
-        '  1. Deploy to AWS: npm run deploy -- --profile staging --stage staging',
-        '  2. Check logs: npx ts-node scripts/check-logs.ts --profile staging'
-      ].join('\n');
-
-      expect(result).toBe(expected);
+      // Phase 3 now includes health check as third step
+      expect(result).toContain('Next steps:');
+      expect(result).toContain('Deploy to AWS: npm run deploy -- --profile staging --stage staging');
+      expect(result).toContain('npx ts-node scripts/check-logs.ts --profile staging');
     });
   });
 
@@ -170,16 +167,29 @@ describe('generateNextSteps', () => {
         expect(result).toContain('npx ts-node scripts/check-logs.ts --profile test-env');
       });
 
-      it('should match exact expected output', () => {
+      it('should show 2 steps for custom profiles', () => {
         const result = generateNextSteps({ profile: 'staging', context });
         const expected = [
           'Next steps:',
           '  1. Deploy to AWS: npm run deploy -- --profile staging --stage staging',
-          '  2. Check logs: npx ts-node scripts/check-logs.ts --profile staging'
+          '  2. Test integration: npx ts-node scripts/check-logs.ts --profile staging'
         ].join('\n');
 
         expect(result).toBe(expected);
       });
+
+      it('should include health check when deployment skipped', () => {
+        const result = generateNextSteps({ profile: 'staging', context, skipDeployment: true });
+        const expected = [
+          'Next steps:',
+          '  1. Deploy to AWS: npm run deploy -- --profile staging --stage staging',
+          '  2. Test integration: npx ts-node scripts/check-logs.ts --profile staging',
+          '  3. Check configuration: npm run setup:health -- --profile staging'
+        ].join('\n');
+
+        expect(result).toBe(expected);
+      });
+
     });
   });
 
@@ -262,22 +272,34 @@ describe('generateNextSteps', () => {
         const result = generateNextSteps({ profile: 'staging', context });
 
         expect(result).toContain('npx @quiltdata/benchling-webhook deploy --profile staging --stage staging');
-        expect(result).toContain('npx @quiltdata/benchling-webhook logs --profile staging');
+        expect(result).toContain('npx @quiltdata/benchling-webhook test --profile staging');
       });
 
-      it('should use logs command for custom profiles', () => {
+      it('should use test command for custom profiles', () => {
         const result = generateNextSteps({ profile: 'test-env', context });
 
-        expect(result).toContain('npx @quiltdata/benchling-webhook logs --profile test-env');
+        expect(result).toContain('npx @quiltdata/benchling-webhook test --profile test-env');
         expect(result).not.toContain('check-logs.ts');
       });
 
-      it('should match exact expected output', () => {
+      it('should show 2 steps for custom profiles', () => {
         const result = generateNextSteps({ profile: 'staging', context });
         const expected = [
           'Next steps:',
           '  1. Deploy to AWS: npx @quiltdata/benchling-webhook deploy --profile staging --stage staging',
-          '  2. Check logs: npx @quiltdata/benchling-webhook logs --profile staging'
+          '  2. Test integration: npx @quiltdata/benchling-webhook test --profile staging'
+        ].join('\n');
+
+        expect(result).toBe(expected);
+      });
+
+      it('should include health check when deployment skipped', () => {
+        const result = generateNextSteps({ profile: 'staging', context, skipDeployment: true });
+        const expected = [
+          'Next steps:',
+          '  1. Deploy to AWS: npx @quiltdata/benchling-webhook deploy --profile staging --stage staging',
+          '  2. Test integration: npx @quiltdata/benchling-webhook test --profile staging',
+          '  3. Check configuration: npx @quiltdata/benchling-webhook health-check --profile staging'
         ].join('\n');
 
         expect(result).toBe(expected);
@@ -374,7 +396,7 @@ describe('generateNextSteps', () => {
       expect(repoResult).toContain('npm run deploy -- --profile staging');
       expect(repoResult).toContain('check-logs.ts');
       expect(npxResult).toContain('npx @quiltdata/benchling-webhook deploy --profile staging');
-      expect(npxResult).toContain('npx @quiltdata/benchling-webhook logs');
+      expect(npxResult).toContain('npx @quiltdata/benchling-webhook test');
     });
   });
 
@@ -393,6 +415,50 @@ describe('generateNextSteps', () => {
       const result = generateNextSteps({ profile: 'default' });
       const lines = result.split('\n');
       expect(lines.length).toBeGreaterThan(1);
+    });
+  });
+
+  // Phase 3: Deployment context tests
+  describe('deployment context (Phase 3)', () => {
+    const context = createRepositoryContext();
+
+    it('should show webhook URL on successful deployment', () => {
+      const result = generateNextSteps({
+        profile: 'default',
+        context,
+        deployment: {
+          success: true,
+          webhookUrl: 'https://example.com/webhook',
+        },
+      });
+
+      expect(result).toContain('Webhook URL: https://example.com/webhook');
+      expect(result).toContain('Configure webhook URL in Benchling');
+    });
+
+    it('should show recovery steps on failed deployment', () => {
+      const result = generateNextSteps({
+        profile: 'default',
+        context,
+        deployment: {
+          success: false,
+          error: 'Stack creation failed',
+        },
+      });
+
+      expect(result).toContain('Setup was successful, but deployment failed');
+      expect(result).toContain('Error: Stack creation failed');
+      expect(result).toContain('Retry deployment');
+    });
+
+    it('should show deploy command when deployment skipped', () => {
+      const result = generateNextSteps({
+        profile: 'default',
+        context,
+        skipDeployment: true,
+      });
+
+      expect(result).toContain('Deploy to AWS: npm run deploy');
     });
   });
 });
