@@ -156,8 +156,8 @@ Full interactive mode (current behavior):
 - `quilt.stackArn` - Required, no OPTIONAL preset
 - `quilt.catalog` - Required, no OPTIONAL preset
 - `quilt.database` - Required, no OPTIONAL preset (inferred from Quilt stack)
-- `quilt.queueUrl` - Required, no OPTIONAL preset
-- `quilt.region` - Required, no OPTIONAL preset
+- `quilt.queueUrl` - Required, no OPTIONAL preset (inferred from Quilt stack)
+- `quilt.region` - Required, no OPTIONAL preset (inferred from Quilt stack)
 
 **Benchling Configuration:**
 
@@ -174,15 +174,15 @@ Full interactive mode (current behavior):
 
 **Deployment Configuration:**
 
-- `deployment.region` - Required, no OPTIONAL preset
-- `deployment.account` - Required, no OPTIONAL preset
+- `deployment.region` - Required, no OPTIONAL preset (inferred from Quilt stack)
+- `deployment.account` - Required, no OPTIONAL preset (inferred from Quilt stack)
 
 **Truly optional fields (can be empty):**
 
 - `benchling.testEntryId` - Optional, can be omitted
 - `deployment.logLevel` - OPTIONAL preset (from system)
 - `deployment.webhookAllowList` - Optional, can be empty
-- `deployment.enableVerification` - OPTIONAL preset (from system)
+- `deployment.enableVerification` - OPTIONAL preset: `"yes"`
 
 ### 4.3 Value Type Decision Matrix
 
