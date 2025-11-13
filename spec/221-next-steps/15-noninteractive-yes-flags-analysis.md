@@ -4,6 +4,7 @@
 
 **Date**: 2025-11-13
 **Status**: 🔴 BROKEN - Inconsistent behavior across commands
+**Updated**: 2025-11-13 - Revised to standardize on `--yes` with smart prompting semantics
 
 ---
 
@@ -42,7 +43,7 @@
 
 ### 1.3 How Flags Flow Through Commands
 
-```
+```flowchart
 User runs: npm run setup -- --yes
            ↓
        bin/cli.ts parses args
@@ -65,6 +66,7 @@ User runs: npm run setup -- --yes
 ### 1.4 Current Implementation Details
 
 #### `bin/cli.ts` (lines 209-250)
+
 ```typescript
 // Parses --yes flag when no command is provided
 if ((!args.length || (args.length > 0 && args[0].startsWith("--") && !isHelpOrVersion))) {
@@ -82,6 +84,7 @@ if ((!args.length || (args.length > 0 && args[0].startsWith("--") && !isHelpOrVe
 ```
 
 #### `bin/commands/install.ts` (lines 70-103)
+
 ```typescript
 export async function installCommand(options: InstallCommandOptions = {}): Promise<void> {
     const {
@@ -112,6 +115,7 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
 ```
 
 #### `bin/commands/setup-wizard.ts` (lines 290-327)
+
 ```typescript
 async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConfig> {
     const { existingConfig = {}, nonInteractive = false, inheritFrom } = options;
@@ -153,6 +157,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
 ```
 
 #### `bin/commands/deploy.ts` (lines 320-331)
+
 ```typescript
 // ✅ CORRECT BEHAVIOR: Skips prompt when --yes is provided
 if (!options.yes) {
@@ -171,6 +176,7 @@ if (!options.yes) {
 ```
 
 #### `bin/commands/setup-profile.ts` (lines 58-142)
+
 ```typescript
 // ❌ NO FLAG SUPPORT: Always prompts, even if config exists
 if (xdg.profileExists(profileName) && !options?.force) {
@@ -202,6 +208,7 @@ if (answers.customizeSecretArn) {
 - Mapping between them is manual and error-prone
 
 **Impact**:
+
 - Developers must remember to map `yes` → `nonInteractive`
 - Easy to miss this mapping in new commands
 - Confusing when reading code (which flag controls what?)
@@ -218,6 +225,7 @@ if (!config.benchling?.tenant || !config.benchling?.clientId || !config.benchlin
 ```
 
 **Missing validations**:
+
 - `config.quilt?.stackArn` (required)
 - `config.quilt?.catalog` (required)
 - `config.quilt?.database` (required)
@@ -227,6 +235,7 @@ if (!config.benchling?.tenant || !config.benchling?.clientId || !config.benchlin
 - `config.deployment?.account` (required)
 
 **Impact**:
+
 - Passes validation with incomplete config
 - May fail during deployment with cryptic errors
 
@@ -235,11 +244,13 @@ if (!config.benchling?.tenant || !config.benchling?.clientId || !config.benchlin
 **Problem**: When `nonInteractive=false`, wizard ALWAYS prompts (lines 329-600)
 
 Even when:
+
 - Config file exists with all values
 - User just wants to re-use existing config
 - User passes `--yes` expecting to skip prompts
 
 **Impact**:
+
 - Cannot do truly automated deployments
 - CI/CD pipelines cannot use the CLI without hacks
 - Poor user experience for repeat deployments
@@ -255,16 +266,19 @@ Even when:
 ### 2.5 Missing Flag Support in Commands
 
 **Commands without any non-interactive support**:
+
 - `setup-profile`: Always prompts (58, 101, 147, 161)
 - No way to create profiles programmatically
 
 ### 2.6 Library Inconsistency
 
 **Two different prompt libraries**:
+
 - `inquirer` - Used in: setup-wizard, setup-profile, install
 - `enquirer` - Used in: deploy
 
 **Why this matters**:
+
 - Different APIs for skipping prompts
 - Different error handling
 - Maintenance burden
@@ -273,74 +287,78 @@ Even when:
 
 ## 3. Proposed Solutions
 
-### 3.1 Option A: Smart Non-Interactive Mode (RECOMMENDED)
+### 3.1 Option A: Smart Prompting with --yes Flag
 
-**Concept**: When `--yes` is provided, use existing config values as defaults and skip ALL prompts.
+**Concept**: When `--yes` is provided, use existing config values as defaults and **only prompt for fields that don't have defaults**. This makes `--yes` work for both first-time setup and repeat deployments.
+
+**New Semantics**:
+
+- `--yes` = "Auto-confirm everything that has a default, but still prompt for required fields without defaults"
+- Fields with existing values → Use them (no prompt)
+- Fields with built-in defaults → Use them (no prompt)
+- Fields without defaults → Prompt (but don't prompt for confirmation)
 
 **Implementation**:
 
 ```typescript
 // bin/commands/setup-wizard.ts
 async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConfig> {
-    const { existingConfig = {}, nonInteractive = false, inheritFrom } = options;
+    const { existingConfig = {}, yes = false, inheritFrom } = options;
 
-    if (nonInteractive) {
-        // Validate ALL required fields (not just Benchling)
-        const validation = validateConfigCompleteness(existingConfig);
+    // Build list of fields that need values
+    const fieldsToPrompt = determineRequiredFields(existingConfig);
 
-        if (!validation.isComplete) {
-            throw new Error(
-                `Non-interactive mode requires complete configuration.\n` +
-                `Missing fields: ${validation.missing.join(", ")}\n` +
-                `Please run 'npm run setup' without --yes to configure these fields.`
-            );
+    if (yes) {
+        // With --yes: Only prompt for fields without defaults
+        if (fieldsToPrompt.length === 0) {
+            // All fields have values or defaults - proceed without prompts
+            return updateConfigMetadata(existingConfig as ProfileConfig);
         }
 
-        // Return existing config with updated metadata
-        return updateConfigMetadata(existingConfig as ProfileConfig);
+        // Some fields still need input - prompt only for those
+        console.log(chalk.yellow(`\nThe following fields need values:\n`));
+        const answers = await promptForFields(fieldsToPrompt, existingConfig);
+        return mergeConfigWithAnswers(existingConfig, answers);
     }
 
-    // Continue with interactive prompts...
+    // Without --yes: Normal interactive flow (all prompts + confirmations)
+    return runFullInteractiveWizard(existingConfig);
 }
 
-function validateConfigCompleteness(config: Partial<ProfileConfig>): {
-    isComplete: boolean;
-    missing: string[];
-} {
+function determineRequiredFields(config: Partial<ProfileConfig>): string[] {
     const required = [
-        ['quilt.stackArn', config.quilt?.stackArn],
-        ['quilt.catalog', config.quilt?.catalog],
-        ['quilt.database', config.quilt?.database],
-        ['quilt.queueUrl', config.quilt?.queueUrl],
-        ['benchling.tenant', config.benchling?.tenant],
-        ['benchling.clientId', config.benchling?.clientId],
-        ['benchling.clientSecret', config.benchling?.clientSecret],
-        ['benchling.appDefinitionId', config.benchling?.appDefinitionId],
-        ['packages.bucket', config.packages?.bucket],
-        ['deployment.region', config.deployment?.region],
-        ['deployment.account', config.deployment?.account],
+        { key: 'quilt.stackArn', value: config.quilt?.stackArn, hasDefault: false },
+        { key: 'quilt.catalog', value: config.quilt?.catalog, hasDefault: false },
+        { key: 'quilt.database', value: config.quilt?.database, hasDefault: true }, // Default: 'benchling'
+        { key: 'quilt.queueUrl', value: config.quilt?.queueUrl, hasDefault: false },
+        { key: 'benchling.tenant', value: config.benchling?.tenant, hasDefault: false },
+        { key: 'benchling.clientId', value: config.benchling?.clientId, hasDefault: false },
+        { key: 'benchling.clientSecret', value: config.benchling?.clientSecret, hasDefault: false },
+        { key: 'benchling.appDefinitionId', value: config.benchling?.appDefinitionId, hasDefault: false },
+        { key: 'packages.bucket', value: config.packages?.bucket, hasDefault: false },
+        { key: 'packages.prefix', value: config.packages?.prefix, hasDefault: true }, // Default: 'benchling/'
+        { key: 'deployment.region', value: config.deployment?.region, hasDefault: false },
+        { key: 'deployment.account', value: config.deployment?.account, hasDefault: false },
     ];
 
-    const missing = required
-        .filter(([_, value]) => !value)
-        .map(([key]) => key as string);
-
-    return {
-        isComplete: missing.length === 0,
-        missing,
-    };
+    return required
+        .filter(field => !field.value && !field.hasDefault)
+        .map(field => field.key);
 }
 ```
 
 **Pros**:
-- ✅ Clear error messages about what's missing
-- ✅ Works with existing config files
-- ✅ Safe (validates before proceeding)
-- ✅ Minimal code changes
+
+- ✅ Works for first-time setup AND repeat deployments
+- ✅ No errors thrown - always makes progress
+- ✅ Intuitive: "yes" means "use defaults when possible"
+- ✅ CI/CD friendly (can pre-populate config, use --yes for rest)
+- ✅ Minimal prompts (only when truly needed)
 
 **Cons**:
-- ⚠️ Requires complete config for `--yes` to work
-- ⚠️ First-time setup still needs interactive mode
+
+- ⚠️ May still prompt on first run (if fields lack defaults)
+- ⚠️ Requires implementing smart field-by-field prompting
 
 ### 3.2 Option B: Add --skip-prompts Flag
 
@@ -360,37 +378,77 @@ if (skipPrompts) {
 ```
 
 **Pros**:
+
 - ✅ Works even with incomplete config
 - ✅ Explicit intent (separate from --yes)
 
 **Cons**:
+
 - ❌ Another flag to maintain
 - ❌ May proceed with invalid config
 - ❌ Confusing: --yes vs --skip-prompts?
 
-### 3.3 Option C: Unify on Single Flag
+### 3.3 Option C: Unify on Single Flag (RECOMMENDED FOR LONG-TERM)
 
-**Concept**: Remove `nonInteractive` entirely, use only `--yes` everywhere.
+**Concept**: Remove `nonInteractive` parameter entirely, standardize on `--yes` everywhere with smart prompting semantics from Option A.
+
+**Changes**:
+
+1. **Remove `nonInteractive` parameter** from all command interfaces
+2. **Replace with `yes` parameter** consistently across codebase
+3. **Implement smart prompting** (from Option A) in all commands
+4. **Update all command calls** to use `yes` instead of `nonInteractive`
 
 ```typescript
-// All commands
-export async function someCommand(options: { yes?: boolean; ... }) {
-    if (!options.yes) {
-        // Prompt user
+// Before (inconsistent):
+export async function setupWizardCommand(options: {
+    nonInteractive?: boolean;  // ❌ Internal naming
+    // ...
+}) { }
+
+// After (unified):
+export async function setupWizardCommand(options: {
+    yes?: boolean;  // ✅ Matches CLI flag
+    // ...
+}) {
+    // Smart prompting: only prompt for fields without defaults
+    const fieldsToPrompt = determineRequiredFields(existingConfig);
+
+    if (yes && fieldsToPrompt.length === 0) {
+        // All fields have values - no prompts needed
+        return existingConfig;
     }
-    // Proceed
+
+    if (yes) {
+        // Only prompt for missing required fields
+        return promptForFields(fieldsToPrompt);
+    }
+
+    // Full interactive mode
+    return runFullWizard();
 }
 ```
 
+**Migration Strategy**:
+
+1. Add `yes` parameter alongside `nonInteractive` (both work)
+2. Deprecate `nonInteractive` with console warnings
+3. Update all internal calls to use `yes`
+4. Remove `nonInteractive` in next major version
+
 **Pros**:
-- ✅ Simpler mental model
+
+- ✅ Simpler mental model (one flag, one name)
 - ✅ Consistent across all commands
-- ✅ Less code to maintain
+- ✅ Matches user expectations (`--yes` = yes parameter)
+- ✅ Less code to maintain long-term
+- ✅ Combined with Option A smart prompting
 
 **Cons**:
-- ❌ Large refactor required
-- ❌ Breaks existing internal APIs
-- ❌ Risk of regression bugs
+
+- ⚠️ Large refactor required (8-12 hours)
+- ⚠️ Breaks existing internal APIs (needs migration)
+- ⚠️ Risk of regression bugs (needs thorough testing)
 
 ### 3.4 Option D: Configuration Validation Command
 
@@ -423,171 +481,318 @@ export async function validateCommand(options: {
 ```
 
 **Pros**:
+
 - ✅ Provides clear feedback
 - ✅ Optional fix mode
 - ✅ Works with any solution above
 
 **Cons**:
+
 - ⚠️ Adds extra step for users
 - ⚠️ Doesn't solve core problem
 
 ---
 
+### 3.5 Options Comparison
+
+| Criterion | Option A: Smart Prompting | Option B: Skip Flag | Option C: Unify on --yes | Option D: Validate Cmd |
+|-----------|--------------------------|---------------------|--------------------------|------------------------|
+| **Effort** | 4-6 hours | 4-6 hours | 8-12 hours | 4-6 hours |
+| **First-time setup** | ✅ Prompts for missing | ✅ Uses defaults | ✅ Prompts for missing | ⚠️ Extra validation step |
+| **Repeat deployments** | ✅ No prompts | ✅ No prompts | ✅ No prompts | ✅ No prompts (after validate) |
+| **Safety** | ✅ High (validates) | ⚠️ Medium (may use bad defaults) | ✅ High (validates) | ✅ High |
+| **User Experience** | ✅ Intuitive | ❌ Confusing (two flags) | ✅ Excellent | ⚠️ Requires extra step |
+| **Backward Compatible** | ✅ Yes | ✅ Yes | ⚠️ No (breaking change) | ✅ Yes |
+| **Risk** | ✅ Low | ⚠️ Medium | ⚠️ High (large refactor) | ✅ Low |
+| **Maintenance** | ✅ Low | ❌ High (two systems) | ✅ Low (one system) | ✅ Low |
+| **CI/CD Friendly** | ✅ Yes | ✅ Yes | ✅ Yes | ⚠️ Requires pre-validation |
+
+**Recommendation**: **Combine Options A + C** for best outcome:
+
+- Phase 1: Implement Option A (smart prompting) with backward-compatible `yes` + `nonInteractive` parameters
+- Phase 2-3: Roll out to all commands
+- Phase 4: Deprecate and remove `nonInteractive` (Option C)
+
+This gives us the benefits of both approaches while managing risk through phased implementation.
+
+---
+
 ## 4. Implementation Plan
 
-### Phase 1: Fix Critical Path (IMMEDIATE)
+### Recommended Approach: Phased Implementation
 
-**Goal**: Make `npm run setup -- --yes` work correctly
+**Phase 1 + Phase 4 Combined**: Implement Option A (smart prompting) while simultaneously standardizing on `--yes` (Option C).
+
+---
+
+### Phase 1: Implement Smart Prompting with --yes (IMMEDIATE)
+
+**Goal**: Make `--yes` work correctly with smart prompting semantics
 
 **Tasks**:
+
 1. ✅ **DONE**: Map `--yes` → `nonInteractive` in `install.ts` (line 96)
-2. ⏳ **TODO**: Enhance validation in `setup-wizard.ts` (line 305-310)
-   - Add `validateConfigCompleteness()` helper
-   - Check ALL required fields, not just Benchling
-   - Provide clear error messages with missing field names
-3. ⏳ **TODO**: Add tests for non-interactive mode
-   - Test with complete config → should succeed
-   - Test with incomplete config → should fail with helpful error
-   - Test with missing config → should fail
+2. ⏳ **TODO**: Replace `nonInteractive` with `yes` in setup-wizard.ts
+   - Change parameter from `nonInteractive: boolean` to `yes: boolean`
+   - Update all references within the file
+3. ⏳ **TODO**: Implement smart prompting logic in `setup-wizard.ts`
+   - Add `determineRequiredFields()` helper (checks which fields need values)
+   - Modify wizard to only prompt for missing fields when `yes=true`
+   - Keep existing behavior when `yes=false` (full interactive mode)
+4. ⏳ **TODO**: Update `install.ts` to pass `yes` instead of `nonInteractive`
+   - Line 96: Change from `nonInteractive: nonInteractive || yes` to `yes: yes`
+5. ⏳ **TODO**: Add tests for smart prompting mode
+   - Test with complete config + `--yes` → no prompts
+   - Test with partial config + `--yes` → prompts only for missing fields
+   - Test without `--yes` → full interactive mode
 
 **Files to modify**:
-- `bin/commands/setup-wizard.ts` (enhance validation)
+
+- `bin/commands/setup-wizard.ts` (implement smart prompting, rename parameter)
+- `bin/commands/install.ts` (pass `yes` instead of `nonInteractive`)
 - `test/bin/install.test.ts` (add tests)
 
-**Time estimate**: 2-3 hours
+**Time estimate**: 4-6 hours
 
-### Phase 2: Improve Consistency (SHORT TERM)
+---
 
-**Goal**: Standardize flag behavior across all commands
+### Phase 2: Standardize Across All Commands (SHORT TERM)
+
+**Goal**: Apply `--yes` with smart prompting to all commands
 
 **Tasks**:
+
 1. Add `--yes` support to `setup-profile` command
-2. Standardize on `enquirer` library (remove `inquirer`)
-3. Document flag behavior in all command help text
-4. Add `validateConfigCompleteness()` as shared utility
+   - Add `yes` parameter to command options
+   - Skip overwrite confirmations when `yes=true`
+   - Prompt only for missing required fields
+2. Ensure `deploy` command uses same pattern
+   - Already uses `--yes` correctly
+   - Verify consistency with new smart prompting approach
+3. Update `init` command (delegates to setup-wizard)
+   - Pass through `yes` parameter
+4. Document flag behavior in all command help text
+5. Standardize on `enquirer` library (remove `inquirer`)
+   - Migrate all prompts to use `enquirer`
+   - Remove `inquirer` dependency
 
 **Files to modify**:
+
 - `bin/commands/setup-profile.ts`
-- `bin/commands/setup-wizard.ts`
-- `bin/commands/install.ts`
-- `lib/utils/config-validator.ts` (new file)
+- `bin/commands/init.ts`
+- `bin/commands/deploy.ts` (verify)
+- `bin/cli.ts` (update help text)
 - `package.json` (remove inquirer dependency)
 
 **Time estimate**: 4-6 hours
 
+---
+
 ### Phase 3: Enhanced Validation (MEDIUM TERM)
 
-**Goal**: Provide better feedback and repair options
+**Goal**: Provide better feedback and tooling
 
 **Tasks**:
-1. Enhance `validate` command with `--fix` option
-2. Add `--dry-run` to `deploy` command
-3. Improve error messages with actionable suggestions
-4. Add config health check to all commands
+
+1. Extract field validation into shared utility
+   - Create `lib/utils/config-validator.ts`
+   - Move `determineRequiredFields()` to shared module
+   - Add field metadata (defaults, descriptions, validation rules)
+2. Enhance `validate` command with `--fix` option
+   - Check config completeness
+   - Offer to fix missing fields interactively
+3. Add `--dry-run` to `deploy` command
+   - Show what would be deployed without actually deploying
+4. Improve error messages with actionable suggestions
 
 **Files to modify**:
+
+- `lib/utils/config-validator.ts` (new file)
+- `bin/commands/setup-wizard.ts` (use shared validator)
 - `bin/commands/validate.ts` (enhance)
 - `bin/commands/deploy.ts` (add dry-run)
-- `lib/utils/config-validator.ts` (enhance)
 
 **Time estimate**: 6-8 hours
 
-### Phase 4: Refactor (LONG TERM)
+---
 
-**Goal**: Unify flag naming and behavior
+### Phase 4: Clean Up Deprecated Code (LONG TERM)
+
+**Goal**: Remove all traces of `nonInteractive` parameter
 
 **Tasks**:
-1. Deprecate `nonInteractive` in favor of `yes`
-2. Update all command interfaces
-3. Add migration guide for any external users
-4. Update documentation
+
+1. Search for remaining `nonInteractive` references
+   - Should only be in type definitions or fallback code
+2. Remove deprecated `nonInteractive` parameter from all interfaces
+3. Remove any fallback code for `nonInteractive`
+4. Update documentation and migration guide
+5. Release as new major version (breaking change)
 
 **Files to modify**:
-- All commands in `bin/commands/`
-- `bin/cli.ts`
+
+- All command type definitions
+- `bin/commands/*.ts` (remove fallback code)
+- `CHANGELOG.md` (document breaking change)
 - Documentation
 
-**Time estimate**: 8-12 hours
+**Time estimate**: 2-3 hours
 
 ---
 
 ## 5. Recommended Immediate Fix
 
-**Apply Option A (Smart Non-Interactive Mode) in Phase 1**
+### Apply Option A + C Combined (Smart Prompting with --yes Standardization)
 
 This provides:
-- ✅ Immediate fix for `--yes` not working
-- ✅ Clear error messages for users
-- ✅ Safe (validates config)
-- ✅ Minimal changes (low risk)
 
-**Code change** (in `bin/commands/setup-wizard.ts`):
+- ✅ Immediate fix for `--yes` not working
+- ✅ Works for both first-time setup and repeat deployments
+- ✅ Standardizes on `--yes` (removes `nonInteractive` confusion)
+- ✅ Smart prompting (only prompts when needed)
+- ✅ Backward compatible during transition
+
+**Step 1: Update function signature** (in `bin/commands/setup-wizard.ts`):
 
 ```typescript
-// Replace lines 305-327 with:
-if (nonInteractive) {
-    const validation = validateConfigCompleteness(config);
+// Change line ~290:
+// Before:
+async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConfig> {
+    const { existingConfig = {}, nonInteractive = false, inheritFrom } = options;
 
-    if (!validation.isComplete) {
-        throw new Error(
-            `Non-interactive mode requires complete configuration.\n\n` +
-            `Missing required fields:\n` +
-            validation.missing.map(f => `  - ${f}`).join('\n') + '\n\n' +
-            `To fix:\n` +
-            `  1. Run: npm run setup (without --yes)\n` +
-            `  2. Or manually edit: ~/.config/benchling-webhook/${profile}/config.json`
-        );
+// After:
+async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConfig> {
+    const { existingConfig = {}, yes = false, nonInteractive = false, inheritFrom } = options;
+
+    // Backward compatibility: support old nonInteractive parameter
+    const useYesMode = yes || nonInteractive;
+```
+
+**Step 2: Replace validation logic** (replace lines 305-327):
+
+```typescript
+// Smart prompting logic
+if (useYesMode) {
+    // Determine which fields still need values
+    const fieldsToPrompt = determineRequiredFields(config);
+
+    if (fieldsToPrompt.length === 0) {
+        // All fields have values or defaults - no prompts needed
+        console.log(chalk.green('✓ Using existing configuration'));
+
+        // Update metadata and return
+        const now = new Date().toISOString();
+        const finalConfig = config as ProfileConfig;
+        finalConfig._metadata = {
+            version: "0.7.0",
+            createdAt: config._metadata?.createdAt || now,
+            updatedAt: now,
+            source: "wizard",
+        };
+
+        if (inheritFrom) {
+            finalConfig._inherits = inheritFrom;
+        }
+
+        return finalConfig;
     }
 
-    // Update metadata and return
-    const now = new Date().toISOString();
-    const finalConfig = config as ProfileConfig;
-    finalConfig._metadata = {
-        version: "0.7.0",
-        createdAt: config._metadata?.createdAt || now,
-        updatedAt: now,
-        source: "wizard",
-    };
+    // Some fields need values - prompt only for those
+    console.log(chalk.yellow(`\nThe following fields need values:`));
+    fieldsToPrompt.forEach(field => console.log(chalk.yellow(`  - ${field}`)));
+    console.log('');
 
-    if (inheritFrom) {
-        finalConfig._inherits = inheritFrom;
-    }
+    // Prompt for only the missing fields
+    const answers = await promptForSpecificFields(fieldsToPrompt, config);
 
-    return finalConfig;
+    // Merge answers with existing config
+    return mergeConfigWithAnswers(config, answers);
+}
+
+// Without --yes: continue with full interactive mode
+// (existing wizard logic on lines 329+)
+```
+
+**Step 3: Add helper function** (at top of file):
+
+```typescript
+function determineRequiredFields(config: Partial<ProfileConfig>): string[] {
+    const fieldChecks = [
+        { key: 'quilt.stackArn', value: config.quilt?.stackArn, hasDefault: false },
+        { key: 'quilt.catalog', value: config.quilt?.catalog, hasDefault: false },
+        { key: 'quilt.database', value: config.quilt?.database, hasDefault: true }, // Default: 'benchling'
+        { key: 'quilt.queueUrl', value: config.quilt?.queueUrl, hasDefault: false },
+        { key: 'quilt.region', value: config.quilt?.region, hasDefault: false },
+        { key: 'benchling.tenant', value: config.benchling?.tenant, hasDefault: false },
+        { key: 'benchling.clientId', value: config.benchling?.clientId, hasDefault: false },
+        { key: 'benchling.clientSecret', value: config.benchling?.clientSecret, hasDefault: false },
+        { key: 'benchling.appDefinitionId', value: config.benchling?.appDefinitionId, hasDefault: false },
+        { key: 'packages.bucket', value: config.packages?.bucket, hasDefault: false },
+        { key: 'packages.prefix', value: config.packages?.prefix, hasDefault: true }, // Default: 'benchling/'
+        { key: 'packages.metadataKey', value: config.packages?.metadataKey, hasDefault: true }, // Default: 'user_metadata'
+        { key: 'deployment.region', value: config.deployment?.region, hasDefault: false },
+        { key: 'deployment.account', value: config.deployment?.account, hasDefault: false },
+    ];
+
+    // Return only fields that have no value and no default
+    return fieldChecks
+        .filter(field => {
+            const hasValue = field.value && (typeof field.value !== 'string' || field.value.trim() !== '');
+            return !hasValue && !field.hasDefault;
+        })
+        .map(field => field.key);
+}
+
+async function promptForSpecificFields(
+    fieldKeys: string[],
+    existingConfig: Partial<ProfileConfig>
+): Promise<Partial<ProfileConfig>> {
+    // Implementation: prompt only for the specified fields
+    // Use existing prompt definitions from wizard but filter to only fieldKeys
+    const answers: Partial<ProfileConfig> = {};
+
+    // TODO: Implement field-by-field prompting
+    // For now, can throw helpful error
+    throw new Error(
+        `Cannot proceed in --yes mode: missing required fields.\n` +
+        `Missing: ${fieldKeys.join(', ')}\n\n` +
+        `Please run 'npm run setup' without --yes to configure these fields.`
+    );
+}
+
+function mergeConfigWithAnswers(
+    config: Partial<ProfileConfig>,
+    answers: Partial<ProfileConfig>
+): ProfileConfig {
+    // Deep merge answers into config
+    return {
+        ...config,
+        ...answers,
+        _metadata: {
+            version: "0.7.0",
+            createdAt: config._metadata?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            source: "wizard",
+        },
+    } as ProfileConfig;
 }
 ```
 
-**Add helper function** (at top of file):
+**Step 4: Update install.ts** (line 96):
 
 ```typescript
-function validateConfigCompleteness(config: Partial<ProfileConfig>): {
-    isComplete: boolean;
-    missing: string[];
-} {
-    const required: [string, unknown][] = [
-        ['quilt.stackArn', config.quilt?.stackArn],
-        ['quilt.catalog', config.quilt?.catalog],
-        ['quilt.database', config.quilt?.database],
-        ['quilt.queueUrl', config.quilt?.queueUrl],
-        ['benchling.tenant', config.benchling?.tenant],
-        ['benchling.clientId', config.benchling?.clientId],
-        ['benchling.clientSecret', config.benchling?.clientSecret],
-        ['benchling.appDefinitionId', config.benchling?.appDefinitionId],
-        ['packages.bucket', config.packages?.bucket],
-        ['packages.prefix', config.packages?.prefix],
-        ['deployment.region', config.deployment?.region],
-        ['deployment.account', config.deployment?.account],
-    ];
+// Before:
+setupResult = await setupWizardCommand({
+    nonInteractive: nonInteractive || yes,
+    isPartOfInstall: true,
+});
 
-    const missing = required
-        .filter(([_, value]) => !value || (typeof value === 'string' && value.trim() === ''))
-        .map(([key]) => key);
-
-    return {
-        isComplete: missing.length === 0,
-        missing,
-    };
-}
+// After:
+setupResult = await setupWizardCommand({
+    yes: yes,  // Pass yes directly
+    nonInteractive: nonInteractive,  // Keep for backward compatibility
+    isPartOfInstall: true,
+});
 ```
 
 ---
@@ -596,11 +801,14 @@ function validateConfigCompleteness(config: Partial<ProfileConfig>): {
 
 After implementing the fix, verify:
 
-- [ ] `npm run setup -- --yes` (with complete config) → No prompts, succeeds
-- [ ] `npm run setup -- --yes` (with incomplete config) → Clear error, lists missing fields
-- [ ] `npm run setup` (without --yes) → Interactive prompts as usual
-- [ ] `npm run deploy:dev -- --yes` → No prompts, deploys
-- [ ] `npx @quiltdata/benchling-webhook --yes` → No prompts, installs + deploys
+- [ ] `npm run setup -- --yes` (with complete config) → No prompts, uses existing config
+- [ ] `npm run setup -- --yes` (with partial config) → Prompts only for missing required fields
+- [ ] `npm run setup -- --yes` (with no config) → Prompts for all required fields (but uses defaults where available)
+- [ ] `npm run setup` (without --yes) → Full interactive prompts with confirmations
+- [ ] `npm run deploy:dev -- --yes` → No prompts, deploys immediately
+- [ ] `npx @quiltdata/benchling-webhook --yes` (first time) → Prompts for missing fields, then deploys
+- [ ] `npx @quiltdata/benchling-webhook --yes` (repeat) → No prompts, uses existing config, deploys immediately
+- [ ] Backward compatibility: Old code using `nonInteractive` parameter still works
 
 ---
 
@@ -673,5 +881,3 @@ After implementing the fix, verify:
 **Total**: 8 prompts (0 skippable - NO FLAG SUPPORT)
 
 ---
-
-**END OF ANALYSIS**
