@@ -208,11 +208,11 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
  * @returns Deployment stage (dev or prod)
  */
 function determineStage(profile: string): "dev" | "prod" {
-    if (profile === "prod") {
-        return "prod";
+    if (profile === "dev") {
+        return "dev";
     }
-    // Default and all other profiles deploy to dev
-    return "dev";
+    // Default and all other profiles deploy to prod
+    return "prod";
 }
 
 /**

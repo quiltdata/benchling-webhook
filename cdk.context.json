@@ -3,7 +3,8 @@
     32775,
     30717,
     34293,
-    34486
+    34486,
+    34892
   ],
   "vpc-provider:account=712023778557:filter.isDefault=true:region=us-east-1:returnAsymmetricSubnets=true": {
     "vpcId": "vpc-2dda6457",
