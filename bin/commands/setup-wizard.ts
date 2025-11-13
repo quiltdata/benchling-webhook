@@ -280,7 +280,7 @@ async function validateConfig(
  */
 interface WizardOptions {
     existingConfig?: Partial<ProfileConfig>;
-    nonInteractive?: boolean;
+    yes?: boolean;
     inheritFrom?: string;
 }
 
@@ -288,7 +288,7 @@ interface WizardOptions {
  * Runs interactive configuration wizard
  */
 async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConfig> {
-    const { existingConfig = {}, nonInteractive = false, inheritFrom } = options;
+    const { existingConfig = {}, yes = false, inheritFrom } = options;
 
     console.log("╔═══════════════════════════════════════════════════════════╗");
     console.log("║   Benchling Webhook Configuration Wizard                 ║");
@@ -302,7 +302,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     let awsAccountId: string | undefined;
 
     // If non-interactive, validate that all required fields are present
-    if (nonInteractive) {
+    if (yes) {
         if (!config.benchling?.tenant || !config.benchling?.clientId || !config.benchling?.clientSecret) {
             throw new Error(
                 "Non-interactive mode requires benchlingTenant, benchlingClientId, and benchlingClientSecret to be already configured",
@@ -360,6 +360,9 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             type: "input",
             name: "database",
             message: "Quilt Athena Database:",
+            // NOTE: "quilt_catalog" is a prompt default ONLY, NOT an OPTIONAL preset
+            // This field is REQUIRED - users must provide a value or it must be inferred from Quilt stack
+            // With --yes flag, this prompt should NOT be skipped even though it has a default here
             default: config.quilt?.database || "quilt_catalog",
             validate: (input: string): boolean | string =>
                 input.trim().length > 0 || "Database name is required",
@@ -523,12 +526,14 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             type: "input",
             name: "prefix",
             message: "Package S3 prefix:",
+            // NOTE: "benchling" is an OPTIONAL preset - can be auto-applied with --yes flag
             default: config.packages?.prefix || "benchling",
         },
         {
             type: "input",
             name: "metadataKey",
             message: "Package metadata key:",
+            // NOTE: "experiment_id" is an OPTIONAL preset - can be auto-applied with --yes flag
             default: config.packages?.metadataKey || "experiment_id",
         },
     ]);
@@ -627,7 +632,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
 export interface InstallWizardOptions {
     profile?: string;
     inheritFrom?: string;
-    nonInteractive?: boolean;
+    yes?: boolean;
     skipValidation?: boolean;
     skipSecretsSync?: boolean;
     awsProfile?: string;
@@ -659,7 +664,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
     const {
         profile = "default",
         inheritFrom,
-        nonInteractive = false,
+        yes = false,
         skipValidation = false,
         skipSecretsSync = false,
         awsProfile,
@@ -703,7 +708,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
         const inferenceResult = await inferQuiltConfig({
             region: awsRegion,
             profile: awsProfile,
-            interactive: !nonInteractive,
+            interactive: !yes,
         });
 
         // Merge inferred config with existing (inferred takes precedence as fresher data)
@@ -717,7 +722,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
     } catch (error) {
         console.error(`Failed to infer Quilt configuration: ${(error as Error).message}`);
 
-        if (nonInteractive) {
+        if (yes) {
             throw error;
         }
 
@@ -749,7 +754,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
     // Step 3: Run interactive wizard for all configuration (with inferred/existing values as suggestions)
     const config = await runConfigWizard({
         existingConfig: partialConfig,
-        nonInteractive,
+        yes,
         inheritFrom, // Only pass explicit inheritFrom, not auto-derived
     });
 
@@ -766,7 +771,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
             console.error("\n❌ Configuration validation failed:");
             validation.errors.forEach((err) => console.error(`  - ${err}`));
 
-            if (nonInteractive) {
+            if (yes) {
                 throw new Error("Configuration validation failed");
             }
 
