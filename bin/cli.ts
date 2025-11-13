@@ -9,6 +9,7 @@ import { manifestCommand } from "./commands/manifest";
 import { setupWizardCommand } from "./commands/setup-wizard";
 import { setupProfileCommand } from "./commands/setup-profile";
 import { healthCheckCommand } from "./commands/health-check";
+import { installCommand } from "./commands/install";
 
 // Load package.json for version
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -19,17 +20,20 @@ const program = new Command();
 program
     .name("benchling-webhook")
     .description("Benchling Webhook Integration for Quilt - Deploy lab notebook integration to AWS\n\n" +
-                 "Run without arguments for interactive setup wizard")
+                 "Run without arguments to install (setup + deploy)")
     .version(pkg.version, "-v, --version", "Display version number")
     .helpOption("-h, --help", "Display help for command")
     .addHelpText("after", `
 
 Quick Start:
-  1. Run interactive setup:
+  1. Run interactive installer (setup + deploy):
      $ npx @quiltdata/benchling-webhook
 
-  2. Deploy to AWS:
-     $ npx @quiltdata/benchling-webhook deploy
+  2. Setup only (skip deployment):
+     $ npx @quiltdata/benchling-webhook --setup-only
+
+  3. Non-interactive install:
+     $ npx @quiltdata/benchling-webhook --yes
 
 v0.7.0 Changes:
   - New unified configuration architecture with profile support
@@ -82,10 +86,28 @@ For more information: https://github.com/quiltdata/benchling-webhook#deployment
         }
     });
 
+// Setup command (for backward compatibility - setup only, no deploy)
+program
+    .command("setup")
+    .description("Run setup wizard only (without deployment)")
+    .option("--profile <name>", "Configuration profile to use (default: default)")
+    .option("--inherit-from <name>", "Base profile to inherit from")
+    .option("--region <region>", "AWS region")
+    .option("--aws-profile <name>", "AWS credentials profile")
+    .action(async (options) => {
+        try {
+            await setupWizardCommand(options);
+            process.exit(0);
+        } catch (error) {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        }
+    });
+
 // Init command (legacy - redirects to setup wizard)
 program
     .command("init")
-    .description("Interactive setup wizard (alias for running without arguments)")
+    .description("Interactive setup wizard (alias for 'setup' command)")
     .action(async (options) => {
         try {
             await initCommand(options);
@@ -184,17 +206,27 @@ program
         }
     });
 
-// Run setup wizard when no command provided (but not for help/version flags)
+// Run install command when no command provided (but not for help/version flags)
 const args = process.argv.slice(2);
 const isHelpOrVersion = args.some(arg => arg === "--help" || arg === "-h" || arg === "--version" || arg === "-v");
 
 if ((!args.length || (args.length > 0 && args[0].startsWith("--") && !isHelpOrVersion))) {
-    // Parse options for setup wizard
-    const options: { nonInteractive?: boolean; profile?: string; inheritFrom?: string; awsRegion?: string; awsProfile?: string } = {};
+    // Parse options for install command
+    const options: {
+        nonInteractive?: boolean;
+        profile?: string;
+        inheritFrom?: string;
+        awsRegion?: string;
+        awsProfile?: string;
+        setupOnly?: boolean;
+        yes?: boolean;
+    } = {};
 
     for (let i = 0; i < args.length; i++) {
         if (args[i] === "--yes" || args[i] === "-y") {
-            options.nonInteractive = true;
+            options.yes = true;
+        } else if (args[i] === "--setup-only") {
+            options.setupOnly = true;
         } else if (args[i] === "--profile" && i + 1 < args.length) {
             options.profile = args[i + 1];
             i++;
@@ -210,7 +242,7 @@ if ((!args.length || (args.length > 0 && args[0].startsWith("--") && !isHelpOrVe
         }
     }
 
-    setupWizardCommand(options)
+    installCommand(options)
         .then(() => process.exit(0))
         .catch((error) => {
             console.error(chalk.red((error as Error).message));
