@@ -246,9 +246,9 @@ async function deploy(
         console.error(chalk.red((error as Error).message));
         console.log();
         console.log(chalk.yellow("To sync secrets manually, run:"));
-        console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook setup`));
+        console.log(chalk.cyan("  npx @quiltdata/benchling-webhook setup"));
         if (options.profileName !== "default") {
-            console.log(chalk.cyan(`  # Or with custom profile:`));
+            console.log(chalk.cyan("  # Or with custom profile:"));
             console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook setup --profile ${options.profileName}`));
         }
         console.log();
