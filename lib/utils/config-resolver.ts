@@ -309,12 +309,12 @@ export class ConfigResolver {
         this.validateRequiredOutputs(outputs);
 
         // Extract queue URL
-        const queueUrl = outputs.PackagerQueueUrl || outputs.QueueUrl;
+        const queueUrl = outputs.PackagerQueueUrl;
 
         if (!queueUrl || !isQueueUrl(queueUrl)) {
             throw new ConfigResolverError(
                 "Missing SQS queue URL in CloudFormation outputs",
-                "Ensure your Quilt stack exports PackagerQueueUrl or QueueUrl",
+                "Ensure your Quilt stack exports PackagerQueueUrl",
                 `Available outputs: ${Object.keys(outputs).join(", ")}`,
             );
         }
