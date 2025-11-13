@@ -47,11 +47,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             );
         }
 
-        console.log(`Deploying with profile configuration (v${config._metadata.version})`);
-        console.log(`  Quilt Stack: ${config.quilt.stackArn}`);
-        console.log(`  Benchling Tenant: ${config.benchling.tenant}`);
-        console.log(`  Region: ${config.deployment.region}`);
-
         // Create CloudFormation parameters for runtime-configurable values
         // These parameters can be updated via CloudFormation stack updates
 

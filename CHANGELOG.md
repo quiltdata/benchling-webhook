@@ -3,6 +3,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.6] - 2025-11-13
+
+### Fixed
+
+- **NPX deployment reliability** - Fixed critical issue where `npx @quiltdata/benchling-webhook` would fail with CDK app not found error
+- **Default deployment stage** - Corrected default stage to `prod` (was incorrectly defaulting to `dev` for non-dev profiles)
+
+### Changed
+
+- **Streamlined deployment** - Removed automatic test execution after deployment
+  - Tests no longer run automatically via npm scripts
+  - Deployment success is independent of test results
+  - Users can run tests manually when needed
+
 ## [0.7.4] - 2025-11-12
 
 ### Fixed
