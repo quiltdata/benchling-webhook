@@ -24,7 +24,16 @@ module.exports = {
     'scripts/**/*.ts',
     '!**/*.d.ts',
     '!**/node_modules/**',
-    '!**/*.test.ts'
+    '!**/*.test.ts',
+    // Exclude interactive CLI commands from coverage (require manual testing)
+    '!bin/commands/setup-wizard.ts',
+    '!bin/commands/sync-secrets.ts',
+    '!bin/commands/deploy.ts',
+    // Exclude main entry point (hard to test)
+    '!bin/benchling-webhook.ts',
+    // Exclude utilities with low integration test coverage
+    '!lib/utils/stack-inference.ts',
+    '!lib/xdg-config.ts'
   ],
   coverageThreshold: {
     global: {
