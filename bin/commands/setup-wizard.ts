@@ -822,9 +822,9 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     // Use next steps generator (Phase 1: assumes repository context)
     const nextSteps = generateNextSteps({
         profile,
-        stage: profile === 'prod' ? 'prod' : 'dev',
+        stage: profile === "prod" ? "prod" : "dev",
     });
-    console.log(nextSteps + '\n');
+    console.log(nextSteps + "\n");
 
     return config;
 }
