@@ -24,6 +24,7 @@ import { ProfileConfig, ValidationResult } from "../../lib/types/config";
 import { inferQuiltConfig } from "../commands/infer-quilt-config";
 import { isQueueUrl } from "../../lib/utils/sqs";
 import { manifestCommand } from "./manifest";
+import { generateNextSteps } from "../../lib/next-steps-generator";
 
 // =============================================================================
 // VALIDATION FUNCTIONS (from scripts/config/validator.ts)
@@ -818,21 +819,12 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     console.log("║   Setup Complete!                                         ║");
     console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
-    console.log("Next steps:");
-    if (profile === "default") {
-        console.log("  1. Deploy to AWS: npm run deploy");
-        console.log("  2. Test integration: npm run test\n");
-    } else if (profile === "dev") {
-        console.log("  1. Deploy to AWS: npm run deploy:dev");
-        console.log("  2. Test integration: npm run test:dev\n");
-    } else if (profile === "prod") {
-        console.log("  1. Deploy to AWS: npm run deploy:prod");
-        console.log("  2. Test integration: npm run test:prod\n");
-    } else {
-        // For custom profiles, use npm run deploy with arguments
-        console.log(`  1. Deploy to AWS: npm run deploy -- --profile ${profile} --stage ${profile}`);
-        console.log(`  2. Check logs: npx ts-node scripts/check-logs.ts --profile ${profile}\n`);
-    }
+    // Use next steps generator (Phase 1: assumes repository context)
+    const nextSteps = generateNextSteps({
+        profile,
+        stage: profile === 'prod' ? 'prod' : 'dev',
+    });
+    console.log(nextSteps + '\n');
 
     return config;
 }
