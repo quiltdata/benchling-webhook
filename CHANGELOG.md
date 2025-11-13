@@ -9,6 +9,8 @@ All notable changes to this project will be documented in this file.
 
 - **NPX deployment reliability** - Fixed critical issue where `npx @quiltdata/benchling-webhook` would fail with CDK app not found error
 - **Default deployment stage** - Corrected default stage to `prod` (was incorrectly defaulting to `dev` for non-dev profiles)
+- **S3 bucket region detection** - Auto-detect S3 bucket region during validation to prevent 301 errors when bucket is in different region than deployment
+- **Validation error messages** - Enhanced `--yes` flag validation errors with detailed context, tested resources, specific error codes, and actionable hints
 
 ### Changed
 
