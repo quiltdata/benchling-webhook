@@ -12,6 +12,7 @@ import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig } from "../../lib/types/config";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
+import { syncSecretsToAWS } from "./sync-secrets";
 
 /**
  * Get the most recent dev version tag (without 'v' prefix)
@@ -208,33 +209,48 @@ async function deploy(
     // Verify secrets exist in AWS Secrets Manager
     spinner.start("Verifying Benchling secrets in AWS Secrets Manager...");
     try {
-        // Run sync-secrets without --force to verify/create but not update existing secrets
-        const syncOutput = execSync(`npm run setup:sync-secrets -- --profile ${options.profileName}`, {
-            stdio: "pipe",
-            encoding: "utf-8",
-            env: {
-                ...process.env,
-                AWS_REGION: deployRegion,
-            },
-        });
+        // Temporarily suppress console output during sync operation
+        const originalLog = console.log;
+        console.log = () => {}; // Suppress logs during sync
 
-        // Parse output to determine action (created/verified/skipped)
-        let message = "verified";
-        if (syncOutput.includes("Secret created:")) {
-            message = "created and verified";
-        } else if (syncOutput.includes("Secret already exists:")) {
-            message = "verified";
+        let results;
+        try {
+            // Sync secrets directly - creates/verifies without updating existing secrets
+            results = await syncSecretsToAWS({
+                profile: options.profileName,
+                region: deployRegion,
+                force: false, // Don't update existing secrets
+            });
+        } finally {
+            // Restore console.log
+            console.log = originalLog;
         }
 
-        spinner.succeed(`Secrets ${message}: '${benchlingSecret}'`);
+        // Determine action from results
+        let message = "verified";
+        if (results.length > 0) {
+            const action = results[0].action;
+            if (action === "created") {
+                message = "created and verified";
+            } else if (action === "skipped") {
+                message = "verified (existing)";
+            } else if (action === "updated") {
+                message = "verified and updated";
+            }
+        }
+
+        spinner.succeed(`Secrets ${message}`);
     } catch (error) {
         spinner.fail("Failed to verify secrets");
         console.log();
         console.error(chalk.red((error as Error).message));
         console.log();
         console.log(chalk.yellow("To sync secrets manually, run:"));
-        console.log(chalk.cyan(`  npm run setup:sync-secrets -- --profile ${options.profileName} --region ${deployRegion}`));
-        console.log(chalk.yellow("To force update existing secrets, add --force flag"));
+        console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook setup`));
+        if (options.profileName !== "default") {
+            console.log(chalk.cyan(`  # Or with custom profile:`));
+            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook setup --profile ${options.profileName}`));
+        }
         console.log();
         process.exit(1);
     }
