@@ -5,6 +5,9 @@
 
 import { execSync } from "child_process";
 import { isQueueUrl } from "./sqs";
+import { IAwsProvider, IHttpClient, StackDetails } from "../interfaces/aws-provider";
+import { ExecSyncAwsProvider } from "../providers/exec-sync-aws-provider";
+import { NodeHttpClient } from "../providers/node-http-client";
 
 export interface QuiltCatalogConfig {
     region: string;
@@ -15,10 +18,8 @@ export interface QuiltCatalogConfig {
     [key: string]: unknown;
 }
 
-export interface StackDetails {
-    outputs: Array<{ OutputKey: string; OutputValue: string }>;
-    parameters: Array<{ ParameterKey: string; ParameterValue: string }>;
-}
+// Re-export StackDetails for backward compatibility
+export type { StackDetails };
 
 export interface InferredStackInfo {
     config: QuiltCatalogConfig;
@@ -152,19 +153,36 @@ export function extractApiGatewayId(endpoint: string): string | null {
 
 /**
  * Find CloudFormation stack using API Gateway ID
+ * @param region AWS region
+ * @param apiGatewayId API Gateway ID to search for
+ * @param awsProviderOrVerbose AWS provider instance or verbose boolean (for backward compatibility)
+ * @param verbose Verbose logging flag (only used when awsProviderOrVerbose is IAwsProvider)
  */
-export function findStack(
+export async function findStack(
     region: string,
     apiGatewayId: string | null,
+    awsProviderOrVerbose: IAwsProvider | boolean = true,
     verbose = true,
-): string | null {
+): Promise<string | null> {
+    // Handle backward compatibility: if third arg is boolean, use default provider
+    let awsProvider: IAwsProvider;
+    let verboseFlag: boolean;
+
+    if (typeof awsProviderOrVerbose === "boolean") {
+        awsProvider = new ExecSyncAwsProvider();
+        verboseFlag = awsProviderOrVerbose;
+    } else {
+        awsProvider = awsProviderOrVerbose;
+        verboseFlag = verbose;
+    }
+
     let stackName: string | null = null;
 
     // Search by API Gateway ID
     if (apiGatewayId) {
-        if (verbose) console.log(`Searching by API Gateway ID: ${apiGatewayId}...`);
-        stackName = findStackByResource(region, apiGatewayId);
-        if (stackName && verbose) {
+        if (verboseFlag) console.log(`Searching by API Gateway ID: ${apiGatewayId}...`);
+        stackName = await awsProvider.findStackByResource(region, apiGatewayId);
+        if (stackName && verboseFlag) {
             console.log(`✓ Found stack by API Gateway: ${stackName}`);
         }
     }
@@ -303,12 +321,36 @@ export function buildInferredConfig(
 }
 
 /**
+ * Options for inferStackConfig
+ */
+export interface InferStackConfigOptions {
+    awsProvider?: IAwsProvider;
+    httpClient?: IHttpClient;
+    verbose?: boolean;
+}
+
+/**
  * Parse config.json and infer stack information
+ * @param catalogUrl URL to Quilt catalog
+ * @param optionsOrVerbose Options object or verbose boolean (for backward compatibility)
  */
 export async function inferStackConfig(
     catalogUrl: string,
-    verbose = true,
+    optionsOrVerbose: InferStackConfigOptions | boolean = true,
 ): Promise<InferredStackInfo> {
+    // Handle backward compatibility: if second arg is boolean, use default options
+    let options: InferStackConfigOptions;
+    if (typeof optionsOrVerbose === "boolean") {
+        options = { verbose: optionsOrVerbose };
+    } else {
+        options = optionsOrVerbose;
+    }
+
+    const {
+        awsProvider = new ExecSyncAwsProvider(),
+        httpClient = new NodeHttpClient(),
+        verbose = true,
+    } = options;
     if (verbose) {
         console.log(`Fetching config from: ${catalogUrl}`);
         console.log("");
@@ -323,7 +365,7 @@ export async function inferStackConfig(
     // Fetch config.json
     let config: QuiltCatalogConfig;
     try {
-        config = (await fetchJson(configUrl)) as QuiltCatalogConfig;
+        config = (await httpClient.fetchJson(configUrl)) as QuiltCatalogConfig;
     } catch (error) {
         // If direct fetch fails, try with just /config.json path
         const err = error as Error;
@@ -331,7 +373,7 @@ export async function inferStackConfig(
             const baseUrl = catalogUrl.match(/https?:\/\/[^/]+/)?.[0];
             if (baseUrl) {
                 if (verbose) console.log(`Direct fetch failed, trying: ${baseUrl}/config.json`);
-                config = (await fetchJson(`${baseUrl}/config.json`)) as QuiltCatalogConfig;
+                config = (await httpClient.fetchJson(`${baseUrl}/config.json`)) as QuiltCatalogConfig;
             } else {
                 throw error;
             }
@@ -363,9 +405,10 @@ export async function inferStackConfig(
     }
 
     // Try to find the stack
-    const stackName = findStack(
+    const stackName = await findStack(
         region,
         apiGatewayId,
+        awsProvider,
         verbose,
     );
 
@@ -385,7 +428,7 @@ export async function inferStackConfig(
         if (verbose) {
             console.log(`Fetching stack details for: ${stackName}...`);
         }
-        stackDetails = getStackDetails(region, stackName);
+        stackDetails = await awsProvider.getStackDetails(region, stackName);
         if (verbose) {
             console.log(
                 `✓ Retrieved ${stackDetails.outputs.length} outputs and ${stackDetails.parameters.length} parameters`,
@@ -395,7 +438,7 @@ export async function inferStackConfig(
     }
 
     // Get AWS account ID
-    const accountId = getAwsAccountId();
+    const accountId = await awsProvider.getAccountId();
     if (accountId && verbose) {
         console.log(`✓ AWS Account ID: ${accountId}`);
         console.log("");
