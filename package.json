@@ -6,6 +6,7 @@
   "types": "dist/lib/index.d.ts",
   "files": [
     "dist/",
+    "cdk.json",
     "README.md",
     "LICENSE",
     "env.template"
