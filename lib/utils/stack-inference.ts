@@ -284,9 +284,7 @@ export function buildInferredConfig(
     }
 
     // SQS Queue URL (normalize from URL or ARN)
-    const queueOutput =
-        stackDetails.outputs.find((o) => o.OutputKey === "PackagerQueueUrl") ||
-        stackDetails.outputs.find((o) => o.OutputKey === "QueueUrl");
+    const queueOutput = stackDetails.outputs.find((o) => o.OutputKey === "PackagerQueueUrl");
 
     if (queueOutput && queueOutput.OutputValue && isQueueUrl(queueOutput.OutputValue)) {
         vars.QUEUE_URL = queueOutput.OutputValue;
