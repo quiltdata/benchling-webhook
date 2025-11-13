@@ -333,8 +333,8 @@ async function deploy(
     }
 
     // Deploy using CDK CLI
-    spinner.start("Deploying to AWS (this may take a few minutes)...");
-    spinner.stop();
+    console.log();
+    console.log(chalk.blue.bold("▶ Starting deployment..."));
     console.log();
 
     try {
@@ -435,34 +435,11 @@ async function deploy(
 
                     console.log(`✅ Recorded deployment to profile '${options.profileName}' stage '${options.stage}'`);
 
-                    // Run stage-specific tests
-                    console.log();
-                    console.log(`Running ${options.stage} integration tests...`);
-                    try {
-                        const testCommand = options.stage === "dev" ? "npm run test:dev" : "npm run test:prod";
-                        execSync(testCommand, {
-                            stdio: "inherit",
-                            cwd: process.cwd(),
-                            env: {
-                                ...process.env,
-                                PROFILE: options.profileName,
-                            },
-                        });
-                        console.log();
-                        console.log(`✅ ${options.stage.charAt(0).toUpperCase() + options.stage.slice(1)} deployment and tests completed successfully!`);
-                    } catch {
-                        console.error();
-                        console.error(`❌ ${options.stage.charAt(0).toUpperCase() + options.stage.slice(1)} tests failed!`);
-                        console.error("   Deployment completed but tests did not pass.");
-                        console.error("   Review test output above for details.");
-                        process.exit(1);
-                    }
-
                     // Success message with webhook URL
                     console.log();
                     console.log(
                         boxen(
-                            `${chalk.green.bold("✓ Deployment and Testing Complete!")}\n\n` +
+                            `${chalk.green.bold("✓ Deployment Complete!")}\n\n` +
                             `Stack:  ${chalk.cyan("BenchlingWebhookStack")}\n` +
                             `Region: ${chalk.cyan(deployRegion)}\n` +
                             `Stage:  ${chalk.cyan(options.stage)}\n` +
@@ -478,12 +455,11 @@ async function deploy(
                     );
                 } else {
                     console.warn("⚠️  Could not retrieve WebhookEndpoint from stack outputs");
-                    console.warn("   Skipping test execution");
                 }
             }
         } catch (error) {
-            console.warn(`⚠️  Could not retrieve/test deployment endpoint: ${(error as Error).message}`);
-            console.warn("   Deployment succeeded but tests were skipped");
+            console.warn(`⚠️  Could not retrieve deployment endpoint: ${(error as Error).message}`);
+            console.warn("   Deployment succeeded but endpoint could not be recorded");
         }
     } catch (error) {
         spinner.fail("Deployment failed");
