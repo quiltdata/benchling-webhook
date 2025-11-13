@@ -350,7 +350,42 @@ async function deploy(
         ];
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
-        const cdkCommand = `npx cdk deploy --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
+
+        // Determine the CDK app entry point
+        // The path needs to be absolute to work from any cwd
+        const fs = require("fs");
+        const path = require("path");
+
+        // Find the package root directory
+        // When compiled: __dirname is dist/bin/commands, so go up 3 levels
+        // When source: __dirname is bin/commands, so go up 2 levels
+        let moduleDir: string;
+        if (__dirname.includes("/dist/")) {
+            // Compiled: dist/bin/commands -> ../../../
+            moduleDir = path.resolve(__dirname, "../../..");
+        } else {
+            // Source: bin/commands -> ../../
+            moduleDir = path.resolve(__dirname, "../..");
+        }
+
+        let appPath: string;
+        const tsSourcePath = path.join(moduleDir, "bin/benchling-webhook.ts");
+        const jsDistPath = path.join(moduleDir, "dist/bin/benchling-webhook.js");
+
+        if (fs.existsSync(tsSourcePath)) {
+            // Development mode: TypeScript source exists, use it directly
+            appPath = `npx ts-node --prefer-ts-exts "${tsSourcePath}"`;
+        } else if (fs.existsSync(jsDistPath)) {
+            // Production mode: use compiled JavaScript
+            appPath = `node "${jsDistPath}"`;
+        } else {
+            // Fallback: rely on cdk.json (should not happen)
+            console.warn(chalk.yellow("⚠️  Could not find CDK app entry point, relying on cdk.json"));
+            appPath = "";
+        }
+
+        const appArg = appPath ? `--app "${appPath}"` : "";
+        const cdkCommand = `npx cdk deploy ${appArg} --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
 
         execSync(cdkCommand, {
             stdio: "inherit",
