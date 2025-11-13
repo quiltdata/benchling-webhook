@@ -196,7 +196,7 @@ describe("installCommand", () => {
             );
         });
 
-        it("should determine stage as 'dev' for default profile", async () => {
+        it("should determine stage as 'prod' for default profile", async () => {
             mockSetupWizard.mockResolvedValue({
                 success: true,
                 profile: "default",
@@ -211,7 +211,7 @@ describe("installCommand", () => {
 
             expect(mockDeploy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    stage: "dev",
+                    stage: "prod",
                 })
             );
         });
