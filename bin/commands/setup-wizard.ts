@@ -40,7 +40,7 @@ import { generateNextSteps } from "../../lib/next-steps-generator";
 async function detectBucketRegion(bucketName: string, awsProfile?: string): Promise<string | null> {
     try {
         const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = {
-            region: "us-east-1" // Use us-east-1 as the API endpoint for GetBucketLocation
+            region: "us-east-1", // Use us-east-1 as the API endpoint for GetBucketLocation
         };
 
         if (awsProfile) {
@@ -55,7 +55,7 @@ async function detectBucketRegion(bucketName: string, awsProfile?: string): Prom
         // AWS returns null for us-east-1, otherwise returns the region constraint
         const region = response.LocationConstraint || "us-east-1";
         return region;
-    } catch (error) {
+    } catch {
         // If we can't detect the region, return null and let validation proceed with the provided region
         return null;
     }
@@ -179,7 +179,7 @@ async function validateBenchlingCredentials(
                         `    Tested: POST ${tokenUrl}\n` +
                         `    Status: ${res.statusCode}\n` +
                         `    Error: ${errorDetail}\n` +
-                        `    Hint: Verify Client ID and Secret are correct and match the app definition`
+                        "    Hint: Verify Client ID and Secret are correct and match the app definition",
                     );
                 }
                 resolve(result);
@@ -190,7 +190,7 @@ async function validateBenchlingCredentials(
             if (!result.warnings) result.warnings = [];
             result.warnings.push(
                 `Could not validate OAuth credentials at ${tokenUrl}: ${error.message}\n` +
-                `    This may be a network issue. Credentials will be validated during deployment.`
+                "    This may be a network issue. Credentials will be validated during deployment.",
             );
             result.isValid = true; // Allow proceeding with warning
             resolve(result);
@@ -279,8 +279,8 @@ async function validateS3BucketAccess(
             `S3 bucket validation failed for '${bucketName}' in region '${regionToUse}'${awsProfile ? ` (AWS profile: ${awsProfile})` : ""}:\n` +
             `    Error: ${errorCode}${statusCode ? ` (HTTP ${statusCode})` : ""}\n` +
             `    Message: ${errorMsg}\n` +
-            `    Tested: HeadBucket operation\n` +
-            `    Hint: ${hint}`
+            "    Tested: HeadBucket operation\n" +
+            `    Hint: ${hint}`,
         );
     }
 
