@@ -632,6 +632,16 @@ export interface InstallWizardOptions {
     skipSecretsSync?: boolean;
     awsProfile?: string;
     awsRegion?: string;
+    isPartOfInstall?: boolean; // NEW: Suppress next steps if part of install command
+}
+
+/**
+ * Setup wizard result (for Phase 3)
+ */
+export interface SetupWizardResult {
+    success: boolean;
+    profile: string;
+    config: ProfileConfig;
 }
 
 /**
@@ -645,7 +655,7 @@ export interface InstallWizardOptions {
  * 5. Save to XDG config directory
  * 6. Sync secrets to AWS Secrets Manager
  */
-async function runInstallWizard(options: InstallWizardOptions = {}): Promise<ProfileConfig> {
+async function runInstallWizard(options: InstallWizardOptions = {}): Promise<SetupWizardResult> {
     const {
         profile = "default",
         inheritFrom,
@@ -654,6 +664,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         skipSecretsSync = false,
         awsProfile,
         awsRegion, // NO DEFAULT - let inferQuiltConfig fetch region from catalog's config.json
+        isPartOfInstall = false, // NEW: Default to false for backward compatibility
     } = options;
 
     const xdg = new XDGConfig();
@@ -814,19 +825,26 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         }
     }
 
-    // Step 7: Display next steps
-    console.log("╔═══════════════════════════════════════════════════════════╗");
-    console.log("║   Setup Complete!                                         ║");
-    console.log("╚═══════════════════════════════════════════════════════════╝\n");
+    // Step 7: Display next steps (only if NOT part of install command)
+    if (!isPartOfInstall) {
+        console.log("╔═══════════════════════════════════════════════════════════╗");
+        console.log("║   Setup Complete!                                         ║");
+        console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
-    // Use next steps generator (Phase 1: assumes repository context)
-    const nextSteps = generateNextSteps({
+        // Use next steps generator (Phase 2: with context detection)
+        const nextSteps = generateNextSteps({
+            profile,
+            stage: profile === "prod" ? "prod" : "dev",
+        });
+        console.log(nextSteps + "\n");
+    }
+
+    // Return result for install command orchestration
+    return {
+        success: true,
         profile,
-        stage: profile === "prod" ? "prod" : "dev",
-    });
-    console.log(nextSteps + "\n");
-
-    return config;
+        config,
+    };
 }
 
 // =============================================================================
@@ -837,11 +855,11 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
  * Setup wizard command handler
  *
  * @param options - Wizard options
- * @returns Promise that resolves when wizard completes
+ * @returns Promise that resolves with setup result
  */
-export async function setupWizardCommand(options: InstallWizardOptions = {}): Promise<void> {
+export async function setupWizardCommand(options: InstallWizardOptions = {}): Promise<SetupWizardResult> {
     try {
-        await runInstallWizard(options);
+        return await runInstallWizard(options);
     } catch (error) {
         // Handle user cancellation (Ctrl+C) gracefully
         const err = error as Error & { code?: string };
