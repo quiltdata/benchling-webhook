@@ -93,7 +93,7 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
             inheritFrom,
             awsProfile,
             awsRegion,
-            nonInteractive,
+            nonInteractive: nonInteractive || yes, // Pass --yes as nonInteractive
             isPartOfInstall: true, // Suppress next steps from setup wizard
         });
     } catch (error) {
