@@ -213,13 +213,12 @@ const isHelpOrVersion = args.some(arg => arg === "--help" || arg === "-h" || arg
 if ((!args.length || (args.length > 0 && args[0].startsWith("--") && !isHelpOrVersion))) {
     // Parse options for install command
     const options: {
-        nonInteractive?: boolean;
+        yes?: boolean;
         profile?: string;
         inheritFrom?: string;
         awsRegion?: string;
         awsProfile?: string;
         setupOnly?: boolean;
-        yes?: boolean;
     } = {};
 
     for (let i = 0; i < args.length; i++) {
