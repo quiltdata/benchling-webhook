@@ -1,128 +1,147 @@
 #!/usr/bin/env python3
 """
 Test script to send webhook payloads to your local server.
+
+This script:
+1. Reads event types from app-manifest.yaml
+2. Loads corresponding real event payloads from ../test-events/
+3. Injects test entry ID from XDG config (benchling.testEntryId)
+4. Sends payloads to the local server
 """
 
 import json
-from datetime import datetime, timezone
+import sys
+from pathlib import Path
 
 import requests
+import yaml
 
 
-def _get_timestamp():
-    """Generate a fresh timestamp for test payloads."""
-    return datetime.now(timezone.utc).isoformat() + "Z"
+def load_app_manifest():
+    """Load app manifest to get subscribed event types."""
+    manifest_path = Path(__file__).parent.parent / "app-manifest.yaml"
+    with open(manifest_path) as f:
+        manifest = yaml.safe_load(f)
+
+    # Extract event types from subscriptions
+    event_types = []
+    for msg in manifest.get("subscriptions", {}).get("messages", []):
+        event_types.append(msg["type"])
+
+    return event_types
+
+
+def load_test_entry_id(profile="dev"):
+    """Load test entry ID from XDG config."""
+    # Use XDGConfig to load the profile
+    sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+    from xdg_config import XDGConfig
+
+    try:
+        xdg = XDGConfig(profile=profile)
+        config = xdg.load_complete_config()
+        test_entry_id = config.get("benchling", {}).get("testEntryId")
+
+        if not test_entry_id:
+            print(f"⚠️  Warning: No testEntryId found in profile '{profile}'")
+            print("   Using fallback entry ID from test-events/entry.json")
+            # Fallback: extract from entry.json
+            entry_path = Path(__file__).parent.parent.parent / "test-events" / "entry.json"
+            if entry_path.exists():
+                with open(entry_path) as f:
+                    entry_data = json.load(f)
+                    test_entry_id = entry_data.get("entry", {}).get("id")
+
+        return test_entry_id
+    except FileNotFoundError:
+        print(f"⚠️  Warning: Profile '{profile}' not found")
+        print("   Using fallback entry ID from test-events/entry.json")
+        # Fallback: extract from entry.json
+        entry_path = Path(__file__).parent.parent.parent / "test-events" / "entry.json"
+        if entry_path.exists():
+            with open(entry_path) as f:
+                entry_data = json.load(f)
+                return entry_data.get("entry", {}).get("id")
+        return None
+
+
+def map_event_type_to_file(event_type):
+    """Map Benchling event types to test-events file names."""
+    mapping = {
+        "v2.entry.created": "entry-created.json",
+        "v2.entry.updated.fields": "entry-updated.json",
+        "v2.canvas.created": "canvas-created.json",
+        "v2.canvas.initialized": "canvas-initialized.json",
+        "v2.canvas.userInteracted": "canvas-interaction.json",
+        "v2.app.installed": "app-installed.json",
+        "v2.app.activateRequested": "app-activate-requested.json",
+        "v2.app.deactivated": "app-deactivated.json",
+        "v2-beta.app.configuration.updated": "app-config-updated.json",
+    }
+    return mapping.get(event_type)
+
+
+def load_test_payload(event_type, test_entry_id=None):
+    """Load test payload from test-events directory."""
+    filename = map_event_type_to_file(event_type)
+    if not filename:
+        print(f"⚠️  No test file mapped for event type: {event_type}")
+        return None
+
+    # Load from root test-events directory
+    test_events_dir = Path(__file__).parent.parent.parent / "test-events"
+    filepath = test_events_dir / filename
+
+    if not filepath.exists():
+        print(f"⚠️  Test file not found: {filename}")
+        return None
+
+    with open(filepath) as f:
+        payload = json.load(f)
+
+    if not payload:
+        print(f"⚠️  Test file not found: {filename}")
+        return None
+
+    # Inject test entry ID where appropriate
+    if test_entry_id:
+        # Update resourceId in message (for entry/canvas events)
+        if "message" in payload and "resourceId" in payload["message"]:
+            payload["message"]["resourceId"] = test_entry_id
+
+        # Update entryId if present
+        if "message" in payload and "entryId" in payload["message"]:
+            payload["message"]["entryId"] = test_entry_id
+
+    return payload
+
+
+def determine_endpoint(event_type):
+    """Determine which endpoint to send the event to."""
+    if event_type.startswith("v2.canvas."):
+        return "/canvas"
+    elif event_type.startswith("v2.app.") or event_type.startswith("v2-beta.app."):
+        return "/lifecycle"
+    else:
+        return "/event"
 
 
 def _print_response(response):
     """Print response with appropriate status indicator."""
     is_success = 200 <= response.status_code < 300
     status_icon = "✅" if is_success else "❌"
-    print(f"\n{status_icon} Response Status: {response.status_code}")
+    print(f"{status_icon} Response Status: {response.status_code}")
     print(f"📄 Response Body: {response.text}")
 
 
-def _get_test_payloads():
-    """Generate test webhook payloads with fresh timestamps."""
-    return {
-        "entry_created": {
-            "channel": "events",
-            "message": {
-                "type": "v2.entry.created",
-                "resourceId": "etr_12345678",
-                "entryId": "etr_12345678",
-                "timestamp": _get_timestamp(),
-            },
-            "baseURL": "https://your-tenant.benchling.com",
-        },
-        "entry_updated": {
-            "channel": "events",
-            "message": {
-                "type": "v2.entry.updated.fields",
-                "resourceId": "etr_12345678",
-                "entryId": "etr_12345678",
-                "timestamp": _get_timestamp(),
-            },
-            "baseURL": "https://your-tenant.benchling.com",
-        },
-    }
+def test_webhook(server_url, event_type, payload):
+    """Send a test webhook to the server."""
+    endpoint = determine_endpoint(event_type)
+    webhook_url = f"{server_url}{endpoint}"
 
-
-def _get_lifecycle_payloads():
-    """Generate lifecycle event test payloads with fresh timestamps."""
-    return {
-        "app_installed": {
-            "channel": "events",
-            "message": {
-                "type": "v2.app.installed",
-                "installationId": "inst_12345678",
-                "timestamp": _get_timestamp(),
-            },
-            "baseURL": "https://your-tenant.benchling.com",
-        },
-        "app_activate_requested": {
-            "channel": "events",
-            "message": {
-                "type": "v2.app.activateRequested",
-                "installationId": "inst_12345678",
-                "timestamp": _get_timestamp(),
-            },
-            "baseURL": "https://your-tenant.benchling.com",
-        },
-        "app_deactivated": {
-            "channel": "events",
-            "message": {
-                "type": "v2.app.deactivated",
-                "installationId": "inst_12345678",
-                "timestamp": _get_timestamp(),
-            },
-            "baseURL": "https://your-tenant.benchling.com",
-        },
-        "app_config_updated": {
-            "channel": "events",
-            "message": {
-                "type": "v2-beta.app.configuration.updated",
-                "installationId": "inst_12345678",
-                "timestamp": _get_timestamp(),
-            },
-            "baseURL": "https://your-tenant.benchling.com",
-        },
-    }
-
-
-# Canvas initialization test payloads
-# Note: Canvas interactions (button clicks) are tested separately in test_app.py
-CANVAS_PAYLOADS = {
-    "canvas_init_with_entry": {
-        "canvasId": "canvas_12345",
-        "userId": "user_123",
-        "context": {
-            "entryId": "etr_12345678",
-            "benchlingUrl": "https://your-tenant.benchling.com",
-        },
-    },
-    "canvas_init_no_entry": {
-        "canvasId": "canvas_67890",
-        "userId": "user_123",
-        "context": {
-            "entryId": "etr_67890",  # Need an entry ID for canvas initialization
-            "benchlingUrl": "https://your-tenant.benchling.com",
-        },
-    },
-}
-
-
-def test_webhook(server_url="http://localhost:5001", payload_type="entry_created"):
-    """Send a test webhook to your server."""
-
-    webhook_url = f"{server_url}/event"
-    # Generate fresh payloads with current timestamps
-    all_payloads = {**_get_test_payloads(), **_get_lifecycle_payloads()}
-    payload = all_payloads[payload_type]
-
-    print(f"🧪 Testing {payload_type} webhook...")
+    print(f"\n🧪 Testing {event_type}...")
     print(f"📡 Sending to: {webhook_url}")
-    print(f"📦 Payload: {json.dumps(payload, indent=2)}")
+    print(f"📦 Payload: {json.dumps(payload, indent=2)}\n")
 
     try:
         response = requests.post(
@@ -133,69 +152,7 @@ def test_webhook(server_url="http://localhost:5001", payload_type="entry_created
         )
 
         _print_response(response)
-
-        if response.status_code == 200:
-            response_data = response.json()
-            return True
-        else:
-            return False
-
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Error: {e}")
-        return False
-
-
-def test_canvas_endpoint(server_url="http://localhost:5001", payload_type="canvas_init_with_entry"):
-    """Test Canvas initialization endpoint.
-
-    Note: All canvas events (initialization and interactions) go to /canvas endpoint.
-    Button interactions are tested separately in test_app.py with proper event payloads.
-    """
-    canvas_url = f"{server_url}/canvas"
-    payload = CANVAS_PAYLOADS[payload_type]
-
-    print(f"🎨 Testing Canvas Init ({payload_type})...")
-    print(f"📡 Sending to: {canvas_url}")
-    print(f"📦 Payload: {json.dumps(payload, indent=2)}")
-
-    try:
-        response = requests.post(
-            canvas_url,
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10,
-        )
-
-        _print_response(response)
-        # Canvas endpoint returns 202 Accepted for async operations
-        return response.status_code in [200, 202]
-
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Error: {e}")
-        return False
-
-
-def test_lifecycle_endpoint(server_url="http://localhost:5001", payload_type="app_installed"):
-    """Test lifecycle endpoints."""
-
-    lifecycle_url = f"{server_url}/lifecycle"
-    # Generate fresh payloads with current timestamps
-    payload = _get_lifecycle_payloads()[payload_type]
-
-    print(f"🔄 Testing Lifecycle ({payload_type})...")
-    print(f"📡 Sending to: {lifecycle_url}")
-    print(f"📦 Payload: {json.dumps(payload, indent=2)}")
-
-    try:
-        response = requests.post(
-            lifecycle_url,
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10,
-        )
-
-        _print_response(response)
-        return response.status_code == 200
+        return 200 <= response.status_code < 300
 
     except requests.exceptions.RequestException as e:
         print(f"❌ Error: {e}")
@@ -220,21 +177,24 @@ def test_health_endpoints(server_url="http://localhost:5001"):
 
 
 if __name__ == "__main__":
-    import sys
-
     server_url = "http://localhost:5001"
     health_only = False
+    profile = "dev"
 
     # Parse arguments
-    for arg in sys.argv[1:]:
+    for i, arg in enumerate(sys.argv[1:]):
         if arg.startswith("http"):
             server_url = arg
         elif arg == "--health-only":
             health_only = True
+        elif arg == "--profile":
+            if i + 1 < len(sys.argv[1:]):
+                profile = sys.argv[i + 2]
 
     print(f"🔧 Testing server: {server_url}")
+    print(f"📋 Profile: {profile}")
     if health_only:
-        print("🏥 Health check mode (skipping webhook/canvas/lifecycle tests)")
+        print("🏥 Health check mode (skipping webhook tests)")
     print()
 
     # Track all test results
@@ -247,26 +207,36 @@ if __name__ == "__main__":
     print()
 
     if not health_only:
-        # Test webhook endpoints
+        # Load test entry ID from profile
+        test_entry_id = load_test_entry_id(profile)
+        if test_entry_id:
+            print(f"📝 Using test entry ID: {test_entry_id}")
+        else:
+            print("⚠️  No test entry ID available - tests may fail")
+        print()
+
+        # Load event types from app-manifest.yaml
+        try:
+            event_types = load_app_manifest()
+            print(f"📋 Found {len(event_types)} event types in app-manifest.yaml:")
+            for event_type in event_types:
+                print(f"   - {event_type}")
+            print()
+        except Exception as e:
+            print(f"❌ Failed to load app-manifest.yaml: {e}")
+            sys.exit(1)
+
+        # Test each event type
         print("=== Webhook Tests ===")
-        for payload_type in _get_test_payloads():
-            success = test_webhook(server_url, payload_type)
-            all_results.append((f"webhook_{payload_type}", success))
-            print("-" * 50)
-
-        # Test Canvas endpoints
-        print("\n=== Canvas Tests ===")
-        for payload_type in CANVAS_PAYLOADS:
-            success = test_canvas_endpoint(server_url, payload_type)
-            all_results.append((f"canvas_{payload_type}", success))
-            print("-" * 50)
-
-        # Test Lifecycle endpoints
-        print("\n=== Lifecycle Tests ===")
-        for payload_type in _get_lifecycle_payloads():
-            success = test_lifecycle_endpoint(server_url, payload_type)
-            all_results.append((f"lifecycle_{payload_type}", success))
-            print("-" * 50)
+        for event_type in event_types:
+            payload = load_test_payload(event_type, test_entry_id)
+            if payload:
+                success = test_webhook(server_url, event_type, payload)
+                all_results.append((event_type, success))
+                print("-" * 50)
+            else:
+                print(f"⚠️  Skipping {event_type} - no test payload available")
+                print("-" * 50)
 
     # Print summary
     print("\n" + "=" * 50)

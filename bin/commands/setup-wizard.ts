@@ -325,71 +325,69 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
         return finalConfig;
     }
 
-    // Prompt for Quilt configuration (if not inherited)
-    if (!inheritFrom) {
-        console.log("Step 1: Quilt Configuration\n");
+    // Always prompt for Quilt configuration (use existing/inferred values as defaults)
+    console.log("Step 1: Quilt Configuration\n");
 
-        const quiltAnswers = await inquirer.prompt([
-            {
-                type: "input",
-                name: "stackArn",
-                message: "Quilt Stack ARN:",
-                default: config.quilt?.stackArn,
-                validate: (input: string): boolean | string =>
-                    input.trim().length > 0 && input.startsWith("arn:aws:cloudformation:") ||
-                    "Stack ARN is required and must start with arn:aws:cloudformation:",
+    const quiltAnswers = await inquirer.prompt([
+        {
+            type: "input",
+            name: "stackArn",
+            message: "Quilt Stack ARN:",
+            default: config.quilt?.stackArn,
+            validate: (input: string): boolean | string =>
+                input.trim().length > 0 && input.startsWith("arn:aws:cloudformation:") ||
+                "Stack ARN is required and must start with arn:aws:cloudformation:",
+        },
+        {
+            type: "input",
+            name: "catalog",
+            message: "Quilt Catalog URL (domain or full URL):",
+            default: config.quilt?.catalog,
+            validate: (input: string): boolean | string => {
+                const trimmed = input.trim();
+                if (trimmed.length === 0) {
+                    return "Catalog URL is required";
+                }
+                return true;
             },
-            {
-                type: "input",
-                name: "catalog",
-                message: "Quilt Catalog URL (domain or full URL):",
-                default: config.quilt?.catalog,
-                validate: (input: string): boolean | string => {
-                    const trimmed = input.trim();
-                    if (trimmed.length === 0) {
-                        return "Catalog URL is required";
-                    }
-                    return true;
-                },
-                filter: (input: string): string => {
-                    // Strip protocol if present, store only domain
-                    return input.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
-                },
+            filter: (input: string): string => {
+                // Strip protocol if present, store only domain
+                return input.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
             },
-            {
-                type: "input",
-                name: "database",
-                message: "Quilt Athena Database:",
-                default: config.quilt?.database || "quilt_catalog",
-                validate: (input: string): boolean | string =>
-                    input.trim().length > 0 || "Database name is required",
+        },
+        {
+            type: "input",
+            name: "database",
+            message: "Quilt Athena Database:",
+            default: config.quilt?.database || "quilt_catalog",
+            validate: (input: string): boolean | string =>
+                input.trim().length > 0 || "Database name is required",
+        },
+        {
+            type: "input",
+            name: "queueUrl",
+            message: "SQS Queue URL:",
+            default: config.quilt?.queueUrl,
+            validate: (input: string): boolean | string => {
+                return isQueueUrl(input) ||
+                    "Queue URL is required and must look like https://sqs.<region>.amazonaws.com/<account>/<queue>";
             },
-            {
-                type: "input",
-                name: "queueUrl",
-                message: "SQS Queue URL:",
-                default: config.quilt?.queueUrl,
-                validate: (input: string): boolean | string => {
-                    return isQueueUrl(input) ||
-                        "Queue URL is required and must look like https://sqs.<region>.amazonaws.com/<account>/<queue>";
-                },
-            },
-        ]);
+        },
+    ]);
 
-        // Extract region and account ID from stack ARN
-        // ARN format: arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/STACK_NAME/STACK_ID
-        const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([^:]+):(\d{12}):/);
-        const quiltRegion = arnMatch ? arnMatch[1] : "us-east-1";
-        awsAccountId = arnMatch ? arnMatch[2] : undefined;
+    // Extract region and account ID from stack ARN
+    // ARN format: arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/STACK_NAME/STACK_ID
+    const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([^:]+):(\d{12}):/);
+    const quiltRegion = arnMatch ? arnMatch[1] : "us-east-1";
+    awsAccountId = arnMatch ? arnMatch[2] : undefined;
 
-        config.quilt = {
-            stackArn: quiltAnswers.stackArn,
-            catalog: quiltAnswers.catalog,
-            database: quiltAnswers.database,
-            queueUrl: quiltAnswers.queueUrl,
-            region: quiltRegion,
-        };
-    }
+    config.quilt = {
+        stackArn: quiltAnswers.stackArn,
+        catalog: quiltAnswers.catalog,
+        database: quiltAnswers.database,
+        queueUrl: quiltAnswers.queueUrl,
+        region: quiltRegion,
+    };
 
     // Prompt for Benchling configuration
     console.log("\nStep 2: Benchling Configuration\n");
@@ -548,7 +546,8 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             type: "input",
             name: "region",
             message: "AWS Deployment Region:",
-            default: config.deployment?.region || config.quilt?.region || "us-east-1",
+            // Prefer inferred region from Quilt stack, then existing deployment config, then fallback
+            default: config.quilt?.region || config.deployment?.region || "us-east-1",
         },
         {
             type: "input",
@@ -643,6 +642,7 @@ export interface InstallWizardOptions {
  * 3. Run interactive prompts for missing fields
  * 4. Validate configuration
  * 5. Save to XDG config directory
+ * 6. Sync secrets to AWS Secrets Manager
  */
 async function runInstallWizard(options: InstallWizardOptions = {}): Promise<ProfileConfig> {
     const {
@@ -650,8 +650,9 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         inheritFrom,
         nonInteractive = false,
         skipValidation = false,
+        skipSecretsSync = false,
         awsProfile,
-        awsRegion = "us-east-1",
+        awsRegion, // NO DEFAULT - let inferQuiltConfig fetch region from catalog's config.json
     } = options;
 
     const xdg = new XDGConfig();
@@ -660,79 +661,72 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     console.log("║   Benchling Webhook Setup (v0.7.0)                        ║");
     console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
-    // Step 1: Load existing configuration (if profile exists)
+    // Step 1: Load existing configuration (if profile exists) - for suggestions only
     let existingConfig: Partial<ProfileConfig> | undefined;
-
-    // Determine if we should inherit from 'default' when profile is not 'default'
-    const shouldInheritFromDefault = profile !== "default" && !inheritFrom;
-    const effectiveInheritFrom = inheritFrom || (shouldInheritFromDefault ? "default" : undefined);
 
     if (xdg.profileExists(profile)) {
         console.log(`Loading existing configuration for profile: ${profile}\n`);
         try {
-            existingConfig = effectiveInheritFrom
-                ? xdg.readProfileWithInheritance(profile, effectiveInheritFrom)
-                : xdg.readProfile(profile);
+            existingConfig = xdg.readProfile(profile);
         } catch (error) {
             console.warn(`Warning: Could not load existing config: ${(error as Error).message}`);
         }
-    } else if (effectiveInheritFrom) {
-        // If profile doesn't exist but we should inherit, load base profile
-        console.log(`Creating new profile '${profile}' inheriting from '${effectiveInheritFrom}'\n`);
+    } else if (inheritFrom) {
+        // Only use explicit inheritFrom if specified (for suggestions)
+        console.log(`Creating new profile '${profile}' with suggestions from '${inheritFrom}'\n`);
         try {
-            existingConfig = xdg.readProfile(effectiveInheritFrom);
+            existingConfig = xdg.readProfile(inheritFrom);
         } catch (error) {
-            throw new Error(`Base profile '${effectiveInheritFrom}' not found: ${(error as Error).message}`);
+            throw new Error(`Base profile '${inheritFrom}' not found: ${(error as Error).message}`);
         }
     }
 
-    // Step 2: Infer Quilt configuration (unless inheriting from another profile)
+    // Step 2: Always infer Quilt configuration from AWS (provides suggestions)
     let quiltConfig: Partial<ProfileConfig["quilt"]> = existingConfig?.quilt || {};
     let inferredAccountId: string | undefined;
 
-    if (!effectiveInheritFrom || !existingConfig?.quilt) {
-        console.log("Step 1: Inferring Quilt configuration from AWS...\n");
+    console.log("Step 1: Inferring Quilt configuration from AWS...\n");
 
-        try {
-            const inferenceResult = await inferQuiltConfig({
-                region: awsRegion,
-                profile: awsProfile,
-                interactive: !nonInteractive,
-            });
+    try {
+        const inferenceResult = await inferQuiltConfig({
+            region: awsRegion,
+            profile: awsProfile,
+            interactive: !nonInteractive,
+        });
 
-            quiltConfig = inferenceResult;
-            inferredAccountId = inferenceResult.account;
+        // Merge inferred config with existing (inferred takes precedence as fresher data)
+        quiltConfig = {
+            ...quiltConfig,
+            ...inferenceResult,
+        };
+        inferredAccountId = inferenceResult.account;
 
-            console.log("✓ Quilt configuration inferred\n");
-        } catch (error) {
-            console.error(`Failed to infer Quilt configuration: ${(error as Error).message}`);
+        console.log("✓ Quilt configuration inferred\n");
+    } catch (error) {
+        console.error(`Failed to infer Quilt configuration: ${(error as Error).message}`);
 
-            if (nonInteractive) {
-                throw error;
-            }
+        if (nonInteractive) {
+            throw error;
+        }
 
-            const { continueManually } = await inquirer.prompt([
-                {
-                    type: "confirm",
-                    name: "continueManually",
-                    message: "Continue and enter Quilt configuration manually?",
-                    default: true,
-                },
-            ]);
+        const { continueManually } = await inquirer.prompt([
+            {
+                type: "confirm",
+                name: "continueManually",
+                message: "Continue and enter Quilt configuration manually?",
+                default: true,
+            },
+        ]);
 
-            if (!continueManually) {
-                throw new Error("Setup aborted by user");
-            }
+        if (!continueManually) {
+            throw new Error("Setup aborted by user");
         }
     }
 
-    // Merge inferred Quilt config with existing config
+    // Merge inferred/existing config as suggestions for the wizard
     const partialConfig: Partial<ProfileConfig> = {
         ...existingConfig,
-        quilt: {
-            ...existingConfig?.quilt,
-            ...quiltConfig,
-        } as ProfileConfig["quilt"],
+        quilt: quiltConfig as ProfileConfig["quilt"],
         // Pass through inferred account ID for deployment config
         deployment: {
             ...existingConfig?.deployment,
@@ -740,11 +734,11 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         } as ProfileConfig["deployment"],
     };
 
-    // Step 3: Run interactive wizard for remaining configuration
+    // Step 3: Run interactive wizard for all configuration (with inferred/existing values as suggestions)
     const config = await runConfigWizard({
         existingConfig: partialConfig,
         nonInteractive,
-        inheritFrom: effectiveInheritFrom,
+        inheritFrom, // Only pass explicit inheritFrom, not auto-derived
     });
 
     // Step 4: Validate configuration
@@ -797,7 +791,29 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         throw new Error(`Failed to save configuration: ${(error as Error).message}`);
     }
 
-    // Step 6: Display next steps
+    // Step 6: Sync secrets to AWS Secrets Manager
+    if (!skipSecretsSync) {
+        console.log("Syncing secrets to AWS Secrets Manager...\n");
+
+        try {
+            const { syncSecretsToAWS } = await import("./sync-secrets");
+            await syncSecretsToAWS({
+                profile,
+                awsProfile,
+                // Use the deployment region from config (which defaults to Quilt stack region)
+                region: config.deployment?.region,
+                force: true,
+            });
+
+            console.log("✓ Secrets synced to AWS Secrets Manager\n");
+        } catch (error) {
+            console.warn(chalk.yellow(`⚠️  Failed to sync secrets: ${(error as Error).message}`));
+            console.warn(chalk.yellow("   You can sync secrets manually later with:"));
+            console.warn(chalk.cyan(`   npm run setup:sync-secrets -- --profile ${profile}\n`));
+        }
+    }
+
+    // Step 7: Display next steps
     console.log("╔═══════════════════════════════════════════════════════════╗");
     console.log("║   Setup Complete!                                         ║");
     console.log("╚═══════════════════════════════════════════════════════════╝\n");
@@ -806,9 +822,16 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     if (profile === "default") {
         console.log("  1. Deploy to AWS: npm run deploy");
         console.log("  2. Test integration: npm run test\n");
+    } else if (profile === "dev") {
+        console.log("  1. Deploy to AWS: npm run deploy:dev");
+        console.log("  2. Test integration: npm run test:dev\n");
+    } else if (profile === "prod") {
+        console.log("  1. Deploy to AWS: npm run deploy:prod");
+        console.log("  2. Test integration: npm run test:prod\n");
     } else {
-        console.log(`  1. Deploy to AWS: npx benchling-webhook deploy --profile ${profile} --stage ${profile}`);
-        console.log(`  2. Test integration: npm run test:${profile}\n`);
+        // For custom profiles, use npm run deploy with arguments
+        console.log(`  1. Deploy to AWS: npm run deploy -- --profile ${profile} --stage ${profile}`);
+        console.log(`  2. Check logs: npx ts-node scripts/check-logs.ts --profile ${profile}\n`);
     }
 
     return config;

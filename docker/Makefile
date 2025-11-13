@@ -199,7 +199,7 @@ test-integration: test-benchling
 		--wait-for-health
 
 # Test webhooks against local dev server (auto-starts and stops server)
-test-local: check-xdg health-local
+test-local: check-xdg kill
 	@echo "Running local server tests (auto-start/stop)..."
 	uv run python scripts/run_local.py --test
 
