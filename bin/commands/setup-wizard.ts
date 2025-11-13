@@ -360,6 +360,9 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             type: "input",
             name: "database",
             message: "Quilt Athena Database:",
+            // NOTE: "quilt_catalog" is a prompt default ONLY, NOT an OPTIONAL preset
+            // This field is REQUIRED - users must provide a value or it must be inferred from Quilt stack
+            // With --yes flag, this prompt should NOT be skipped even though it has a default here
             default: config.quilt?.database || "quilt_catalog",
             validate: (input: string): boolean | string =>
                 input.trim().length > 0 || "Database name is required",
@@ -523,12 +526,14 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             type: "input",
             name: "prefix",
             message: "Package S3 prefix:",
+            // NOTE: "benchling" is an OPTIONAL preset - can be auto-applied with --yes flag
             default: config.packages?.prefix || "benchling",
         },
         {
             type: "input",
             name: "metadataKey",
             message: "Package metadata key:",
+            // NOTE: "experiment_id" is an OPTIONAL preset - can be auto-applied with --yes flag
             default: config.packages?.metadataKey || "experiment_id",
         },
     ]);
