@@ -3,6 +3,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.4] - 2025-11-12
+
+### Fixed
+
+- **Setup wizard auto-syncs secrets** - Secrets now automatically sync to AWS Secrets Manager after setup wizard completes
+- **Region detection** - Fixed deployment region to correctly use inferred stack region from Quilt catalog
+- **Secret sync region** - Fixed sync-secrets command to use correct deployment region instead of hardcoded us-east-1
+- **Profile instructions** - Setup wizard now shows correct next steps for custom profiles
+- **Test isolation** - Tests no longer overwrite user XDG configuration files
+
+### Changed
+
+- **Deploy validation** - Deploy command now verifies secrets instead of force-updating them on every deployment
+- **Cleaner codebase** - Removed legacy mode detection and config_version field (no longer needed)
+
 ## [0.7.3] - 2025-11-06
 
 ### Added
