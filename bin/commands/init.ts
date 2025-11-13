@@ -20,7 +20,7 @@ export async function initCommand(_options: InitOptions): Promise<void> {
     try {
         await setupWizardCommand({
             profile: "default",
-            nonInteractive: false,
+            yes: false,
         });
     } catch (error) {
         // Handle user cancellation gracefully

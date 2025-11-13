@@ -49,10 +49,6 @@ export interface InstallCommandOptions {
      */
     yes?: boolean;
 
-    /**
-     * Non-interactive mode
-     */
-    nonInteractive?: boolean;
 }
 
 /**
@@ -75,7 +71,6 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
         awsRegion,
         setupOnly = false,
         yes = false,
-        nonInteractive = false,
     } = options;
 
     // Validate flags
@@ -93,7 +88,7 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
             inheritFrom,
             awsProfile,
             awsRegion,
-            nonInteractive,
+            yes: yes,
             isPartOfInstall: true, // Suppress next steps from setup wizard
         });
     } catch (error) {
@@ -130,7 +125,7 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
     // Step 3: Prompt for deployment (unless --yes)
     let shouldDeploy = yes;
 
-    if (!yes && !nonInteractive) {
+    if (!yes && !yes) {
         console.log(chalk.blue("═══════════════════════════════════════════════════════════\n"));
         console.log(chalk.bold("Step 2: Deployment\n"));
 
@@ -213,11 +208,11 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
  * @returns Deployment stage (dev or prod)
  */
 function determineStage(profile: string): "dev" | "prod" {
-    if (profile === "prod") {
-        return "prod";
+    if (profile === "dev") {
+        return "dev";
     }
-    // Default and all other profiles deploy to dev
-    return "dev";
+    // Default and all other profiles deploy to prod
+    return "prod";
 }
 
 /**
