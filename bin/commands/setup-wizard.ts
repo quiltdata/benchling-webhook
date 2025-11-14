@@ -476,6 +476,44 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
         region: quiltRegion,
     };
 
+    // Query manually entered stack for BenchlingSecret
+    // This ensures we detect integrated stacks even when user manually enters the ARN
+    if (quiltAnswers.stackArn) {
+        console.log("\nQuerying stack for BenchlingSecret...");
+
+        try {
+            const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+
+            // Parse region from ARN
+            const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([a-z0-9-]+):/);
+            const stackRegion = arnMatch ? arnMatch[1] : quiltRegion;
+
+            const cfnClient = new CloudFormationClient({ region: stackRegion });
+            const response = await cfnClient.send(
+                new DescribeStacksCommand({ StackName: quiltAnswers.stackArn })
+            );
+
+            const outputs = response.Stacks?.[0]?.Outputs || [];
+            const secretOutput = outputs.find(
+                (o) => o.OutputKey === "BenchlingSecretArn" || o.OutputKey === "BenchlingSecret"
+            );
+
+            if (secretOutput?.OutputValue) {
+                console.log(chalk.green(`✓ Found BenchlingSecret: ${secretOutput.OutputValue}\n`));
+
+                // Update config with detected secret
+                if (!config.benchling) {
+                    config.benchling = {} as any;
+                }
+                config.benchling.secretArn = secretOutput.OutputValue;
+            } else {
+                console.log(chalk.dim("  No BenchlingSecret found in stack\n"));
+            }
+        } catch (error) {
+            console.log(chalk.yellow(`⚠️  Could not query stack: ${(error as Error).message}\n`));
+        }
+    }
+
     // Prompt for Benchling configuration
     console.log("\nStep 2: Benchling Configuration\n");
 
@@ -892,10 +930,13 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
     };
 
     // Pass through BenchlingSecret ARN if found in Quilt stack
+    // IMPORTANT: Prefer freshly inferred secret over existing config secret
+    // because user may have switched to a different stack
     if (inferredBenchlingSecretArn || existingConfig?.benchling?.secretArn) {
         (partialConfig as any).benchling = {
             ...existingConfig?.benchling,
-            secretArn: existingConfig?.benchling?.secretArn || inferredBenchlingSecretArn,
+            // Freshly inferred secret takes precedence over existing config
+            secretArn: inferredBenchlingSecretArn || existingConfig?.benchling?.secretArn,
         };
     }
 
