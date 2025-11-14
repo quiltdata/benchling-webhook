@@ -354,7 +354,12 @@ export async function inferQuiltConfig(options: {
             });
 
             if (!confirmed) {
-                throw new Error("User rejected the auto-detected catalog. Please specify the catalog manually.");
+                // User wants to select manually - let the wizard handle it
+                // Return partial result so wizard can prompt for missing fields
+                return {
+                    ...result,
+                    source: "manual-selection-required",
+                };
             }
         }
     } else if (interactive) {
