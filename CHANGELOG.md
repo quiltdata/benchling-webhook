@@ -3,6 +3,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.7] - 2025-11-13
+
+### Changed
+
+- **Improved `--yes` flag validation** - Enhanced error messages with detailed context, tested resources, error codes, and actionable hints
+- **Improved S3 bucket region handling** - Auto-detects bucket region to prevent 301 errors when bucket is in different region than deployment
+- **Internal code quality** - Refactored stack inference module for better testability (test coverage: 32% → 87.5%)
+
 ## [0.7.6] - 2025-11-13
 
 ### Fixed
