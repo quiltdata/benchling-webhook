@@ -3,12 +3,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.7] - 2025-11-13
+
+### Changed
+
+- **Improved `--yes` flag validation** - Enhanced error messages with detailed context, tested resources, error codes, and actionable hints
+- **Improved S3 bucket region handling** - Auto-detects bucket region to prevent 301 errors when bucket is in different region than deployment
+- **Internal code quality** - Refactored stack inference module for better testability (test coverage: 32% → 87.5%)
+
 ## [0.7.6] - 2025-11-13
 
 ### Fixed
 
 - **NPX deployment reliability** - Fixed critical issue where `npx @quiltdata/benchling-webhook` would fail with CDK app not found error
 - **Default deployment stage** - Corrected default stage to `prod` (was incorrectly defaulting to `dev` for non-dev profiles)
+- **S3 bucket region detection** - Auto-detect S3 bucket region during validation to prevent 301 errors when bucket is in different region than deployment
+- **Validation error messages** - Enhanced `--yes` flag validation errors with detailed context, tested resources, specific error codes, and actionable hints
 
 ### Changed
 

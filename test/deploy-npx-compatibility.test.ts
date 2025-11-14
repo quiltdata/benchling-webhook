@@ -79,7 +79,7 @@ describe("Deploy Command NPX Compatibility", () => {
 
         // Should temporarily override console.log
         expect(deploySource).toMatch(/const\s+originalLog\s*=\s*console\.log/);
-        expect(deploySource).toMatch(/console\.log\s*=\s*\(\s*\)\s*=>\s*{}/);
+        expect(deploySource).toMatch(/console\.log\s*=\s*\(\s*\)\s*:\s*void\s*=>\s*{}/);
 
         // Should restore console.log in a finally block
         expect(deploySource).toMatch(/finally\s*{[\s\S]*console\.log\s*=\s*originalLog/);

@@ -13,6 +13,8 @@ import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig } from "../../lib/types/config";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 import { syncSecretsToAWS } from "./sync-secrets";
+import * as fs from "fs";
+import * as path from "path";
 
 /**
  * Get the most recent dev version tag (without 'v' prefix)
@@ -211,7 +213,7 @@ async function deploy(
     try {
         // Temporarily suppress console output during sync operation
         const originalLog = console.log;
-        console.log = () => {}; // Suppress logs during sync
+        console.log = (): void => {}; // Suppress logs during sync
 
         let results;
         try {
@@ -353,8 +355,6 @@ async function deploy(
 
         // Determine the CDK app entry point
         // The path needs to be absolute to work from any cwd
-        const fs = require("fs");
-        const path = require("path");
 
         // Find the package root directory
         // When compiled: __dirname is dist/bin/commands, so go up 3 levels
