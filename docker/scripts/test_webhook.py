@@ -44,7 +44,7 @@ def load_test_entry_id(profile="dev"):
 
         if not test_entry_id:
             print(f"⚠️  Warning: No testEntryId found in profile '{profile}'")
-            print(f"   Using fallback entry ID from test-events/entry.json")
+            print("   Using fallback entry ID from test-events/entry.json")
             # Fallback: extract from entry.json
             entry_path = Path(__file__).parent.parent.parent / "test-events" / "entry.json"
             if entry_path.exists():
@@ -55,7 +55,7 @@ def load_test_entry_id(profile="dev"):
         return test_entry_id
     except FileNotFoundError:
         print(f"⚠️  Warning: Profile '{profile}' not found")
-        print(f"   Using fallback entry ID from test-events/entry.json")
+        print("   Using fallback entry ID from test-events/entry.json")
         # Fallback: extract from entry.json
         entry_path = Path(__file__).parent.parent.parent / "test-events" / "entry.json"
         if entry_path.exists():

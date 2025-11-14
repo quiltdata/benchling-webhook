@@ -4,28 +4,18 @@
  * Tests profile inheritance with deep merge behavior and circular detection.
  */
 
-import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig } from "../../lib/types/config";
-import { mkdirSync, existsSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { XDGTest } from "../helpers/xdg-test";
 
 describe("Profile Inheritance", () => {
-    let testBaseDir: string;
-    let xdg: XDGConfig;
+    let mockStorage: XDGTest;
 
     beforeEach(() => {
-        // Create temporary test directory for each test
-        testBaseDir = join(tmpdir(), `xdg-inherit-test-${Date.now()}-${Math.random().toString(36).substring(7)}`);
-        mkdirSync(testBaseDir, { recursive: true });
-        xdg = new XDGConfig(testBaseDir);
+        mockStorage = new XDGTest();
     });
 
     afterEach(() => {
-        // Clean up test directory after each test
-        if (existsSync(testBaseDir)) {
-            rmSync(testBaseDir, { recursive: true, force: true });
-        }
+        mockStorage.clear();
     });
 
     describe("simple inheritance", () => {
@@ -61,7 +51,7 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("default", defaultConfig);
+            mockStorage.writeProfile("default", defaultConfig);
 
             // Create dev profile that inherits from default
             const devConfig: ProfileConfig = {
@@ -95,10 +85,10 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("dev", devConfig);
+            mockStorage.writeProfile("dev", devConfig);
 
             // Read with inheritance
-            const resolved = xdg.readProfileWithInheritance("dev");
+            const resolved = mockStorage.readProfileWithInheritance("dev");
 
             // Should have all fields from default
             expect(resolved.benchling.tenant).toBe("default-tenant");
@@ -142,7 +132,7 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("base", baseConfig);
+            mockStorage.writeProfile("base", baseConfig);
 
             const childConfig: ProfileConfig = {
                 quilt: {
@@ -173,9 +163,9 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("child", childConfig);
+            mockStorage.writeProfile("child", childConfig);
 
-            const resolved = xdg.readProfileWithInheritance("child", "base");
+            const resolved = mockStorage.readProfileWithInheritance("child", "base");
 
             expect(resolved.benchling.tenant).toBe("base-tenant");
             expect(resolved.benchling.clientId).toBe("child-client-override");
@@ -211,9 +201,9 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("standalone", standaloneConfig);
+            mockStorage.writeProfile("standalone", standaloneConfig);
 
-            const resolved = xdg.readProfileWithInheritance("standalone");
+            const resolved = mockStorage.readProfileWithInheritance("standalone");
 
             expect(resolved).toEqual(standaloneConfig);
         });
@@ -259,7 +249,7 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("base", baseConfig);
+            mockStorage.writeProfile("base", baseConfig);
 
             const childConfig: ProfileConfig = {
                 _inherits: "base",
@@ -295,9 +285,9 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("child", childConfig);
+            mockStorage.writeProfile("child", childConfig);
 
-            const resolved = xdg.readProfileWithInheritance("child");
+            const resolved = mockStorage.readProfileWithInheritance("child");
 
             // Base fields should be preserved
             expect(resolved.benchling.tenant).toBe("base-tenant");
@@ -348,7 +338,7 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("base", baseConfig);
+            mockStorage.writeProfile("base", baseConfig);
 
             const childConfig: ProfileConfig = {
                 _inherits: "base",
@@ -384,9 +374,9 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("child", childConfig);
+            mockStorage.writeProfile("child", childConfig);
 
-            const resolved = xdg.readProfileWithInheritance("child");
+            const resolved = mockStorage.readProfileWithInheritance("child");
 
             expect(resolved.security?.webhookAllowList).toBe("10.0.0.0/8");
             expect(resolved.security?.enableVerification).toBe(false);
@@ -425,9 +415,9 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("circular", circularConfig);
+            mockStorage.writeProfile("circular", circularConfig);
 
-            expect(() => xdg.readProfileWithInheritance("circular")).toThrow(/Circular inheritance detected/);
+            expect(() => mockStorage.readProfileWithInheritance("circular")).toThrow(/Circular inheritance detected/);
         });
 
         it("should detect two-level circular inheritance (A -> B -> A)", () => {
@@ -491,11 +481,11 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("profileA", profileA);
-            xdg.writeProfile("profileB", profileB);
+            mockStorage.writeProfile("profileA", profileA);
+            mockStorage.writeProfile("profileB", profileB);
 
-            expect(() => xdg.readProfileWithInheritance("profileA")).toThrow(/Circular inheritance detected/);
-            expect(() => xdg.readProfileWithInheritance("profileB")).toThrow(/Circular inheritance detected/);
+            expect(() => mockStorage.readProfileWithInheritance("profileA")).toThrow(/Circular inheritance detected/);
+            expect(() => mockStorage.readProfileWithInheritance("profileB")).toThrow(/Circular inheritance detected/);
         });
 
         it("should detect multi-level circular inheritance (A -> B -> C -> A)", () => {
@@ -589,11 +579,11 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("profileA", profileA);
-            xdg.writeProfile("profileB", profileB);
-            xdg.writeProfile("profileC", profileC);
+            mockStorage.writeProfile("profileA", profileA);
+            mockStorage.writeProfile("profileB", profileB);
+            mockStorage.writeProfile("profileC", profileC);
 
-            expect(() => xdg.readProfileWithInheritance("profileA")).toThrow(/Circular inheritance detected/);
+            expect(() => mockStorage.readProfileWithInheritance("profileA")).toThrow(/Circular inheritance detected/);
         });
     });
 
@@ -630,7 +620,7 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("base", baseConfig);
+            mockStorage.writeProfile("base", baseConfig);
 
             // Dev inherits from base
             const devConfig: ProfileConfig = {
@@ -664,7 +654,7 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("dev", devConfig);
+            mockStorage.writeProfile("dev", devConfig);
 
             // Staging inherits from dev
             const stagingConfig: ProfileConfig = {
@@ -698,9 +688,9 @@ describe("Profile Inheritance", () => {
                 },
             };
 
-            xdg.writeProfile("staging", stagingConfig);
+            mockStorage.writeProfile("staging", stagingConfig);
 
-            const resolved = xdg.readProfileWithInheritance("staging");
+            const resolved = mockStorage.readProfileWithInheritance("staging");
 
             // Should inherit from base through dev
             expect(resolved.benchling.tenant).toBe("base-tenant");

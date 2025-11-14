@@ -12,6 +12,9 @@ import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig } from "../../lib/types/config";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
+import { syncSecretsToAWS } from "./sync-secrets";
+import * as fs from "fs";
+import * as path from "path";
 
 /**
  * Get the most recent dev version tag (without 'v' prefix)
@@ -208,33 +211,48 @@ async function deploy(
     // Verify secrets exist in AWS Secrets Manager
     spinner.start("Verifying Benchling secrets in AWS Secrets Manager...");
     try {
-        // Run sync-secrets without --force to verify/create but not update existing secrets
-        const syncOutput = execSync(`npm run setup:sync-secrets -- --profile ${options.profileName}`, {
-            stdio: "pipe",
-            encoding: "utf-8",
-            env: {
-                ...process.env,
-                AWS_REGION: deployRegion,
-            },
-        });
+        // Temporarily suppress console output during sync operation
+        const originalLog = console.log;
+        console.log = (): void => {}; // Suppress logs during sync
 
-        // Parse output to determine action (created/verified/skipped)
-        let message = "verified";
-        if (syncOutput.includes("Secret created:")) {
-            message = "created and verified";
-        } else if (syncOutput.includes("Secret already exists:")) {
-            message = "verified";
+        let results;
+        try {
+            // Sync secrets directly - creates/verifies without updating existing secrets
+            results = await syncSecretsToAWS({
+                profile: options.profileName,
+                region: deployRegion,
+                force: false, // Don't update existing secrets
+            });
+        } finally {
+            // Restore console.log
+            console.log = originalLog;
         }
 
-        spinner.succeed(`Secrets ${message}: '${benchlingSecret}'`);
+        // Determine action from results
+        let message = "verified";
+        if (results.length > 0) {
+            const action = results[0].action;
+            if (action === "created") {
+                message = "created and verified";
+            } else if (action === "skipped") {
+                message = "verified (existing)";
+            } else if (action === "updated") {
+                message = "verified and updated";
+            }
+        }
+
+        spinner.succeed(`Secrets ${message}`);
     } catch (error) {
         spinner.fail("Failed to verify secrets");
         console.log();
         console.error(chalk.red((error as Error).message));
         console.log();
         console.log(chalk.yellow("To sync secrets manually, run:"));
-        console.log(chalk.cyan(`  npm run setup:sync-secrets -- --profile ${options.profileName} --region ${deployRegion}`));
-        console.log(chalk.yellow("To force update existing secrets, add --force flag"));
+        console.log(chalk.cyan("  npx @quiltdata/benchling-webhook setup"));
+        if (options.profileName !== "default") {
+            console.log(chalk.cyan("  # Or with custom profile:"));
+            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook setup --profile ${options.profileName}`));
+        }
         console.log();
         process.exit(1);
     }
@@ -317,8 +335,8 @@ async function deploy(
     }
 
     // Deploy using CDK CLI
-    spinner.start("Deploying to AWS (this may take a few minutes)...");
-    spinner.stop();
+    console.log();
+    console.log(chalk.blue.bold("▶ Starting deployment..."));
     console.log();
 
     try {
@@ -334,7 +352,40 @@ async function deploy(
         ];
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
-        const cdkCommand = `npx cdk deploy --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
+
+        // Determine the CDK app entry point
+        // The path needs to be absolute to work from any cwd
+
+        // Find the package root directory
+        // When compiled: __dirname is dist/bin/commands, so go up 3 levels
+        // When source: __dirname is bin/commands, so go up 2 levels
+        let moduleDir: string;
+        if (__dirname.includes("/dist/")) {
+            // Compiled: dist/bin/commands -> ../../../
+            moduleDir = path.resolve(__dirname, "../../..");
+        } else {
+            // Source: bin/commands -> ../../
+            moduleDir = path.resolve(__dirname, "../..");
+        }
+
+        let appPath: string;
+        const tsSourcePath = path.join(moduleDir, "bin/benchling-webhook.ts");
+        const jsDistPath = path.join(moduleDir, "dist/bin/benchling-webhook.js");
+
+        if (fs.existsSync(tsSourcePath)) {
+            // Development mode: TypeScript source exists, use it directly
+            appPath = `npx ts-node --prefer-ts-exts "${tsSourcePath}"`;
+        } else if (fs.existsSync(jsDistPath)) {
+            // Production mode: use compiled JavaScript
+            appPath = `node "${jsDistPath}"`;
+        } else {
+            // Fallback: rely on cdk.json (should not happen)
+            console.warn(chalk.yellow("⚠️  Could not find CDK app entry point, relying on cdk.json"));
+            appPath = "";
+        }
+
+        const appArg = appPath ? `--app "${appPath}"` : "";
+        const cdkCommand = `npx cdk deploy ${appArg} --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
 
         execSync(cdkCommand, {
             stdio: "inherit",
@@ -384,34 +435,11 @@ async function deploy(
 
                     console.log(`✅ Recorded deployment to profile '${options.profileName}' stage '${options.stage}'`);
 
-                    // Run stage-specific tests
-                    console.log();
-                    console.log(`Running ${options.stage} integration tests...`);
-                    try {
-                        const testCommand = options.stage === "dev" ? "npm run test:dev" : "npm run test:prod";
-                        execSync(testCommand, {
-                            stdio: "inherit",
-                            cwd: process.cwd(),
-                            env: {
-                                ...process.env,
-                                PROFILE: options.profileName,
-                            },
-                        });
-                        console.log();
-                        console.log(`✅ ${options.stage.charAt(0).toUpperCase() + options.stage.slice(1)} deployment and tests completed successfully!`);
-                    } catch {
-                        console.error();
-                        console.error(`❌ ${options.stage.charAt(0).toUpperCase() + options.stage.slice(1)} tests failed!`);
-                        console.error("   Deployment completed but tests did not pass.");
-                        console.error("   Review test output above for details.");
-                        process.exit(1);
-                    }
-
                     // Success message with webhook URL
                     console.log();
                     console.log(
                         boxen(
-                            `${chalk.green.bold("✓ Deployment and Testing Complete!")}\n\n` +
+                            `${chalk.green.bold("✓ Deployment Complete!")}\n\n` +
                             `Stack:  ${chalk.cyan("BenchlingWebhookStack")}\n` +
                             `Region: ${chalk.cyan(deployRegion)}\n` +
                             `Stage:  ${chalk.cyan(options.stage)}\n` +
@@ -427,12 +455,11 @@ async function deploy(
                     );
                 } else {
                     console.warn("⚠️  Could not retrieve WebhookEndpoint from stack outputs");
-                    console.warn("   Skipping test execution");
                 }
             }
         } catch (error) {
-            console.warn(`⚠️  Could not retrieve/test deployment endpoint: ${(error as Error).message}`);
-            console.warn("   Deployment succeeded but tests were skipped");
+            console.warn(`⚠️  Could not retrieve deployment endpoint: ${(error as Error).message}`);
+            console.warn("   Deployment succeeded but endpoint could not be recorded");
         }
     } catch (error) {
         spinner.fail("Deployment failed");

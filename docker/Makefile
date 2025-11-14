@@ -205,7 +205,7 @@ test-integration: test-benchling
 
 # Test webhooks against local dev server (auto-starts and stops server)
 # Uses dev profile by default, errors if profile doesn't exist
-test-local: check-xdg
+test-local: check-xdg kill
 	@echo "Running local server tests (profile: $(PROFILE))..."
 	uv run python scripts/run_local.py --test --profile $(PROFILE)
 

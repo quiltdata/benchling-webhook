@@ -31,7 +31,6 @@ from botocore.exceptions import ClientError
 
 logger = structlog.get_logger(__name__)
 
-QUEUE_URL_REGEX = re.compile(r"^arn:aws:sqs:([a-z0-9-]+):(\d+):(.+)$", re.IGNORECASE)
 QUEUE_URL_REGEX = re.compile(r"^https://sqs\.[a-z0-9-]+\.amazonaws\.com/\d+/.+", re.IGNORECASE)
 
 
@@ -64,6 +63,16 @@ class ConfigResolverError(Exception):
         if self.details:
             output += f"\n   ℹ️  {self.details}"
         return output
+
+
+@dataclass
+class ParsedStackArn:
+    """Components of a CloudFormation stack ARN."""
+
+    region: str
+    account: str
+    stack_name: str
+    stack_id: str
 
 
 @dataclass
@@ -494,15 +503,12 @@ class ConfigResolver:
         # Step 6: Resolve catalog URL
         catalog = self._resolve_catalog_url(outputs)
 
-        # Step 6.5: Normalize queue identifier
-        queue_url = (
-            outputs.get("PackagerQueueUrl")
-        )
-
+        # Step 6.5: Get queue URL
+        queue_url = outputs.get("PackagerQueueUrl")
 
         if not queue_url or not is_queue_url(queue_url):
             raise ConfigResolverError(
-                "Missing SQS queue URL in CloudFormation outputs",
+                "Missing PackagerQueueUrl in CloudFormation outputs",
                 "Ensure your Quilt stack exports PackagerQueueUrl",
                 f"Available outputs: {', '.join(outputs.keys())}",
             )
@@ -554,8 +560,8 @@ class ConfigResolver:
         if "UserAthenaDatabaseName" not in outputs or not outputs.get("UserAthenaDatabaseName"):
             missing.append("UserAthenaDatabaseName")
 
-        if not (outputs.get("PackagerQueueUrl") or outputs.get("QueueUrl") or outputs.get("PackagerQueueUrl")):
-            missing.append("PackagerQueueUrl or PackagerQueueUrl")
+        if not outputs.get("PackagerQueueUrl"):
+            missing.append("PackagerQueueUrl")
 
         if missing:
             raise ConfigResolverError(
