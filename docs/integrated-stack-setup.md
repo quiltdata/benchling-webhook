@@ -177,6 +177,10 @@ The profile configuration stores the secret ARN and deployment mode:
 - **User Prompt**: `bin/commands/setup-wizard.ts`
   - Lines 482-514: Prompts user to choose integrated vs standalone
   - Lines 626-645: Stores ARN and deployment mode metadata
+  - Lines 991-1013: Shows different next steps based on deployment mode
+
+- **Install Command**: `bin/commands/install.ts`
+  - Lines 107-124: Checks deployment mode and skips deployment prompt for integrated mode
 
 - **Secret Update**: `bin/commands/sync-secrets.ts`
   - Lines 358-372: Detects if using existing secret
@@ -187,8 +191,10 @@ The profile configuration stores the secret ARN and deployment mode:
 1. **Cherry-picked from deploy-077**: This feature was originally developed in the `deploy-077` branch and cherry-picked into `194-rework-dockerfile`
 
 2. **Commits**:
-   - `2b7c9ea`: feat: add catalog verification and BenchlingSecret reuse
-   - `19fa103`: fix: improve setup wizard UX for catalog selection and secret reuse
+   - `08c678d`: feat: add catalog verification and BenchlingSecret reuse
+   - `3417733`: fix: improve setup wizard UX for catalog selection and secret reuse
+   - `3536c47`: refactor: clarify integrated vs standalone deployment choice
+   - `517ec2b`: fix: skip deployment prompt for integrated stack mode
 
 3. **Testing**: The integrated flow should be tested with a Quilt stack that has a BenchlingSecret output
 
