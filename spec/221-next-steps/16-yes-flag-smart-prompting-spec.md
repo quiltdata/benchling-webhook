@@ -39,20 +39,20 @@ Change the semantics of `--yes` to implement "smart prompting":
 # First time (no config exists yet, no CONFIGURED values)
 $ npm run setup -- --yes
 Using optional defaults where available...
-⚠ The following required fields need values:
-  - quilt.stackArn
-  - quilt.catalog
-  - quilt.database
-  - quilt.queueUrl
-  - benchling.tenant
-  - benchling.clientId
-  - benchling.clientSecret
-  - benchling.appDefinitionId
-  - packages.bucket
-  - deployment.region
-  - deployment.account
+Configuring required fields...
 
-[prompts for these ~11 required fields]
+? Quilt Stack ARN: [prompt]
+? Quilt Catalog: [prompt]
+? Quilt Database: [prompt]
+? Quilt Queue URL: [prompt]
+? Benchling Tenant: [prompt]
+? Benchling Client ID: [prompt]
+? Benchling Client Secret: [prompt]
+? Benchling App Definition ID: [prompt]
+? S3 Bucket: [prompt]
+? Deployment Region: [prompt]
+? AWS Account ID: [prompt]
+
 [automatically uses OPTIONAL presets for: packages.prefix, packages.metadataKey]
 ✓ Configuration saved
 
@@ -226,7 +226,7 @@ Full interactive mode (current behavior):
 
 - System MUST show which CONFIGURED values are being used
 - System MUST show which OPTIONAL presets are being applied
-- System MUST clearly list missing required fields before prompting
+- System MUST indicate when prompting for required fields
 - System MUST indicate when proceeding without prompts
 
 **FR-5: Backward Compatibility**
@@ -305,8 +305,7 @@ $ npm run setup -- --yes
 # (e.g., profile exists but missing benchling.tenant and quilt.stackArn)
 ```
 
-- ✅ MUST list specific missing required fields
-- ✅ MUST prompt ONLY for those 2 fields (no CONFIGURED or OPTIONAL values)
+- ✅ MUST prompt ONLY for those 2 missing required fields (no CONFIGURED or OPTIONAL values)
 - ✅ MUST NOT prompt for fields with CONFIGURED values
 - ✅ MUST apply OPTIONAL presets (packages.prefix, packages.metadataKey)
 - ✅ MUST complete successfully after minimal input
@@ -475,9 +474,7 @@ Expected Output:
 $ npm run setup -- --yes
 Expected Output:
   Using defaults where available...
-  ⚠ The following fields need values:
-    - benchling.tenant
-    - quilt.stackArn
+  Configuring missing required fields...
 
   ? Benchling Tenant: [user inputs]
   ? Quilt Stack ARN: [user inputs]
@@ -495,20 +492,20 @@ $ npx @quiltdata/benchling-webhook --yes
 Expected Output:
   No configuration found
   Using defaults where available...
-  ⚠ The following fields need values:
-    - quilt.stackArn
-    - quilt.catalog
-    - quilt.queueUrl
-    - quilt.region
-    - benchling.tenant
-    - benchling.clientId
-    - benchling.clientSecret
-    - benchling.appDefinitionId
-    - packages.bucket
-    - deployment.region
-    - deployment.account
+  Configuring required fields...
 
-  [prompts for these required fields]
+  ? Quilt Stack ARN: [user inputs]
+  ? Quilt Catalog: [user inputs]
+  ? Quilt Database: [user inputs]
+  ? Quilt Queue URL: [user inputs]
+  ? Benchling Tenant: [user inputs]
+  ? Benchling Client ID: [user inputs]
+  ? Benchling Client Secret: [user inputs]
+  ? Benchling App Definition ID: [user inputs]
+  ? S3 Bucket: [user inputs]
+  ? Deployment Region: [user inputs]
+  ? AWS Account ID: [user inputs]
+
   [uses OPTIONAL presets for: packages.prefix, packages.metadataKey]
 
   ✓ Configuration saved
