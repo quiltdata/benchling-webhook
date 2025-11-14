@@ -254,7 +254,7 @@ test-ecr: check-xdg
 test-deployed-dev: check-xdg
 	@if [ -n "$(SKIP_AUTO_DEPLOY)" ]; then \
 		echo "⏭️  Auto-deploy disabled (SKIP_AUTO_DEPLOY=1)"; \
-		$(MAKE) -f Makefile test-deployed-dev-direct; \
+		$(MAKE) -C $(CURDIR) test-deployed-dev-direct; \
 	else \
 		echo "🔍 Checking if dev deployment is needed..."; \
 		DEPLOYMENTS_JSON=$(PROFILE_DIR)/deployments.json; \
@@ -291,7 +291,7 @@ test-deployed-dev: check-xdg
 		else \
 			echo "✅ Dev deployment is up-to-date"; \
 		fi; \
-		$(MAKE) -f Makefile test-deployed-dev-direct; \
+		$(MAKE) -C $(CURDIR) test-deployed-dev-direct; \
 	fi
 
 # Test deployed dev stack (direct, no auto-deploy check)
