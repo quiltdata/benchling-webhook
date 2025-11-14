@@ -480,27 +480,36 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     console.log("\nStep 2: Benchling Configuration\n");
 
     // Check if there's an existing BenchlingSecret ARN from the Quilt stack
-    let useStackSecret = false;
+    let useIntegratedStack = false;
     if (config.benchling?.secretArn) {
         console.log(chalk.green(`✓ Found BenchlingSecret in Quilt stack: ${config.benchling.secretArn}\n`));
-        const secretChoice = await inquirer.prompt([
+        console.log(chalk.dim("This Quilt stack already has Benchling webhook integration configured."));
+        console.log(chalk.dim("You can either use the integrated stack or deploy a separate standalone webhook.\n"));
+
+        const deploymentChoice = await inquirer.prompt([
             {
                 type: "list",
                 name: "choice",
-                message: "How do you want to handle Benchling credentials?",
+                message: "How do you want to deploy the Benchling webhook?",
                 choices: [
-                    { name: "Use this secret (will write credentials into it)", value: "use" },
-                    { name: "Create a new secret instead", value: "new" },
+                    { name: "Use integrated stack (update existing secret, no separate deployment needed)", value: "integrated" },
+                    { name: "Deploy standalone webhook (create new secret and deploy separate stack)", value: "standalone" },
                 ],
-                default: "use",
+                default: "integrated",
             },
         ]);
-        useStackSecret = secretChoice.choice === "use";
+        useIntegratedStack = deploymentChoice.choice === "integrated";
 
-        if (useStackSecret) {
-            console.log(chalk.blue("\nWill store credentials in the Quilt stack's BenchlingSecret.\n"));
+        if (useIntegratedStack) {
+            console.log(chalk.blue("\n✓ Using integrated stack mode"));
+            console.log(chalk.dim("  - Will update BenchlingSecret in the Quilt stack"));
+            console.log(chalk.dim("  - No separate webhook deployment needed"));
+            console.log(chalk.dim("  - Quilt stack will handle webhook events\n"));
         } else {
-            console.log(chalk.blue("\nWill create a new secret for Benchling credentials.\n"));
+            console.log(chalk.blue("\n✓ Using standalone webhook mode"));
+            console.log(chalk.dim("  - Will create a new BenchlingSecret"));
+            console.log(chalk.dim("  - Will deploy a separate BenchlingWebhookStack"));
+            console.log(chalk.dim("  - Standalone stack will handle webhook events\n"));
         }
     }
 
@@ -614,9 +623,25 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
         appDefinitionId: appDefinitionId,
     };
 
-    // If user chose to use the stack secret, store the ARN
-    if (useStackSecret && config.benchling?.secretArn) {
+    // If user chose to use the integrated stack, store the ARN and mark as integrated
+    if (useIntegratedStack && config.benchling?.secretArn) {
         config.benchling.secretArn = config.benchling.secretArn;
+        // Add metadata to track that this is using integrated stack mode
+        if (!config._metadata) {
+            config._metadata = {
+                version: "0.7.0",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                source: "wizard",
+            };
+        }
+        (config._metadata as any).deploymentMode = "integrated";
+    } else if (config.benchling?.secretArn) {
+        // User chose standalone mode - clear the stack secret ARN
+        delete config.benchling.secretArn;
+        if (config._metadata) {
+            (config._metadata as any).deploymentMode = "standalone";
+        }
     }
 
     if (testEntryAnswer.testEntryId && testEntryAnswer.testEntryId.trim() !== "") {
@@ -963,12 +988,29 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
         console.log("║   Setup Complete!                                         ║");
         console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
-        // Use next steps generator (Phase 2: with context detection)
-        const nextSteps = generateNextSteps({
-            profile,
-            stage: profile === "prod" ? "prod" : "dev",
-        });
-        console.log(nextSteps + "\n");
+        // Check if this is integrated mode
+        const isIntegratedMode = (config._metadata as any)?.deploymentMode === "integrated";
+
+        if (isIntegratedMode) {
+            // Integrated mode - no deployment needed
+            console.log(chalk.bold("Using Integrated Stack Mode"));
+            console.log(chalk.dim("─".repeat(80)));
+            console.log(chalk.green("✓ BenchlingSecret updated in Quilt stack"));
+            console.log(chalk.dim("✓ No separate webhook deployment needed"));
+            console.log(chalk.dim("✓ Quilt stack will handle webhook events\n"));
+            console.log(chalk.bold("Next steps:"));
+            console.log("  1. Configure webhook URL in Benchling app settings");
+            console.log(`     (Get the webhook URL from your Quilt stack outputs)`);
+            console.log("  2. Test the webhook integration");
+            console.log(`  3. Monitor logs: npx ts-node scripts/check-logs.ts --profile ${profile}\n`);
+        } else {
+            // Standalone mode - deployment required
+            const nextSteps = generateNextSteps({
+                profile,
+                stage: profile === "prod" ? "prod" : "dev",
+            });
+            console.log(nextSteps + "\n");
+        }
     }
 
     // Return result for install command orchestration
