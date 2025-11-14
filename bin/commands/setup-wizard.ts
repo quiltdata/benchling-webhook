@@ -784,6 +784,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
     // Step 2: Always infer Quilt configuration from AWS (provides suggestions)
     let quiltConfig: Partial<ProfileConfig["quilt"]> = existingConfig?.quilt || {};
     let inferredAccountId: string | undefined;
+    let inferredBenchlingSecretArn: string | undefined;
 
     console.log("Step 1: Inferring Quilt configuration from AWS...\n");
 
@@ -792,6 +793,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
             region: awsRegion,
             profile: awsProfile,
             interactive: !yes,
+            yes: yes,
         });
 
         // Merge inferred config with existing (inferred takes precedence as fresher data)
@@ -800,6 +802,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
             ...inferenceResult,
         };
         inferredAccountId = inferenceResult.account;
+        inferredBenchlingSecretArn = inferenceResult.benchlingSecretArn;
 
         console.log("✓ Quilt configuration inferred\n");
     } catch (error) {
@@ -833,6 +836,14 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
             account: existingConfig?.deployment?.account || inferredAccountId,
         } as ProfileConfig["deployment"],
     };
+
+    // Pass through BenchlingSecret ARN if found in Quilt stack
+    if (inferredBenchlingSecretArn || existingConfig?.benchling?.secretArn) {
+        (partialConfig as any).benchling = {
+            ...existingConfig?.benchling,
+            secretArn: existingConfig?.benchling?.secretArn || inferredBenchlingSecretArn,
+        };
+    }
 
     // Step 3: Run interactive wizard for all configuration (with inferred/existing values as suggestions)
     const config = await runConfigWizard({

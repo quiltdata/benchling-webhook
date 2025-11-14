@@ -3,6 +3,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Catalog name verification prompt** - Setup wizard now asks users to confirm auto-detected catalog name before using it (skipped with `--yes` flag)
+- **BenchlingSecret reuse from Quilt stack** - Automatically detects and reuses existing BenchlingSecret from T4 template deployments instead of creating duplicate secrets
+
 ## [0.7.7] - 2025-11-13
 
 ### Changed

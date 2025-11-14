@@ -330,7 +330,8 @@ describe("infer-quilt-config", () => {
 
             const result = await inferQuiltConfig({
                 region: "us-east-1",
-                interactive: true, // Interactive mode but should auto-select
+                interactive: true,
+                yes: true, // Skip confirmation prompt for auto-selected stack
             });
 
             // Should auto-select quilt-production because it matches quilt3 catalog
