@@ -25,6 +25,7 @@ import {
     ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 import { XDGConfig } from "../../lib/xdg-config";
+import type { XDGBase } from "../../lib/xdg-base";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { ProfileConfig, ProfileName } from "../../lib/types/config";
 import { generateSecretName } from "../../lib/utils/secrets";
@@ -35,10 +36,10 @@ import { generateSecretName } from "../../lib/utils/secrets";
 interface SyncSecretsOptions {
     profile?: ProfileName;
     awsProfile?: string;
-    region?: string;
+    region: string; // REQUIRED - must specify target region for secrets
     dryRun?: boolean;
     force?: boolean;
-    baseDir?: string;
+    configStorage?: XDGBase; // Dependency injection for testing
 }
 
 /**
@@ -320,14 +321,19 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
  * @param options - Sync options
  * @returns Array of sync results
  */
-export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promise<SyncResult[]> {
-    const { profile = "default", awsProfile, region = "us-east-1", dryRun = false, force = false, baseDir } = options;
+export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<SyncResult[]> {
+    const { profile = "default", awsProfile, region, dryRun = false, force = false, configStorage } = options;
+
+    // Validate required parameters
+    if (!region) {
+        throw new Error("region is required - must specify AWS region for secret storage");
+    }
 
     const results: SyncResult[] = [];
 
     // Step 1: Load configuration
     console.log(`Loading configuration from profile: ${profile}...`);
-    const xdgConfig = new XDGConfig(baseDir);
+    const xdgConfig = configStorage || new XDGConfig();
 
     let config: ProfileConfig;
     try {
@@ -440,11 +446,12 @@ export async function getSecretsFromAWS(options: {
     profile?: ProfileName;
     awsProfile?: string;
     region?: string;
+    configStorage?: XDGBase;
 }): Promise<Record<string, string>> {
-    const { profile = "default", awsProfile, region = "us-east-1" } = options;
+    const { profile = "default", awsProfile, region = "us-east-1", configStorage } = options;
 
     // Load configuration
-    const xdgConfig = new XDGConfig();
+    const xdgConfig = configStorage || new XDGConfig();
     const config = xdgConfig.readProfile(profile);
 
     if (!config.benchling.secretArn) {
@@ -471,6 +478,7 @@ export async function validateSecretsAccess(options: {
     profile?: ProfileName;
     awsProfile?: string;
     region?: string;
+    configStorage?: XDGBase;
 }): Promise<boolean> {
     try {
         await getSecretsFromAWS(options);
@@ -486,7 +494,7 @@ export async function validateSecretsAccess(options: {
  */
 async function main(): Promise<void> {
     const args = process.argv.slice(2);
-    const options: SyncSecretsOptions = {};
+    const options: Partial<SyncSecretsOptions> = {}; // Partial until we parse all args
     let command = "sync";
 
     // Parse command line arguments
@@ -525,13 +533,18 @@ async function main(): Promise<void> {
         }
     }
 
+    // Validate required options before execution
+    if (command === "sync" && !options.region) {
+        throw new Error("--region is required for syncing secrets");
+    }
+
     try {
         if (command === "sync") {
             console.log("╔═══════════════════════════════════════════════════════════╗");
             console.log("║   AWS Secrets Manager Sync                                ║");
             console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
-            const results = await syncSecretsToAWS(options);
+            const results = await syncSecretsToAWS(options as SyncSecretsOptions);
 
             console.log("\n=== Sync Results ===");
             results.forEach((result) => {

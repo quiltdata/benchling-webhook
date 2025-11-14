@@ -2,7 +2,7 @@ manifestVersion: 1
 info:
   name: quilt-docker
   description: Packaging Benchling Notebooks as Quilt packages
-  version: 0.7.4
+  version: 0.7.7
 features:
   - name: Quilt Connector
     id: quilt_entry

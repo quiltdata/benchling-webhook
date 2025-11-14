@@ -17,17 +17,49 @@
 import * as https from "https";
 import inquirer from "inquirer";
 import chalk from "chalk";
-import { S3Client, HeadBucketCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { S3Client, HeadBucketCommand, ListObjectsV2Command, GetBucketLocationCommand } from "@aws-sdk/client-s3";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig, ValidationResult } from "../../lib/types/config";
 import { inferQuiltConfig } from "../commands/infer-quilt-config";
 import { isQueueUrl } from "../../lib/utils/sqs";
 import { manifestCommand } from "./manifest";
+import { generateNextSteps } from "../../lib/next-steps-generator";
 
 // =============================================================================
 // VALIDATION FUNCTIONS (from scripts/config/validator.ts)
 // =============================================================================
+
+/**
+ * Detects the actual region of an S3 bucket
+ *
+ * @param bucketName - Name of the S3 bucket
+ * @param awsProfile - Optional AWS profile to use
+ * @returns The bucket's actual region, or null if detection fails
+ */
+async function detectBucketRegion(bucketName: string, awsProfile?: string): Promise<string | null> {
+    try {
+        const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = {
+            region: "us-east-1", // Use us-east-1 as the API endpoint for GetBucketLocation
+        };
+
+        if (awsProfile) {
+            const { fromIni } = await import("@aws-sdk/credential-providers");
+            clientConfig.credentials = fromIni({ profile: awsProfile });
+        }
+
+        const s3Client = new S3Client(clientConfig);
+        const command = new GetBucketLocationCommand({ Bucket: bucketName });
+        const response = await s3Client.send(command);
+
+        // AWS returns null for us-east-1, otherwise returns the region constraint
+        const region = response.LocationConstraint || "us-east-1";
+        return region;
+    } catch {
+        // If we can't detect the region, return null and let validation proceed with the provided region
+        return null;
+    }
+}
 
 /**
  * Validates Benchling tenant accessibility
@@ -52,6 +84,7 @@ async function validateBenchlingTenant(tenant: string): Promise<ValidationResult
 
     // Test tenant URL accessibility
     const tenantUrl = `https://${tenant}.benchling.com`;
+    console.log(`  Testing Benchling tenant URL: ${tenantUrl}`);
 
     return new Promise((resolve) => {
         https
@@ -61,14 +94,14 @@ async function validateBenchlingTenant(tenant: string): Promise<ValidationResult
                     console.log(`  ✓ Tenant URL accessible: ${tenantUrl}`);
                 } else {
                     if (!result.warnings) result.warnings = [];
-                    result.warnings.push(`Tenant URL returned status ${res.statusCode}`);
+                    result.warnings.push(`Tenant URL ${tenantUrl} returned status ${res.statusCode}`);
                     result.isValid = true; // Consider this a warning, not an error
                 }
                 resolve(result);
             })
             .on("error", (error) => {
                 if (!result.warnings) result.warnings = [];
-                result.warnings.push(`Could not verify tenant URL: ${error.message}`);
+                result.warnings.push(`Could not verify tenant URL ${tenantUrl}: ${error.message}`);
                 result.isValid = true; // Allow proceeding with warning
                 resolve(result);
             });
@@ -104,6 +137,7 @@ async function validateBenchlingCredentials(
     // Test OAuth token endpoint
     const tokenUrl = `https://${tenant}.benchling.com/api/v2/token`;
     const authString = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+    console.log(`  Testing OAuth credentials: ${tokenUrl} (Client ID: ${clientId.substring(0, 8)}...)`);
 
     return new Promise((resolve) => {
         const postData = "grant_type=client_credentials";
@@ -130,8 +164,22 @@ async function validateBenchlingCredentials(
                     result.isValid = true;
                     console.log("  ✓ OAuth credentials validated successfully");
                 } else {
+                    let errorDetail = data.substring(0, 200);
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (parsed.error_description) {
+                            errorDetail = parsed.error_description;
+                        }
+                    } catch {
+                        // Keep the raw data if not JSON
+                    }
+
                     result.errors.push(
-                        `OAuth validation failed with status ${res.statusCode}: ${data.substring(0, 100)}`,
+                        `OAuth validation failed for tenant '${tenant}':\n` +
+                        `    Tested: POST ${tokenUrl}\n` +
+                        `    Status: ${res.statusCode}\n` +
+                        `    Error: ${errorDetail}\n` +
+                        "    Hint: Verify Client ID and Secret are correct and match the app definition",
                     );
                 }
                 resolve(result);
@@ -140,7 +188,10 @@ async function validateBenchlingCredentials(
 
         req.on("error", (error) => {
             if (!result.warnings) result.warnings = [];
-            result.warnings.push(`Could not validate OAuth credentials: ${error.message}`);
+            result.warnings.push(
+                `Could not validate OAuth credentials at ${tokenUrl}: ${error.message}\n` +
+                "    This may be a network issue. Credentials will be validated during deployment.",
+            );
             result.isValid = true; // Allow proceeding with warning
             resolve(result);
         });
@@ -169,41 +220,30 @@ async function validateS3BucketAccess(
         return result;
     }
 
+    // First, try to detect the bucket's actual region
+    console.log(`  Detecting region for bucket: ${bucketName}`);
+    const actualRegion = await detectBucketRegion(bucketName, awsProfile);
+
+    let regionToUse = region;
+    if (actualRegion && actualRegion !== region) {
+        console.log(`  ⚠ Bucket is in ${actualRegion}, not ${region} - using detected region`);
+        regionToUse = actualRegion;
+    } else if (actualRegion) {
+        console.log(`  ✓ Bucket region confirmed: ${actualRegion}`);
+    }
+
     try {
-        // Start with a region-agnostic client to get bucket location
-        const clientConfig: { region?: string; credentials?: AwsCredentialIdentityProvider } = {};
+        const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region: regionToUse };
 
         if (awsProfile) {
             const { fromIni } = await import("@aws-sdk/credential-providers");
             clientConfig.credentials = fromIni({ profile: awsProfile });
         }
 
-        // Use us-east-1 as the default region for GetBucketLocation
-        // S3 will automatically redirect to the correct region
-        let s3Client = new S3Client({ ...clientConfig, region: "us-east-1" });
-
-        // First, try to determine the bucket's actual region
-        let bucketRegion = region;
-        try {
-            const { GetBucketLocationCommand } = await import("@aws-sdk/client-s3");
-            const locationCommand = new GetBucketLocationCommand({ Bucket: bucketName });
-            const locationResponse = await s3Client.send(locationCommand);
-
-            // LocationConstraint is null for us-east-1, otherwise it's the region name
-            bucketRegion = locationResponse.LocationConstraint || "us-east-1";
-
-            if (bucketRegion !== region) {
-                console.log(`  ℹ Bucket is in region ${bucketRegion} (deployment region is ${region})`);
-            }
-        } catch {
-            // If we can't determine the region, try with the provided region
-            console.log(`  ℹ Using deployment region ${region} for bucket validation`);
-        }
-
-        // Now use a client with the correct region
-        s3Client = new S3Client({ ...clientConfig, region: bucketRegion });
+        const s3Client = new S3Client(clientConfig);
 
         // Test HeadBucket (verify bucket exists and we have access)
+        console.log(`  Testing S3 bucket access: ${bucketName} (region: ${regionToUse}${awsProfile ? `, profile: ${awsProfile}` : ""})`);
         const headCommand = new HeadBucketCommand({ Bucket: bucketName });
         await s3Client.send(headCommand);
 
@@ -220,30 +260,28 @@ async function validateS3BucketAccess(
 
         result.isValid = true;
     } catch (error) {
-        const err = error as Error & { Code?: string; $metadata?: { httpStatusCode?: number } };
-
-        // Extract detailed error information from AWS SDK error
-        let errorMsg = err.message || "Unknown error";
-        const errorCode = err.Code || (err as { code?: string }).code || (err as { name?: string }).name;
+        const err = error as Error & { Code?: string; name?: string; $metadata?: { httpStatusCode?: number } };
+        const errorCode = err.Code || err.name || "UnknownError";
+        const errorMsg = err.message || "Unknown error occurred";
         const statusCode = err.$metadata?.httpStatusCode;
 
-        // Build detailed error message
-        const details: string[] = [errorMsg];
-        if (errorCode && errorCode !== errorMsg) {
-            details.push(`Code: ${errorCode}`);
-        }
-        if (statusCode) {
-            details.push(`Status: ${statusCode}`);
+        // Provide specific guidance based on error type
+        let hint = "Verify bucket exists, region is correct, and you have s3:GetBucketLocation and s3:ListBucket permissions";
+        if (errorCode === "NoSuchBucket" || errorMsg.includes("does not exist")) {
+            hint = "The bucket does not exist. Verify the bucket name is correct.";
+        } else if (errorCode === "AccessDenied" || errorCode === "403" || statusCode === 403) {
+            hint = "Access denied. Verify your AWS credentials have s3:GetBucketLocation and s3:ListBucket permissions for this bucket.";
+        } else if (errorCode === "PermanentRedirect" || errorCode === "301" || statusCode === 301) {
+            hint = `The bucket exists but is in a different region. Try specifying the correct region for bucket '${bucketName}'.`;
         }
 
-        result.errors.push(`S3 bucket validation failed: ${details.join(", ")}`);
-
-        // Add helpful hints based on error type
-        if (errorCode === "NoSuchBucket" || statusCode === 404) {
-            result.errors.push(`Hint: Bucket '${bucketName}' does not exist or is not accessible`);
-        } else if (errorCode === "AccessDenied" || statusCode === 403) {
-            result.errors.push("Hint: Check that your AWS credentials have s3:GetBucketLocation, s3:HeadBucket and s3:ListBucket permissions");
-        }
+        result.errors.push(
+            `S3 bucket validation failed for '${bucketName}' in region '${regionToUse}'${awsProfile ? ` (AWS profile: ${awsProfile})` : ""}:\n` +
+            `    Error: ${errorCode}${statusCode ? ` (HTTP ${statusCode})` : ""}\n` +
+            `    Message: ${errorMsg}\n` +
+            "    Tested: HeadBucket operation\n" +
+            `    Hint: ${hint}`,
+        );
     }
 
     return result;
@@ -325,7 +363,7 @@ async function validateConfig(
  */
 interface WizardOptions {
     existingConfig?: Partial<ProfileConfig>;
-    nonInteractive?: boolean;
+    yes?: boolean;
     inheritFrom?: string;
 }
 
@@ -333,7 +371,7 @@ interface WizardOptions {
  * Runs interactive configuration wizard
  */
 async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConfig> {
-    const { existingConfig = {}, nonInteractive = false, inheritFrom } = options;
+    const { existingConfig = {}, yes = false, inheritFrom } = options;
 
     console.log("╔═══════════════════════════════════════════════════════════╗");
     console.log("║   Benchling Webhook Configuration Wizard                 ║");
@@ -347,7 +385,7 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     let awsAccountId: string | undefined;
 
     // If non-interactive, validate that all required fields are present
-    if (nonInteractive) {
+    if (yes) {
         if (!config.benchling?.tenant || !config.benchling?.clientId || !config.benchling?.clientSecret) {
             throw new Error(
                 "Non-interactive mode requires benchlingTenant, benchlingClientId, and benchlingClientSecret to be already configured",
@@ -371,71 +409,72 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
         return finalConfig;
     }
 
-    // Prompt for Quilt configuration (if not inherited)
-    if (!inheritFrom) {
-        console.log("Step 1: Quilt Configuration\n");
+    // Always prompt for Quilt configuration (use existing/inferred values as defaults)
+    console.log("Step 1: Quilt Configuration\n");
 
-        const quiltAnswers = await inquirer.prompt([
-            {
-                type: "input",
-                name: "stackArn",
-                message: "Quilt Stack ARN:",
-                default: config.quilt?.stackArn,
-                validate: (input: string): boolean | string =>
-                    input.trim().length > 0 && input.startsWith("arn:aws:cloudformation:") ||
-                    "Stack ARN is required and must start with arn:aws:cloudformation:",
+    const quiltAnswers = await inquirer.prompt([
+        {
+            type: "input",
+            name: "stackArn",
+            message: "Quilt Stack ARN:",
+            default: config.quilt?.stackArn,
+            validate: (input: string): boolean | string =>
+                input.trim().length > 0 && input.startsWith("arn:aws:cloudformation:") ||
+                "Stack ARN is required and must start with arn:aws:cloudformation:",
+        },
+        {
+            type: "input",
+            name: "catalog",
+            message: "Quilt Catalog URL (domain or full URL):",
+            default: config.quilt?.catalog,
+            validate: (input: string): boolean | string => {
+                const trimmed = input.trim();
+                if (trimmed.length === 0) {
+                    return "Catalog URL is required";
+                }
+                return true;
             },
-            {
-                type: "input",
-                name: "catalog",
-                message: "Quilt Catalog URL (domain or full URL):",
-                default: config.quilt?.catalog,
-                validate: (input: string): boolean | string => {
-                    const trimmed = input.trim();
-                    if (trimmed.length === 0) {
-                        return "Catalog URL is required";
-                    }
-                    return true;
-                },
-                filter: (input: string): string => {
-                    // Strip protocol if present, store only domain
-                    return input.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
-                },
+            filter: (input: string): string => {
+                // Strip protocol if present, store only domain
+                return input.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
             },
-            {
-                type: "input",
-                name: "database",
-                message: "Quilt Athena Database:",
-                default: config.quilt?.database || "quilt_catalog",
-                validate: (input: string): boolean | string =>
-                    input.trim().length > 0 || "Database name is required",
+        },
+        {
+            type: "input",
+            name: "database",
+            message: "Quilt Athena Database:",
+            // NOTE: "quilt_catalog" is a prompt default ONLY, NOT an OPTIONAL preset
+            // This field is REQUIRED - users must provide a value or it must be inferred from Quilt stack
+            // With --yes flag, this prompt should NOT be skipped even though it has a default here
+            default: config.quilt?.database || "quilt_catalog",
+            validate: (input: string): boolean | string =>
+                input.trim().length > 0 || "Database name is required",
+        },
+        {
+            type: "input",
+            name: "queueUrl",
+            message: "SQS Queue URL:",
+            default: config.quilt?.queueUrl,
+            validate: (input: string): boolean | string => {
+                return isQueueUrl(input) ||
+                    "Queue URL is required and must look like https://sqs.<region>.amazonaws.com/<account>/<queue>";
             },
-            {
-                type: "input",
-                name: "queueUrl",
-                message: "SQS Queue URL:",
-                default: config.quilt?.queueUrl,
-                validate: (input: string): boolean | string => {
-                    return isQueueUrl(input) ||
-                        "Queue URL is required and must look like https://sqs.<region>.amazonaws.com/<account>/<queue>";
-                },
-            },
-        ]);
+        },
+    ]);
 
-        // Extract region and account ID from stack ARN
-        // ARN format: arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/STACK_NAME/STACK_ID
-        const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([^:]+):(\d{12}):/);
-        const quiltRegion = arnMatch ? arnMatch[1] : "us-east-1";
-        awsAccountId = arnMatch ? arnMatch[2] : undefined;
+    // Extract region and account ID from stack ARN
+    // ARN format: arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/STACK_NAME/STACK_ID
+    const arnMatch = quiltAnswers.stackArn.match(/^arn:aws:cloudformation:([^:]+):(\d{12}):/);
+    const quiltRegion = arnMatch ? arnMatch[1] : "us-east-1";
+    awsAccountId = arnMatch ? arnMatch[2] : undefined;
 
-        config.quilt = {
-            stackArn: quiltAnswers.stackArn,
-            catalog: quiltAnswers.catalog,
-            database: quiltAnswers.database,
-            queueUrl: quiltAnswers.queueUrl,
-            region: quiltRegion,
-        };
-    }
+    config.quilt = {
+        stackArn: quiltAnswers.stackArn,
+        catalog: quiltAnswers.catalog,
+        database: quiltAnswers.database,
+        queueUrl: quiltAnswers.queueUrl,
+        region: quiltRegion,
+    };
 
     // Prompt for Benchling configuration
     console.log("\nStep 2: Benchling Configuration\n");
@@ -570,12 +609,14 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             type: "input",
             name: "prefix",
             message: "Package S3 prefix:",
+            // NOTE: "benchling" is an OPTIONAL preset - can be auto-applied with --yes flag
             default: config.packages?.prefix || "benchling",
         },
         {
             type: "input",
             name: "metadataKey",
             message: "Package metadata key:",
+            // NOTE: "experiment_id" is an OPTIONAL preset - can be auto-applied with --yes flag
             default: config.packages?.metadataKey || "experiment_id",
         },
     ]);
@@ -594,7 +635,8 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
             type: "input",
             name: "region",
             message: "AWS Deployment Region:",
-            default: config.deployment?.region || config.quilt?.region || "us-east-1",
+            // Prefer inferred region from Quilt stack, then existing deployment config, then fallback
+            default: config.quilt?.region || config.deployment?.region || "us-east-1",
         },
         {
             type: "input",
@@ -673,11 +715,21 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
 export interface InstallWizardOptions {
     profile?: string;
     inheritFrom?: string;
-    nonInteractive?: boolean;
+    yes?: boolean;
     skipValidation?: boolean;
     skipSecretsSync?: boolean;
     awsProfile?: string;
     awsRegion?: string;
+    isPartOfInstall?: boolean; // NEW: Suppress next steps if part of install command
+}
+
+/**
+ * Setup wizard result (for Phase 3)
+ */
+export interface SetupWizardResult {
+    success: boolean;
+    profile: string;
+    config: ProfileConfig;
 }
 
 /**
@@ -691,15 +743,16 @@ export interface InstallWizardOptions {
  * 5. Save to XDG config directory
  * 6. Sync secrets to AWS Secrets Manager
  */
-async function runInstallWizard(options: InstallWizardOptions = {}): Promise<ProfileConfig> {
+async function runInstallWizard(options: InstallWizardOptions = {}): Promise<SetupWizardResult> {
     const {
         profile = "default",
         inheritFrom,
-        nonInteractive = false,
+        yes = false,
         skipValidation = false,
         skipSecretsSync = false,
         awsProfile,
-        awsRegion = "us-east-1",
+        awsRegion, // NO DEFAULT - let inferQuiltConfig fetch region from catalog's config.json
+        isPartOfInstall = false, // NEW: Default to false for backward compatibility
     } = options;
 
     const xdg = new XDGConfig();
@@ -708,79 +761,72 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
     console.log("║   Benchling Webhook Setup (v0.7.0)                        ║");
     console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
-    // Step 1: Load existing configuration (if profile exists)
+    // Step 1: Load existing configuration (if profile exists) - for suggestions only
     let existingConfig: Partial<ProfileConfig> | undefined;
-
-    // Determine if we should inherit from 'default' when profile is not 'default'
-    const shouldInheritFromDefault = profile !== "default" && !inheritFrom;
-    const effectiveInheritFrom = inheritFrom || (shouldInheritFromDefault ? "default" : undefined);
 
     if (xdg.profileExists(profile)) {
         console.log(`Loading existing configuration for profile: ${profile}\n`);
         try {
-            existingConfig = effectiveInheritFrom
-                ? xdg.readProfileWithInheritance(profile, effectiveInheritFrom)
-                : xdg.readProfile(profile);
+            existingConfig = xdg.readProfile(profile);
         } catch (error) {
             console.warn(`Warning: Could not load existing config: ${(error as Error).message}`);
         }
-    } else if (effectiveInheritFrom) {
-        // If profile doesn't exist but we should inherit, load base profile
-        console.log(`Creating new profile '${profile}' inheriting from '${effectiveInheritFrom}'\n`);
+    } else if (inheritFrom) {
+        // Only use explicit inheritFrom if specified (for suggestions)
+        console.log(`Creating new profile '${profile}' with suggestions from '${inheritFrom}'\n`);
         try {
-            existingConfig = xdg.readProfile(effectiveInheritFrom);
+            existingConfig = xdg.readProfile(inheritFrom);
         } catch (error) {
-            throw new Error(`Base profile '${effectiveInheritFrom}' not found: ${(error as Error).message}`);
+            throw new Error(`Base profile '${inheritFrom}' not found: ${(error as Error).message}`);
         }
     }
 
-    // Step 2: Infer Quilt configuration (unless inheriting from another profile)
+    // Step 2: Always infer Quilt configuration from AWS (provides suggestions)
     let quiltConfig: Partial<ProfileConfig["quilt"]> = existingConfig?.quilt || {};
     let inferredAccountId: string | undefined;
 
-    if (!effectiveInheritFrom || !existingConfig?.quilt) {
-        console.log("Step 1: Inferring Quilt configuration from AWS...\n");
+    console.log("Step 1: Inferring Quilt configuration from AWS...\n");
 
-        try {
-            const inferenceResult = await inferQuiltConfig({
-                region: awsRegion,
-                profile: awsProfile,
-                interactive: !nonInteractive,
-            });
+    try {
+        const inferenceResult = await inferQuiltConfig({
+            region: awsRegion,
+            profile: awsProfile,
+            interactive: !yes,
+        });
 
-            quiltConfig = inferenceResult;
-            inferredAccountId = inferenceResult.account;
+        // Merge inferred config with existing (inferred takes precedence as fresher data)
+        quiltConfig = {
+            ...quiltConfig,
+            ...inferenceResult,
+        };
+        inferredAccountId = inferenceResult.account;
 
-            console.log("✓ Quilt configuration inferred\n");
-        } catch (error) {
-            console.error(`Failed to infer Quilt configuration: ${(error as Error).message}`);
+        console.log("✓ Quilt configuration inferred\n");
+    } catch (error) {
+        console.error(`Failed to infer Quilt configuration: ${(error as Error).message}`);
 
-            if (nonInteractive) {
-                throw error;
-            }
+        if (yes) {
+            throw error;
+        }
 
-            const { continueManually } = await inquirer.prompt([
-                {
-                    type: "confirm",
-                    name: "continueManually",
-                    message: "Continue and enter Quilt configuration manually?",
-                    default: true,
-                },
-            ]);
+        const { continueManually } = await inquirer.prompt([
+            {
+                type: "confirm",
+                name: "continueManually",
+                message: "Continue and enter Quilt configuration manually?",
+                default: true,
+            },
+        ]);
 
-            if (!continueManually) {
-                throw new Error("Setup aborted by user");
-            }
+        if (!continueManually) {
+            throw new Error("Setup aborted by user");
         }
     }
 
-    // Merge inferred Quilt config with existing config
+    // Merge inferred/existing config as suggestions for the wizard
     const partialConfig: Partial<ProfileConfig> = {
         ...existingConfig,
-        quilt: {
-            ...existingConfig?.quilt,
-            ...quiltConfig,
-        } as ProfileConfig["quilt"],
+        quilt: quiltConfig as ProfileConfig["quilt"],
         // Pass through inferred account ID for deployment config
         deployment: {
             ...existingConfig?.deployment,
@@ -788,11 +834,11 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         } as ProfileConfig["deployment"],
     };
 
-    // Step 3: Run interactive wizard for remaining configuration
+    // Step 3: Run interactive wizard for all configuration (with inferred/existing values as suggestions)
     const config = await runConfigWizard({
         existingConfig: partialConfig,
-        nonInteractive,
-        inheritFrom: effectiveInheritFrom,
+        yes,
+        inheritFrom, // Only pass explicit inheritFrom, not auto-derived
     });
 
     // Step 4: Validate configuration
@@ -806,9 +852,14 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
 
         if (!validation.isValid) {
             console.error("\n❌ Configuration validation failed:");
-            validation.errors.forEach((err) => console.error(`  - ${err}`));
+            console.error(chalk.gray("   The following validations were performed:"));
+            console.error(chalk.gray(`   - Benchling tenant: ${config.benchling.tenant}`));
+            console.error(chalk.gray(`   - OAuth credentials: Client ID ${config.benchling.clientId.substring(0, 8)}...`));
+            console.error(chalk.gray(`   - S3 bucket: ${config.packages.bucket} (region: ${config.deployment.region})`));
+            console.error("");
+            validation.errors.forEach((err) => console.error(`${err}\n`));
 
-            if (nonInteractive) {
+            if (yes) {
                 throw new Error("Configuration validation failed");
             }
 
@@ -830,8 +881,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
 
         if (validation.warnings && validation.warnings.length > 0) {
             console.warn("\n⚠ Warnings:");
-            validation.warnings.forEach((warn) => console.warn(`  - ${warn}`));
-            console.log("");
+            validation.warnings.forEach((warn) => console.warn(`  ${warn}\n`));
         }
     }
 
@@ -854,7 +904,8 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
             await syncSecretsToAWS({
                 profile,
                 awsProfile,
-                region: config.deployment.region,
+                // Use the deployment region from config (which defaults to Quilt stack region)
+                region: config.deployment?.region,
                 force: true,
             });
 
@@ -866,28 +917,26 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
         }
     }
 
-    // Step 7: Display next steps
-    console.log("╔═══════════════════════════════════════════════════════════╗");
-    console.log("║   Setup Complete!                                         ║");
-    console.log("╚═══════════════════════════════════════════════════════════╝\n");
+    // Step 7: Display next steps (only if NOT part of install command)
+    if (!isPartOfInstall) {
+        console.log("╔═══════════════════════════════════════════════════════════╗");
+        console.log("║   Setup Complete!                                         ║");
+        console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
-    console.log("Next steps:");
-    if (profile === "default") {
-        console.log("  1. Deploy to AWS: npm run deploy");
-        console.log("  2. Test integration: npm run test\n");
-    } else if (profile === "dev") {
-        console.log("  1. Deploy to AWS: npm run deploy:dev");
-        console.log("  2. Test integration: npm run test:dev\n");
-    } else if (profile === "prod") {
-        console.log("  1. Deploy to AWS: npm run deploy:prod");
-        console.log("  2. Test integration: npm run test:prod\n");
-    } else {
-        // For custom profiles, show the full command
-        console.log(`  1. Deploy to AWS: npx benchling-webhook deploy --profile ${profile} --stage ${profile}`);
-        console.log(`  2. Test integration: npm run test:${profile}\n`);
+        // Use next steps generator (Phase 2: with context detection)
+        const nextSteps = generateNextSteps({
+            profile,
+            stage: profile === "prod" ? "prod" : "dev",
+        });
+        console.log(nextSteps + "\n");
     }
 
-    return config;
+    // Return result for install command orchestration
+    return {
+        success: true,
+        profile,
+        config,
+    };
 }
 
 // =============================================================================
@@ -898,11 +947,11 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Pro
  * Setup wizard command handler
  *
  * @param options - Wizard options
- * @returns Promise that resolves when wizard completes
+ * @returns Promise that resolves with setup result
  */
-export async function setupWizardCommand(options: InstallWizardOptions = {}): Promise<void> {
+export async function setupWizardCommand(options: InstallWizardOptions = {}): Promise<SetupWizardResult> {
     try {
-        await runInstallWizard(options);
+        return await runInstallWizard(options);
     } catch (error) {
         // Handle user cancellation (Ctrl+C) gracefully
         const err = error as Error & { code?: string };
