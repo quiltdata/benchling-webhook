@@ -355,14 +355,27 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
     console.log(`Initializing Secrets Manager client (region: ${region})...`);
     const client = await getSecretsManagerClient(region, awsProfile);
 
-    // Step 3: Generate secret name
-    const secretName = generateSecretName(profile, config.benchling.tenant);
-    console.log(`Secret name: ${secretName}`);
+    // Step 3: Determine secret name or use existing ARN from Quilt stack
+    const generatedSecretName = generateSecretName(profile, config.benchling.tenant);
+    let secretName: string;
+    let useExistingSecret = false;
+
+    if (config.benchling.secretArn) {
+        // Use existing secret ARN from Quilt stack (if BenchlingSecret output was found)
+        secretName = config.benchling.secretArn;
+        useExistingSecret = true;
+        console.log(`Using existing BenchlingSecret from Quilt stack: ${secretName}`);
+    } else {
+        // Generate new secret name
+        secretName = generatedSecretName;
+        console.log(`Secret name: ${secretName}`);
+    }
 
     // Step 4: Build secret value
     let clientSecretValue: string;
     try {
-        clientSecretValue = await resolveClientSecretValue(client, config, secretName);
+        // Pass generatedSecretName for placeholder checking (not the ARN when useExistingSecret is true)
+        clientSecretValue = await resolveClientSecretValue(client, config, generatedSecretName);
     } catch (error) {
         throw new Error(`Failed to resolve Benchling client secret: ${(error as Error).message}`);
     }
@@ -383,7 +396,17 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
     let action: "created" | "updated" | "skipped";
 
     if (exists) {
-        if (force) {
+        if (useExistingSecret) {
+            // When using existing secret from Quilt stack, always update it (force is implied)
+            console.log(`Updating BenchlingSecret from Quilt stack: ${secretName}...`);
+            secretArn = await updateSecret(client, {
+                name: secretName,
+                value: secretValue,
+                description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile})`,
+            });
+            action = "updated";
+            console.log(`✓ BenchlingSecret updated: ${secretArn}`);
+        } else if (force) {
             console.log(`Updating existing secret: ${secretName}...`);
             secretArn = await updateSecret(client, {
                 name: secretName,
@@ -403,6 +426,13 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
             action = "skipped";
         }
     } else {
+        if (useExistingSecret) {
+            // BenchlingSecret from Quilt stack should exist but doesn't - this is an error
+            throw new Error(
+                `BenchlingSecret ARN found in Quilt stack outputs (${secretName}) but the secret does not exist in Secrets Manager. ` +
+                `This may indicate the Quilt stack deployment is incomplete or the secret was deleted.`
+            );
+        }
         console.log(`Creating new secret: ${secretName}...`);
         secretArn = await createSecret(client, {
             name: secretName,
