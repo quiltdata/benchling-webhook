@@ -1,0 +1,125 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                    SETUP WIZARD PHASE-BASED FLOW                          ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 1: CATALOG DISCOVERY (phase1-catalog-discovery.ts)               │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Input:  options (yes?, catalogUrl?)                                     │
+│ Process:                                                                 │
+│   1. Read local quilt3 config (NO AWS)                                 │
+│   2. Show detected catalog                                              │
+│   3. Ask: "Is this correct?"                                           │
+│   4. If NO: Prompt for manual entry                                     │
+│ Output: { catalogDns, wasManuallyEntered }                             │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 2: STACK QUERY (phase2-stack-query.ts)                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Input:  catalogDns (from Phase 1)                                       │
+│ Process:                                                                 │
+│   1. Query AWS CloudFormation for CONFIRMED catalog                     │
+│   2. Call inferQuiltConfig with catalog DNS                            │
+│   3. Extract: stackArn, database, queueUrl, region, account            │
+│   4. Extract: benchlingSecretArn (if exists in stack outputs)          │
+│ Output: { stackArn, catalog, database, queueUrl, region, account,      │
+│           benchlingSecretArn?, stackQuerySucceeded }                    │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 3: PARAMETER COLLECTION (phase3-parameter-collection.ts)         │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Input:  stackQuery (from Phase 2), CLI args                            │
+│ Process:                                                                 │
+│   1. Collect Benchling credentials (tenant, clientId, clientSecret)    │
+│   2. Collect app definition ID (or create manifest)                    │
+│   3. Collect package settings (bucket, prefix, metadataKey)            │
+│   4. Use stackQuery values as defaults (NO re-prompting)               │
+│   5. Collect optional settings (logLevel, webhookAllowList)            │
+│ Output: { benchling{}, packages{}, deployment{}, logging{},            │
+│           security{} }                                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 4: VALIDATION (phase4-validation.ts)                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Input:  stackQuery, parameters                                          │
+│ Process:                                                                 │
+│   1. Validate Benchling tenant (HTTPS check)                           │
+│   2. Validate OAuth credentials (test token endpoint)                   │
+│   3. Validate S3 bucket access (HeadBucket + ListObjects)              │
+│   4. Auto-detect bucket region if mismatch                             │
+│ Output: { success, errors[], warnings[], shouldExitForManifest }       │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 5: MODE DECISION (phase5-mode-decision.ts)                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Input:  stackQuery (check benchlingSecretArn)                          │
+│ Process:                                                                 │
+│   1. If benchlingSecretArn exists:                                      │
+│      - Show: "Found BenchlingSecret in Quilt stack"                    │
+│      - Ask: "Use existing BenchlingSecret?"                            │
+│      - If YES: mode = integrated                                        │
+│      - If NO: mode = standalone                                         │
+│   2. If no benchlingSecretArn:                                          │
+│      - Automatic: mode = standalone                                     │
+│ Output: { mode: 'integrated' | 'standalone', benchlingSecretArn? }     │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ↓
+                    ┌───────────────┴───────────────┐
+                    │                               │
+                    ↓                               ↓
+┌──────────────────────────────┐  ┌────────────────────────────────┐
+│ PHASE 6: INTEGRATED MODE     │  │ PHASE 7: STANDALONE MODE       │
+│ (phase6-integrated-mode.ts)  │  │ (phase7-standalone-mode.ts)    │
+├──────────────────────────────┤  ├────────────────────────────────┤
+│ Input:  stackQuery,          │  │ Input:  stackQuery,            │
+│         parameters,          │  │         parameters,            │
+│         benchlingSecretArn   │  │         yes?, setupOnly?       │
+│                              │  │                                │
+│ Process:                     │  │ Process:                       │
+│   1. Build ProfileConfig     │  │   1. Build ProfileConfig       │
+│      with integratedStack=T  │  │      with integratedStack=F    │
+│   2. Save to XDG config      │  │   2. Save to XDG config        │
+│   3. Update BenchlingSecret  │  │   3. Create dedicated secret   │
+│      in Quilt stack          │  │      (name pattern)            │
+│   4. Show success message    │  │   4. Ask: "Deploy now?"        │
+│   5. Show next steps         │  │      (unless --setup-only)     │
+│                              │  │   5. If YES: call deploy()     │
+│ Output:                      │  │   6. Show next steps           │
+│   { success, configPath,     │  │                                │
+│     secretArn }              │  │ Output:                        │
+│                              │  │   { success, configPath,       │
+│ ⚠️  NO DEPLOYMENT            │  │     secretArn, deployed }      │
+│ ⚠️  EXPLICIT RETURN          │  │                                │
+└──────────────────────────────┘  │ ⚠️  EXPLICIT RETURN            │
+            │                      └────────────────────────────────┘
+            │                                  │
+            ↓                                  ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ RETURN TO CALLER (setup-wizard.ts)                                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Return: { success: true, profile, config }                             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════
+
+KEY ARCHITECTURAL FEATURES:
+
+✅ Catalog confirmed BEFORE stack query (Phase 1 → Phase 2)
+✅ Only ONE catalog prompt (Phase 1 only)
+✅ Manual entry triggers stack re-query (Phase 1 returns, Phase 2 queries)
+✅ BenchlingSecret extracted from stack outputs (Phase 2)
+✅ Integrated mode has EXPLICIT RETURN (cannot fall through)
+✅ Standalone mode has EXPLICIT RETURN
+✅ Impossible to skip phases (sequential execution enforced)
+✅ Type-safe data flow (TypeScript interfaces)
+
+═══════════════════════════════════════════════════════════════════════════
