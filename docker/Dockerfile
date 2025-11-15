@@ -135,27 +135,30 @@ ARG VERSION
 # - PYTHONPATH: Ensure Python can find application modules
 # - FLASK_APP: Flask application entry point
 # - BUILD_VERSION: Git tag version from CI (overrides pyproject.toml version)
+# - PORT: Flask application port (default 5000)
 # - UV_NO_CACHE: Disable UV cache to prevent read-only filesystem errors
 # - UV_CACHE_DIR: Set cache to /tmp (writable) as fallback if UV is invoked
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH="/app" \
     FLASK_APP="src.app" \
     BUILD_VERSION="${VERSION}" \
+    PORT="5000" \
     UV_NO_CACHE="1" \
     UV_CACHE_DIR="/tmp/.uv-cache"
 
 # Expose application port
-# Flask default port for HTTP traffic
-EXPOSE 5000
+# Uses PORT env var for consistency with app.py
+EXPOSE ${PORT}
 
 # Configure health check for container orchestration
 # - interval: Check every 30 seconds
 # - timeout: Fail if check takes longer than 10 seconds
 # - start-period: Wait 5 seconds before first check (app startup)
 # - retries: Mark unhealthy after 3 consecutive failures
+# Uses PORT env var for consistency with app.py runtime port configuration
 # Compatible with ECS Fargate health check requirements
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5000/health || exit 1
+    CMD curl -f http://localhost:${PORT}/health || exit 1
 
 # Start application with direct Python execution
 # Using python -m src.app instead of uv run to avoid:
