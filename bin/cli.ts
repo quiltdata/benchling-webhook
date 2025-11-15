@@ -122,11 +122,24 @@ program
 program
     .command("validate")
     .description("Validate configuration without deploying")
-    .option("--env-file <path>", "Path to .env file", ".env")
+    .option("--profile <name>", "Configuration profile to validate", "default")
     .option("--verbose", "Show detailed validation information")
     .action(async (options) => {
         try {
-            await validateCommand(options);
+            const { XDGConfig } = await import("../lib/xdg-config");
+            const xdg = new XDGConfig();
+            const profile = options.profile || "default";
+
+            if (!xdg.profileExists(profile)) {
+                console.error(chalk.red(`Profile does not exist: ${profile}`));
+                console.log();
+                console.log(chalk.yellow("To create a profile, run:"));
+                console.log(chalk.cyan("  npx @quiltdata/benchling-webhook"));
+                process.exit(1);
+            }
+
+            const config = xdg.readProfile(profile);
+            await validateCommand({ config, profile, verbose: options.verbose });
         } catch (error) {
             console.error(chalk.red((error as Error).message));
             process.exit(1);
@@ -152,9 +165,24 @@ program
     .command("manifest")
     .description("Generate Benchling app manifest file")
     .option("--output <path>", "Output file path", "app-manifest.yaml")
+    .option("--profile <name>", "Configuration profile to use (optional)")
+    .option("--catalog <url>", "Catalog URL to use (optional, overrides profile)")
     .action(async (options) => {
         try {
-            await manifestCommand(options);
+            let catalogUrl = options.catalog;
+
+            // If catalog not provided directly, try to load from profile
+            if (!catalogUrl && options.profile) {
+                const { XDGConfig } = await import("../lib/xdg-config");
+                const xdg = new XDGConfig();
+
+                if (xdg.profileExists(options.profile)) {
+                    const config = xdg.readProfile(options.profile);
+                    catalogUrl = config.quilt.catalog;
+                }
+            }
+
+            await manifestCommand({ output: options.output, catalog: catalogUrl });
         } catch (error) {
             console.error(chalk.red((error as Error).message));
             process.exit(1);

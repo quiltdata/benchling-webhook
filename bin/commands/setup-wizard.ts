@@ -158,7 +158,7 @@ function printStepHeader(stepNumber: number, title: string): void {
  * @param options - Setup wizard options
  * @returns Setup wizard result
  */
-async function runSetupWizard(options: SetupWizardOptions = {}): Promise<SetupWizardResult> {
+export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<SetupWizardResult> {
     const {
         profile = "default",
         yes = false,

@@ -165,7 +165,7 @@ export async function deployCommand(options: {
 /**
  * Deploy the Benchling webhook stack
  */
-async function deploy(
+export async function deploy(
     stackArn: string,
     benchlingSecret: string,
     config: ProfileConfig,
