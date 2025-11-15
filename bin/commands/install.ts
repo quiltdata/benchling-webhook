@@ -15,6 +15,27 @@ import { deployCommand } from "./deploy";
 import { generateNextSteps } from "../../lib/next-steps-generator";
 
 /**
+ * Phase titles for the install command
+ * This is the single source of truth for install phase headers
+ */
+const PHASE_TITLES = {
+    setup: "Configuration Setup",
+    deployment: "Deployment",
+};
+
+/**
+ * Prints a phase header for the install command
+ * Uses distinct visual style from wizard steps (double borders, cyan color)
+ * @param phaseNumber - The phase number
+ * @param title - The phase title
+ */
+function printPhaseHeader(phaseNumber: number, title: string): void {
+    console.log(chalk.blue("\n═══════════════════════════════════════════════════════════"));
+    console.log(chalk.bold.cyan(`  PHASE ${phaseNumber}: ${title}`));
+    console.log(chalk.blue("═══════════════════════════════════════════════════════════\n"));
+}
+
+/**
  * Options for install command
  */
 export interface InstallCommandOptions {
@@ -76,9 +97,8 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
     // Validate flags
     validateFlags({ setupOnly, yes });
 
-    // Step 1: Run setup wizard
-    console.log(chalk.blue("\n═══════════════════════════════════════════════════════════\n"));
-    console.log(chalk.bold("Step 1: Configuration Setup\n"));
+    // Phase 1: Run setup wizard
+    printPhaseHeader(1, PHASE_TITLES.setup);
 
     let setupResult: SetupWizardResult;
 
@@ -105,7 +125,7 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
     console.log(chalk.green("\n✓ Setup complete!\n"));
 
     // Check if integrated stack mode - no deployment needed
-    const isIntegratedMode = (setupResult.config._metadata as any)?.deploymentMode === "integrated";
+    const isIntegratedMode = setupResult.config.integratedStack === true;
 
     if (isIntegratedMode) {
         // Integrated stack mode - no deployment needed
@@ -145,8 +165,7 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
     let shouldDeploy = yes;
 
     if (!yes && !yes) {
-        console.log(chalk.blue("═══════════════════════════════════════════════════════════\n"));
-        console.log(chalk.bold("Step 2: Deployment\n"));
+        printPhaseHeader(2, PHASE_TITLES.deployment);
 
         const answers = await inquirer.prompt([
             {
@@ -178,8 +197,7 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
     }
 
     // Step 4: Execute deployment
-    console.log(chalk.blue("\n═══════════════════════════════════════════════════════════\n"));
-    console.log(chalk.bold("Step 2: Deployment\n"));
+    printPhaseHeader(2, PHASE_TITLES.deployment);
     console.log("Deploying to AWS... This may take 5-10 minutes.\n");
 
     const stage = determineStage(setupResult.profile);
