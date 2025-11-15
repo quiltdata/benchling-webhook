@@ -75,6 +75,7 @@ export async function runStackQuery(
         const region = inferenceResult.region || awsRegion || "us-east-1";
         const account = inferenceResult.account || "";
         const benchlingSecretArn = inferenceResult.benchlingSecretArn;
+        const benchlingIntegrationEnabled = inferenceResult.benchlingIntegrationEnabled;
 
         // Log what we found
         console.log(chalk.green("✓ Stack query succeeded\n"));
@@ -89,6 +90,11 @@ export async function runStackQuery(
         } else {
             console.log(chalk.dim("BenchlingSecret: Not found in stack"));
         }
+
+        if (benchlingIntegrationEnabled !== undefined) {
+            console.log(chalk.dim(`BenchlingIntegration: ${benchlingIntegrationEnabled ? 'Enabled' : 'Disabled'}`));
+        }
+
         console.log("");
 
         return {
@@ -99,6 +105,7 @@ export async function runStackQuery(
             region,
             account,
             benchlingSecretArn,
+            benchlingIntegrationEnabled,
             stackQuerySucceeded: true,
         };
     } catch (error) {
@@ -114,6 +121,7 @@ export async function runStackQuery(
             region: awsRegion || "us-east-1",
             account: "",
             benchlingSecretArn: undefined,
+            benchlingIntegrationEnabled: undefined,
             stackQuerySucceeded: false,
         };
     }
