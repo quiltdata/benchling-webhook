@@ -1,19 +1,15 @@
 #!/usr/bin/env node
 /**
- * AWS Secrets Manager Integration
- *
- * WARNING: This file needs significant refactoring for v0.7.0
- * TODO: Update to use ProfileConfig instead of UserConfig/DerivedConfig
- * TODO: Remove references to BaseConfig
- * TODO: Update to use readProfile/writeProfile instead of readProfileConfig/writeProfileConfig
+ * AWS Secrets Manager Integration (v0.7.0)
  *
  * Synchronizes configuration to AWS Secrets Manager with:
+ * - Mode-aware secret management (integrated vs standalone)
  * - Consistent secret naming conventions
  * - AWS profile selection support
  * - Atomic secret creation/update operations
  * - ARN tracking in XDG configuration
  *
- * @module scripts/sync-secrets
+ * @module commands/sync-secrets
  */
 
 import {
@@ -25,6 +21,7 @@ import {
     ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 import { XDGConfig } from "../../lib/xdg-config";
+import type { XDGBase } from "../../lib/xdg-base";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { ProfileConfig, ProfileName } from "../../lib/types/config";
 import { generateSecretName } from "../../lib/utils/secrets";
@@ -35,10 +32,10 @@ import { generateSecretName } from "../../lib/utils/secrets";
 interface SyncSecretsOptions {
     profile?: ProfileName;
     awsProfile?: string;
-    region?: string;
+    region: string; // REQUIRED - must specify target region for secrets
     dryRun?: boolean;
     force?: boolean;
-    baseDir?: string;
+    configStorage?: XDGBase; // Dependency injection for testing
 }
 
 /**
@@ -317,17 +314,26 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
 /**
  * Syncs configuration to AWS Secrets Manager
  *
+ * Mode-aware behavior (B7):
+ * - Integrated mode (integratedStack=true): Always updates existing BenchlingSecret ARN
+ * - Standalone mode (integratedStack=false): Creates new secret with pattern quiltdata/benchling-webhook/<profile>/<tenant>
+ *
  * @param options - Sync options
  * @returns Array of sync results
  */
-export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promise<SyncResult[]> {
-    const { profile = "default", awsProfile, region = "us-east-1", dryRun = false, force = false, baseDir } = options;
+export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<SyncResult[]> {
+    const { profile = "default", awsProfile, region, dryRun = false, force = false, configStorage } = options;
+
+    // Validate required parameters
+    if (!region) {
+        throw new Error("region is required - must specify AWS region for secret storage");
+    }
 
     const results: SyncResult[] = [];
 
     // Step 1: Load configuration
     console.log(`Loading configuration from profile: ${profile}...`);
-    const xdgConfig = new XDGConfig(baseDir);
+    const xdgConfig = configStorage || new XDGConfig();
 
     let config: ProfileConfig;
     try {
@@ -349,14 +355,33 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
     console.log(`Initializing Secrets Manager client (region: ${region})...`);
     const client = await getSecretsManagerClient(region, awsProfile);
 
-    // Step 3: Generate secret name
-    const secretName = generateSecretName(profile, config.benchling.tenant);
-    console.log(`Secret name: ${secretName}`);
+    // Step 3: Determine secret name based on mode (B7)
+    const generatedSecretName = generateSecretName(profile, config.benchling.tenant);
+    let secretName: string;
+    let isIntegratedMode = false;
+
+    // Check both integratedStack flag and secretArn presence for mode detection
+    if (config.integratedStack && config.benchling.secretArn) {
+        // Integrated mode: Use existing secret ARN from Quilt stack
+        secretName = config.benchling.secretArn;
+        isIntegratedMode = true;
+        console.log(`Integrated mode: Using BenchlingSecret from Quilt stack: ${secretName}`);
+    } else if (config.benchling.secretArn && config.integratedStack === undefined) {
+        // Legacy config with secretArn but no integratedStack field - assume integrated
+        secretName = config.benchling.secretArn;
+        isIntegratedMode = true;
+        console.log(`Legacy integrated mode detected: Using BenchlingSecret: ${secretName}`);
+    } else {
+        // Standalone mode: Generate new secret name
+        secretName = generatedSecretName;
+        console.log(`Standalone mode: Secret name: ${secretName}`);
+    }
 
     // Step 4: Build secret value
     let clientSecretValue: string;
     try {
-        clientSecretValue = await resolveClientSecretValue(client, config, secretName);
+        // Pass generatedSecretName for placeholder checking (not the ARN)
+        clientSecretValue = await resolveClientSecretValue(client, config, generatedSecretName);
     } catch (error) {
         throw new Error(`Failed to resolve Benchling client secret: ${(error as Error).message}`);
     }
@@ -365,6 +390,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
 
     if (dryRun) {
         console.log("\n=== DRY RUN MODE ===");
+        console.log(`Mode: ${isIntegratedMode ? "Integrated" : "Standalone"}`);
         console.log(`Would sync secret: ${secretName}`);
         console.log(`Secret value:\n${secretValue}`);
         return results;
@@ -377,16 +403,28 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
     let action: "created" | "updated" | "skipped";
 
     if (exists) {
-        if (force) {
+        if (isIntegratedMode) {
+            // Integrated mode: Always update existing secret (force is implied)
+            console.log(`Updating BenchlingSecret from Quilt stack: ${secretName}...`);
+            secretArn = await updateSecret(client, {
+                name: secretName,
+                value: secretValue,
+                description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile}, integrated mode)`,
+            });
+            action = "updated";
+            console.log(`✓ BenchlingSecret updated: ${secretArn}`);
+        } else if (force) {
+            // Standalone mode with force flag
             console.log(`Updating existing secret: ${secretName}...`);
             secretArn = await updateSecret(client, {
                 name: secretName,
                 value: secretValue,
-                description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile})`,
+                description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile}, standalone mode)`,
             });
             action = "updated";
             console.log(`✓ Secret updated: ${secretArn}`);
         } else {
+            // Standalone mode without force - skip update
             console.log(`Secret already exists: ${secretName}`);
             console.log("Use --force to update existing secret");
 
@@ -397,11 +435,19 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
             action = "skipped";
         }
     } else {
+        if (isIntegratedMode) {
+            // Integrated mode but secret doesn't exist - this is an error
+            throw new Error(
+                `BenchlingSecret ARN found in Quilt stack outputs (${secretName}) but the secret does not exist in Secrets Manager. ` +
+                `This may indicate the Quilt stack deployment is incomplete or the secret was deleted.`
+            );
+        }
+        // Standalone mode: Create new secret
         console.log(`Creating new secret: ${secretName}...`);
         secretArn = await createSecret(client, {
             name: secretName,
             value: secretValue,
-            description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile})`,
+            description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile}, standalone mode)`,
         });
         action = "created";
         console.log(`✓ Secret created: ${secretArn}`);
@@ -414,7 +460,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions = {}): Promis
         message: `Secret ${action} successfully`,
     });
 
-    // Step 6: Update XDG configuration with secret ARN
+    // Step 6: Update XDG configuration with secret ARN (always update for tracking)
     console.log("Updating XDG configuration with secret ARN...");
 
     // Update config with secret ARN
@@ -440,11 +486,12 @@ export async function getSecretsFromAWS(options: {
     profile?: ProfileName;
     awsProfile?: string;
     region?: string;
+    configStorage?: XDGBase;
 }): Promise<Record<string, string>> {
-    const { profile = "default", awsProfile, region = "us-east-1" } = options;
+    const { profile = "default", awsProfile, region = "us-east-1", configStorage } = options;
 
     // Load configuration
-    const xdgConfig = new XDGConfig();
+    const xdgConfig = configStorage || new XDGConfig();
     const config = xdgConfig.readProfile(profile);
 
     if (!config.benchling.secretArn) {
@@ -471,6 +518,7 @@ export async function validateSecretsAccess(options: {
     profile?: ProfileName;
     awsProfile?: string;
     region?: string;
+    configStorage?: XDGBase;
 }): Promise<boolean> {
     try {
         await getSecretsFromAWS(options);
@@ -486,7 +534,7 @@ export async function validateSecretsAccess(options: {
  */
 async function main(): Promise<void> {
     const args = process.argv.slice(2);
-    const options: SyncSecretsOptions = {};
+    const options: Partial<SyncSecretsOptions> = {}; // Partial until we parse all args
     let command = "sync";
 
     // Parse command line arguments
@@ -525,13 +573,18 @@ async function main(): Promise<void> {
         }
     }
 
+    // Validate required options before execution
+    if (command === "sync" && !options.region) {
+        throw new Error("--region is required for syncing secrets");
+    }
+
     try {
         if (command === "sync") {
             console.log("╔═══════════════════════════════════════════════════════════╗");
             console.log("║   AWS Secrets Manager Sync                                ║");
             console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
-            const results = await syncSecretsToAWS(options);
+            const results = await syncSecretsToAWS(options as SyncSecretsOptions);
 
             console.log("\n=== Sync Results ===");
             results.forEach((result) => {

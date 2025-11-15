@@ -2,6 +2,9 @@
  * Integration tests for Legacy Configuration Detection (v0.7.0)
  *
  * Tests detection and error messages for v0.6.x configuration files.
+ *
+ * NOTE: This test intentionally uses the real XDGConfig with temp directories
+ * to test legacy filesystem detection behavior.
  */
 
 import { XDGConfig } from "../../lib/xdg-config";
@@ -9,7 +12,7 @@ import { mkdirSync, writeFileSync, existsSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
-describe("Legacy Configuration Detection", () => {
+describe("Legacy Configuration Detection (Filesystem Integration)", () => {
     let testBaseDir: string;
     let xdg: XDGConfig;
 

@@ -291,7 +291,6 @@ class TestFlaskApp:
 
             data = json.loads(response.data)
             assert data["status"] == "healthy"
-            assert data["mode"] == "secrets-only"
             assert data["source"] == "secrets_manager_arn"
             assert data["secrets_valid"] is True
             assert data["tenant_configured"] is True
@@ -342,43 +341,62 @@ class TestFlaskApp:
 
             data = json.loads(response.data)
             assert data["status"] == "healthy"
-            assert data["mode"] == "secrets-only"
             assert data["source"] == "secrets_manager_name"
             assert data["secrets_valid"] is True
             assert data["tenant_configured"] is True
             assert data["quilt_stack_configured"] is True
 
     def test_health_secrets_endpoint_misconfigured(self, monkeypatch):
-        """Test /health/secrets reports misconfigured status when secrets-only env vars missing."""
-        # Remove secrets-only mode env vars
-        monkeypatch.delenv("QuiltStackARN", raising=False)
-        monkeypatch.delenv("BenchlingSecret", raising=False)
+        """Test /health/secrets returns 503 when secrets-only env vars are missing.
+
+        In the real world, the app would fail to start if these env vars are missing,
+        but in this test we simulate a situation where they disappear after startup.
+        """
+        from src.config_resolver import ResolvedConfig
+
+        # Initially set env vars to allow app creation
+        stack_arn = "arn:aws:cloudformation:us-east-2:123456789012:stack/test-quilt/abc123"
+        secret_name = "benchling-prod-secret"
+        monkeypatch.setenv("QuiltStackARN", stack_arn)
+        monkeypatch.setenv("BenchlingSecret", secret_name)
         monkeypatch.setenv("AWS_REGION", "us-east-2")
 
-        # Create app without proper config - mock config that returns False for validation
+        # Mock ConfigResolver to return resolved config
+        mock_resolved_config = ResolvedConfig(
+            aws_region="us-east-2",
+            aws_account="123456789012",
+            quilt_catalog="test.quiltdata.com",
+            quilt_database="test-db",
+            queue_url="https://sqs.us-east-2.amazonaws.com/123456789012/test-queue",
+            benchling_tenant="test-tenant",
+            benchling_client_id="test-id",
+            benchling_client_secret="test-secret",
+            benchling_app_definition_id="",
+            pkg_prefix="benchling",
+            pkg_key="experiment_id",
+            user_bucket="test-bucket",
+            log_level="INFO",
+            enable_webhook_verification=False,
+            webhook_allow_list="",
+        )
+
+        # Create app with proper config
         with (
             patch("src.app.Benchling"),
             patch("src.app.EntryPackager"),
-            patch("src.app.get_config") as mock_config,
+            patch("src.config_resolver.ConfigResolver.resolve", return_value=mock_resolved_config),
         ):
-            # Mock a config that returns None/empty for required fields
-            mock_cfg = Mock()
-            mock_cfg.benchling_tenant = None
-            mock_cfg.benchling_client_id = None
-            mock_cfg.benchling_client_secret = None
-            mock_config.return_value = mock_cfg
-
             app = create_app()
             app.config["TESTING"] = True
             client = app.test_client()
 
+            # Now remove env vars to simulate misconfiguration
+            monkeypatch.delenv("QuiltStackARN", raising=False)
+            monkeypatch.delenv("BenchlingSecret", raising=False)
+
             response = client.get("/health/secrets")
-            assert response.status_code == 200
+            assert response.status_code == 503
 
             data = json.loads(response.data)
             assert data["status"] == "unhealthy"
-            assert data["mode"] == "legacy_or_misconfigured"
-            assert data["source"] == "not_configured"
-            assert data["secrets_valid"] is False
-            assert data["tenant_configured"] is False
-            assert data["quilt_stack_configured"] is False
+            assert "Missing required environment variables" in data["error"]

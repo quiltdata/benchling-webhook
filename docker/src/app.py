@@ -13,7 +13,6 @@ from .canvas import CanvasManager
 from .config import get_config
 from .entry_packager import EntryPackager
 from .payload import Payload
-from .version import __version__
 from .webhook_verification import require_webhook_verification
 
 # Load environment variables
@@ -75,30 +74,20 @@ def create_app():
 
     @app.route("/health", methods=["GET"])
     def health():
-        """Application health status with configuration info."""
-        # Determine configuration source
-        quilt_stack_arn = os.getenv("QuiltStackARN")
-        benchling_secret = os.getenv("BenchlingSecret")
+        """Application health status.
 
-        if quilt_stack_arn and benchling_secret:
-            config_source = "secrets-only-mode"
-            config_version = "v1.0.0"
-            config_parameters = 10  # All 10 runtime parameters from secret
-        else:
-            config_source = "legacy-mode"
-            config_version = "v0.5.x"
-            config_parameters = None
+        Note: If this endpoint returns successfully, the application is properly
+        configured with secrets-only mode. The app cannot start without QuiltStackARN
+        and BenchlingSecret environment variables.
+        """
+        # Get version from environment (set by CDK) or package default
+        app_version = os.getenv("BENCHLING_WEBHOOK_VERSION", "0.7.3")
 
         response = {
             "status": "healthy",
             "service": "benchling-webhook",
-            "version": __version__,
-            "config_source": config_source,
-            "config_version": config_version,
+            "version": app_version,
         }
-
-        if config_parameters:
-            response["config_parameters"] = config_parameters
 
         return jsonify(response)
 
@@ -126,33 +115,33 @@ def create_app():
 
     @app.route("/health/secrets", methods=["GET"])
     def secrets_health():
-        """Report secret resolution status and source (secrets-only mode)."""
+        """Report secret resolution status (secrets-only mode).
+
+        Note: This endpoint only works in secrets-only mode. If the app is running,
+        it means QuiltStackARN and BenchlingSecret were successfully resolved.
+        """
         try:
-            # Secrets-only mode: Check for QuiltStackARN and BenchlingSecret
+            # Verify required environment variables are present
             quilt_stack_arn = os.getenv("QuiltStackARN")
             benchling_secret = os.getenv("BenchlingSecret")
 
-            # Determine configuration mode and source
-            if quilt_stack_arn and benchling_secret:
-                # Secrets-only mode (v0.6.0+)
-                mode = "secrets-only"
-                if benchling_secret.startswith("arn:aws:secretsmanager:"):
-                    source = "secrets_manager_arn"
-                else:
-                    source = "secrets_manager_name"
+            if not quilt_stack_arn or not benchling_secret:
+                # This should never happen - app initialization would have failed
+                return (
+                    jsonify(
+                        {
+                            "status": "unhealthy",
+                            "error": "Missing required environment variables - app should not be running",
+                        }
+                    ),
+                    503,
+                )
+
+            # Determine secret source
+            if benchling_secret.startswith("arn:aws:secretsmanager:"):
+                source = "secrets_manager_arn"
             else:
-                # Legacy mode or misconfigured
-                mode = "legacy_or_misconfigured"
-                benchling_secrets_env = os.getenv("BENCHLING_SECRETS")
-                if benchling_secrets_env:
-                    if benchling_secrets_env.startswith("arn:"):
-                        source = "legacy_secrets_manager"
-                    else:
-                        source = "legacy_environment_json"
-                elif os.getenv("BENCHLING_TENANT"):
-                    source = "legacy_environment_vars"
-                else:
-                    source = "not_configured"
+                source = "secrets_manager_name"
 
             # Check if secrets are valid
             secrets_valid = bool(
@@ -162,7 +151,6 @@ def create_app():
             return jsonify(
                 {
                     "status": "healthy" if secrets_valid else "unhealthy",
-                    "mode": mode,
                     "source": source,
                     "secrets_valid": secrets_valid,
                     "tenant_configured": bool(config.benchling_tenant),
@@ -175,13 +163,15 @@ def create_app():
 
     @app.route("/config", methods=["GET"])
     def config_status():
-        """Display resolved configuration (secrets masked)."""
+        """Display resolved configuration (secrets masked).
+
+        Note: All deployments use secrets-only mode. Configuration is resolved from
+        AWS CloudFormation (QuiltStackARN) and Secrets Manager (BenchlingSecret).
+        """
         try:
-            # Determine configuration mode
+            # Get required environment variables (app cannot start without these)
             quilt_stack_arn = os.getenv("QuiltStackARN")
             benchling_secret_name = os.getenv("BenchlingSecret")
-
-            config_mode = "secrets-only" if (quilt_stack_arn and benchling_secret_name) else "legacy"
 
             # Mask sensitive values
             def mask_value(value, show_last=4):
@@ -217,9 +207,10 @@ def create_app():
                 return f"{prefix}amazonaws.com/{masked_account}/{queue_path}"
 
             response = {
-                "config_mode": config_mode,
                 "aws": {
                     "region": config.aws_region or os.getenv("AWS_REGION", "not-set"),
+                    "quilt_stack_arn": mask_arn(quilt_stack_arn),
+                    "benchling_secret_name": benchling_secret_name,
                 },
                 "quilt": {
                     "catalog": config.quilt_catalog,
@@ -242,14 +233,6 @@ def create_app():
                     "enable_webhook_verification": config.enable_webhook_verification,
                 },
             }
-
-            # Add secrets-only mode specific info
-            if config_mode == "secrets-only":
-                response["secrets_only_params"] = {
-                    "quilt_stack_arn": mask_arn(quilt_stack_arn),
-                    "benchling_secret_name": benchling_secret_name,
-                    "note": "All configuration resolved from AWS CloudFormation and Secrets Manager",
-                }
 
             return jsonify(response)
 
