@@ -135,10 +135,14 @@ ARG VERSION
 # - PYTHONPATH: Ensure Python can find application modules
 # - FLASK_APP: Flask application entry point
 # - BUILD_VERSION: Git tag version from CI (overrides pyproject.toml version)
+# - UV_NO_CACHE: Disable UV cache to prevent read-only filesystem errors
+# - UV_CACHE_DIR: Set cache to /tmp (writable) as fallback if UV is invoked
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH="/app" \
     FLASK_APP="src.app" \
-    BUILD_VERSION="${VERSION}"
+    BUILD_VERSION="${VERSION}" \
+    UV_NO_CACHE="1" \
+    UV_CACHE_DIR="/tmp/.uv-cache"
 
 # Expose application port
 # Flask default port for HTTP traffic
