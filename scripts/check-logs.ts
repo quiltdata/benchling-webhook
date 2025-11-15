@@ -2,8 +2,15 @@
 /**
  * Check CloudWatch logs for the deployed Benchling webhook ECS service
  *
- * Uses profile deployment tracking (v0.7.0) to find deployment details.
- * Falls back to CloudFormation stack outputs if no deployment record exists.
+ * @deprecated Use `npx @quiltdata/benchling-webhook logs` instead
+ *
+ * This script is deprecated and will be removed in v1.0.0.
+ * Please use the new `logs` command which provides the same functionality
+ * with better NPX compatibility and proper profile support.
+ *
+ * Migration:
+ *   Old: npx ts-node scripts/check-logs.ts --profile sales --type ecs
+ *   New: npx @quiltdata/benchling-webhook logs --profile sales --type ecs
  *
  * @module scripts/check-logs
  * @version 0.7.0
@@ -144,6 +151,23 @@ function printStackInfo(outputs: StackOutput[], logGroup: string | null, logType
 }
 
 function main(): void {
+    // Show deprecation warning
+    console.warn("\n⚠️  DEPRECATION WARNING");
+    console.warn("═".repeat(80));
+    console.warn("This script is deprecated. Please use the new 'logs' command instead:");
+    console.warn("");
+    console.warn("  npx @quiltdata/benchling-webhook logs [options]");
+    console.warn("");
+    console.warn("The new command provides:");
+    console.warn("  - Better NPX compatibility (no ts-node required)");
+    console.warn("  - Proper profile support");
+    console.warn("  - Listed in --help output");
+    console.warn("  - Same functionality as this script");
+    console.warn("");
+    console.warn("This script will be removed in v1.0.0");
+    console.warn("═".repeat(80));
+    console.warn("");
+
     const args = process.argv.slice(2);
     const logType = args.find((arg) => arg.startsWith("--type="))?.split("=")[1] || "all";
     const filterPattern = args.find((arg) => arg.startsWith("--filter="))?.split("=")[1];
@@ -259,6 +283,7 @@ function main(): void {
 }
 
 function printHelp(): void {
+    console.log("⚠️  DEPRECATED - Use 'npx @quiltdata/benchling-webhook logs' instead\n");
     console.log("Usage: npm run logs [options]");
     console.log("");
     console.log("Options:");

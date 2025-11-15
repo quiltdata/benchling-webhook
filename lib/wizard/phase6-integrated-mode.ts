@@ -198,7 +198,9 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
     console.log("  2. Configure webhook URL in Benchling app settings");
     console.log("     (Get the webhook URL from your Quilt stack outputs)");
     console.log("  3. Test the webhook integration");
-    console.log(`  4. Monitor logs: npx ts-node scripts/check-logs.ts --profile ${profile}\n`);
+    console.log("  4. Monitor logs:");
+    console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook logs --profile ${profile}`));
+    console.log("");
 
     return {
         success: true,
