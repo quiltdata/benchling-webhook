@@ -505,7 +505,9 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
                 if (!config.benchling) {
                     config.benchling = {} as any;
                 }
-                config.benchling.secretArn = secretOutput.OutputValue;
+                if (config.benchling) {
+                    config.benchling.secretArn = secretOutput.OutputValue;
+                }
             } else {
                 console.log(chalk.dim("  No BenchlingSecret found in stack\n"));
             }
