@@ -9,38 +9,28 @@ All notable changes to this project will be documented in this file.
 
 ### Breaking Changes
 
-**Runtime CloudFormation Dependencies Removed** (Issue #206)
+- Remove QuiltStackARN from runtime environment - services now resolved at deployment time
+- Remove CloudFormation IAM permissions from ECS task role
+- Delete config-resolver.ts - runtime CloudFormation resolution no longer needed
 
-The container no longer makes runtime CloudFormation API calls. Service configuration is now resolved at deployment time and passed as explicit environment variables.
+### Added
 
-**What Changed:**
-- Removed `QuiltStackARN` CloudFormation parameter
-- Removed `QuiltStackARN` container environment variable
-- Removed CloudFormation IAM permissions from ECS task role (`cloudformation:DescribeStacks`, `cloudformation:DescribeStackResources`)
-- Removed `stackArn` property from `FargateServiceProps` interface
+- Deployment-time service resolution via new CloudFormation parameters
+- Explicit service environment variables (PACKAGER_SQS_URL, ATHENA_USER_DATABASE, QUILT_WEB_HOST, ICEBERG_DATABASE)
+- 7-phase modular wizard architecture with improved flow control
+- Amazon Linux 2023 and Python 3.13 support in Docker container
+- UV package manager for faster Python dependency installation
 
-**New Behavior:**
-- Services resolved once at deployment time from Quilt CloudFormation stack
-- Container receives explicit service environment variables:
-  - `PACKAGER_SQS_URL` - SQS queue URL for package creation
-  - `ATHENA_USER_DATABASE` - Athena/Glue database name
-  - `QUILT_WEB_HOST` - Quilt catalog domain
-  - `ICEBERG_DATABASE` - Iceberg database name (optional)
-- No runtime CloudFormation API calls required
-- Faster container startup
-- Reduced IAM permissions (principle of least privilege)
+### Changed
 
-**Migration:**
-- Existing configurations in `~/.config/benchling-webhook/` do not need changes
-- The `quilt.stackArn` field is still used at deployment time to resolve services
-- Simply redeploy with `npm run deploy` - services will be automatically resolved
-- See [MIGRATION.md](./spec/206-service-envars/MIGRATION.md) for detailed migration instructions
+- Container startup faster without runtime CloudFormation API calls
+- Setup wizard detects and reuses BenchlingSecret from integrated Quilt stacks
+- Improved test isolation with XDG helpers and mock interfaces
+- Better sync-secrets implementation with direct function calls
 
-**Benefits:**
-- Faster container startup (no CloudFormation API calls at runtime)
-- Better security (reduced IAM permissions)
-- Explicit configuration (all services visible in environment variables)
-- Easier debugging (inspect environment variables without API calls)
+### Migration
+
+See [spec/206-service-envars/MIGRATION.md](./spec/206-service-envars/MIGRATION.md) for upgrade instructions. Existing configs work unchanged - simply redeploy.
 
 ## [0.7.8] - 2025-11-14
 
