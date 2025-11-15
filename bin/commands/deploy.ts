@@ -5,9 +5,11 @@ import boxen from "boxen";
 import { prompt } from "enquirer";
 import { maskArn } from "../../lib/utils/config";
 import {
+    resolveQuiltServices,
+    QuiltServices,
+    ServiceResolverError,
     parseStackArn,
-    ConfigResolverError,
-} from "../../lib/utils/config-resolver";
+} from "../../lib/utils/service-resolver";
 import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig } from "../../lib/types/config";
@@ -190,8 +192,8 @@ export async function deploy(
     } catch (error) {
         spinner.fail("Invalid Stack ARN");
         console.log();
-        if (error instanceof ConfigResolverError) {
-            console.error(error.format());
+        if (error instanceof ServiceResolverError) {
+            console.error(chalk.red(error.format()));
         } else {
             console.error(chalk.red((error as Error).message));
         }
@@ -287,6 +289,35 @@ export async function deploy(
         }
     }
 
+    // Resolve Quilt services from CloudFormation stack (v1.0.0+)
+    // This eliminates runtime CloudFormation API calls by resolving services at deployment time
+    let services: QuiltServices;
+    spinner.start("Resolving Quilt services from CloudFormation stack...");
+    try {
+        services = await resolveQuiltServices({
+            stackArn,
+        });
+        spinner.succeed("Quilt services resolved from CloudFormation stack");
+    } catch (error) {
+        spinner.fail("Failed to resolve Quilt services");
+        console.log();
+        if (error instanceof ServiceResolverError) {
+            console.error(chalk.red(error.format()));
+        } else {
+            console.error(chalk.red((error as Error).message));
+        }
+        console.log();
+        console.log(chalk.yellow("Troubleshooting:"));
+        console.log("  1. Verify the Quilt CloudFormation stack exists and is deployed");
+        console.log("  2. Ensure your AWS credentials have cloudformation:DescribeStacks permission");
+        console.log("  3. Check that the stack outputs include required values:");
+        console.log("     - PackagerQueueUrl (SQS queue URL)");
+        console.log("     - UserAthenaDatabaseName (Athena database)");
+        console.log("     - Catalog/CatalogDomain/ApiGatewayEndpoint (catalog URL)");
+        console.log();
+        process.exit(1);
+    }
+
     // Build ECR image URI for display
     // HARDCODED: Always use the quiltdata AWS account for ECR images
     const ecrAccount = "712023778557";
@@ -304,8 +335,16 @@ export async function deploy(
     console.log(`  ${chalk.bold("Stage:")}                     ${options.stage}`);
     console.log(`  ${chalk.bold("Profile:")}                   ${options.profileName}`);
     console.log();
+    console.log(chalk.bold("  Resolved Quilt Services:"));
+    console.log(`    ${chalk.bold("Packager Queue:")}          ${services.packagerQueueUrl}`);
+    console.log(`    ${chalk.bold("Athena Database:")}         ${services.athenaUserDatabase}`);
+    console.log(`    ${chalk.bold("Catalog Host:")}            ${services.quiltWebHost}`);
+    if (services.icebergDatabase) {
+        console.log(`    ${chalk.bold("Iceberg Database:")}        ${services.icebergDatabase}`);
+    }
+    console.log();
     console.log(chalk.bold("  Stack Parameters:"));
-    console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)}`);
+    console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)} ${chalk.dim("(deployment-time resolution only)")}`);
     console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
     console.log();
     console.log(chalk.bold("  Container Image:"));
@@ -314,7 +353,7 @@ export async function deploy(
     console.log(`    ${chalk.bold("Image Tag:")}               ${options.imageTag}`);
     console.log(`    ${chalk.bold("Full Image URI:")}          ${ecrImageUri}`);
     console.log();
-    console.log(chalk.dim("  ℹ️  All other configuration will be resolved from AWS at runtime"));
+    console.log(chalk.dim("  ℹ️  Services resolved at deployment time - no runtime CloudFormation calls"));
     console.log(chalk.gray("─".repeat(80)));
     console.log();
 
@@ -343,7 +382,12 @@ export async function deploy(
         // Build CloudFormation parameters
         // Parameter names must match the CfnParameter IDs in BenchlingWebhookStack
         const parameters = [
-            `QuiltStackARN=${stackArn}`,
+            // Explicit service parameters (v1.0.0+)
+            `PackagerQueueUrl=${services.packagerQueueUrl}`,
+            `AthenaUserDatabase=${services.athenaUserDatabase}`,
+            `QuiltWebHost=${services.quiltWebHost}`,
+            `IcebergDatabase=${services.icebergDatabase || ""}`,
+            // Legacy parameters
             `BenchlingSecretARN=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
             `PackageBucket=${config.packages.bucket}`,

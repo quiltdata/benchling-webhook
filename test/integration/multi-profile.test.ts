@@ -2,6 +2,7 @@
  * Integration tests for Multi-Profile Setup (v0.7.0)
  *
  * Tests complete workflow with multiple profiles and deployment tracking.
+ * Uses explicit baseDir for XDGConfig to isolate tests from real config.
  */
 
 import { XDGTest } from "../helpers/xdg-test";

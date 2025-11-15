@@ -29,7 +29,6 @@ export type ProfileName = string;
  * ```json
  * {
  *   "quilt": {
- *     "stackArn": "arn:aws:cloudformation:...",
  *     "catalog": "https://quilt.example.com",
  *     "bucket": "my-quilt-bucket",
  *     "database": "quilt_catalog",
@@ -121,19 +120,40 @@ export interface ProfileConfig {
 /**
  * Quilt Catalog Configuration
  *
- * Configuration for Quilt data catalog integration, including CloudFormation stack
+ * Configuration for Quilt data catalog integration, including service endpoints
  * and SQS queue for package creation.
+ *
+ * **Breaking Change (v1.0.0)**: `stackArn` is used at deployment time only to resolve services.
+ * Services are passed as explicit environment variables to the container.
+ * No runtime CloudFormation API calls are made.
+ *
+ * **Usage**:
+ * - **Deployment time**: `stackArn` used to resolve service endpoints from stack outputs
+ * - **Runtime**: Explicit environment variables are used (no CloudFormation API calls)
  */
 export interface QuiltConfig {
     /**
-     * Quilt CloudFormation stack ARN
+     * Quilt CloudFormation stack ARN (optional)
+     *
+     * Used at deployment time to resolve service endpoints from stack outputs.
+     * The resolved services are then passed as explicit environment variables to the container.
+     *
+     * **Deployment usage only** - not passed to container runtime.
+     * **Breaking Change (v1.0.0)**: No longer passed as environment variable or CloudFormation parameter.
      *
      * @example "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-stack/..."
      */
-    stackArn: string;
+    stackArn?: string;
 
     /**
      * Quilt catalog domain (without protocol)
+     *
+     * Resolved from stack outputs at deployment time:
+     * - Priority 1: `Catalog` output
+     * - Priority 2: `CatalogDomain` output
+     * - Priority 3: Extract from `ApiGatewayEndpoint` output
+     *
+     * Passed to container as `QUILT_WEB_HOST` environment variable.
      *
      * @example "quilt.example.com"
      */
@@ -142,12 +162,18 @@ export interface QuiltConfig {
     /**
      * Athena/Glue database name for catalog metadata
      *
+     * Resolved from stack output `UserAthenaDatabaseName` at deployment time.
+     * Passed to container as `ATHENA_USER_DATABASE` environment variable.
+     *
      * @example "quilt_catalog"
      */
     database: string;
 
     /**
      * SQS queue URL for package creation jobs
+     *
+     * Resolved from stack output `PackagerQueueUrl` at deployment time.
+     * Passed to container as `PACKAGER_SQS_URL` environment variable.
      *
      * @example "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-package-queue"
      */
@@ -159,6 +185,18 @@ export interface QuiltConfig {
      * @example "us-east-1"
      */
     region: string;
+
+    /**
+     * Iceberg database name (optional)
+     *
+     * If available, use Iceberg database instead of Athena for package* tables.
+     * Resolved from stack output `IcebergDatabase` at deployment time if present.
+     *
+     * Passed to container as `ICEBERG_DATABASE` environment variable.
+     *
+     * @example "quilt_iceberg"
+     */
+    icebergDatabase?: string;
 }
 
 /**
@@ -551,13 +589,14 @@ export const ProfileConfigSchema = {
     properties: {
         quilt: {
             type: "object",
-            required: ["stackArn", "catalog", "database", "queueUrl", "region"],
+            required: ["catalog", "database", "queueUrl", "region"],
             properties: {
                 stackArn: { type: "string", pattern: "^arn:aws:cloudformation:" },
                 catalog: { type: "string", minLength: 1 },
                 database: { type: "string", minLength: 1 },
                 queueUrl: { type: "string", pattern: "^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/\\d{12}/.+" },
                 region: { type: "string", pattern: "^[a-z]{2}-[a-z]+-[0-9]$" },
+                icebergDatabase: { type: "string", minLength: 1 },
             },
         },
         benchling: {

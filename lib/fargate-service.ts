@@ -10,11 +10,14 @@ import { Construct } from "constructs";
 import { ProfileConfig } from "./types/config";
 
 /**
- * Properties for FargateService construct (v0.7.0+)
+ * Properties for FargateService construct (v1.0.0+)
  *
  * Uses ProfileConfig for structured configuration access.
- * Runtime-configurable parameters (quiltStackArn, benchlingSecret, logLevel, packageBucket)
- * can be overridden via CloudFormation parameters.
+ * Runtime-configurable parameters can be overridden via CloudFormation parameters.
+ *
+ * **Breaking Change (v1.0.0)**: Removed stackArn in favor of explicit service environment variables.
+ * The explicit service parameters (packagerQueueUrl, athenaUserDatabase, quiltWebHost, icebergDatabase)
+ * are resolved at deployment time and passed directly to the container, eliminating runtime CloudFormation calls.
  */
 export interface FargateServiceProps {
     readonly vpc: ec2.IVpc;
@@ -24,8 +27,14 @@ export interface FargateServiceProps {
     readonly imageTag?: string;
     readonly stackVersion?: string;
 
+    // Explicit service parameters (v1.0.0+)
+    // These replace runtime resolution from stackArn
+    readonly packagerQueueUrl: string;
+    readonly athenaUserDatabase: string;
+    readonly quiltWebHost: string;
+    readonly icebergDatabase: string;
+
     // Runtime-configurable parameters (from CloudFormation)
-    readonly stackArn: string;
     readonly benchlingSecret: string;
     readonly packageBucket: string;
     readonly quiltDatabase: string;
@@ -80,17 +89,6 @@ export class FargateService extends Construct {
         const taskRole = new iam.Role(this, "TaskRole", {
             assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
         });
-
-        // Grant CloudFormation read access (to query stack outputs)
-        taskRole.addToPolicy(
-            new iam.PolicyStatement({
-                actions: [
-                    "cloudformation:DescribeStacks",
-                    "cloudformation:DescribeStackResources",
-                ],
-                resources: [props. stackArn],
-            }),
-        );
 
         // Grant Secrets Manager read access (to fetch Benchling credentials)
         // Use both config.benchling.secretArn and runtime parameter
@@ -211,23 +209,36 @@ export class FargateService extends Construct {
         });
 
         // Build environment variables using new config structure
-        // Container will query CloudFormation and Secrets Manager for runtime config
+        // v1.0.0+: Explicit service parameters eliminate runtime CloudFormation calls
         const environmentVars: { [key: string]: string } = {
+            // AWS Configuration
             AWS_REGION: region,
             AWS_DEFAULT_REGION: region,
+
+            // Application Configuration
             FLASK_ENV: "production",
             LOG_LEVEL: props.logLevel || config.logging?.level || "INFO",
             ENABLE_WEBHOOK_VERIFICATION: config.security?.enableVerification !== false ? "true" : "false",
             BENCHLING_WEBHOOK_VERSION: props.stackVersion || props.imageTag || "latest",
-            // Runtime-configurable parameters (from CloudFormation)
-            QuiltStackARN: props. stackArn,
-            BenchlingSecret: props.benchlingSecret,
-            // Static config values (for reference)
+
+            // Explicit Quilt Service Parameters (v1.0.0+)
+            // Resolved at deployment time, no runtime CloudFormation calls needed
+            PACKAGER_SQS_URL: props.packagerQueueUrl,
+            ATHENA_USER_DATABASE: props.athenaUserDatabase,
+            QUILT_WEB_HOST: props.quiltWebHost,
+            ICEBERG_DATABASE: props.icebergDatabase,
+
+            // Benchling Configuration
+            BENCHLING_SECRET_ARN: props.benchlingSecret,
             BENCHLING_TENANT: config.benchling.tenant,
             BENCHLING_PKG_BUCKET: config.packages.bucket,
             BENCHLING_PKG_PREFIX: config.packages.prefix,
             BENCHLING_PKG_KEY: config.packages.metadataKey,
         };
+
+        // DEPRECATED: BenchlingSecret renamed to BENCHLING_SECRET_ARN for consistency
+        // Keep old name temporarily for backward compatibility
+        environmentVars.BenchlingSecret = props.benchlingSecret;
 
         // Add container with configured environment
         const container = taskDefinition.addContainer("BenchlingWebhookContainer", {

@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.0] - 2025-11-07
+
+### Breaking Changes
+
+- Remove QuiltStackARN from runtime environment - services now resolved at deployment time
+- Remove CloudFormation IAM permissions from ECS task role
+- Delete config-resolver.ts - runtime CloudFormation resolution no longer needed
+
+### Added
+
+- Deployment-time service resolution via new CloudFormation parameters
+- Explicit service environment variables (PACKAGER_SQS_URL, ATHENA_USER_DATABASE, QUILT_WEB_HOST, ICEBERG_DATABASE)
+- 7-phase modular wizard architecture with improved flow control
+- Amazon Linux 2023 and Python 3.13 support in Docker container
+- UV package manager for faster Python dependency installation
+
+### Changed
+
+- Container startup faster without runtime CloudFormation API calls
+- Setup wizard detects and reuses BenchlingSecret from integrated Quilt stacks
+- Improved test isolation with XDG helpers and mock interfaces
+- Better sync-secrets implementation with direct function calls
+
+### Migration
+
+See [spec/206-service-envars/MIGRATION.md](./spec/206-service-envars/MIGRATION.md) for upgrade instructions. Existing configs work unchanged - simply redeploy.
+
 ## [0.7.8] - 2025-11-14
 
 ### Added
@@ -75,7 +102,6 @@ All notable changes to this project will be documented in this file.
 
 - **Deploy validation** - Deploy command now verifies secrets instead of force-updating them on every deployment
 - **Cleaner codebase** - Removed legacy mode detection and config_version field (no longer needed)
-
 ## [0.7.3] - 2025-11-06
 
 ### Added
