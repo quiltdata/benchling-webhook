@@ -5,10 +5,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.8] - 2025-11-14
+
 ### Added
 
-- **Catalog name verification prompt** - Setup wizard now asks users to confirm auto-detected catalog name before using it (skipped with `--yes` flag)
-- **BenchlingSecret reuse from Quilt stack** - Automatically detects and reuses existing BenchlingSecret from T4 template deployments instead of creating duplicate secrets
+- **Integrated stack mode** - Setup wizard detects and reuses BenchlingSecret from Quilt stacks deployed via T4 template, eliminating duplicate credential entry
+- **Catalog verification prompt** - Setup wizard confirms auto-detected catalog DNS before proceeding (skipped with `--yes`)
+- **Version display in canvas** - Benchling canvas footer now shows application version from `pyproject.toml`
+
+### Changed
+
+- **Dockerfile rebuilt with Amazon Linux 2023** - Multi-stage build with UV package manager for faster, more reliable container builds
+- **Setup wizard modularized** - Refactored into composable phases (profile, catalog, deployment, secrets) for better maintainability
+- **Manifest/validate commands migrated to XDG** - Now use profile-based configuration for consistency
+
+### Fixed
+
+- **UV cache disabled in runtime** - Prevents disk space issues in ECS containers
+- **Secret sync respects integratedStack flag** - Skips AWS sync when using Quilt stack's BenchlingSecret
+- **Test isolation improved** - Removed `env.template` and `os.getenv` calls that could leak between tests
 
 ## [0.7.7] - 2025-11-13
 
