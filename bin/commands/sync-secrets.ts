@@ -1,19 +1,15 @@
 #!/usr/bin/env node
 /**
- * AWS Secrets Manager Integration
- *
- * WARNING: This file needs significant refactoring for v0.7.0
- * TODO: Update to use ProfileConfig instead of UserConfig/DerivedConfig
- * TODO: Remove references to BaseConfig
- * TODO: Update to use readProfile/writeProfile instead of readProfileConfig/writeProfileConfig
+ * AWS Secrets Manager Integration (v0.7.0)
  *
  * Synchronizes configuration to AWS Secrets Manager with:
+ * - Mode-aware secret management (integrated vs standalone)
  * - Consistent secret naming conventions
  * - AWS profile selection support
  * - Atomic secret creation/update operations
  * - ARN tracking in XDG configuration
  *
- * @module scripts/sync-secrets
+ * @module commands/sync-secrets
  */
 
 import {
@@ -318,6 +314,10 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
 /**
  * Syncs configuration to AWS Secrets Manager
  *
+ * Mode-aware behavior (B7):
+ * - Integrated mode (integratedStack=true): Always updates existing BenchlingSecret ARN
+ * - Standalone mode (integratedStack=false): Creates new secret with pattern quiltdata/benchling-webhook/<profile>/<tenant>
+ *
  * @param options - Sync options
  * @returns Array of sync results
  */
@@ -355,26 +355,32 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
     console.log(`Initializing Secrets Manager client (region: ${region})...`);
     const client = await getSecretsManagerClient(region, awsProfile);
 
-    // Step 3: Determine secret name or use existing ARN from Quilt stack
+    // Step 3: Determine secret name based on mode (B7)
     const generatedSecretName = generateSecretName(profile, config.benchling.tenant);
     let secretName: string;
-    let useExistingSecret = false;
+    let isIntegratedMode = false;
 
-    if (config.benchling.secretArn) {
-        // Use existing secret ARN from Quilt stack (if BenchlingSecret output was found)
+    // Check both integratedStack flag and secretArn presence for mode detection
+    if (config.integratedStack && config.benchling.secretArn) {
+        // Integrated mode: Use existing secret ARN from Quilt stack
         secretName = config.benchling.secretArn;
-        useExistingSecret = true;
-        console.log(`Using existing BenchlingSecret from Quilt stack: ${secretName}`);
+        isIntegratedMode = true;
+        console.log(`Integrated mode: Using BenchlingSecret from Quilt stack: ${secretName}`);
+    } else if (config.benchling.secretArn && config.integratedStack === undefined) {
+        // Legacy config with secretArn but no integratedStack field - assume integrated
+        secretName = config.benchling.secretArn;
+        isIntegratedMode = true;
+        console.log(`Legacy integrated mode detected: Using BenchlingSecret: ${secretName}`);
     } else {
-        // Generate new secret name
+        // Standalone mode: Generate new secret name
         secretName = generatedSecretName;
-        console.log(`Secret name: ${secretName}`);
+        console.log(`Standalone mode: Secret name: ${secretName}`);
     }
 
     // Step 4: Build secret value
     let clientSecretValue: string;
     try {
-        // Pass generatedSecretName for placeholder checking (not the ARN when useExistingSecret is true)
+        // Pass generatedSecretName for placeholder checking (not the ARN)
         clientSecretValue = await resolveClientSecretValue(client, config, generatedSecretName);
     } catch (error) {
         throw new Error(`Failed to resolve Benchling client secret: ${(error as Error).message}`);
@@ -384,6 +390,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
 
     if (dryRun) {
         console.log("\n=== DRY RUN MODE ===");
+        console.log(`Mode: ${isIntegratedMode ? "Integrated" : "Standalone"}`);
         console.log(`Would sync secret: ${secretName}`);
         console.log(`Secret value:\n${secretValue}`);
         return results;
@@ -396,26 +403,28 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
     let action: "created" | "updated" | "skipped";
 
     if (exists) {
-        if (useExistingSecret) {
-            // When using existing secret from Quilt stack, always update it (force is implied)
+        if (isIntegratedMode) {
+            // Integrated mode: Always update existing secret (force is implied)
             console.log(`Updating BenchlingSecret from Quilt stack: ${secretName}...`);
             secretArn = await updateSecret(client, {
                 name: secretName,
                 value: secretValue,
-                description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile})`,
+                description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile}, integrated mode)`,
             });
             action = "updated";
             console.log(`✓ BenchlingSecret updated: ${secretArn}`);
         } else if (force) {
+            // Standalone mode with force flag
             console.log(`Updating existing secret: ${secretName}...`);
             secretArn = await updateSecret(client, {
                 name: secretName,
                 value: secretValue,
-                description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile})`,
+                description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile}, standalone mode)`,
             });
             action = "updated";
             console.log(`✓ Secret updated: ${secretArn}`);
         } else {
+            // Standalone mode without force - skip update
             console.log(`Secret already exists: ${secretName}`);
             console.log("Use --force to update existing secret");
 
@@ -426,18 +435,19 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
             action = "skipped";
         }
     } else {
-        if (useExistingSecret) {
-            // BenchlingSecret from Quilt stack should exist but doesn't - this is an error
+        if (isIntegratedMode) {
+            // Integrated mode but secret doesn't exist - this is an error
             throw new Error(
                 `BenchlingSecret ARN found in Quilt stack outputs (${secretName}) but the secret does not exist in Secrets Manager. ` +
                 `This may indicate the Quilt stack deployment is incomplete or the secret was deleted.`
             );
         }
+        // Standalone mode: Create new secret
         console.log(`Creating new secret: ${secretName}...`);
         secretArn = await createSecret(client, {
             name: secretName,
             value: secretValue,
-            description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile})`,
+            description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile}, standalone mode)`,
         });
         action = "created";
         console.log(`✓ Secret created: ${secretArn}`);
@@ -450,7 +460,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
         message: `Secret ${action} successfully`,
     });
 
-    // Step 6: Update XDG configuration with secret ARN
+    // Step 6: Update XDG configuration with secret ARN (always update for tracking)
     console.log("Updating XDG configuration with secret ARN...");
 
     // Update config with secret ARN

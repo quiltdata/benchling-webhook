@@ -20,6 +20,7 @@ from .package_query import PackageQuery
 from .packages import Package
 from .pagination import PageState, paginate_items
 from .payload import Payload
+from .version import __version__
 
 logger = structlog.get_logger(__name__)
 
@@ -225,7 +226,7 @@ class CanvasManager:
 
         # Footer with version and deployment info
         content += fmt.format_canvas_footer(
-            version="0.6.1",
+            version=__version__,
             quilt_host=self.config.quilt_catalog,
             bucket=self.config.s3_bucket_name,
         )

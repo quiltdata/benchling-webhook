@@ -251,7 +251,7 @@ def test_oauth_credentials(tenant: str, client_id: str, client_secret: str, entr
         print(f"✅ API accessible ({len(entries)} entries found)\n")
 
         # Determine which entry to test
-        test_entry_id = entry_id or os.environ.get("BENCHLING_TEST_ENTRY")
+        test_entry_id = entry_id
 
         if not test_entry_id:
             # Use most recent entry if none specified
@@ -327,8 +327,7 @@ Examples:
 
 Configuration Priority:
   1. CLI arguments (--tenant, --client-id, --client-secret)
-  2. Environment variables (BENCHLING_TENANT, BENCHLING_CLIENT_ID, BENCHLING_CLIENT_SECRET)
-  3. XDG configuration (~/.config/benchling-webhook/default.json)
+  2. XDG configuration (~/.config/benchling-webhook/{profile}/config.json)
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -339,14 +338,14 @@ Configuration Priority:
     parser.add_argument("--entry-id", "-e", help="Specific entry ID to test (overrides XDG config)")
     args = parser.parse_args()
 
-    # Load configuration from XDG config or environment variables
-    # Priority: CLI args > Environment variables > XDG config
-    tenant = args.tenant or os.getenv("BENCHLING_TENANT")
-    client_id = args.client_id or os.getenv("BENCHLING_CLIENT_ID")
-    client_secret = args.client_secret or os.getenv("BENCHLING_CLIENT_SECRET")
-    entry_id = args.entry_id or os.getenv("BENCHLING_TEST_ENTRY")
+    # Load configuration from XDG config
+    # Priority: CLI args > XDG config
+    tenant = args.tenant
+    client_id = args.client_id
+    client_secret = args.client_secret
+    entry_id = args.entry_id
 
-    # If not provided via CLI or environment, try XDG config
+    # If not provided via CLI, load from XDG config
     if not (tenant and client_id and client_secret):
         try:
             print(f"Loading credentials from XDG configuration (profile: {args.profile})...\n")
@@ -361,11 +360,10 @@ Configuration Priority:
 
             print(f"✅ Loaded credentials from XDG configuration\n")
         except FileNotFoundError as e:
-            print(f"⚠️  XDG configuration not found: {e}")
-            print(f"   Falling back to environment variables\n")
+            print(f"❌ XDG configuration not found: {e}")
+            print(f"   Run 'npm run setup' to configure\n")
         except Exception as e:
-            print(f"⚠️  Failed to load XDG configuration: {e}")
-            print(f"   Falling back to environment variables\n")
+            print(f"❌ Failed to load XDG configuration: {e}\n")
 
     # Validate credentials
     missing = []
