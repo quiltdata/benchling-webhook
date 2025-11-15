@@ -3,6 +3,10 @@
  *
  * Provides utility functions to create mock ProfileConfig objects for testing.
  * This centralizes test fixture creation and ensures consistency across tests.
+ *
+ * Use with test-profile.ts for complete test setup:
+ * - mock-config.ts: Creates ProfileConfig objects
+ * - test-profile.ts: Manages the 'test' profile lifecycle
  */
 
 import { ProfileConfig } from "../../lib/types/config";

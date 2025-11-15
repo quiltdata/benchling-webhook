@@ -9,6 +9,7 @@ import { manifestCommand } from "./commands/manifest";
 import { setupWizardCommand } from "./commands/setup-wizard";
 import { setupProfileCommand } from "./commands/setup-profile";
 import { healthCheckCommand } from "./commands/health-check";
+import { configShowCommand } from "./commands/config-show";
 import { installCommand } from "./commands/install";
 
 // Load package.json for version
@@ -121,11 +122,24 @@ program
 program
     .command("validate")
     .description("Validate configuration without deploying")
-    .option("--env-file <path>", "Path to .env file", ".env")
+    .option("--profile <name>", "Configuration profile to validate", "default")
     .option("--verbose", "Show detailed validation information")
     .action(async (options) => {
         try {
-            await validateCommand(options);
+            const { XDGConfig } = await import("../lib/xdg-config");
+            const xdg = new XDGConfig();
+            const profile = options.profile || "default";
+
+            if (!xdg.profileExists(profile)) {
+                console.error(chalk.red(`Profile does not exist: ${profile}`));
+                console.log();
+                console.log(chalk.yellow("To create a profile, run:"));
+                console.log(chalk.cyan("  npx @quiltdata/benchling-webhook"));
+                process.exit(1);
+            }
+
+            const config = xdg.readProfile(profile);
+            await validateCommand({ config, profile, verbose: options.verbose });
         } catch (error) {
             console.error(chalk.red((error as Error).message));
             process.exit(1);
@@ -151,9 +165,24 @@ program
     .command("manifest")
     .description("Generate Benchling app manifest file")
     .option("--output <path>", "Output file path", "app-manifest.yaml")
+    .option("--profile <name>", "Configuration profile to use (optional)")
+    .option("--catalog <url>", "Catalog URL to use (optional, overrides profile)")
     .action(async (options) => {
         try {
-            await manifestCommand(options);
+            let catalogUrl = options.catalog;
+
+            // If catalog not provided directly, try to load from profile
+            if (!catalogUrl && options.profile) {
+                const { XDGConfig } = await import("../lib/xdg-config");
+                const xdg = new XDGConfig();
+
+                if (xdg.profileExists(options.profile)) {
+                    const config = xdg.readProfile(options.profile);
+                    catalogUrl = config.quilt.catalog;
+                }
+            }
+
+            await manifestCommand({ output: options.output, catalog: catalogUrl });
         } catch (error) {
             console.error(chalk.red((error as Error).message));
             process.exit(1);
@@ -206,6 +235,20 @@ program
         }
     });
 
+// Config show command (for Python interop)
+program
+    .command("config")
+    .description("Show configuration for a profile as JSON")
+    .option("--profile <name>", "Configuration profile to show", "default")
+    .action(async (options) => {
+        try {
+            await configShowCommand(options);
+        } catch (error) {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        }
+    });
+
 // Run install command when no command provided (but not for help/version flags)
 const args = process.argv.slice(2);
 const isHelpOrVersion = args.some(arg => arg === "--help" || arg === "-h" || arg === "--version" || arg === "-v");
@@ -219,6 +262,7 @@ if ((!args.length || (args.length > 0 && args[0].startsWith("--") && !isHelpOrVe
         awsRegion?: string;
         awsProfile?: string;
         setupOnly?: boolean;
+        skipValidation?: boolean;
     } = {};
 
     for (let i = 0; i < args.length; i++) {
@@ -238,6 +282,8 @@ if ((!args.length || (args.length > 0 && args[0].startsWith("--") && !isHelpOrVe
         } else if (args[i] === "--aws-profile" && i + 1 < args.length) {
             options.awsProfile = args[i + 1];
             i++;
+        } else if (args[i] === "--skip-validation") {
+            options.skipValidation = true;
         }
     }
 

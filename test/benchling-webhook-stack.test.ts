@@ -1,7 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
-import { createMockConfig } from "./helpers/mock-config";
+import { createMockConfig } from "./helpers/test-config";
 
 describe("BenchlingWebhookStack", () => {
     let template: Template;

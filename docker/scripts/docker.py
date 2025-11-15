@@ -177,12 +177,13 @@ class DockerManager:
 
         return tags
 
-    def build(self, tag: str, platform: Optional[str] = None) -> bool:
+    def build(self, tag: str, platform: Optional[str] = None, version: Optional[str] = None) -> bool:
         """Build Docker image with the specified tag.
 
         Args:
             tag: Image tag to build
             platform: Target platform (defaults to detected platform)
+            version: Version to pass as build arg (will be set as BUILD_VERSION env var in container)
         """
         # Use detected platform if not specified
         build_platform = platform or self.platform
@@ -202,11 +203,21 @@ class DockerManager:
 
         print(f"INFO: Building Docker image: {tag}", file=sys.stderr)
         print(f"INFO: Target platform: {build_platform}", file=sys.stderr)
+        if version:
+            print(f"INFO: Build version: {version}", file=sys.stderr)
 
         os.chdir(self.project_root)
-        result = self._run_command(
-            ["docker", "build", "--platform", build_platform, "--file", "Dockerfile", "--tag", tag, "."], check=False
-        )
+
+        # Build docker build command
+        build_cmd = ["docker", "build", "--platform", build_platform, "--file", "Dockerfile"]
+
+        # Add VERSION build arg if provided
+        if version:
+            build_cmd.extend(["--build-arg", f"VERSION={version}"])
+
+        build_cmd.extend(["--tag", tag, "."])
+
+        result = self._run_command(build_cmd, check=False)
 
         if result.returncode == 0:
             print(f"INFO: Successfully built: {tag}", file=sys.stderr)
@@ -278,9 +289,9 @@ class DockerManager:
         for ref in tags:
             print(f"INFO:   - {ref.uri}", file=sys.stderr)
 
-        # Build with first tag
+        # Build with first tag, passing version as build arg
         primary_tag = tags[0].uri
-        if not self.build(primary_tag):
+        if not self.build(primary_tag, version=version):
             return False
 
         # Tag with additional tags
@@ -311,7 +322,7 @@ class DockerManager:
         local_tag = f"{self.registry}/{self.image_name}:{version}"
 
         print(f"INFO: Building Docker image locally", file=sys.stderr)
-        if not self.build(local_tag):
+        if not self.build(local_tag, version=version):
             return False
 
         print(f"INFO: Local build completed: {local_tag}", file=sys.stderr)

@@ -219,22 +219,35 @@ export async function inferQuiltConfig(options: {
     profile?: string;
     interactive?: boolean;
     yes?: boolean;
+    catalogDns?: string; // NEW: If provided, skip quilt3 check and use this catalog
 }): Promise<InferenceResult> {
-    const { region, profile, interactive = true, yes = false } = options;
+    const { region, profile, interactive = true, yes = false, catalogDns } = options;
 
     const result: InferenceResult = {
         source: "none",
     };
 
-    // Step 1: Try quilt3 CLI command
-    console.log("Checking quilt3 CLI configuration...");
-    const quilt3Config = getQuilt3Catalog();
+    // Step 1: Use provided catalog or try quilt3 CLI command
+    let quilt3Config: QuiltCliConfig | null = null;
 
-    if (quilt3Config?.catalogUrl) {
-        result.catalog = quilt3Config.catalogUrl;
-        result.source = "quilt3-cli";
+    if (catalogDns) {
+        // Use the provided catalog DNS - skip quilt3 check
+        console.log(`Using provided catalog: ${catalogDns}`);
+        const catalogUrl = catalogDns.startsWith('http') ? catalogDns : `https://${catalogDns}`;
+        result.catalog = catalogUrl;
+        result.source = "provided";
+        quilt3Config = { catalogUrl }; // Create fake quilt3Config for config.json fetch
     } else {
-        console.log("No quilt3 CLI configuration found.");
+        // Try quilt3 CLI command
+        console.log("Checking quilt3 CLI configuration...");
+        quilt3Config = getQuilt3Catalog();
+
+        if (quilt3Config?.catalogUrl) {
+            result.catalog = quilt3Config.catalogUrl;
+            result.source = "quilt3-cli";
+        } else {
+            console.log("No quilt3 CLI configuration found.");
+        }
     }
 
     // Step 1.5: If we have a catalog URL but no region specified, fetch config.json to get the region
@@ -294,8 +307,8 @@ export async function inferQuiltConfig(options: {
             selectedStack = matchingStack;
             console.log(`Auto-selected stack matching catalog URL: ${selectedStack.stackName}`);
 
-            // If --yes not passed and interactive mode, verify the catalog name before using it
-            if (!yes && interactive) {
+            // If --yes not passed, interactive mode, and catalog was NOT explicitly provided, verify the catalog name before using it
+            if (!yes && interactive && !catalogDns) {
                 const rl = readline.createInterface({
                     input: process.stdin,
                     output: process.stdout,
@@ -336,8 +349,8 @@ export async function inferQuiltConfig(options: {
         selectedStack = stacks[0];
         console.log(`Using stack: ${selectedStack.stackName}`);
 
-        // If --yes not passed and interactive mode, verify the catalog name before using it
-        if (!yes && interactive) {
+        // If --yes not passed, interactive mode, and catalog was NOT explicitly provided, verify the catalog name before using it
+        if (!yes && interactive && !catalogDns) {
             const rl = readline.createInterface({
                 input: process.stdin,
                 output: process.stdout,

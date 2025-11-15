@@ -8,7 +8,7 @@ include make.deploy
 
 # XDG configuration directory and profile (v0.7.0)
 XDG_CONFIG ?= $(HOME)/.config/benchling-webhook
-PROFILE ?= default
+PROFILE ?= dev
 PROFILE_DIR = $(XDG_CONFIG)/$(PROFILE)
 
 # Default log level
@@ -79,8 +79,13 @@ help:
 	@echo "  kill                  - Stop Docker containers and kill local processes"
 	@echo ""
 	@echo "Environment Variables (v0.7.0):"
-	@echo "  PROFILE               - Configuration profile to use (default: default)"
+	@echo "  PROFILE               - Configuration profile to use (default: dev)"
 	@echo "  SKIP_AUTO_DEPLOY      - Skip auto-deployment in test-deployed-dev"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make test-local                - Test with dev profile (default)"
+	@echo "  make test-local PROFILE=sales  - Test with sales profile"
+	@echo "  make run-local PROFILE=prod    - Run local server with prod profile"
 
 # Setup
 
@@ -140,11 +145,11 @@ run-prod: build check-xdg
 
 # Local Flask server with mocked AWS (no credentials needed)
 run-local: check-xdg
-	uv run python scripts/run_local.py
+	uv run python scripts/run_local.py --profile $(PROFILE)
 
 # Local Flask server with verbose logging
 run-local-verbose: check-xdg
-	uv run python scripts/run_local.py --verbose
+	uv run python scripts/run_local.py --verbose --profile $(PROFILE)
 
 # Local server + ngrok tunnel
 run-local-ngrok: check-xdg
@@ -199,9 +204,10 @@ test-integration: test-benchling
 		--wait-for-health
 
 # Test webhooks against local dev server (auto-starts and stops server)
+# Uses dev profile by default, errors if profile doesn't exist
 test-local: check-xdg kill
-	@echo "Running local server tests (auto-start/stop)..."
-	uv run python scripts/run_local.py --test
+	@echo "Running local server tests (profile: $(PROFILE))..."
+	uv run python scripts/run_local.py --test --profile $(PROFILE)
 
 # Test webhooks against docker dev server (requires server running)
 test-dev:
@@ -248,7 +254,7 @@ test-ecr: check-xdg
 test-deployed-dev: check-xdg
 	@if [ -n "$(SKIP_AUTO_DEPLOY)" ]; then \
 		echo "⏭️  Auto-deploy disabled (SKIP_AUTO_DEPLOY=1)"; \
-		$(MAKE) -f Makefile test-deployed-dev-direct; \
+		$(MAKE) -C $(CURDIR) test-deployed-dev-direct; \
 	else \
 		echo "🔍 Checking if dev deployment is needed..."; \
 		DEPLOYMENTS_JSON=$(PROFILE_DIR)/deployments.json; \
@@ -285,7 +291,7 @@ test-deployed-dev: check-xdg
 		else \
 			echo "✅ Dev deployment is up-to-date"; \
 		fi; \
-		$(MAKE) -f Makefile test-deployed-dev-direct; \
+		$(MAKE) -C $(CURDIR) test-deployed-dev-direct; \
 	fi
 
 # Test deployed dev stack (direct, no auto-deploy check)
