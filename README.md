@@ -3,7 +3,6 @@
 Connects Benchling lab notebook entries to Quilt data packages via webhooks.
 
 > **⚠️ Breaking Change in v1.0.0**: Runtime CloudFormation dependencies removed. Service configuration now resolved at deployment time. See [MIGRATION.md](./spec/206-service-envars/MIGRATION.md) for upgrade instructions.
-
 ## Prerequisites
 
 - Node.js 18+ with `npx` ([download](https://nodejs.org))
@@ -34,12 +33,27 @@ npx @quiltdata/benchling-webhook@latest
 
 The wizard will:
 
-1. Detect your Quilt stack from AWS CloudFormation
-2. Collect and validate your Benchling credentials
-3. Sync secrets to AWS Secrets Manager
-4. Deploy to AWS
+1. **Catalog Discovery** - Detect and confirm your Quilt catalog DNS
+2. **Stack Query** - Extract configuration from your CloudFormation stack
+3. **Parameter Collection** - Collect Benchling credentials and package settings
+4. **Validation** - Validate all parameters before proceeding
+5. **Deployment Mode** - Choose between integrated or standalone deployment:
+   - **Integrated Mode**: Updates the existing BenchlingSecret in your Quilt stack (recommended if you have one)
+   - **Standalone Mode**: Creates a dedicated secret and optionally deploys a separate webhook stack
 
-It will list the outputs, including the webhook URL.
+#### Deployment Modes
+
+**Integrated Mode** (recommended if your Quilt stack has a BenchlingSecret):
+- Uses the existing BenchlingSecret from your Quilt CloudFormation stack
+- No separate deployment needed - the webhook URL is available from your Quilt stack outputs
+- Cleaner architecture with fewer AWS resources
+
+**Standalone Mode** (for separate deployments):
+- Creates a dedicated secret: `quiltdata/benchling-webhook/<profile>/<tenant>`
+- Prompts you to deploy a separate webhook stack to AWS
+- Useful for testing or isolated deployments
+
+It will list the webhook URL in the completion message or next steps.
 
 NOTE: This version no longer reads your `.env` file.
 Instead, it stores your results in the [XDG_CONFIG_HOME](https://wiki.archlinux.org/title/XDG_Base_Directory),

@@ -1,10 +1,19 @@
-import { config as dotenvConfig } from "dotenv";
-import { expand as dotenvExpand } from "dotenv-expand";
+/**
+ * Configuration Utilities
+ *
+ * Legacy configuration types and utility functions.
+ * Most configuration loading now happens via XDG profiles (see lib/xdg-config.ts).
+ */
+
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { execSync } from "child_process";
 import { isQueueUrl } from "./sqs";
 
+/**
+ * Legacy Config interface
+ * @deprecated Use ProfileConfig from lib/types/config.ts instead
+ */
 export interface Config {
   // Secrets-Only Mode (v0.6.0+)
   quiltStackArn?: string;
@@ -43,6 +52,10 @@ export interface Config {
   imageTag?: string;
 }
 
+/**
+ * Legacy ConfigOptions interface
+ * @deprecated CLI commands now use XDG profiles
+ */
 export interface ConfigOptions {
   envFile?: string;
   catalog?: string;
@@ -88,30 +101,6 @@ export function getQuilt3Catalog(): string | undefined {
         return undefined;
     }
     return undefined;
-}
-
-/**
- * Load .env file and expand variables
- */
-export function loadDotenv(filePath: string): Record<string, string> {
-    const resolvedPath = resolve(filePath);
-
-    if (!existsSync(resolvedPath)) {
-        return {};
-    }
-
-    const result = dotenvConfig({ path: resolvedPath });
-
-    if (result.error) {
-        throw new Error(`Failed to load ${filePath}: ${result.error.message}`);
-    }
-
-    // Expand variables like ${VAR}
-    if (result.parsed) {
-        dotenvExpand(result);
-    }
-
-    return result.parsed || {};
 }
 
 /**
@@ -201,87 +190,6 @@ export function maskArn(arn: string): string {
 
     // Return as-is if pattern doesn't match
     return arn;
-}
-
-/**
- * Load configuration from multiple sources with priority:
- * 1. CLI options (highest)
- * 2. Environment variables
- * 3. .env file
- * 4. quilt3 config (for catalog only)
- * 5. Inferred values (will be added separately)
- */
-export function loadConfigSync(options: ConfigOptions = {}): Partial<Config> {
-    // 1. Load .env file
-    const envFile = options.envFile || ".env";
-    const dotenvVars = existsSync(envFile) ? loadDotenv(envFile) : {};
-
-    // 2. Merge with process.env
-    const envVars = { ...dotenvVars, ...process.env };
-
-    // 3. Try to get catalog from quilt3 config as fallback
-    const quilt3Catalog = getQuilt3Catalog();
-
-    // 4. Build config with CLI options taking priority
-    const config: Partial<Config> = {
-    // Quilt
-        quiltCatalog: options.catalog || envVars.QUILT_CATALOG || quilt3Catalog,
-        quiltUserBucket: options.bucket || envVars.QUILT_USER_BUCKET,
-        quiltDatabase: envVars.QUILT_DATABASE,
-
-        // Benchling
-        benchlingTenant: options.tenant || envVars.BENCHLING_TENANT,
-        benchlingClientId: options.clientId || envVars.BENCHLING_CLIENT_ID,
-        benchlingClientSecret: options.clientSecret || envVars.BENCHLING_CLIENT_SECRET,
-        benchlingAppDefinitionId: options.appId || envVars.BENCHLING_APP_DEFINITION_ID,
-
-        // Unified secrets (priority: CLI > env > .env)
-        // Process file input syntax (@file.json) if present
-        benchlingSecrets: ((): string | undefined => {
-            const rawSecrets = options.benchlingSecrets || envVars.BENCHLING_SECRETS;
-            return rawSecrets ? processBenchlingSecretsInput(rawSecrets) : undefined;
-        })(),
-
-        // AWS
-        cdkAccount: envVars.CDK_DEFAULT_ACCOUNT,
-        cdkRegion: options.region || envVars.CDK_DEFAULT_REGION || envVars.AWS_REGION,
-        awsProfile: options.profile || envVars.AWS_PROFILE,
-
-        // SQS
-        queueUrl: envVars.QUEUE_URL,
-
-        // Optional
-        pkgPrefix: envVars.PKG_PREFIX || "benchling",
-        pkgKey: envVars.PKG_KEY || "experiment_id",
-        logLevel: envVars.LOG_LEVEL || "INFO",
-        webhookAllowList: envVars.WEBHOOK_ALLOW_LIST,
-        enableWebhookVerification: envVars.ENABLE_WEBHOOK_VERIFICATION ?? "true",
-        createEcrRepository: envVars.CREATE_ECR_REPOSITORY,
-        ecrRepositoryName: envVars.ECR_REPOSITORY_NAME || "quiltdata/benchling",
-        imageTag: options.imageTag || envVars.IMAGE_TAG || "latest",
-    };
-
-    // Remove undefined values
-    return Object.fromEntries(
-        Object.entries(config).filter(([, v]) => v !== undefined),
-    ) as Partial<Config>;
-}
-
-/**
- * Merge inferred configuration with loaded config
- */
-export function mergeInferredConfig(
-    config: Partial<Config>,
-    inferredVars: Record<string, string>,
-): Partial<Config> {
-    // Only use inferred values if not already set
-    return {
-        cdkAccount: config.cdkAccount || inferredVars.CDK_DEFAULT_ACCOUNT,
-        cdkRegion: config.cdkRegion || inferredVars.CDK_DEFAULT_REGION,
-        queueUrl: config.queueUrl || inferredVars.QUEUE_URL,
-        quiltDatabase: config.quiltDatabase || inferredVars.QUILT_DATABASE,
-        ...config, // User values always take precedence
-    };
 }
 
 /**

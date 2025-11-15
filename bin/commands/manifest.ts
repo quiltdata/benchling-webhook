@@ -1,23 +1,35 @@
+#!/usr/bin/env node
+/**
+ * Manifest Command
+ *
+ * Pure function to generate Benchling app manifest file.
+ * Catalog URL is passed in as parameter.
+ */
+
 import { writeFileSync } from "fs";
 import chalk from "chalk";
 import boxen from "boxen";
-import { loadConfigSync, type ConfigOptions } from "../../lib/utils/config";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pkg = require("../../package.json");
 
-export async function manifestCommand(options: ConfigOptions & { output?: string }): Promise<void> {
-    const config = loadConfigSync(options);
-    const outputPath = options.output || "app-manifest.yaml";
+interface ManifestOptions {
+    output?: string;
+    catalog?: string;
+}
 
+/**
+ * Pure function to generate manifest YAML content
+ */
+export function generateManifest(catalogUrl?: string): string {
     // Generate app name from catalog URL if available
     let appName = "Quilt Integration";
-    if (config.quiltCatalog) {
+    if (catalogUrl) {
         // Replace dots and colons with hyphens to create a valid identifier
-        appName = config.quiltCatalog.replace(/[.:]/g, "-");
+        appName = catalogUrl.replace(/[.:]/g, "-");
     }
 
-    const manifest = `manifestVersion: 1
+    return `manifestVersion: 1
 info:
   name: ${appName}
   description: Package Benchling notebook entries as Quilt data packages
@@ -34,6 +46,15 @@ subscriptions:
     - type: v2.entry.created
     - type: v2.entry.updated.fields
 `;
+}
+
+/**
+ * Manifest command - generates Benchling app manifest file
+ * This is a pure function - catalog URL must be passed in
+ */
+export async function manifestCommand(options: ManifestOptions): Promise<void> {
+    const outputPath = options.output || "app-manifest.yaml";
+    const manifest = generateManifest(options.catalog);
 
     try {
         writeFileSync(outputPath, manifest);

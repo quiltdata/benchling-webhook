@@ -3,6 +3,8 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
 ## [1.0.0] - 2025-11-07
 
 ### Breaking Changes
@@ -40,7 +42,51 @@ The container no longer makes runtime CloudFormation API calls. Service configur
 - Explicit configuration (all services visible in environment variables)
 - Easier debugging (inspect environment variables without API calls)
 
-## [0.7.4] - 2025-11-06
+## [0.7.8] - 2025-11-14
+
+### Added
+
+- **Integrated stack mode** - Setup wizard detects and reuses BenchlingSecret from Quilt stacks deployed via T4 template, eliminating duplicate credential entry
+- **Catalog verification prompt** - Setup wizard confirms auto-detected catalog DNS before proceeding (skipped with `--yes`)
+- **Version display in canvas** - Benchling canvas footer now shows application version from `pyproject.toml`
+
+### Changed
+
+- **Dockerfile rebuilt with Amazon Linux 2023** - Multi-stage build with UV package manager for faster, more reliable container builds
+- **Setup wizard modularized** - Refactored into composable phases (profile, catalog, deployment, secrets) for better maintainability
+- **Manifest/validate commands migrated to XDG** - Now use profile-based configuration for consistency
+
+### Fixed
+
+- **UV cache disabled in runtime** - Prevents disk space issues in ECS containers
+- **Secret sync respects integratedStack flag** - Skips AWS sync when using Quilt stack's BenchlingSecret
+- **Test isolation improved** - Removed `env.template` and `os.getenv` calls that could leak between tests
+
+## [0.7.7] - 2025-11-13
+
+### Changed
+
+- **Improved `--yes` flag validation** - Enhanced error messages with detailed context, tested resources, error codes, and actionable hints
+- **Improved S3 bucket region handling** - Auto-detects bucket region to prevent 301 errors when bucket is in different region than deployment
+- **Internal code quality** - Refactored stack inference module for better testability (test coverage: 32% → 87.5%)
+
+## [0.7.6] - 2025-11-13
+
+### Fixed
+
+- **NPX deployment reliability** - Fixed critical issue where `npx @quiltdata/benchling-webhook` would fail with CDK app not found error
+- **Default deployment stage** - Corrected default stage to `prod` (was incorrectly defaulting to `dev` for non-dev profiles)
+- **S3 bucket region detection** - Auto-detect S3 bucket region during validation to prevent 301 errors when bucket is in different region than deployment
+- **Validation error messages** - Enhanced `--yes` flag validation errors with detailed context, tested resources, specific error codes, and actionable hints
+
+### Changed
+
+- **Streamlined deployment** - Removed automatic test execution after deployment
+  - Tests no longer run automatically via npm scripts
+  - Deployment success is independent of test results
+  - Users can run tests manually when needed
+
+## [0.7.5] - 2025-11-12
 
 ### Changed
 
@@ -52,6 +98,20 @@ The container no longer makes runtime CloudFormation API calls. Service configur
 - Dockerfile base image updated with correct hash and dependencies
 - Setup wizard auto-syncs secrets to AWS Secrets Manager after completion
 
+## [0.7.4] - 2025-11-12
+
+### Fixed
+
+- **Setup wizard auto-syncs secrets** - Secrets now automatically sync to AWS Secrets Manager after setup wizard completes
+- **Region detection** - Fixed deployment region to correctly use inferred stack region from Quilt catalog
+- **Secret sync region** - Fixed sync-secrets command to use correct deployment region instead of hardcoded us-east-1
+- **Profile instructions** - Setup wizard now shows correct next steps for custom profiles
+- **Test isolation** - Tests no longer overwrite user XDG configuration files
+
+### Changed
+
+- **Deploy validation** - Deploy command now verifies secrets instead of force-updating them on every deployment
+- **Cleaner codebase** - Removed legacy mode detection and config_version field (no longer needed)
 ## [0.7.3] - 2025-11-06
 
 ### Added

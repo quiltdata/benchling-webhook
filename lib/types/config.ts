@@ -50,6 +50,7 @@ export type ProfileName = string;
  *     "region": "us-east-1",
  *     "imageTag": "latest"
  *   },
+ *   "integratedStack": true,
  *   "_metadata": {
  *     "version": "0.7.0",
  *     "createdAt": "2025-11-04T10:00:00Z",
@@ -79,6 +80,16 @@ export interface ProfileConfig {
      * AWS deployment configuration (CDK)
      */
     deployment: DeploymentConfig;
+
+    /**
+     * Deployment mode flag
+     *
+     * - `true`: Integrated mode - uses existing BenchlingSecret in Quilt stack
+     * - `false` or undefined: Standalone mode - creates dedicated secret
+     *
+     * @default false
+     */
+    integratedStack?: boolean;
 
     /**
      * Optional logging configuration
@@ -619,6 +630,7 @@ export const ProfileConfigSchema = {
                 imageTag: { type: "string" },
             },
         },
+        integratedStack: { type: "boolean" },
         logging: {
             type: "object",
             properties: {
@@ -694,4 +706,3 @@ export const DeploymentHistorySchema = {
     },
     additionalProperties: false,
 } as const;
-
