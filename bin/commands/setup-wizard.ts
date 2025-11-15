@@ -415,22 +415,13 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
     const quiltAnswers = await inquirer.prompt([
         {
             type: "input",
-            name: "stackArn",
-            message: "Quilt Stack ARN:",
-            default: config.quilt?.stackArn,
-            validate: (input: string): boolean | string =>
-                input.trim().length > 0 && input.startsWith("arn:aws:cloudformation:") ||
-                "Stack ARN is required and must start with arn:aws:cloudformation:",
-        },
-        {
-            type: "input",
             name: "catalog",
-            message: "Quilt Catalog URL (domain or full URL):",
+            message: "Quilt Catalog DNS name (e.g., open.quiltdata.com):",
             default: config.quilt?.catalog,
             validate: (input: string): boolean | string => {
                 const trimmed = input.trim();
                 if (trimmed.length === 0) {
-                    return "Catalog URL is required";
+                    return "Catalog DNS name is required";
                 }
                 return true;
             },
@@ -438,6 +429,15 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
                 // Strip protocol if present, store only domain
                 return input.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
             },
+        },
+        {
+            type: "input",
+            name: "stackArn",
+            message: "Quilt Stack ARN:",
+            default: config.quilt?.stackArn,
+            validate: (input: string): boolean | string =>
+                input.trim().length > 0 && input.startsWith("arn:aws:cloudformation:") ||
+                "Stack ARN is required and must start with arn:aws:cloudformation:",
         },
         {
             type: "input",
@@ -478,6 +478,31 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
 
     // Prompt for Benchling configuration
     console.log("\nStep 2: Benchling Configuration\n");
+
+    // Check if there's an existing BenchlingSecret ARN from the Quilt stack
+    let useStackSecret = false;
+    if (config.benchling?.secretArn) {
+        console.log(chalk.green(`✓ Found BenchlingSecret in Quilt stack: ${config.benchling.secretArn}\n`));
+        const secretChoice = await inquirer.prompt([
+            {
+                type: "list",
+                name: "choice",
+                message: "How do you want to handle Benchling credentials?",
+                choices: [
+                    { name: "Use this secret (will write credentials into it)", value: "use" },
+                    { name: "Create a new secret instead", value: "new" },
+                ],
+                default: "use",
+            },
+        ]);
+        useStackSecret = secretChoice.choice === "use";
+
+        if (useStackSecret) {
+            console.log(chalk.blue("\nWill store credentials in the Quilt stack's BenchlingSecret.\n"));
+        } else {
+            console.log(chalk.blue("\nWill create a new secret for Benchling credentials.\n"));
+        }
+    }
 
     // First, get tenant
     const tenantAnswer = await inquirer.prompt([
@@ -588,6 +613,11 @@ async function runConfigWizard(options: WizardOptions = {}): Promise<ProfileConf
         clientSecret: credentialAnswers.clientSecret,
         appDefinitionId: appDefinitionId,
     };
+
+    // If user chose to use the stack secret, store the ARN
+    if (useStackSecret && config.benchling?.secretArn) {
+        config.benchling.secretArn = config.benchling.secretArn;
+    }
 
     if (testEntryAnswer.testEntryId && testEntryAnswer.testEntryId.trim() !== "") {
         config.benchling!.testEntryId = testEntryAnswer.testEntryId;
@@ -784,6 +814,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
     // Step 2: Always infer Quilt configuration from AWS (provides suggestions)
     let quiltConfig: Partial<ProfileConfig["quilt"]> = existingConfig?.quilt || {};
     let inferredAccountId: string | undefined;
+    let inferredBenchlingSecretArn: string | undefined;
 
     console.log("Step 1: Inferring Quilt configuration from AWS...\n");
 
@@ -792,16 +823,28 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
             region: awsRegion,
             profile: awsProfile,
             interactive: !yes,
+            yes: yes,
         });
 
-        // Merge inferred config with existing (inferred takes precedence as fresher data)
-        quiltConfig = {
-            ...quiltConfig,
-            ...inferenceResult,
-        };
-        inferredAccountId = inferenceResult.account;
+        // Check if user wants manual selection (not an error - they just want to enter it themselves)
+        if (inferenceResult.source === "manual-selection-required") {
+            console.log("Will prompt for Quilt configuration manually.\n");
+            // Keep any partial results but let wizard prompt for the rest
+            quiltConfig = {
+                ...quiltConfig,
+                ...inferenceResult,
+            };
+        } else {
+            // Merge inferred config with existing (inferred takes precedence as fresher data)
+            quiltConfig = {
+                ...quiltConfig,
+                ...inferenceResult,
+            };
+            inferredAccountId = inferenceResult.account;
+            inferredBenchlingSecretArn = inferenceResult.benchlingSecretArn;
 
-        console.log("✓ Quilt configuration inferred\n");
+            console.log("✓ Quilt configuration inferred\n");
+        }
     } catch (error) {
         console.error(`Failed to infer Quilt configuration: ${(error as Error).message}`);
 
@@ -809,18 +852,7 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
             throw error;
         }
 
-        const { continueManually } = await inquirer.prompt([
-            {
-                type: "confirm",
-                name: "continueManually",
-                message: "Continue and enter Quilt configuration manually?",
-                default: true,
-            },
-        ]);
-
-        if (!continueManually) {
-            throw new Error("Setup aborted by user");
-        }
+        console.log("Will prompt for Quilt configuration manually.\n");
     }
 
     // Merge inferred/existing config as suggestions for the wizard
@@ -833,6 +865,14 @@ async function runInstallWizard(options: InstallWizardOptions = {}): Promise<Set
             account: existingConfig?.deployment?.account || inferredAccountId,
         } as ProfileConfig["deployment"],
     };
+
+    // Pass through BenchlingSecret ARN if found in Quilt stack
+    if (inferredBenchlingSecretArn || existingConfig?.benchling?.secretArn) {
+        (partialConfig as any).benchling = {
+            ...existingConfig?.benchling,
+            secretArn: existingConfig?.benchling?.secretArn || inferredBenchlingSecretArn,
+        };
+    }
 
     // Step 3: Run interactive wizard for all configuration (with inferred/existing values as suggestions)
     const config = await runConfigWizard({

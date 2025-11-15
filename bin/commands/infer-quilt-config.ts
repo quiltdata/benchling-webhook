@@ -35,6 +35,7 @@ interface QuiltStackInfo {
     database?: string;
     queueUrl?: string;
     catalogUrl?: string;
+    benchlingSecretArn?: string;
 }
 
 /**
@@ -47,6 +48,7 @@ interface InferenceResult {
     region?: string;
     account?: string;
     queueUrl?: string;
+    benchlingSecretArn?: string;
     source: string;
 }
 
@@ -149,6 +151,9 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
                         if (isQueueUrl(value)) {
                             stackInfo.queueUrl = value;
                         }
+                    } else if (key === "BenchlingSecretArn" || key === "BenchlingSecret") {
+                        // Check for BenchlingSecret output from T4 template
+                        stackInfo.benchlingSecretArn = value;
                     }
                 }
 
@@ -213,8 +218,9 @@ export async function inferQuiltConfig(options: {
     region?: string;
     profile?: string;
     interactive?: boolean;
+    yes?: boolean;
 }): Promise<InferenceResult> {
-    const { region, profile, interactive = true } = options;
+    const { region, profile, interactive = true, yes = false } = options;
 
     const result: InferenceResult = {
         source: "none",
@@ -233,12 +239,13 @@ export async function inferQuiltConfig(options: {
 
     // Step 1.5: If we have a catalog URL but no region specified, fetch config.json to get the region
     let searchRegion = region;
+    let catalogNameFromUrl: string | undefined;
 
     if (quilt3Config?.catalogUrl && !searchRegion) {
         try {
             console.log(`\nFetching catalog configuration from ${quilt3Config.catalogUrl}...`);
             const configUrl = quilt3Config.catalogUrl.replace(/\/$/, "") + "/config.json";
-            const catalogConfig = (await fetchJson(configUrl)) as { region?: string; [key: string]: unknown };
+            const catalogConfig = (await fetchJson(configUrl)) as { region?: string; stackName?: string; [key: string]: unknown };
 
             if (catalogConfig.region) {
                 searchRegion = catalogConfig.region;
@@ -246,6 +253,11 @@ export async function inferQuiltConfig(options: {
                 console.log(`✓ Found catalog region: ${searchRegion}`);
             } else {
                 console.log("⚠️  config.json does not contain region field");
+            }
+
+            // Extract catalog name from config.json if available
+            if (catalogConfig.stackName) {
+                catalogNameFromUrl = catalogConfig.stackName as string;
             }
         } catch (error) {
             console.log(`⚠️  Could not fetch config.json: ${(error as Error).message}`);
@@ -281,6 +293,32 @@ export async function inferQuiltConfig(options: {
         if (matchingStack) {
             selectedStack = matchingStack;
             console.log(`Auto-selected stack matching catalog URL: ${selectedStack.stackName}`);
+
+            // If --yes not passed and interactive mode, verify the catalog name before using it
+            if (!yes && interactive) {
+                const rl = readline.createInterface({
+                    input: process.stdin,
+                    output: process.stdout,
+                });
+
+                const confirmed = await new Promise<boolean>((resolve) => {
+                    rl.question(
+                        `\nUsing catalog stack: ${selectedStack.stackName}\nIs this the correct catalog? (y/n): `,
+                        (answer) => {
+                            rl.close();
+                            resolve(answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes");
+                        }
+                    );
+                });
+
+                if (!confirmed) {
+                    console.log("\nPlease select the correct stack:");
+                    const options = stacks.map((s) => `${s.stackName} (${s.region})`);
+                    const selectedIndex = await promptCatalogSelection(options);
+                    selectedStack = stacks[selectedIndex];
+                    console.log(`\nSelected: ${selectedStack.stackName}`);
+                }
+            }
         } else {
             // No match found, prompt user
             console.log(`No stack found matching catalog URL: ${result.catalog}`);
@@ -297,6 +335,33 @@ export async function inferQuiltConfig(options: {
     } else if (stacks.length === 1) {
         selectedStack = stacks[0];
         console.log(`Using stack: ${selectedStack.stackName}`);
+
+        // If --yes not passed and interactive mode, verify the catalog name before using it
+        if (!yes && interactive) {
+            const rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout,
+            });
+
+            const confirmed = await new Promise<boolean>((resolve) => {
+                rl.question(
+                    `\nUsing catalog stack: ${selectedStack.stackName}\nIs this the correct catalog? (y/n): `,
+                    (answer) => {
+                        rl.close();
+                        resolve(answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes");
+                    }
+                );
+            });
+
+            if (!confirmed) {
+                // User wants to select manually - let the wizard handle it
+                // Return partial result so wizard can prompt for missing fields
+                return {
+                    ...result,
+                    source: "manual-selection-required",
+                };
+            }
+        }
     } else if (interactive) {
         const options = stacks.map((s) => `${s.stackName} (${s.region})`);
         const selectedIndex = await promptCatalogSelection(options);
@@ -325,6 +390,10 @@ export async function inferQuiltConfig(options: {
     }
     if (selectedStack.region) {
         result.region = selectedStack.region;
+    }
+    if (selectedStack.benchlingSecretArn) {
+        result.benchlingSecretArn = selectedStack.benchlingSecretArn;
+        console.log(`✓ Found BenchlingSecret from Quilt stack: ${selectedStack.benchlingSecretArn}`);
     }
 
     if (result.source === "quilt3-cli") {
