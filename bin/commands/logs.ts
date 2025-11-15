@@ -45,68 +45,63 @@ interface LogGroupDefinition {
 }
 
 /**
- * Get deployment configuration from profile
+ * Get AWS region and deployment info from profile configuration
  */
-function getDeploymentFromProfile(
+function getDeploymentInfo(
     profile: string,
-    stage: string,
     configStorage: XDGBase
-): { region: string } | null {
+): { region: string; stackName: string; integratedMode: boolean; quiltStackName?: string } | null {
     try {
-        const deployment = configStorage.getActiveDeployment(profile, stage);
-        if (deployment) {
-            return { region: deployment.region };
+        const config = configStorage.readProfile(profile);
+        if (config.deployment?.region) {
+            const region = config.deployment.region;
+            const integratedMode = config.integratedStack || false;
+
+            // For integrated mode, extract Quilt stack name from ARN
+            if (integratedMode && config.quilt?.stackArn) {
+                const match = config.quilt.stackArn.match(/stack\/([^/]+)\//);
+                if (match) {
+                    return {
+                        region,
+                        stackName: STACK_NAME, // Still check BenchlingWebhookStack for metadata
+                        integratedMode: true,
+                        quiltStackName: match[1] // But use Quilt stack name for logs
+                    };
+                }
+            }
+
+            // For standalone mode, use BenchlingWebhookStack
+            return {
+                region,
+                stackName: STACK_NAME,
+                integratedMode: false
+            };
         }
-    } catch {
-        // Deployment tracking not available
+    } catch (error) {
+        // Profile not found or invalid
+        console.warn(chalk.yellow(`⚠️  Could not read profile '${profile}': ${(error as Error).message}`));
     }
     return null;
-}
-
-/**
- * Get AWS region from deployment tracking or environment
- */
-function getAwsRegion(
-    profile: string,
-    stage: string,
-    configStorage: XDGBase
-): string {
-    // Try deployment tracking
-    const deployment = getDeploymentFromProfile(profile, stage, configStorage);
-    if (deployment) {
-        return deployment.region;
-    }
-
-    // Fall back to environment
-    if (process.env.CDK_DEFAULT_REGION) {
-        return process.env.CDK_DEFAULT_REGION;
-    }
-    if (process.env.AWS_REGION) {
-        return process.env.AWS_REGION;
-    }
-
-    // Default
-    console.warn(chalk.yellow("⚠️  No region found, defaulting to us-east-1"));
-    return "us-east-1";
 }
 
 /**
  * Get CloudFormation stack outputs
  */
 function getStackOutputs(
+    stackName: string,
     region: string,
     awsProfile?: string
 ): StackOutput[] {
     try {
         const profileFlag = awsProfile ? `--profile ${awsProfile}` : "";
         const output = execSync(
-            `aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${region} ${profileFlag} --query 'Stacks[0].Outputs' --output json`,
+            `aws cloudformation describe-stacks --stack-name ${stackName} --region ${region} ${profileFlag} --query 'Stacks[0].Outputs' --output json`,
             { encoding: "utf-8" }
         );
         return JSON.parse(output) as StackOutput[];
     } catch {
         throw new Error(
-            `Could not get stack outputs for ${STACK_NAME}. ` +
+            `Could not get stack outputs for ${stackName}. ` +
             `Make sure the stack is deployed and AWS credentials are configured.`
         );
     }
@@ -335,33 +330,38 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
     }
 
     try {
-        // Get AWS region
-        const region = getAwsRegion(profile, stage, xdg);
-
-        // Get stack outputs
-        const outputs = getStackOutputs(region, awsProfile);
-
-        // Show info header
-        printStackInfo(outputs, type, profile, stage);
-
-        // Handle different log types
-        if (type === "all") {
-            showAllLogs(outputs, region, {
-                awsProfile,
-                since,
-                filter,
-                tail,
-            });
-        } else {
-            const logGroup = getLogGroupFromOutputs(outputs, type);
-            tailLogs(logGroup, region, {
-                awsProfile,
-                since,
-                filter,
-                follow,
-                tail,
-            });
+        // Get AWS region and deployment info from profile
+        const deploymentInfo = getDeploymentInfo(profile, xdg);
+        if (!deploymentInfo) {
+            const errorMsg = `Could not determine AWS region for profile '${profile}'. Make sure the profile is configured correctly.`;
+            console.error(chalk.red(`\n❌ ${errorMsg}\n`));
+            return { success: false, error: errorMsg };
         }
+
+        const { region, integratedMode, quiltStackName } = deploymentInfo;
+
+        // For integrated mode, use Quilt stack name; for standalone use BenchlingWebhookStack
+        const logGroupName = integratedMode && quiltStackName ? quiltStackName : "BenchlingWebhookStack";
+
+        console.log("================================================================================");
+        console.log("Benchling Webhook Logs");
+        console.log("================================================================================");
+        console.log(`Profile:   ${profile}`);
+        console.log(`Stage:     ${stage}`);
+        console.log(`Region:    ${region}`);
+        console.log(`Mode:      ${integratedMode ? "Integrated" : "Standalone"}`);
+        console.log(`Log Group: ${logGroupName}`);
+        console.log("================================================================================");
+        console.log("");
+
+        // Tail the log group
+        tailLogs(logGroupName, region, {
+            awsProfile,
+            since,
+            filter,
+            follow,
+            tail,
+        });
 
         return { success: true };
     } catch (error) {
