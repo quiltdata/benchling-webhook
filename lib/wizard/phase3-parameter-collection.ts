@@ -78,19 +78,9 @@ export async function runParameterCollection(
         // Always ask if user wants to reuse existing app or create new one
         const { reuseApp } = await inquirer.prompt([
             {
-                type: "list",
+                type: "confirm",
                 name: "reuseApp",
-                message: "Benchling app configuration:",
-                choices: [
-                    {
-                        name: `Use existing app (${existingConfig.benchling.appDefinitionId})`,
-                        value: true,
-                    },
-                    {
-                        name: "Create new app for this catalog",
-                        value: false,
-                    },
-                ],
+                message: `Use existing app (${existingConfig.benchling.appDefinitionId})?`,
                 default: true,
             },
         ]);
