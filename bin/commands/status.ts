@@ -43,6 +43,8 @@ export interface StatusResult {
         benchlingUrl?: string;
         secretArn?: string;
         dockerImage?: string;
+        ecsLogGroup?: string;
+        apiGatewayLogGroup?: string;
     };
     secretInfo?: {
         name: string;
@@ -126,6 +128,8 @@ async function getStackStatus(
             benchlingUrl: outputs.find((o) => o.OutputKey === "BenchlingUrl")?.OutputValue,
             secretArn: outputs.find((o) => o.OutputKey === "BenchlingSecretArn" || o.OutputKey === "BenchlingClientSecretArn" || o.OutputKey === "SecretArn")?.OutputValue,
             dockerImage: outputs.find((o) => o.OutputKey === "BenchlingDockerImage" || o.OutputKey === "DockerImage")?.OutputValue,
+            ecsLogGroup: outputs.find((o) => o.OutputKey === "EcsLogGroup")?.OutputValue,
+            apiGatewayLogGroup: outputs.find((o) => o.OutputKey === "ApiGatewayLogGroup")?.OutputValue,
         };
 
         return {
@@ -615,6 +619,17 @@ function displayStatusResult(result: StatusResult, profile: string): void {
         console.log(secretLine);
     }
 
+    // Display log groups
+    if (result.stackOutputs?.ecsLogGroup || result.stackOutputs?.apiGatewayLogGroup) {
+        console.log(`${chalk.bold("CloudWatch Logs:")}`);
+        if (result.stackOutputs.ecsLogGroup) {
+            console.log(`  ${chalk.cyan("ECS:")} ${chalk.dim(result.stackOutputs.ecsLogGroup)}`);
+        }
+        if (result.stackOutputs.apiGatewayLogGroup) {
+            console.log(`  ${chalk.cyan("API Gateway:")} ${chalk.dim(result.stackOutputs.apiGatewayLogGroup)}`);
+        }
+    }
+
     console.log("");
 
     // Display listener rules
@@ -627,28 +642,55 @@ function displayStatusResult(result: StatusResult, profile: string): void {
         console.log("");
     }
 
-    // Display ECS service health
+    // Display ECS service health in compact table format
     if (result.ecsServices && result.ecsServices.length > 0) {
         console.log(chalk.bold("ECS Services:"));
+
+        // Table header
+        const statusHeader = "Status";
+        const nameHeader = "Service";
+        const tasksHeader = "Tasks";
+        const rolloutHeader = "Rollout";
+        const logHeader = "Log Group";
+
+        // Calculate column widths
+        const maxNameLen = Math.max(nameHeader.length, ...result.ecsServices.map(s => s.serviceName.length));
+        const nameWidth = Math.min(maxNameLen + 2, 40); // Cap at 40 chars
+        const tasksWidth = 12;
+        const rolloutWidth = 15;
+
+        // Print header
+        console.log(`  ${statusHeader.padEnd(8)} ${nameHeader.padEnd(nameWidth)} ${tasksHeader.padEnd(tasksWidth)} ${rolloutHeader.padEnd(rolloutWidth)} ${logHeader}`);
+        console.log(`  ${chalk.dim("─".repeat(8))} ${chalk.dim("─".repeat(nameWidth))} ${chalk.dim("─".repeat(tasksWidth))} ${chalk.dim("─".repeat(rolloutWidth))} ${chalk.dim("─".repeat(30))}`);
+
+        // Print rows
         for (const svc of result.ecsServices) {
             const statusIcon = svc.status === "ACTIVE" ? "✓" : "⚠";
             const statusColor = svc.status === "ACTIVE" ? chalk.green : chalk.yellow;
             const tasksMatch = svc.runningCount === svc.desiredCount;
             const tasksColor = tasksMatch ? chalk.green : chalk.yellow;
 
-            console.log(`  ${statusColor(statusIcon)} ${chalk.cyan(svc.serviceName)}`);
-            console.log(`    Status: ${statusColor(svc.status)}`);
-            console.log(`    Tasks: ${tasksColor(`${svc.runningCount}/${svc.desiredCount} running`)}${svc.pendingCount > 0 ? chalk.dim(` (${svc.pendingCount} pending)`) : ""}`);
+            const statusCol = `${statusColor(statusIcon)} ${statusColor(svc.status)}`.padEnd(8 + 10); // +10 for ANSI codes
+            const nameCol = chalk.cyan(svc.serviceName.padEnd(nameWidth));
+            const tasksText = `${svc.runningCount}/${svc.desiredCount}`;
+            const tasksCol = tasksColor(tasksText).padEnd(tasksWidth + (tasksMatch ? 10 : 10)); // Account for ANSI
 
+            let rolloutCol = "";
             if (svc.rolloutState) {
                 if (svc.rolloutState === "COMPLETED") {
-                    console.log(`    Rollout: ${chalk.green(svc.rolloutState)}`);
+                    rolloutCol = chalk.green(svc.rolloutState).padEnd(rolloutWidth + 10);
                 } else if (svc.rolloutState === "FAILED") {
-                    console.log(`    Rollout: ${chalk.red(svc.rolloutState)} ❌`);
+                    rolloutCol = chalk.red(svc.rolloutState + " ❌").padEnd(rolloutWidth + 10);
                 } else {
-                    console.log(`    Rollout: ${chalk.yellow(svc.rolloutState)}`);
+                    rolloutCol = chalk.yellow(svc.rolloutState).padEnd(rolloutWidth + 10);
                 }
+            } else {
+                rolloutCol = chalk.dim("-").padEnd(rolloutWidth + 10);
             }
+
+            const logCol = result.stackOutputs?.ecsLogGroup ? chalk.dim(result.stackOutputs.ecsLogGroup) : chalk.dim("-");
+
+            console.log(`  ${statusCol} ${nameCol} ${tasksCol} ${rolloutCol} ${logCol}`);
         }
         console.log("");
     }
