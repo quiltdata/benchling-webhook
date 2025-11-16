@@ -40,6 +40,8 @@ export interface StackQueryResult {
     account: string;
     /** BenchlingSecret ARN from stack outputs (if exists) */
     benchlingSecretArn?: string;
+    /** Whether BenchlingIntegration parameter is enabled in the stack */
+    benchlingIntegrationEnabled?: boolean;
     /** Whether stack query succeeded */
     stackQuerySucceeded: boolean;
 }
@@ -145,6 +147,7 @@ export interface IntegratedModeInput {
     benchlingSecretArn: string;
     configStorage: XDGBase;
     awsProfile?: string;
+    yes?: boolean;
 }
 
 /**

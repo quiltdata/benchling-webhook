@@ -36,6 +36,7 @@ interface QuiltStackInfo {
     queueUrl?: string;
     catalogUrl?: string;
     benchlingSecretArn?: string;
+    benchlingIntegrationEnabled?: boolean;
 }
 
 /**
@@ -49,6 +50,7 @@ interface InferenceResult {
     account?: string;
     queueUrl?: string;
     benchlingSecretArn?: string;
+    benchlingIntegrationEnabled?: boolean;
     source: string;
 }
 
@@ -154,6 +156,17 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
                     } else if (key === "BenchlingSecretArn" || key === "BenchlingSecret") {
                         // Check for BenchlingSecret output from T4 template
                         stackInfo.benchlingSecretArn = value;
+                    }
+                }
+
+                // Extract parameters
+                const parameters = stackDetail.Parameters || [];
+                for (const param of parameters) {
+                    const key = param.ParameterKey || "";
+                    const value = param.ParameterValue || "";
+
+                    if (key === "BenchlingIntegration") {
+                        stackInfo.benchlingIntegrationEnabled = value === "Enabled";
                     }
                 }
 
@@ -407,6 +420,10 @@ export async function inferQuiltConfig(options: {
     if (selectedStack.benchlingSecretArn) {
         result.benchlingSecretArn = selectedStack.benchlingSecretArn;
         console.log(`✓ Found BenchlingSecret from Quilt stack: ${selectedStack.benchlingSecretArn}`);
+    }
+    if (selectedStack.benchlingIntegrationEnabled !== undefined) {
+        result.benchlingIntegrationEnabled = selectedStack.benchlingIntegrationEnabled;
+        console.log(`✓ BenchlingIntegration: ${selectedStack.benchlingIntegrationEnabled ? 'Enabled' : 'Disabled'}`);
     }
 
     if (result.source === "quilt3-cli") {

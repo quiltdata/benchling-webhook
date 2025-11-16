@@ -329,6 +329,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             benchlingSecretArn: modeDecision.benchlingSecretArn!,
             configStorage: xdg,
             awsProfile,
+            yes,
         });
 
         // CRITICAL: Explicit return for integrated mode

@@ -560,8 +560,9 @@ describe("FargateService - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
+            // Log group should be named after the stack (not hardcoded)
             template.hasResourceProperties("AWS::Logs::LogGroup", {
-                LogGroupName: "/ecs/benchling-webhook",
+                LogGroupName: "TestStack",
                 RetentionInDays: 7,
             });
         });

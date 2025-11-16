@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.9] - 2025-11-15
+
+### Added
+
+- Setup wizard automatically enables Benchling integration in Quilt stack (no manual CloudFormation update needed)
+- `status` command to check deployment status and integration state
+- `logs` command for viewing CloudWatch logs via NPX
+
+### Changed
+
+- Release notes now filter out non-user-facing commits
+
+### Fixed
+
+- Profile flag now properly respected in log viewing commands
+
 ## [0.7.8] - 2025-11-14
 
 ### Added
@@ -117,7 +133,6 @@ All notable changes to this project will be documented in this file.
 
 - **CLI argument parsing** - Fixed issue where help/version flags triggered setup wizard
 - **Deploy error messages** - Corrected profile argument syntax in error messages
-
 
 ### Fixed
 
