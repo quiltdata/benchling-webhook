@@ -707,7 +707,9 @@ function displayStatusResult(result: StatusResult, profile: string): void {
 
             const statusCol = `${statusColor(statusIcon)} ${statusColor(svc.status)}`.padEnd(8 + 10); // +10 for ANSI codes
             const nameCol = chalk.cyan(svc.serviceName.padEnd(nameWidth));
-            const tasksText = `${svc.runningCount}/${svc.desiredCount}`;
+            const tasksText = svc.pendingCount > 0
+                ? `${svc.runningCount}/${svc.desiredCount} (${svc.pendingCount} pending)`
+                : `${svc.runningCount}/${svc.desiredCount}`;
             const tasksCol = tasksColor(tasksText).padEnd(tasksWidth + (tasksMatch ? 10 : 10)); // Account for ANSI
 
             let rolloutCol = "";
