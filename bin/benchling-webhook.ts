@@ -154,9 +154,11 @@ if (require.main === module) {
     const app = new cdk.App();
 
     // Minimal ProfileConfig from environment variables (for direct CDK usage)
+    // For destroy operations, provide placeholder values if SKIP_CONFIG_VALIDATION is set
+    const skipValidation = process.env.SKIP_CONFIG_VALIDATION === "true";
     const profileConfig: ProfileConfig = {
         quilt: {
-            stackArn: process.env.QUILT_STACK_ARN || "",
+            stackArn: process.env.QUILT_STACK_ARN || (skipValidation ? "placeholder" : ""),
             catalog: process.env.QUILT_CATALOG || "",
             database: process.env.QUILT_DATABASE || "",
             queueUrl: process.env.QUEUE_URL || "",
@@ -165,7 +167,7 @@ if (require.main === module) {
         benchling: {
             tenant: process.env.BENCHLING_TENANT || "",
             clientId: process.env.BENCHLING_CLIENT_ID || "",
-            secretArn: process.env.BENCHLING_SECRET,
+            secretArn: process.env.BENCHLING_SECRET || (skipValidation ? "placeholder" : undefined),
             appDefinitionId: process.env.BENCHLING_APP_DEFINITION_ID || "",
         },
         packages: {
