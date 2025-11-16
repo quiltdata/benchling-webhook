@@ -128,7 +128,7 @@ docker-build-local: docker-tools
 	@echo "🐳 Building Docker image locally..."
 	@echo "Version: $(VERSION)"
 	@echo "Architecture: $(shell uname -m)"
-	uv run python scripts/docker.py build --version $(VERSION)
+	uv run python scripts/docker.py build $(if $(VERSION),--version $(VERSION))
 
 # ==============================================================================
 # Docker Push Operations (Simplified)
@@ -137,7 +137,7 @@ docker-build-local: docker-tools
 # Push from local machine with architecture in image name (e.g., quiltdata/benchling-arm64:v1.0.0)
 # Use this for local development and testing
 # Set DRY_RUN=1 for dry run mode
-push-local: check-env docker-tools docker-ecr-create
+push-local:  docker-tools docker-ecr-create
 	@if [ "$(DRY_RUN)" = "1" ]; then \
 		echo "🔍 DRY RUN: Would push architecture-specific Docker image (local)..."; \
 	else \
@@ -157,7 +157,7 @@ push-local: check-env docker-tools docker-ecr-create
 # Use this in CI/CD on merge to benchling-docker branch
 # Set DRY_RUN=1 for dry run mode
 # Note: Does NOT auto-create ECR repos (assumes they exist from previous push-local)
-# Note: Does NOT require check-env since CI provides credentials via OIDC
+# Note: Does NOT require  since CI provides credentials via OIDC
 push-ci: docker-tools
 	@if [ "$(DRY_RUN)" = "1" ]; then \
 		echo "🔍 DRY RUN: Would push unified Docker image (CI)..."; \
