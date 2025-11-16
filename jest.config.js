@@ -5,7 +5,7 @@ module.exports = {
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: {
-        module: 'node20',
+        module: 'commonjs',
         resolveJsonModule: true
       }
     }]

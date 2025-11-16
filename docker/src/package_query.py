@@ -45,6 +45,7 @@ class PackageQuery:
         database: Optional[str] = None,
         region: Optional[str] = None,
         athena_output_bucket: Optional[str] = None,
+        workgroup: Optional[str] = None,
     ):
         """Initialize Athena query client.
 
@@ -54,7 +55,8 @@ class PackageQuery:
             database: Athena database name (defaults to QUILT_DATABASE env var)
             region: AWS region (defaults to AWS_REGION env var or us-east-1)
             athena_output_bucket: S3 bucket for Athena query results
-                (defaults to aws-athena-query-results-{account_id}-{region})
+                (defaults to ATHENA_RESULTS_BUCKET env var, then aws-athena-query-results-{account_id}-{region})
+            workgroup: Athena workgroup name (defaults to ATHENA_USER_WORKGROUP env var, then 'primary')
         """
         self.bucket = bucket
         self.catalog_url = catalog_url
@@ -68,11 +70,17 @@ class PackageQuery:
         # Initialize Athena client
         self.athena = boto3.client("athena", region_name=self.region)
 
+        # Determine Athena workgroup (from env var or parameter, default to 'primary')
+        self.workgroup = workgroup or os.getenv("ATHENA_USER_WORKGROUP", "primary")
+
         # Determine Athena output location
+        # Priority: parameter > ATHENA_RESULTS_BUCKET env var > default pattern
         if athena_output_bucket:
             self.output_location = f"s3://{athena_output_bucket}/"
+        elif os.getenv("ATHENA_RESULTS_BUCKET"):
+            self.output_location = f"s3://{os.getenv('ATHENA_RESULTS_BUCKET')}/"
         else:
-            # Get AWS account ID
+            # Get AWS account ID for default bucket
             sts = boto3.client("sts", region_name=self.region)
             account_id = sts.get_caller_identity()["Account"]
             self.output_location = f"s3://aws-athena-query-results-{account_id}-{self.region}/"
@@ -83,6 +91,7 @@ class PackageQuery:
             bucket=bucket,
             catalog=catalog_url,
             region=self.region,
+            workgroup=self.workgroup,
             output_location=self.output_location,
         )
 
@@ -100,17 +109,18 @@ class PackageQuery:
             TimeoutError: If query doesn't complete within timeout
             RuntimeError: If query fails
         """
-        self.logger.debug("Executing Athena query", query=query)
+        self.logger.debug("Executing Athena query", query=query, workgroup=self.workgroup)
 
-        # Start query execution
+        # Start query execution with workgroup
         response = self.athena.start_query_execution(
             QueryString=query,
             QueryExecutionContext={"Database": self.database},
             ResultConfiguration={"OutputLocation": self.output_location},
+            WorkGroup=self.workgroup,
         )
 
         query_execution_id = response["QueryExecutionId"]
-        self.logger.debug("Query started", execution_id=query_execution_id)
+        self.logger.debug("Query started", execution_id=query_execution_id, workgroup=self.workgroup)
 
         # Wait for query to complete
         start_time = time.time()

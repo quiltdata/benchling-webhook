@@ -166,6 +166,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
             packageBucket: packageBucketValue,
             quiltDatabase: quiltDatabaseValue,
             logLevel: logLevelValue,
+            // Optional Athena resources (from Quilt stack discovery)
+            athenaUserWorkgroup: config.quilt.athenaUserWorkgroup,
+            athenaResultsBucket: config.quilt.athenaResultsBucket,
         });
 
         // Create API Gateway that routes to the ALB
