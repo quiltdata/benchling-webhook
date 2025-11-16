@@ -98,7 +98,7 @@ function validateCatalogDns(catalogDns: string): boolean | string {
  * @returns Catalog discovery result
  */
 export async function runCatalogDiscovery(
-    options: CatalogDiscoveryOptions
+    options: CatalogDiscoveryOptions,
 ): Promise<CatalogDiscoveryResult> {
     const { yes = false, catalogUrl: cliCatalogUrl, existingCatalog } = options;
 
@@ -220,7 +220,7 @@ export async function runCatalogDiscovery(
     if (yes) {
         throw new Error(
             "No catalog detected and --yes flag prevents interactive prompt. " +
-            "Provide catalog URL via --catalog-url argument."
+            "Provide catalog URL via --catalog-url argument.",
         );
     }
 

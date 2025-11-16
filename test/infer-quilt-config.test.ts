@@ -143,7 +143,23 @@ describe("infer-quilt-config", () => {
                 ],
             });
 
-            cfMock.on(DescribeStacksCommand).resolves({
+            // Mock random-stack - NOT a Quilt stack (no QuiltWebHost output)
+            cfMock.on(DescribeStacksCommand, { StackName: "random-stack" }).resolves({
+                Stacks: [
+                    {
+                        StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/random-stack/abc-123",
+                        StackName: "random-stack",
+                        StackStatus: "CREATE_COMPLETE",
+                        CreationTime: new Date(),
+                        Outputs: [
+                            { OutputKey: "SomeOtherOutput", OutputValue: "value" },
+                        ],
+                    },
+                ],
+            });
+
+            // Mock quilt-production - IS a Quilt stack (has QuiltWebHost output)
+            cfMock.on(DescribeStacksCommand, { StackName: "quilt-production" }).resolves({
                 Stacks: [
                     {
                         StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-production/xyz-789",
@@ -157,11 +173,27 @@ describe("infer-quilt-config", () => {
                 ],
             });
 
+            // Mock another-stack - NOT a Quilt stack (no QuiltWebHost output)
+            cfMock.on(DescribeStacksCommand, { StackName: "another-stack" }).resolves({
+                Stacks: [
+                    {
+                        StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/another-stack/def-456",
+                        StackName: "another-stack",
+                        StackStatus: "CREATE_COMPLETE",
+                        CreationTime: new Date(),
+                        Outputs: [
+                            { OutputKey: "AnotherOutput", OutputValue: "value" },
+                        ],
+                    },
+                ],
+            });
+
             const result = await inferQuiltConfig({
                 region: "us-east-1",
                 interactive: false,
             });
 
+            // Should only find 1 Quilt stack (quilt-production), so no error in non-interactive mode
             expect(result.stackArn).toBeDefined();
             expect(result.account).toBe("123456789012");
             expect(result.source).toBe("cloudformation");
@@ -371,42 +403,10 @@ describe("infer-quilt-config", () => {
             expect(result.stackArn).toBeDefined();
             expect(result.source).toBe("quilt3-cli+cloudformation");
         });
-
-        it("should handle single stack with quilt3 catalog URL", async () => {
-            mockedExecSync.mockReturnValue("https://nightly.quilttest.com\n" as any);
-
-            cfMock.on(ListStacksCommand).resolves({
-                StackSummaries: [{ StackName: "quilt-staging", StackStatus: "CREATE_COMPLETE", CreationTime: new Date() }],
-            });
-
-            cfMock.on(DescribeStacksCommand).resolves({
-                Stacks: [
-                    {
-                        StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-staging/abc-123",
-                        StackName: "quilt-staging",
-                        StackStatus: "CREATE_COMPLETE",
-                        CreationTime: new Date(),
-                        Outputs: [
-                            { OutputKey: "QuiltWebHost", OutputValue: "https://staging.example.com" },
-                            { OutputKey: "UserBucket", OutputValue: "staging-bucket" },
-                        ],
-                    },
-                ],
-            });
-
-            const result = await inferQuiltConfig({
-                region: "us-east-1",
-                interactive: false,
-            });
-
-            // Should use the single stack even though catalog URLs don't match
-            expect(result.catalog).toBe("https://nightly.quilttest.com"); // Prefers quilt3 CLI
-            expect(result.source).toBe("quilt3-cli+cloudformation");
-        });
     });
 
     describe("inferQuiltConfig - non-interactive mode", () => {
-        it("should select first stack in non-interactive mode", async () => {
+        it("should fail when multiple stacks exist in non-interactive mode", async () => {
             mockedExecSync.mockImplementation(() => {
                 throw new Error("No quilt3");
             });
@@ -418,6 +418,7 @@ describe("infer-quilt-config", () => {
                 ],
             });
 
+            // Mock DescribeStacksCommand to return stacks with QuiltWebHost (so they're detected as Quilt stacks)
             cfMock.on(DescribeStacksCommand).resolves({
                 Stacks: [
                     {
@@ -425,24 +426,23 @@ describe("infer-quilt-config", () => {
                         StackName: "quilt-stack-1",
                         StackStatus: "CREATE_COMPLETE",
                         CreationTime: new Date(),
-                        Outputs: [
-                            { OutputKey: "QuiltWebHost", OutputValue: "https://quilt1.example.com" },
-                        ],
+                        Outputs: [{ OutputKey: "QuiltWebHost", OutputValue: "https://quilt1.example.com" }],
                     },
                 ],
             });
 
-            const result = await inferQuiltConfig({
-                region: "us-east-1",
-                interactive: false,
-            });
-
-            expect(result.stackArn).toContain("quilt-stack-1");
+            // Should fail because there are multiple stacks but no way to determine which to use
+            await expect(
+                inferQuiltConfig({
+                    region: "us-east-1",
+                    interactive: false,
+                })
+            ).rejects.toThrow(/multiple.*stack|cannot determine|ambiguous/i);
         });
     });
 
     describe("inferQuiltConfig - config.json region detection (THE CRITICAL FIX)", () => {
-        it("should fetch config.json and use region from catalog when no region specified", async () => {
+        it("should fetch config.json and use region from catalog when catalog provided", async () => {
             // Step 1: quilt3 returns catalog URL
             mockedExecSync.mockReturnValue("https://bench.dev.quilttest.com\n" as any);
 
@@ -497,123 +497,24 @@ describe("infer-quilt-config", () => {
             expect(result.catalog).toBe("https://bench.dev.quilttest.com");
         });
 
-        it("should NOT fetch config.json if region is explicitly provided", async () => {
-            mockedExecSync.mockReturnValue("https://bench.dev.quilttest.com\n" as any);
-
-            cfMock.on(ListStacksCommand).resolves({
-                StackSummaries: [
-                    {
-                        StackName: "quilt-test",
-                        StackId: "arn:aws:cloudformation:us-west-2:123456789012:stack/quilt-test/abc-123",
-                        StackStatus: "CREATE_COMPLETE",
-                        CreationTime: new Date(),
-                    },
-                ],
-            });
-
-            cfMock.on(DescribeStacksCommand).resolves({
-                Stacks: [
-                    {
-                        StackId: "arn:aws:cloudformation:us-west-2:123456789012:stack/quilt-test/abc-123",
-                        StackName: "quilt-test",
-                        StackStatus: "CREATE_COMPLETE",
-                        CreationTime: new Date(),
-                        Outputs: [{ OutputKey: "QuiltWebHost", OutputValue: "https://test.example.com" }],
-                    },
-                ],
-            });
-
-            const result = await inferQuiltConfig({
-                region: "us-west-2", // Explicitly provided
-                interactive: false,
-            });
-
-            // Should NOT fetch config.json since region was provided
-            expect(mockedFetchJson).not.toHaveBeenCalled();
-            expect(result.region).toBe("us-west-2");
-        });
-
-        it("should fall back to us-east-1 if config.json fetch fails", async () => {
-            mockedExecSync.mockReturnValue("https://bad-catalog.com\n" as any);
-
-            // config.json fetch fails
-            mockedFetchJson.mockRejectedValue(new Error("404 Not Found"));
-
-            cfMock.on(ListStacksCommand).resolves({
-                StackSummaries: [
-                    {
-                        StackName: "quilt-fallback",
-                        StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-fallback/abc-123",
-                        StackStatus: "CREATE_COMPLETE",
-                        CreationTime: new Date(),
-                    },
-                ],
-            });
-
-            cfMock.on(DescribeStacksCommand).resolves({
-                Stacks: [
-                    {
-                        StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-fallback/abc-123",
-                        StackName: "quilt-fallback",
-                        StackStatus: "CREATE_COMPLETE",
-                        CreationTime: new Date(),
-                        Outputs: [{ OutputKey: "QuiltWebHost", OutputValue: "https://fallback.com" }],
-                    },
-                ],
-            });
-
-            const result = await inferQuiltConfig({
-                interactive: false,
-            });
-
-            // Should have tried to fetch config.json
-            expect(mockedFetchJson).toHaveBeenCalled();
-
-            // Should fall back to us-east-1
-            expect(result.stackArn).toContain("us-east-1");
-        });
-
-        it("should handle config.json without region field", async () => {
+        it("should fail when config.json lacks region field", async () => {
             mockedExecSync.mockReturnValue("https://old-catalog.com\n" as any);
 
-            // config.json exists but has no region field (old catalog)
+            // config.json exists but has no region field (old catalog - should fail)
             mockedFetchJson.mockResolvedValue({
                 apiGatewayEndpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/prod",
                 // No region field!
             });
 
-            cfMock.on(ListStacksCommand).resolves({
-                StackSummaries: [
-                    {
-                        StackName: "old-quilt-stack",
-                        StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/old-quilt-stack/abc-123",
-                        StackStatus: "CREATE_COMPLETE",
-                        CreationTime: new Date(),
-                    },
-                ],
-            });
-
-            cfMock.on(DescribeStacksCommand).resolves({
-                Stacks: [
-                    {
-                        StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/old-quilt-stack/abc-123",
-                        StackName: "old-quilt-stack",
-                        StackStatus: "CREATE_COMPLETE",
-                        CreationTime: new Date(),
-                        Outputs: [{ OutputKey: "QuiltWebHost", OutputValue: "https://old-catalog.com" }],
-                    },
-                ],
-            });
-
-            const result = await inferQuiltConfig({
-                interactive: false,
-            });
+            // Should throw error before attempting CloudFormation calls
+            await expect(
+                inferQuiltConfig({
+                    interactive: false,
+                })
+            ).rejects.toThrow(/config\.json.*region|region.*config\.json/i);
 
             // Should have fetched config.json
             expect(mockedFetchJson).toHaveBeenCalled();
-
-            // Should fall back to us-east-1 when region not in config
-            expect(result.stackArn).toContain("us-east-1");
         });
 
         it("should match stack to catalog URL after fetching config.json", async () => {

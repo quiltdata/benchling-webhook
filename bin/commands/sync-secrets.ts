@@ -439,7 +439,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
             // Integrated mode but secret doesn't exist - this is an error
             throw new Error(
                 `BenchlingSecret ARN found in Quilt stack outputs (${secretName}) but the secret does not exist in Secrets Manager. ` +
-                `This may indicate the Quilt stack deployment is incomplete or the secret was deleted.`
+                "This may indicate the Quilt stack deployment is incomplete or the secret was deleted.",
             );
         }
         // Standalone mode: Create new secret
