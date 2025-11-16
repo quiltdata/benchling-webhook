@@ -21,7 +21,7 @@ PORT_DOCKER_PROD := 5003
 
 .PHONY: help build test clean install lint ngrok kill \
         check-xdg check-ngrok run-native run-native-verbose run-dev run run-native-ngrok run-ecr \
-        test test-unit test-integration test-dev test-docker-prod test-deployed-dev test-deployed-dev-direct test-deployed-prod test-ecr test-native test-benchling test-query \
+        test test-unit test-integration test-dev test-docker-dev test-docker-prod test-deployed-dev test-deployed-dev-direct test-deployed-prod test-ecr test-native test-benchling test-query \
         health-native health-dev health logs-dev logs
 
 # Default target
@@ -46,6 +46,7 @@ help:
 	@echo "  test-unit             - Run unit tests (pytest)"
 	@echo "  test-native           - Test webhooks with auto-managed native server"
 	@echo "  test-dev              - Test webhooks against docker dev (port $(PORT_DOCKER_DEV))"
+	@echo "  test-docker-dev       - Test local docker dev container (auto-start, port $(PORT_DOCKER_DEV))"
 	@echo "  test-docker-prod      - Test local docker prod container (port $(PORT_DOCKER_PROD))"
 	@echo "  test-deployed-dev     - Test dev stack via API Gateway (auto-deploys if needed)"
 	@echo "  test-deployed-prod    - Test prod stack via API Gateway endpoint"
@@ -217,6 +218,11 @@ test-dev:
 		exit 1; \
 	fi
 	@echo "Testing webhooks against http://localhost:$(PORT_DOCKER_DEV)"
+	uv run python scripts/test_webhook.py http://localhost:$(PORT_DOCKER_DEV)
+
+# Test webhooks against local docker dev container (auto-starts if not running)
+test-docker-dev: run-dev health-dev
+	@echo "Running webhook tests against http://localhost:$(PORT_DOCKER_DEV)"
 	uv run python scripts/test_webhook.py http://localhost:$(PORT_DOCKER_DEV)
 
 # Test webhooks against local docker production container (auto-starts if not running)
