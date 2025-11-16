@@ -44,7 +44,9 @@
     "version": "ts-node scripts/version.ts",
     "version:dev": "ts-node scripts/get-dev-version.ts",
     "version:tag": "npm run test:ci && ts-node scripts/version.ts tag",
-    "version:tag:dev": "npm run test:ci && ts-node scripts/version.ts tag dev"
+    "version:tag:dev": "npm run test:ci && ts-node scripts/version.ts tag dev",
+    "test:integration": "cross-env NODE_ENV=test NODE_OPTIONS='--experimental-vm-modules' jest --testMatch='**/test/integration/**/*.test.ts' --runInBand",
+    "test:integration:verbose": "npm run test:integration -- --verbose"
   },
   "keywords": [
     "benchling",

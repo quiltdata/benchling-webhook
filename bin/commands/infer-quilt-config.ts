@@ -15,7 +15,7 @@ import * as readline from "readline";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { isQueueUrl } from "../../lib/utils/sqs";
-import { fetchJson } from "../../lib/utils/stack-inference";
+import { fetchJson, getStackResources, extractQuiltResources } from "../../lib/utils/stack-inference";
 
 /**
  * Quilt CLI configuration
@@ -37,6 +37,9 @@ interface QuiltStackInfo {
     catalogUrl?: string;
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
+    athenaUserWorkgroup?: string;
+    athenaIcebergWorkgroup?: string;
+    icebergDatabase?: string;
 }
 
 /**
@@ -51,6 +54,9 @@ interface InferenceResult {
     queueUrl?: string;
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
+    athenaUserWorkgroup?: string;
+    athenaIcebergWorkgroup?: string;
+    icebergDatabase?: string;
     source: string;
 }
 
@@ -169,6 +175,9 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     } else if (key === "BenchlingSecretArn" || key === "BenchlingSecret") {
                         // Check for BenchlingSecret output from T4 template
                         stackInfo.benchlingSecretArn = value;
+                    } else if (key === "IcebergDatabase") {
+                        // Extract IcebergDatabase from outputs (fallback)
+                        stackInfo.icebergDatabase = value;
                     }
                 }
 
@@ -181,6 +190,27 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     if (key === "BenchlingIntegration") {
                         stackInfo.benchlingIntegrationEnabled = value === "Enabled";
                     }
+                }
+
+                // NEW: Query stack resources for additional data
+                try {
+                    const resources = await getStackResources(region, stack.StackName);
+                    const discovered = extractQuiltResources(resources);
+
+                    // Add discovered resources to stackInfo
+                    if (discovered.athenaUserWorkgroup) {
+                        stackInfo.athenaUserWorkgroup = discovered.athenaUserWorkgroup;
+                    }
+                    if (discovered.athenaIcebergWorkgroup) {
+                        stackInfo.athenaIcebergWorkgroup = discovered.athenaIcebergWorkgroup;
+                    }
+                    // Prefer resource over output for IcebergDatabase
+                    if (discovered.icebergDatabase) {
+                        stackInfo.icebergDatabase = discovered.icebergDatabase;
+                    }
+                } catch {
+                    // Resource discovery is best-effort, don't fail stack inference
+                    // Error already logged by getStackResources
                 }
 
                 stackInfos.push(stackInfo);
@@ -465,6 +495,17 @@ export async function inferQuiltConfig(options: {
     if (selectedStack.benchlingIntegrationEnabled !== undefined) {
         result.benchlingIntegrationEnabled = selectedStack.benchlingIntegrationEnabled;
         console.log(`✓ BenchlingIntegration: ${selectedStack.benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`);
+    }
+    // NEW: Add discovered workgroups to result
+    if (selectedStack.athenaUserWorkgroup) {
+        result.athenaUserWorkgroup = selectedStack.athenaUserWorkgroup;
+    }
+    if (selectedStack.athenaIcebergWorkgroup) {
+        result.athenaIcebergWorkgroup = selectedStack.athenaIcebergWorkgroup;
+    }
+    // icebergDatabase already handled (prefer resource over output)
+    if (selectedStack.icebergDatabase) {
+        result.icebergDatabase = selectedStack.icebergDatabase;
     }
 
     if (result.source === "quilt3-cli") {

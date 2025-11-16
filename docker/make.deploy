@@ -124,7 +124,7 @@ docker-ecr-create: docker-tools
 # Docker Build Operations
 # ==============================================================================
 
-docker-build-local: check-env docker-tools
+docker-build-local: docker-tools
 	@echo "🐳 Building Docker image locally..."
 	@echo "Version: $(VERSION)"
 	@echo "Architecture: $(shell uname -m)"

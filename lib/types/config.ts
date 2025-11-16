@@ -197,6 +197,46 @@ export interface QuiltConfig {
      * @example "quilt_iceberg"
      */
     icebergDatabase?: string;
+
+    /**
+     * Athena workgroup for user queries (non-managed role)
+     *
+     * Resolved from UserAthenaNonManagedRoleWorkgroup stack resource
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * @example "quilt-user-workgroup-prod"
+     */
+    athenaUserWorkgroup?: string;
+
+    /**
+     * Athena workgroup for Iceberg queries
+     *
+     * Resolved from IcebergWorkGroup stack resource
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * @example "quilt-iceberg-workgroup-prod"
+     */
+    athenaIcebergWorkgroup?: string;
+
+    /**
+     * User Athena results bucket (S3 bucket for query results)
+     *
+     * Resolved from UserAthenaResultsBucket stack resource
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * @example "my-stack-userathenar-abc123"
+     */
+    athenaResultsBucket?: string;
+
+    /**
+     * User Athena results bucket policy ARN
+     *
+     * Resolved from UserAthenaResultsBucketPolicy stack resource
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * @example "arn:aws:s3:::my-stack-userathenar-abc123"
+     */
+    athenaResultsBucketPolicy?: string;
 }
 
 /**
@@ -597,6 +637,8 @@ export const ProfileConfigSchema = {
                 queueUrl: { type: "string", pattern: "^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/\\d{12}/.+" },
                 region: { type: "string", pattern: "^[a-z]{2}-[a-z]+-[0-9]$" },
                 icebergDatabase: { type: "string", minLength: 1 },
+                athenaUserWorkgroup: { type: "string", minLength: 1 },
+                athenaIcebergWorkgroup: { type: "string", minLength: 1 },
             },
         },
         benchling: {

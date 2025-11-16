@@ -65,6 +65,17 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
         config.benchling.testEntryId = parameters.benchling.testEntryId;
     }
 
+    // Add discovered workgroups if present
+    if (stackQuery.athenaUserWorkgroup) {
+        config.quilt.athenaUserWorkgroup = stackQuery.athenaUserWorkgroup;
+    }
+    if (stackQuery.athenaIcebergWorkgroup) {
+        config.quilt.athenaIcebergWorkgroup = stackQuery.athenaIcebergWorkgroup;
+    }
+    if (stackQuery.icebergDatabase) {
+        config.quilt.icebergDatabase = stackQuery.icebergDatabase;
+    }
+
     return config;
 }
 

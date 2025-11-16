@@ -44,6 +44,16 @@ export interface StackQueryResult {
     benchlingIntegrationEnabled?: boolean;
     /** Whether stack query succeeded */
     stackQuerySucceeded: boolean;
+    /** Athena workgroup for user queries (optional) */
+    athenaUserWorkgroup?: string;
+    /** Athena workgroup for Iceberg queries (optional) */
+    athenaIcebergWorkgroup?: string;
+    /** Iceberg database name - now from both outputs and resources */
+    icebergDatabase?: string;
+    /** User Athena results bucket (S3 bucket for query results) */
+    athenaResultsBucket?: string;
+    /** User Athena results bucket policy ARN */
+    athenaResultsBucketPolicy?: string;
 }
 
 /**

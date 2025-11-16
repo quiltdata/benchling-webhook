@@ -4,6 +4,9 @@
  */
 
 import { execSync } from "child_process";
+import * as https from "https";
+import * as http from "http";
+import { CloudFormationClient, DescribeStackResourcesCommand } from "@aws-sdk/client-cloudformation";
 import { isQueueUrl } from "./sqs";
 import { IAwsProvider, IHttpClient, StackDetails } from "../interfaces/aws-provider";
 import { ExecSyncAwsProvider } from "../providers/exec-sync-aws-provider";
@@ -42,12 +45,136 @@ export interface StackSummary {
 }
 
 /**
+ * Stack resource metadata
+ *
+ * Maps logical resource ID to physical resource information
+ */
+export interface StackResourceMap {
+    [logicalId: string]: {
+        physicalResourceId: string;
+        resourceType: string;
+        resourceStatus: string;
+    };
+}
+
+/**
+ * Discovered Quilt resources from stack
+ *
+ * Target resources:
+ * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
+ * - IcebergWorkGroup (AWS::Athena::WorkGroup)
+ * - IcebergDatabase (AWS::Glue::Database)
+ * - UserAthenaResultsBucket (AWS::S3::Bucket)
+ * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
+ */
+export interface DiscoveredQuiltResources {
+    athenaUserWorkgroup?: string;
+    athenaIcebergWorkgroup?: string;
+    icebergDatabase?: string;
+    athenaResultsBucket?: string;
+    athenaResultsBucketPolicy?: string;
+}
+
+/**
+ * Get stack resources (physical resource IDs)
+ *
+ * Unlike outputs (which are user-defined exports), resources are the actual
+ * AWS resources created by the stack.
+ *
+ * @param region AWS region
+ * @param stackName CloudFormation stack name or ARN
+ * @param awsProvider Optional AWS provider for testing
+ * @returns Stack resources with logical and physical IDs
+ */
+export async function getStackResources(
+    region: string,
+    stackName: string,
+    _awsProvider?: IAwsProvider,
+): Promise<StackResourceMap> {
+    try {
+        const client = new CloudFormationClient({ region });
+        const command = new DescribeStackResourcesCommand({
+            StackName: stackName,
+        });
+        const response = await client.send(command);
+
+        const resourceMap: StackResourceMap = {};
+
+        for (const resource of response.StackResources || []) {
+            if (resource.LogicalResourceId && resource.PhysicalResourceId) {
+                resourceMap[resource.LogicalResourceId] = {
+                    physicalResourceId: resource.PhysicalResourceId,
+                    resourceType: resource.ResourceType || "Unknown",
+                    resourceStatus: resource.ResourceStatus || "Unknown",
+                };
+            }
+        }
+
+        return resourceMap;
+    } catch (error) {
+        // Resource discovery is best-effort, don't fail the calling operation
+        console.error(
+            `Warning: Could not get stack resources: ${(error as Error).message}`,
+        );
+        return {};
+    }
+}
+
+/**
+ * Extract Athena workgroups, Glue databases, and S3 buckets from stack resources
+ *
+ * Target resources:
+ * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
+ * - IcebergWorkGroup (AWS::Athena::WorkGroup)
+ * - IcebergDatabase (AWS::Glue::Database)
+ * - UserAthenaResultsBucket (AWS::S3::Bucket)
+ * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
+ *
+ * @param resources Stack resource map from getStackResources
+ * @returns Discovered Quilt resources
+ */
+export function extractQuiltResources(
+    resources: StackResourceMap,
+): DiscoveredQuiltResources {
+    const discovered: DiscoveredQuiltResources = {};
+
+    // Extract UserAthenaNonManagedRoleWorkgroup
+    if (resources.UserAthenaNonManagedRoleWorkgroup) {
+        discovered.athenaUserWorkgroup =
+            resources.UserAthenaNonManagedRoleWorkgroup.physicalResourceId;
+    }
+
+    // Extract IcebergWorkGroup
+    if (resources.IcebergWorkGroup) {
+        discovered.athenaIcebergWorkgroup =
+            resources.IcebergWorkGroup.physicalResourceId;
+    }
+
+    // Extract IcebergDatabase
+    if (resources.IcebergDatabase) {
+        discovered.icebergDatabase =
+            resources.IcebergDatabase.physicalResourceId;
+    }
+
+    // Extract UserAthenaResultsBucket
+    if (resources.UserAthenaResultsBucket) {
+        discovered.athenaResultsBucket =
+            resources.UserAthenaResultsBucket.physicalResourceId;
+    }
+
+    // Extract UserAthenaResultsBucketPolicy
+    if (resources.UserAthenaResultsBucketPolicy) {
+        discovered.athenaResultsBucketPolicy =
+            resources.UserAthenaResultsBucketPolicy.physicalResourceId;
+    }
+
+    return discovered;
+}
+
+/**
  * Fetch JSON from a URL using native Node.js modules
  */
 export async function fetchJson(url: string): Promise<unknown> {
-    const https = await import("https");
-    const http = await import("http");
-
     return new Promise((resolve, reject) => {
         const parsedUrl = new URL(url);
         const client = parsedUrl.protocol === "https:" ? https : http;

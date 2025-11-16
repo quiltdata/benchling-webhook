@@ -39,6 +39,10 @@ export interface FargateServiceProps {
     readonly packageBucket: string;
     readonly quiltDatabase: string;
     readonly logLevel?: string;
+
+    // Optional Athena resources (from Quilt stack discovery)
+    readonly athenaUserWorkgroup?: string;
+    readonly athenaResultsBucket?: string;
 }
 
 export class FargateService extends Construct {
@@ -169,6 +173,19 @@ export class FargateService extends Construct {
         );
 
         // Grant Athena access to task role for package querying
+        // Support both discovered workgroup (from Quilt stack) and fallback to primary
+        const athenaWorkgroups = props.athenaUserWorkgroup
+            ? [
+                // Discovered workgroup from Quilt stack
+                `arn:aws:athena:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:workgroup/${props.athenaUserWorkgroup}`,
+                // Fallback to primary workgroup
+                `arn:aws:athena:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:workgroup/primary`,
+            ]
+            : [
+                // Only primary workgroup if no discovered workgroup
+                `arn:aws:athena:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:workgroup/primary`,
+            ];
+
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
@@ -178,26 +195,39 @@ export class FargateService extends Construct {
                     "athena:StopQueryExecution",
                     "athena:GetWorkGroup",
                 ],
-                resources: [
-                    `arn:aws:athena:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:workgroup/primary`,
-                ],
+                resources: athenaWorkgroups,
             }),
         );
 
         // Grant S3 access for Athena query results
-        const athenaResultsBucketArn = `arn:aws:s3:::aws-athena-query-results-${account}-${region}`;
+        // Support both discovered results bucket (from Quilt stack) and fallback to default
+        const athenaResultsBuckets = props.athenaResultsBucket
+            ? [
+                // Discovered results bucket from Quilt stack
+                `arn:aws:s3:::${props.athenaResultsBucket}`,
+                `arn:aws:s3:::${props.athenaResultsBucket}/*`,
+                // Fallback to default bucket
+                `arn:aws:s3:::aws-athena-query-results-${account}-${region}`,
+                `arn:aws:s3:::aws-athena-query-results-${account}-${region}/*`,
+            ]
+            : [
+                // Only default bucket if no discovered bucket
+                `arn:aws:s3:::aws-athena-query-results-${account}-${region}`,
+                `arn:aws:s3:::aws-athena-query-results-${account}-${region}/*`,
+            ];
+
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
                     "s3:GetBucketLocation",
                     "s3:GetObject",
                     "s3:ListBucket",
+                    "s3:ListBucketVersions",
                     "s3:PutObject",
+                    "s3:PutBucketPublicAccessBlock",
+                    "s3:CreateBucket",
                 ],
-                resources: [
-                    athenaResultsBucketArn,
-                    `${athenaResultsBucketArn}/*`,
-                ],
+                resources: athenaResultsBuckets,
             }),
         );
 
@@ -237,6 +267,16 @@ export class FargateService extends Construct {
             BENCHLING_PKG_PREFIX: config.packages.prefix,
             BENCHLING_PKG_KEY: config.packages.metadataKey,
         };
+
+        // Add optional Athena resources (from Quilt stack discovery)
+        // These are used by the Python application for Athena queries
+        // If not provided, the app falls back to defaults (primary workgroup, default results bucket)
+        if (props.athenaUserWorkgroup) {
+            environmentVars.ATHENA_USER_WORKGROUP = props.athenaUserWorkgroup;
+        }
+        if (props.athenaResultsBucket) {
+            environmentVars.ATHENA_RESULTS_BUCKET = props.athenaResultsBucket;
+        }
 
         // DEPRECATED: BenchlingSecret renamed to BENCHLING_SECRET_ARN for consistency
         // Keep old name temporarily for backward compatibility
