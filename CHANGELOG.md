@@ -10,12 +10,14 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - Enhanced `status` command with comprehensive deployment health checks (ECS service status, ALB target health, recent stack events, secret accessibility, listener rules)
+- Auto-refresh status monitoring with `--timer` flag (default: 10 seconds, watches until stack reaches terminal state)
 - Catalog validation now shows progress when searching CloudFormation stacks
 
 ### Changed
 
 - Status command displays stack outputs, secrets metadata, and minutes since last modified
 - Stack outputs and secrets display made more concise and readable
+- Status command now auto-refreshes by default when monitoring deployments (use `--timer 0` to disable)
 
 ### Fixed
 
