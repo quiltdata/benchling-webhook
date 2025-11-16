@@ -81,9 +81,10 @@ function getQuilt3Catalog(): QuiltCliConfig | null {
  *
  * @param region - AWS region to search (defaults to us-east-1)
  * @param profile - AWS profile to use
+ * @param targetCatalog - If provided, stop after finding this specific catalog (optimization)
  * @returns Array of Quilt stack information
  */
-async function findQuiltStacks(region: string = "us-east-1", profile?: string): Promise<QuiltStackInfo[]> {
+async function findQuiltStacks(region: string = "us-east-1", profile?: string, targetCatalog?: string): Promise<QuiltStackInfo[]> {
     try {
         const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region };
 
@@ -95,10 +96,9 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
 
         const client = new CloudFormationClient(clientConfig);
 
-        // List all stacks (include rollback states as they may still be functional)
-        const listCommand = new ListStacksCommand({
-            StackStatusFilter: ["CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_ROLLBACK_COMPLETE"],
-        });
+        // List ALL stacks regardless of status - we'll check and warn about status later
+        // Don't filter here because we need to find the user's stack even if it's in a failed state
+        const listCommand = new ListStacksCommand({});
 
         const listResponse = await client.send(listCommand);
         const stacks = listResponse.StackSummaries || [];
@@ -107,6 +107,11 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
         // All Quilt catalog stacks have a "QuiltWebHost" output - this is the canonical identifier
         // Stack names vary (e.g., "quilt-staging", "tf-stable", "sales-prod") so we check outputs
         const stackInfos: QuiltStackInfo[] = [];
+
+        // Show progress when searching for target catalog
+        if (targetCatalog) {
+            process.stdout.write("Checking: ");
+        }
 
         for (const stack of stacks) {
             if (!stack.StackName) continue;
@@ -127,11 +132,19 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
                 const hasQuiltWebHost = outputs.some((output) => output.OutputKey === "QuiltWebHost");
                 if (!hasQuiltWebHost) continue;
 
+                // Show progress dot for this Quilt stack
+                if (targetCatalog) {
+                    process.stdout.write(`${stack.StackName}...`);
+                }
+
                 const stackInfo: QuiltStackInfo = {
                     stackName: stack.StackName,
                     stackArn: stackDetail.StackId || "",
                     region: region,
                 };
+
+                // Check stack status (will warn later if this is the selected stack)
+                const stackStatus = stackDetail.StackStatus;
 
                 // Extract AWS Account ID from Stack ARN
                 // ARN format: arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/STACK_NAME/STACK_ID
@@ -171,6 +184,24 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string): 
                 }
 
                 stackInfos.push(stackInfo);
+
+                // If we're looking for a specific catalog and found it, stop searching
+                // MUST BE EXACT MATCH - no fuzzy matching or greedy behavior
+                if (targetCatalog && stackInfo.catalogUrl) {
+                    const normalizeUrl = (url: string): string => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+                    const normalizedStackUrl = normalizeUrl(stackInfo.catalogUrl);
+                    const normalizedTargetUrl = normalizeUrl(targetCatalog);
+
+                    // EXACT MATCH ONLY - QuiltWebHost must exactly equal the target catalog
+                    if (normalizedStackUrl === normalizedTargetUrl) {
+                        console.log(`\nFound: ${stackInfo.stackName}`);
+                        // Warn if stack is in a problematic state
+                        if (stackStatus && !["CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_ROLLBACK_COMPLETE"].includes(stackStatus)) {
+                            console.log(`⚠️  Stack is in state: ${stackStatus}`);
+                        }
+                        return stackInfos;
+                    }
+                }
             } catch {
                 // Silently skip stacks that can't be described
                 // to avoid overwhelming users with warnings for non-accessible stacks
@@ -292,9 +323,17 @@ export async function inferQuiltConfig(options: {
     const regionToSearch = searchRegion || "us-east-1";
     console.log(`Searching in region: ${regionToSearch}`);
 
-    const stacks = await findQuiltStacks(regionToSearch, profile);
+    // Pass the target catalog so we can stop early if we find it
+    const stacks = await findQuiltStacks(regionToSearch, profile, result.catalog);
 
     if (stacks.length === 0) {
+        // If catalog was explicitly provided, this is a fatal error
+        if (catalogDns) {
+            throw new Error(
+                `No Quilt CloudFormation stack found with QuiltWebHost matching '${catalogDns}'. ` +
+                `The catalog does not exist in region ${regionToSearch}.`,
+            );
+        }
         console.log("No Quilt CloudFormation stacks found.");
         return result;
     }
@@ -303,8 +342,8 @@ export async function inferQuiltConfig(options: {
 
     let selectedStack: QuiltStackInfo;
 
-    // If we have a catalog URL from quilt3, try to find matching stack
-    if (result.catalog && stacks.length > 1) {
+    // If we have a catalog URL (from catalogDns or quilt3), try to find matching stack
+    if (result.catalog) {
         // Normalize URLs for comparison (remove protocol and trailing slashes)
         const normalizeUrl = (url: string): string => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
         const targetUrl = normalizeUrl(result.catalog);
@@ -312,7 +351,7 @@ export async function inferQuiltConfig(options: {
         const matchingStack = stacks.find((s) => s.catalogUrl && normalizeUrl(s.catalogUrl) === targetUrl);
         if (matchingStack) {
             selectedStack = matchingStack;
-            console.log(`Auto-selected stack matching catalog URL: ${selectedStack.stackName}`);
+            console.log(`Using stack: ${selectedStack.stackName}`);
 
             // If --yes not passed, interactive mode, and catalog was NOT explicitly provided, verify the catalog name before using it
             if (!yes && interactive && !catalogDns) {
@@ -340,46 +379,35 @@ export async function inferQuiltConfig(options: {
                 }
             }
         } else {
-            // No match found, prompt user
+            // No match found - if catalog was explicitly provided, this is FATAL
+            if (catalogDns) {
+                // FATAL ERROR: User provided explicit catalog but no matching stack found
+                console.error(`\n❌ No stack found with QuiltWebHost matching: ${result.catalog}`);
+                console.error(`\nFound ${stacks.length} Quilt stack(s) but NONE have matching QuiltWebHost:`);
+                stacks.forEach((s) => console.error(`  - ${s.stackName}: ${s.catalogUrl || "NO QuiltWebHost"}`));
+                throw new Error(
+                    `No CloudFormation stack found with QuiltWebHost exactly matching '${result.catalog}'. ` +
+                    `Found ${stacks.length} stack(s) in region ${regionToSearch} but none match exactly.`,
+                );
+            }
+
+            // For non-explicit catalog (quilt3 CLI), allow fallback to selection
             console.log(`No stack found matching catalog URL: ${result.catalog}`);
+            console.log(`Available stacks:`);
+            stacks.forEach((s) => console.log(`  - ${s.catalogUrl || s.stackName}`));
+
             if (interactive) {
                 const options = stacks.map((s) => `${s.stackName} (${s.region})`);
                 const selectedIndex = await promptCatalogSelection(options);
                 selectedStack = stacks[selectedIndex];
                 console.log(`\nSelected: ${selectedStack.stackName}`);
             } else {
-                selectedStack = stacks[0];
-                console.log(`Using first stack: ${selectedStack.stackName}`);
-            }
-        }
-    } else if (stacks.length === 1) {
-        selectedStack = stacks[0];
-        console.log(`Using stack: ${selectedStack.stackName}`);
-
-        // If --yes not passed, interactive mode, and catalog was NOT explicitly provided, verify the catalog name before using it
-        if (!yes && interactive && !catalogDns) {
-            const rl = readline.createInterface({
-                input: process.stdin,
-                output: process.stdout,
-            });
-
-            const confirmed = await new Promise<boolean>((resolve) => {
-                rl.question(
-                    `\nUsing catalog stack: ${selectedStack.stackName}\nIs this the correct catalog? (y/n): `,
-                    (answer) => {
-                        rl.close();
-                        resolve(answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes");
-                    },
+                // In non-interactive mode, we CANNOT guess - must fail
+                throw new Error(
+                    `No CloudFormation stack found matching catalog '${result.catalog}'. ` +
+                    `Found ${stacks.length} stack(s) but none match. ` +
+                    `Available: ${stacks.map((s) => s.catalogUrl || s.stackName).join(", ")}`,
                 );
-            });
-
-            if (!confirmed) {
-                // User wants to select manually - let the wizard handle it
-                // Return partial result so wizard can prompt for missing fields
-                return {
-                    ...result,
-                    source: "manual-selection-required",
-                };
             }
         }
     } else if (interactive) {
