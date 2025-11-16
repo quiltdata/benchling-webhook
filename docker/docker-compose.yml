@@ -3,26 +3,15 @@ services:
     build: .
     ports:
       - "5003:5000"
-    env_file:
-      - ../.env
     environment:
       - FLASK_ENV=production
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - AWS_REGION=${AWS_REGION:-us-east-2}
-      # v1.0.0+ Explicit service parameters
-      - PACKAGER_SQS_URL=${PACKAGER_SQS_URL}
+      # v0.8.0+ Explicit service parameters
       - ATHENA_USER_DATABASE=${ATHENA_USER_DATABASE}
-      - QUILT_WEB_HOST=${QUILT_WEB_HOST:-stable.quilttest.com}
       - ICEBERG_DATABASE=${ICEBERG_DATABASE:-}
-      # Benchling configuration
-      - BENCHLING_TENANT=${BENCHLING_TENANT}
-      - BENCHLING_CLIENT_ID=${BENCHLING_CLIENT_ID}
-      - BENCHLING_CLIENT_SECRET=${BENCHLING_CLIENT_SECRET}
-      - BENCHLING_APP_DEFINITION_ID=${BENCHLING_APP_DEFINITION_ID}
-      - BENCHLING_PKG_BUCKET=${BENCHLING_PKG_BUCKET}
-      - BENCHLING_PKG_PREFIX=${BENCHLING_PKG_PREFIX:-benchling}
-      - BENCHLING_PKG_KEY=${BENCHLING_PKG_KEY:-experiment_id}
-      - ENABLE_WEBHOOK_VERIFICATION=${ENABLE_WEBHOOK_VERIFICATION:-true}
+      - QUILT_WEB_HOST=${QUILT_WEB_HOST}
+      - PACKAGER_SQS_URL=${PACKAGER_SQS_URL}
     volumes:
       - ~/.aws:/home/appuser/.aws:ro
     restart: unless-stopped
@@ -44,26 +33,16 @@ services:
     profiles: ["dev"]
     ports:
       - "5002:5000"
-    env_file:
-      - ../.env
     environment:
       - FLASK_ENV=development
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - AWS_REGION=${AWS_REGION:-us-east-2}
-      # v1.0.0+ Explicit service parameters
-      - PACKAGER_SQS_URL=${PACKAGER_SQS_URL}
+      - ENABLE_WEBHOOK_VERIFICATION=${ENABLE_WEBHOOK_VERIFICATION:-false}
+      # v0.8.0+ Explicit service parameters
       - ATHENA_USER_DATABASE=${ATHENA_USER_DATABASE}
-      - QUILT_WEB_HOST=${QUILT_WEB_HOST:-stable.quilttest.com}
       - ICEBERG_DATABASE=${ICEBERG_DATABASE:-}
-      # Benchling configuration
-      - BENCHLING_TENANT=${BENCHLING_TENANT}
-      - BENCHLING_CLIENT_ID=${BENCHLING_CLIENT_ID}
-      - BENCHLING_CLIENT_SECRET=${BENCHLING_CLIENT_SECRET}
-      - BENCHLING_APP_DEFINITION_ID=${BENCHLING_APP_DEFINITION_ID}
-      - BENCHLING_PKG_BUCKET=${BENCHLING_PKG_BUCKET}
-      - BENCHLING_PKG_PREFIX=${BENCHLING_PKG_PREFIX:-benchling}
-      - BENCHLING_PKG_KEY=${BENCHLING_PKG_KEY:-experiment_id}
-      - ENABLE_WEBHOOK_VERIFICATION=${ENABLE_WEBHOOK_VERIFICATION:-true}
+      - PACKAGER_SQS_URL=${PACKAGER_SQS_URL}
+      - QUILT_WEB_HOST=${QUILT_WEB_HOST}
     volumes:
       - ~/.aws:/home/appuser/.aws:ro
       - ./src:/app/src
