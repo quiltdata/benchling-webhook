@@ -11,7 +11,7 @@
 import chalk from "chalk";
 import ora from "ora";
 import { CloudFormationClient, DescribeStacksCommand, DescribeStackEventsCommand, DescribeStackResourcesCommand } from "@aws-sdk/client-cloudformation";
-import { ECSClient, DescribeServicesCommand } from "@aws-sdk/client-ecs";
+import { ECSClient, DescribeServicesCommand, DescribeTaskDefinitionCommand } from "@aws-sdk/client-ecs";
 import { ElasticLoadBalancingV2Client, DescribeTargetHealthCommand, DescribeTargetGroupsCommand, DescribeRulesCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { SecretsManagerClient, DescribeSecretCommand } from "@aws-sdk/client-secrets-manager";
 import { fromIni } from "@aws-sdk/credential-providers";
@@ -64,6 +64,8 @@ export interface StatusResult {
         runningCount: number;
         pendingCount: number;
         rolloutState?: string;
+        logGroup?: string;
+        logStreamPrefix?: string;
     }>;
     albTargetGroups?: Array<{
         targetGroupName: string;
@@ -259,14 +261,47 @@ async function getEcsServiceHealth(
         });
         const servicesResponse = await ecsClient.send(servicesCommand);
 
-        return servicesResponse.services?.map((svc: { serviceName?: string; status?: string; desiredCount?: number; runningCount?: number; pendingCount?: number; deployments?: Array<{ rolloutState?: string }> }) => ({
-            serviceName: svc.serviceName || "Unknown",
-            status: svc.status || "UNKNOWN",
-            desiredCount: svc.desiredCount || 0,
-            runningCount: svc.runningCount || 0,
-            pendingCount: svc.pendingCount || 0,
-            rolloutState: svc.deployments?.[0]?.rolloutState,
-        }));
+        // Get log groups from task definitions
+        const servicesWithLogs = await Promise.all(
+            (servicesResponse.services || []).map(async (svc: { serviceName?: string; status?: string; desiredCount?: number; runningCount?: number; pendingCount?: number; deployments?: Array<{ rolloutState?: string; taskDefinition?: string }> }) => {
+                let logGroup: string | undefined;
+                let logStreamPrefix: string | undefined;
+
+                // Get task definition ARN from the current deployment
+                const taskDefArn = svc.deployments?.[0]?.taskDefinition;
+                if (taskDefArn) {
+                    try {
+                        const taskDefCommand = new DescribeTaskDefinitionCommand({
+                            taskDefinition: taskDefArn,
+                        });
+                        const taskDefResponse = await ecsClient.send(taskDefCommand);
+
+                        // Extract log group and stream prefix from first container's log configuration
+                        const logConfig = taskDefResponse.taskDefinition?.containerDefinitions?.[0]?.logConfiguration;
+                        if (logConfig?.logDriver === "awslogs") {
+                            logGroup = logConfig.options?.["awslogs-group"];
+                            logStreamPrefix = logConfig.options?.["awslogs-stream-prefix"];
+                        }
+                    } catch (error) {
+                        // Log group query failed, continue without it
+                        console.error(chalk.dim(`  Could not retrieve log group for ${svc.serviceName}: ${(error as Error).message}`));
+                    }
+                }
+
+                return {
+                    serviceName: svc.serviceName || "Unknown",
+                    status: svc.status || "UNKNOWN",
+                    desiredCount: svc.desiredCount || 0,
+                    runningCount: svc.runningCount || 0,
+                    pendingCount: svc.pendingCount || 0,
+                    rolloutState: svc.deployments?.[0]?.rolloutState,
+                    logGroup,
+                    logStreamPrefix,
+                };
+            }),
+        );
+
+        return servicesWithLogs;
     } catch (error) {
         // ECS health check is optional, don't fail the entire command
         console.error(chalk.dim(`  Could not retrieve ECS service health: ${(error as Error).message}`));
@@ -688,7 +723,16 @@ function displayStatusResult(result: StatusResult, profile: string): void {
                 rolloutCol = chalk.dim("-").padEnd(rolloutWidth + 10);
             }
 
-            const logCol = result.stackOutputs?.ecsLogGroup ? chalk.dim(result.stackOutputs.ecsLogGroup) : chalk.dim("-");
+            let logCol: string;
+            if (svc.logGroup) {
+                if (svc.logStreamPrefix) {
+                    logCol = chalk.dim(`${svc.logGroup}/${svc.logStreamPrefix}`);
+                } else {
+                    logCol = chalk.dim(svc.logGroup);
+                }
+            } else {
+                logCol = chalk.dim("-");
+            }
 
             console.log(`  ${statusCol} ${nameCol} ${tasksCol} ${rolloutCol} ${logCol}`);
         }
