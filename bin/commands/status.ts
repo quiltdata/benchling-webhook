@@ -29,8 +29,8 @@ export interface StatusCommandOptions {
     detailed?: boolean;
     /** Auto-refresh interval in seconds (0 or non-numeric to disable) */
     timer?: string | number;
-    /** Continue monitoring even after reaching terminal status */
-    noExit?: boolean;
+    /** Exit after reaching terminal status (default: true, use --no-exit to keep monitoring) */
+    exit?: boolean;
 }
 
 export interface StatusResult {
@@ -841,7 +841,7 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
         awsProfile,
         configStorage,
         timer,
-        noExit = false,
+        exit = true,
     } = options;
 
     const xdg = configStorage || new XDGConfig();
@@ -922,7 +922,7 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
 
             // If terminal status, announce completion and exit (unless --no-exit is set)
             if (isTerminalStatus(result.stackStatus)) {
-                if (!noExit) {
+                if (exit) {
                     if (result.stackStatus?.includes("COMPLETE") && !result.stackStatus.includes("ROLLBACK")) {
                         console.log(chalk.green("✓ Stack reached stable state. Monitoring complete.\n"));
                     } else if (result.stackStatus?.includes("FAILED") || result.stackStatus?.includes("ROLLBACK")) {
