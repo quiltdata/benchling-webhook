@@ -81,7 +81,7 @@ async function validateBenchlingTenant(tenant: string): Promise<{ isValid: boole
 async function validateBenchlingCredentials(
     tenant: string,
     clientId: string,
-    clientSecret: string
+    clientSecret: string,
 ): Promise<{ isValid: boolean; errors: string[]; warnings: string[] }> {
     const result = { isValid: false, errors: [] as string[], warnings: [] as string[] };
 
@@ -141,7 +141,7 @@ async function validateBenchlingCredentials(
                         `    Tested: POST ${tokenUrl}\n` +
                         `    Status: ${res.statusCode}\n` +
                         `    Error: ${errorDetail}\n` +
-                        "    Hint: Verify Client ID and Secret are correct and match the app definition"
+                        "    Hint: Verify Client ID and Secret are correct and match the app definition",
                     );
                 }
                 resolve(result);
@@ -151,7 +151,7 @@ async function validateBenchlingCredentials(
         req.on("error", (error) => {
             result.warnings.push(
                 `Could not validate OAuth credentials at ${tokenUrl}: ${error.message}\n` +
-                "    This may be a network issue. Credentials will be validated during deployment."
+                "    This may be a network issue. Credentials will be validated during deployment.",
             );
             result.isValid = true; // Allow proceeding with warning
             resolve(result);
@@ -168,7 +168,7 @@ async function validateBenchlingCredentials(
 async function validateS3BucketAccess(
     bucketName: string,
     region: string,
-    awsProfile?: string
+    awsProfile?: string,
 ): Promise<{ isValid: boolean; errors: string[]; warnings: string[] }> {
     const result = { isValid: false, errors: [] as string[], warnings: [] as string[] };
 
@@ -233,7 +233,7 @@ async function validateS3BucketAccess(
             `    Error: ${errorCode}${statusCode ? ` (HTTP ${statusCode})` : ""}\n` +
             `    Message: ${errorMsg}\n` +
             "    Tested: HeadBucket operation\n" +
-            `    Hint: ${hint}`
+            `    Hint: ${hint}`,
         );
     }
 
@@ -253,7 +253,7 @@ async function validateS3BucketAccess(
  * @returns Validation result
  */
 export async function runValidation(input: ValidationInput): Promise<ValidationResult> {
-    const { stackQuery, parameters, awsProfile } = input;
+    const { parameters, awsProfile } = input;
 
     const result: ValidationResult = {
         success: true,
@@ -274,7 +274,7 @@ export async function runValidation(input: ValidationInput): Promise<ValidationR
     const credValidation = await validateBenchlingCredentials(
         parameters.benchling.tenant,
         parameters.benchling.clientId,
-        parameters.benchling.clientSecret
+        parameters.benchling.clientSecret,
     );
     if (!credValidation.isValid) {
         result.success = false;
@@ -286,7 +286,7 @@ export async function runValidation(input: ValidationInput): Promise<ValidationR
     const bucketValidation = await validateS3BucketAccess(
         parameters.packages.bucket,
         parameters.deployment.region,
-        awsProfile
+        awsProfile,
     );
     if (!bucketValidation.isValid) {
         result.success = false;

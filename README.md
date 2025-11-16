@@ -59,6 +59,35 @@ NOTE: This version no longer reads your `.env` file.
 Instead, it stores your results in the [XDG_CONFIG_HOME](https://wiki.archlinux.org/title/XDG_Base_Directory),
 where you can have more than one profile.
 
+#### Integrated Mode: BenchlingIntegration Parameter
+
+When using integrated mode (built-in Quilt stack webhook), the setup wizard will:
+
+1. Check if `BenchlingIntegration` is enabled in your Quilt stack
+2. Offer to enable it automatically if disabled
+3. Provide a status command to monitor the stack update
+
+**Checking Integration Status:**
+
+```bash
+npx @quiltdata/benchling-webhook@latest status --profile myprofile
+```
+
+This shows:
+
+- CloudFormation stack status
+- BenchlingIntegration parameter state
+- Last update timestamp
+- Direct link to CloudFormation console
+
+**Enabling BenchlingIntegration:**
+
+If your Quilt stack has `BenchlingIntegration` set to `false`, the setup wizard will detect this and offer to enable it automatically. You can:
+
+- Let the wizard update the parameter (recommended)
+- Enable it manually through the AWS CloudFormation console
+- Use the `status` command to monitor the update progress
+
 ### 3. Configure Webhook URL
 
 After deployment, add the webhook URL to your [Benchling app settings](https://docs.benchling.com/docs/getting-started-benchling-apps#installing-your-app).
@@ -76,11 +105,31 @@ This will generate an App Canvas with a dedicated Quilt package for this noteboo
 
 ## Other Commands
 
+### Deploy
+
 If necessary, you can manually deploy (without redoing setup) via:
 
 ```bash
 npx @quiltdata/benchling-webhook@latest deploy
 ```
+
+### Status
+
+Check the status of your Quilt stack and BenchlingIntegration parameter:
+
+```bash
+npx @quiltdata/benchling-webhook@latest status [--profile <name>]
+```
+
+This command displays:
+- CloudFormation stack status (CREATE_COMPLETE, UPDATE_IN_PROGRESS, etc.)
+- BenchlingIntegration parameter value (true/false)
+- Last update timestamp
+- Direct console link for manual updates
+
+Useful for monitoring stack updates after enabling BenchlingIntegration.
+
+### Help
 
 For more information, use:
 

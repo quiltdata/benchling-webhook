@@ -5,32 +5,42 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [1.0.0] - 2025-11-07
-
-### Breaking Changes
-
-- Remove QuiltStackARN from runtime environment - services now resolved at deployment time
-- Remove CloudFormation IAM permissions from ECS task role
-- Delete config-resolver.ts - runtime CloudFormation resolution no longer needed
+## [0.7.10] - 2025-11-15
 
 ### Added
 
-- Deployment-time service resolution via new CloudFormation parameters
-- Explicit service environment variables (PACKAGER_SQS_URL, ATHENA_USER_DATABASE, QUILT_WEB_HOST, ICEBERG_DATABASE)
-- 7-phase modular wizard architecture with improved flow control
-- Amazon Linux 2023 and Python 3.13 support in Docker container
-- UV package manager for faster Python dependency installation
+- Enhanced `status` command with comprehensive deployment health checks (ECS service status, ALB target health, recent stack events, secret accessibility, listener rules)
+- Auto-refresh status monitoring with `--timer` flag (default: 10 seconds, watches until stack reaches terminal state)
+- Catalog validation now shows progress when searching CloudFormation stacks
 
 ### Changed
 
-- Container startup faster without runtime CloudFormation API calls
-- Setup wizard detects and reuses BenchlingSecret from integrated Quilt stacks
-- Improved test isolation with XDG helpers and mock interfaces
-- Better sync-secrets implementation with direct function calls
+- Status command displays stack outputs, secrets metadata, and minutes since last modified
+- Stack outputs and secrets display made more concise and readable
+- Status command now auto-refreshes by default when monitoring deployments (use `--timer 0` to disable)
 
-### Migration
+### Fixed
 
-See [spec/206-service-envars/MIGRATION.md](./spec/206-service-envars/MIGRATION.md) for upgrade instructions. Existing configs work unchanged - simply redeploy.
+- Catalog matching now enforces exact QuiltWebHost match (prevents ambiguous catalog detection)
+- Setup wizard fails fast on catalog mismatch instead of proceeding with wrong configuration
+- CDK destroy command no longer requires valid configuration to run
+- Removed duplicate completion message in integrated stack mode
+
+## [0.7.9] - 2025-11-15
+
+### Added
+
+- Setup wizard automatically enables Benchling integration in Quilt stack (no manual CloudFormation update needed)
+- `status` command to check deployment status and integration state
+- `logs` command for viewing CloudWatch logs via NPX
+
+### Changed
+
+- Release notes now filter out non-user-facing commits
+
+### Fixed
+
+- Profile flag now properly respected in log viewing commands
 
 ## [0.7.8] - 2025-11-14
 
@@ -143,7 +153,6 @@ See [spec/206-service-envars/MIGRATION.md](./spec/206-service-envars/MIGRATION.m
 
 - **CLI argument parsing** - Fixed issue where help/version flags triggered setup wizard
 - **Deploy error messages** - Corrected profile argument syntax in error messages
-
 
 ### Fixed
 

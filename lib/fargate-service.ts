@@ -69,8 +69,10 @@ export class FargateService extends Construct {
         ];
 
         // Create CloudWatch Log Group for container logs
+        // Use stack name for consistency between integrated and standalone modes
+        const stackName = cdk.Stack.of(this).stackName;
         this.logGroup = new logs.LogGroup(this, "ContainerLogGroup", {
-            logGroupName: "/ecs/benchling-webhook",
+            logGroupName: stackName,
             retention: logs.RetentionDays.ONE_WEEK,
             removalPolicy: cdk.RemovalPolicy.DESTROY,
         });

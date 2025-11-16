@@ -38,9 +38,9 @@ export interface StackQueryOptions {
  */
 export async function runStackQuery(
     catalogDns: string,
-    options: StackQueryOptions = {}
+    options: StackQueryOptions = {},
 ): Promise<StackQueryResult> {
-    const { awsProfile, awsRegion, yes = false } = options;
+    const { awsProfile, awsRegion } = options;
 
     console.log(`Querying CloudFormation stack for catalog: ${catalogDns}...\n`);
 
@@ -60,7 +60,7 @@ export async function runStackQuery(
 
         if (normalizedInferred !== normalizedConfirmed) {
             console.log(chalk.yellow(
-                `Warning: Inferred catalog (${normalizedInferred}) does not match confirmed catalog (${normalizedConfirmed})`
+                `Warning: Inferred catalog (${normalizedInferred}) does not match confirmed catalog (${normalizedConfirmed})`,
             ));
         }
 
@@ -75,6 +75,7 @@ export async function runStackQuery(
         const region = inferenceResult.region || awsRegion || "us-east-1";
         const account = inferenceResult.account || "";
         const benchlingSecretArn = inferenceResult.benchlingSecretArn;
+        const benchlingIntegrationEnabled = inferenceResult.benchlingIntegrationEnabled;
 
         // Log what we found
         console.log(chalk.green("✓ Stack query succeeded\n"));
@@ -89,6 +90,11 @@ export async function runStackQuery(
         } else {
             console.log(chalk.dim("BenchlingSecret: Not found in stack"));
         }
+
+        if (benchlingIntegrationEnabled !== undefined) {
+            console.log(chalk.dim(`BenchlingIntegration: ${benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`));
+        }
+
         console.log("");
 
         return {
@@ -99,6 +105,7 @@ export async function runStackQuery(
             region,
             account,
             benchlingSecretArn,
+            benchlingIntegrationEnabled,
             stackQuerySucceeded: true,
         };
     } catch (error) {
@@ -114,6 +121,7 @@ export async function runStackQuery(
             region: awsRegion || "us-east-1",
             account: "",
             benchlingSecretArn: undefined,
+            benchlingIntegrationEnabled: undefined,
             stackQuerySucceeded: false,
         };
     }
