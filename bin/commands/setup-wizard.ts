@@ -198,7 +198,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
                 if (copy) {
                     existingConfig = defaultConfig;
                     inheritFrom = "default";
-                    console.log(chalk.dim(`\nCopying configuration from profile: default\n`));
+                    console.log(chalk.dim("\nCopying configuration from profile: default\n"));
                 } else {
                     console.log(chalk.dim(`\nCreating new configuration for profile: ${profile}\n`));
                 }

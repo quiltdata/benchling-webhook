@@ -26,7 +26,7 @@ import { ParameterCollectionInput, ParameterCollectionResult } from "./types";
  * @returns Parameter collection result
  */
 export async function runParameterCollection(
-    input: ParameterCollectionInput
+    input: ParameterCollectionInput,
 ): Promise<ParameterCollectionResult> {
     const { stackQuery, existingConfig, yes = false } = input;
 
@@ -71,7 +71,7 @@ export async function runParameterCollection(
         // Show catalog change warning if applicable
         if (catalogChanged) {
             console.log("\n" + chalk.yellow(
-                `Catalog changed from ${existingConfig.quilt.catalog} to ${stackQuery.catalog}`
+                `Catalog changed from ${existingConfig.quilt.catalog} to ${stackQuery.catalog}`,
             ));
         }
 
@@ -162,7 +162,7 @@ export async function runParameterCollection(
         });
 
         console.log("\n" + chalk.yellow(
-            "After you have installed the app in Benchling and have the App Definition ID, you can continue."
+            "After you have installed the app in Benchling and have the App Definition ID, you can continue.",
         ) + "\n");
 
         // Now ask for the app definition ID
@@ -296,9 +296,9 @@ export async function runParameterCollection(
             throw new Error("--user-bucket is required in non-interactive mode");
         }
 
-        console.log(`  Bucket: ${bucket} (from ${input.userBucket ? 'CLI' : 'existing config'})`);
-        console.log(`  Prefix: ${prefix} (from ${input.pkgPrefix ? 'CLI' : existingConfig?.packages?.prefix ? 'existing config' : 'default'})`);
-        console.log(`  Metadata Key: ${metadataKey} (from ${input.pkgKey ? 'CLI' : existingConfig?.packages?.metadataKey ? 'existing config' : 'default'})`);
+        console.log(`  Bucket: ${bucket} (from ${input.userBucket ? "CLI" : "existing config"})`);
+        console.log(`  Prefix: ${prefix} (from ${input.pkgPrefix ? "CLI" : existingConfig?.packages?.prefix ? "existing config" : "default"})`);
+        console.log(`  Metadata Key: ${metadataKey} (from ${input.pkgKey ? "CLI" : existingConfig?.packages?.metadataKey ? "existing config" : "default"})`);
     } else {
         // Always show prompts with defaults from existing config
         const packageAnswers = await inquirer.prompt([
@@ -356,8 +356,8 @@ export async function runParameterCollection(
         // In non-interactive mode, use CLI args or existing config or defaults
         logLevel = (input.logLevel as "DEBUG" | "INFO" | "WARNING" | "ERROR") || existingConfig?.logging?.level || "INFO";
         webhookAllowList = input.webhookAllowList ?? existingConfig?.security?.webhookAllowList ?? "";
-        console.log(`  Log Level: ${logLevel} (from ${input.logLevel ? 'CLI' : existingConfig?.logging?.level ? 'existing config' : 'default'})`);
-        console.log(`  Webhook Allow List: ${webhookAllowList || "(none)"} (from ${input.webhookAllowList !== undefined ? 'CLI' : existingConfig?.security?.webhookAllowList ? 'existing config' : 'default'})`);
+        console.log(`  Log Level: ${logLevel} (from ${input.logLevel ? "CLI" : existingConfig?.logging?.level ? "existing config" : "default"})`);
+        console.log(`  Webhook Allow List: ${webhookAllowList || "(none)"} (from ${input.webhookAllowList !== undefined ? "CLI" : existingConfig?.security?.webhookAllowList ? "existing config" : "default"})`);
     } else {
         // Always show prompts with defaults from existing config
         const optionalAnswers = await inquirer.prompt([

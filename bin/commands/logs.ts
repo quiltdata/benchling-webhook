@@ -49,7 +49,7 @@ interface LogGroupDefinition {
  */
 function getDeploymentInfo(
     profile: string,
-    configStorage: XDGBase
+    configStorage: XDGBase,
 ): { region: string; stackName: string; integratedMode: boolean; quiltStackName?: string } | null {
     try {
         const config = configStorage.readProfile(profile);
@@ -65,7 +65,7 @@ function getDeploymentInfo(
                         region,
                         stackName: STACK_NAME, // Still check BenchlingWebhookStack for metadata
                         integratedMode: true,
-                        quiltStackName: match[1] // But use Quilt stack name for logs
+                        quiltStackName: match[1], // But use Quilt stack name for logs
                     };
                 }
             }
@@ -74,7 +74,7 @@ function getDeploymentInfo(
             return {
                 region,
                 stackName: STACK_NAME,
-                integratedMode: false
+                integratedMode: false,
             };
         }
     } catch (error) {
@@ -90,19 +90,19 @@ function getDeploymentInfo(
 function getStackOutputs(
     stackName: string,
     region: string,
-    awsProfile?: string
+    awsProfile?: string,
 ): StackOutput[] {
     try {
         const profileFlag = awsProfile ? `--profile ${awsProfile}` : "";
         const output = execSync(
             `aws cloudformation describe-stacks --stack-name ${stackName} --region ${region} ${profileFlag} --query 'Stacks[0].Outputs' --output json`,
-            { encoding: "utf-8" }
+            { encoding: "utf-8" },
         );
         return JSON.parse(output) as StackOutput[];
     } catch {
         throw new Error(
             `Could not get stack outputs for ${stackName}. ` +
-            `Make sure the stack is deployed and AWS credentials are configured.`
+            "Make sure the stack is deployed and AWS credentials are configured.",
         );
     }
 }
@@ -112,7 +112,7 @@ function getStackOutputs(
  */
 function getLogGroupFromOutputs(
     outputs: StackOutput[],
-    logType: string
+    logType: string,
 ): string {
     let outputKey: string;
     if (logType === "ecs") {
@@ -129,7 +129,7 @@ function getLogGroupFromOutputs(
     if (!logGroupOutput) {
         throw new Error(
             `Could not find ${outputKey} in stack outputs. ` +
-            `Stack may need to be redeployed.`
+            "Stack may need to be redeployed.",
         );
     }
 
@@ -143,7 +143,7 @@ function printStackInfo(
     outputs: StackOutput[],
     logType: string,
     profile: string,
-    stage: string
+    stage: string,
 ): void {
     console.log("=".repeat(80));
     console.log("Benchling Webhook Logs");
@@ -192,7 +192,7 @@ function tailLogs(
         filter?: string;
         follow: boolean;
         tail: number;
-    }
+    },
 ): void {
     const profileFlag = options.awsProfile ? `--profile ${options.awsProfile}` : "";
     let command = `aws logs tail "${logGroup}"`;
@@ -222,7 +222,7 @@ function tailLogs(
                 "Error fetching logs. Make sure:\n" +
                 "1. The stack is deployed\n" +
                 "2. AWS CLI is configured with proper credentials\n" +
-                "3. You have CloudWatch Logs read permissions"
+                "3. You have CloudWatch Logs read permissions",
             );
         }
     }
@@ -239,7 +239,7 @@ function showAllLogs(
         since: string;
         filter?: string;
         tail: number;
-    }
+    },
 ): void {
     console.log("Showing logs from all sources (most recent first):\n");
 

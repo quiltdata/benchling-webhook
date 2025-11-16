@@ -31,7 +31,7 @@ export interface StackParameterUpdateResult {
  * @returns Update result
  */
 export async function updateStackParameter(
-    options: StackParameterUpdateOptions
+    options: StackParameterUpdateOptions,
 ): Promise<StackParameterUpdateResult> {
     const { stackArn, region, parameterKey, parameterValue, awsProfile } = options;
 
@@ -121,7 +121,7 @@ export async function getStackParameter(
     stackArn: string,
     region: string,
     parameterKey: string,
-    awsProfile?: string
+    awsProfile?: string,
 ): Promise<string | undefined> {
     try {
         const stackNameMatch = stackArn.match(/stack\/([^\/]+)\//);

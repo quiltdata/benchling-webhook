@@ -38,7 +38,7 @@ export interface StackQueryOptions {
  */
 export async function runStackQuery(
     catalogDns: string,
-    options: StackQueryOptions = {}
+    options: StackQueryOptions = {},
 ): Promise<StackQueryResult> {
     const { awsProfile, awsRegion, yes = false } = options;
 
@@ -60,7 +60,7 @@ export async function runStackQuery(
 
         if (normalizedInferred !== normalizedConfirmed) {
             console.log(chalk.yellow(
-                `Warning: Inferred catalog (${normalizedInferred}) does not match confirmed catalog (${normalizedConfirmed})`
+                `Warning: Inferred catalog (${normalizedInferred}) does not match confirmed catalog (${normalizedConfirmed})`,
             ));
         }
 
@@ -92,7 +92,7 @@ export async function runStackQuery(
         }
 
         if (benchlingIntegrationEnabled !== undefined) {
-            console.log(chalk.dim(`BenchlingIntegration: ${benchlingIntegrationEnabled ? 'Enabled' : 'Disabled'}`));
+            console.log(chalk.dim(`BenchlingIntegration: ${benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`));
         }
 
         console.log("");

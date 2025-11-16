@@ -246,7 +246,7 @@ export async function inferQuiltConfig(options: {
     if (catalogDns) {
         // Use the provided catalog DNS - skip quilt3 check
         console.log(`Using provided catalog: ${catalogDns}`);
-        const catalogUrl = catalogDns.startsWith('http') ? catalogDns : `https://${catalogDns}`;
+        const catalogUrl = catalogDns.startsWith("http") ? catalogDns : `https://${catalogDns}`;
         result.catalog = catalogUrl;
         result.source = "provided";
         quilt3Config = { catalogUrl }; // Create fake quilt3Config for config.json fetch
@@ -333,7 +333,7 @@ export async function inferQuiltConfig(options: {
                         (answer) => {
                             rl.close();
                             resolve(answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes");
-                        }
+                        },
                     );
                 });
 
@@ -375,7 +375,7 @@ export async function inferQuiltConfig(options: {
                     (answer) => {
                         rl.close();
                         resolve(answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes");
-                    }
+                    },
                 );
             });
 
@@ -423,7 +423,7 @@ export async function inferQuiltConfig(options: {
     }
     if (selectedStack.benchlingIntegrationEnabled !== undefined) {
         result.benchlingIntegrationEnabled = selectedStack.benchlingIntegrationEnabled;
-        console.log(`✓ BenchlingIntegration: ${selectedStack.benchlingIntegrationEnabled ? 'Enabled' : 'Disabled'}`);
+        console.log(`✓ BenchlingIntegration: ${selectedStack.benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`);
     }
 
     if (result.source === "quilt3-cli") {
