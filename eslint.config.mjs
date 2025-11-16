@@ -5,7 +5,7 @@ import globals from "globals";
 
 export default [
     {
-        ignores: ["dist/**", "cdk.out/**", "node_modules/**", "test/**", "eslint.config.js"],
+        ignores: ["dist/**", "cdk.out/**", "node_modules/**", "test/**", "eslint.config.js", "docker/.venv/**"],
     },
     {
         files: ["**/*.ts"],
