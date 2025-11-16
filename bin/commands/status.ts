@@ -9,6 +9,7 @@
  */
 
 import chalk from "chalk";
+import ora from "ora";
 import { CloudFormationClient, DescribeStacksCommand, DescribeStackEventsCommand, DescribeStackResourcesCommand } from "@aws-sdk/client-cloudformation";
 import { ECSClient, DescribeServicesCommand } from "@aws-sdk/client-ecs";
 import { ElasticLoadBalancingV2Client, DescribeTargetHealthCommand, DescribeTargetGroupsCommand, DescribeRulesCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
@@ -826,12 +827,20 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
                 break;
             }
 
-            // Show refresh message
-            const seconds = refreshInterval / 1000;
-            console.log(chalk.dim(`⟳ Refreshing in ${seconds} seconds... (Ctrl+C to exit)`));
+            // Show countdown with live updates
+            const totalSeconds = Math.floor(refreshInterval / 1000);
+            const spinner = ora({
+                text: chalk.dim(`⟳ Refreshing in ${totalSeconds} second${totalSeconds !== 1 ? "s" : ""}... (Ctrl+C to exit)`),
+                color: "gray",
+            }).start();
 
-            // Wait before next refresh
-            await sleep(refreshInterval);
+            for (let i = totalSeconds; i > 0; i--) {
+                spinner.text = chalk.dim(`⟳ Refreshing in ${i} second${i !== 1 ? "s" : ""}... (Ctrl+C to exit)`);
+                await sleep(1000);
+                if (shouldExit) break;
+            }
+
+            spinner.stop();
 
             if (shouldExit) {
                 break;
