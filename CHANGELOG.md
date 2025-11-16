@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.0] - 2025-11-16
+
+### Added
+
+- Deployment-time service resolution via new CloudFormation parameters (PACKAGER_SQS_URL, ATHENA_USER_DATABASE, QUILT_WEB_HOST, ICEBERG_DATABASE)
+- Service resolver implementation for deployment-time CloudFormation query and resolution
+- Comprehensive merge conflict resolution documentation in spec/206-service-envars/
+
+### Changed
+
+- QuiltStackARN now optional in configuration (services resolved at deployment time, not runtime)
+- Container startup faster without runtime CloudFormation API calls
+- Removed runtime CloudFormation IAM permissions from ECS task role
+- Status command now validates stackArn presence before execution
+
+### Fixed
+
+- Status command handles optional stackArn gracefully with clear error messages
+
+### Migration
+
+Existing configurations work unchanged. The QuiltStackARN field is now optional as services are resolved during deployment rather than at container runtime. See [spec/206-service-envars/MIGRATION.md](./spec/206-service-envars/MIGRATION.md) for details.
+
 ## [0.7.10] - 2025-11-15
 
 ### Added
