@@ -11,6 +11,7 @@
 import chalk from "chalk";
 import { CloudFormationClient, DescribeStacksCommand, DescribeStackEventsCommand, DescribeStackResourcesCommand } from "@aws-sdk/client-cloudformation";
 import { ECSClient, DescribeServicesCommand } from "@aws-sdk/client-ecs";
+import { ElasticLoadBalancingV2Client, DescribeTargetHealthCommand, DescribeTargetGroupsCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { fromIni } from "@aws-sdk/credential-providers";
 import { XDGConfig } from "../../lib/xdg-config";
 import type { XDGBase } from "../../lib/xdg-base";
@@ -41,6 +42,17 @@ export interface StatusResult {
         runningCount: number;
         pendingCount: number;
         rolloutState?: string;
+    }>;
+    albTargetGroups?: Array<{
+        targetGroupName: string;
+        healthyCount: number;
+        unhealthyCount: number;
+        drainingCount: number;
+        targets: Array<{
+            id: string;
+            health: string;
+            reason?: string;
+        }>;
     }>;
     stackEvents?: Array<{
         timestamp: Date;
@@ -225,6 +237,92 @@ async function getRecentStackEvents(
 }
 
 /**
+ * Gets ALB target group health information
+ */
+async function getAlbTargetHealth(
+    stackName: string,
+    region: string,
+    awsProfile?: string,
+): Promise<StatusResult["albTargetGroups"]> {
+    try {
+        // Configure AWS SDK clients
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
+        if (awsProfile) {
+            clientConfig.credentials = fromIni({ profile: awsProfile });
+        }
+
+        const cfClient = new CloudFormationClient(clientConfig);
+        const elbClient = new ElasticLoadBalancingV2Client(clientConfig);
+
+        // Find Target Group resources in stack
+        const resourcesCommand = new DescribeStackResourcesCommand({
+            StackName: stackName,
+        });
+        const resourcesResponse = await cfClient.send(resourcesCommand);
+
+        const targetGroups = resourcesResponse.StackResources?.filter(
+            (r) => r.ResourceType === "AWS::ElasticLoadBalancingV2::TargetGroup"
+        ) || [];
+
+        if (targetGroups.length === 0) {
+            return undefined;
+        }
+
+        // Get target group ARNs
+        const targetGroupArns = targetGroups
+            .map((tg) => tg.PhysicalResourceId)
+            .filter((arn): arn is string => !!arn);
+
+        if (targetGroupArns.length === 0) {
+            return undefined;
+        }
+
+        // Get target group names
+        const tgInfoCommand = new DescribeTargetGroupsCommand({
+            TargetGroupArns: targetGroupArns,
+        });
+        const tgInfoResponse = await elbClient.send(tgInfoCommand);
+
+        const result: StatusResult["albTargetGroups"] = [];
+
+        // Get health for each target group
+        for (const tgArn of targetGroupArns) {
+            const healthCommand = new DescribeTargetHealthCommand({
+                TargetGroupArn: tgArn,
+            });
+            const healthResponse = await elbClient.send(healthCommand);
+
+            const tgInfo = tgInfoResponse.TargetGroups?.find((tg) => tg.TargetGroupArn === tgArn);
+            const tgName = tgInfo?.TargetGroupName || tgArn.split("/").pop() || "Unknown";
+
+            const targets = healthResponse.TargetHealthDescriptions?.map((target) => ({
+                id: target.Target?.Id || "Unknown",
+                health: target.TargetHealth?.State || "unknown",
+                reason: target.TargetHealth?.Reason,
+            })) || [];
+
+            const healthyCount = targets.filter((t) => t.health === "healthy").length;
+            const unhealthyCount = targets.filter((t) => t.health === "unhealthy").length;
+            const drainingCount = targets.filter((t) => t.health === "draining").length;
+
+            result.push({
+                targetGroupName: tgName,
+                healthyCount,
+                unhealthyCount,
+                drainingCount,
+                targets,
+            });
+        }
+
+        return result.length > 0 ? result : undefined;
+    } catch (error) {
+        // ALB health check is optional, don't fail the entire command
+        console.error(chalk.dim(`  Could not retrieve ALB target health: ${(error as Error).message}`));
+        return undefined;
+    }
+}
+
+/**
  * Status command implementation
  */
 export async function statusCommand(options: StatusCommandOptions = {}): Promise<StatusResult> {
@@ -272,13 +370,15 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
         return result;
     }
 
-    // Get ECS service health and recent events in parallel
-    const [ecsServices, stackEvents] = await Promise.all([
+    // Get ECS service health, ALB target health, and recent events in parallel
+    const [ecsServices, albTargetGroups, stackEvents] = await Promise.all([
         getEcsServiceHealth(stackName, region, awsProfile),
+        getAlbTargetHealth(stackName, region, awsProfile),
         getRecentStackEvents(stackName, region, awsProfile, 3),
     ]);
 
     result.ecsServices = ecsServices;
+    result.albTargetGroups = albTargetGroups;
     result.stackEvents = stackEvents;
 
     // Format last updated time in local timezone
@@ -324,6 +424,32 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
                     console.log(`    Rollout: ${chalk.red(svc.rolloutState)} ❌`);
                 } else {
                     console.log(`    Rollout: ${chalk.yellow(svc.rolloutState)}`);
+                }
+            }
+        }
+        console.log("");
+    }
+
+    // Display ALB target group health
+    if (result.albTargetGroups && result.albTargetGroups.length > 0) {
+        console.log(chalk.bold("ALB Target Groups:"));
+        for (const tg of result.albTargetGroups) {
+            const allHealthy = tg.healthyCount > 0 && tg.unhealthyCount === 0;
+            const hasUnhealthy = tg.unhealthyCount > 0;
+            const statusIcon = allHealthy ? "✓" : hasUnhealthy ? "✗" : "⚠";
+            const statusColor = allHealthy ? chalk.green : hasUnhealthy ? chalk.red : chalk.yellow;
+
+            console.log(`  ${statusColor(statusIcon)} ${chalk.cyan(tg.targetGroupName)}`);
+            console.log(`    Targets: ${chalk.green(`${tg.healthyCount} healthy`)}${tg.unhealthyCount > 0 ? chalk.red(` / ${tg.unhealthyCount} unhealthy`) : ""}${tg.drainingCount > 0 ? chalk.dim(` / ${tg.drainingCount} draining`) : ""}`);
+
+            // Show unhealthy target details
+            const unhealthyTargets = tg.targets.filter((t) => t.health === "unhealthy");
+            if (unhealthyTargets.length > 0) {
+                for (const target of unhealthyTargets) {
+                    console.log(`      ${chalk.red("✗")} ${chalk.dim(target.id)}: ${chalk.red(target.health)}`);
+                    if (target.reason) {
+                        console.log(`        ${chalk.dim(target.reason)}`);
+                    }
                 }
             }
         }
