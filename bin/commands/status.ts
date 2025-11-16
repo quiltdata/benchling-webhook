@@ -414,8 +414,13 @@ async function getSecretInfo(
 
         // Only use LastChangedDate - do NOT fall back to CreatedDate
         // If LastChangedDate is undefined, the secret has never been modified
+
+        // Extract full secret name from ARN (includes random suffix)
+        // ARN format: arn:aws:secretsmanager:region:account:secret:name-suffix
+        const fullSecretName = secretArn.split(":secret:")[1] || response.Name || secretArn;
+
         return {
-            name: response.Name || secretArn,
+            name: fullSecretName,
             lastModified: response.LastChangedDate,
             accessible: true,
         };
