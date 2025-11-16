@@ -179,7 +179,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
     try {
         existingConfig = xdg.readProfile(profile);
         console.log(chalk.dim(`\nLoading existing configuration for profile: ${profile}\n`));
-    } catch (_error) {
+    } catch {
         // Profile doesn't exist - offer to copy from default
         if (profile !== "default" && !yes) {
             try {
