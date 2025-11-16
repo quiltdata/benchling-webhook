@@ -130,57 +130,48 @@ AWS CDK application deploying auto-scaling webhook processor:
 
 ## Testing Strategy
 
-### The Single Path (Use This)
+### Primary Workflow
 
 ```bash
-# 1. Fast feedback during development
-npm run test                 # Unit tests: lint + typecheck + mocked tests (30 seconds)
+# 1. Fast feedback during development (30 seconds)
+npm run test                 # Lint + typecheck + unit tests (no Docker, mocked AWS)
 
-# 2. Verify integration before PR
-npm run test:local           # Local Docker + real Benchling (2 minutes)
+# 2. Local integration testing (2 minutes)
+npm run test:local           # Build + run Docker dev container + test webhooks
 
-# 3. CI verifies remote deployment
-# (Automatic on PR - deploys dev stack, tests via API Gateway)
+# 3. Remote deployment testing (via CI or manual)
+npm run test:dev             # Test deployed dev stack via API Gateway (auto-deploys if needed)
 ```
 
 ### Available Test Commands
 
 ```bash
-# Primary workflow
-npm run test                 # All unit tests (lint + typecheck + TS + Python)
-npm run test:native          # Local Flask (mocked)
-npm run test:dev             # Dev deployment integration (auto-deploys if needed)
-npm run test:prod            # Production deployment integration (via API Gateway)
+# Local testing (no deployment)
+npm run test                 # Unit tests: lint + typecheck + TS + Python
+npm run test:local           # Docker dev container (hot-reload, port 5002)
+npm run test:local:prod      # Docker prod container (production mode, port 5003)
+npm run test:native          # Native Flask with mocked AWS (no Docker, port 5001)
 
-# Individual components (for debugging)
-npm run build:typecheck      # TypeScript type checking only
-npm run test:ts              # Jest tests only
+# Remote deployment testing
+npm run test:dev             # Deployed dev stack via API Gateway (auto-deploys if needed)
+npm run test:prod            # Deployed prod stack via API Gateway
+
+# Component testing (debugging)
+npm run test:ts              # TypeScript tests only
 npm run test:python          # Python unit tests only
-npm run lint                 # Linting and auto-fix
-
-# Low-level Docker commands (rarely needed)
-make -C docker test-unit     # Python unit tests
-make -C docker test-native    # Local Flask server
-make -C docker test-ecr      # ECR image validation
+npm run lint                 # Auto-fix formatting
 ```
 
-### When to Use What
+### Quick Reference
 
-- **Daily development**: `npm run test` (fast, no external deps)
-- **Before committing**: `npm run test` + verify changes work
-- **Before PR**: `npm run test:local` (ensure integration works)
-- **CI/CD**: `npm run test:dev` (auto-deploys dev stack if needed, then tests)
-- **After production deploy**: `npm run test:prod` (runs automatically via deploy:prod)
-- **Debugging only**: Individual test commands or Docker make targets
-
-### Auto-Deployment (v0.6.3+)
-
-`npm run test:dev` now automatically deploys when:
-
-- No deployment tracking exists for profile
-- Python source files are newer than deployment timestamp
-
-Disable with `SKIP_AUTO_DEPLOY=1 npm run test:dev`
+| Command | Docker? | AWS? | When to Use |
+|---------|---------|------|-------------|
+| `test` | No | Mocked | Daily development, pre-commit |
+| `test:local` | Yes (dev) | Real | Before PR, local integration testing |
+| `test:local:prod` | Yes (prod) | Real | Test prod Docker config locally |
+| `test:native` | No | Mocked | Quick Flask testing without Docker |
+| `test:dev` | Remote | Real | CI/CD, verify deployed dev stack |
+| `test:prod` | Remote | Real | After production deployment |
 
 ---
 
