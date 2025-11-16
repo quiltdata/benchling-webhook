@@ -16,13 +16,13 @@ npm run setup                # Interactive wizard: deps + XDG config + secrets
 
 ```bash
 npm run test                 # Fast unit tests (lint + typecheck + mocked tests)
-npm run test:local           # Local Docker integration (when needed)
+npm run test:native          # Local Flask (mocked) integration tests
 ```
 
 #### Before creating PR
 
 ```bash
-npm run test:local           # Verify integration works
+npm run test:native           # Verify integration works
 git commit -m "type(scope): description"
 gh pr create
 npm run test:dev             # Verify dev deployment works
@@ -148,7 +148,7 @@ npm run test:local           # Local Docker + real Benchling (2 minutes)
 ```bash
 # Primary workflow
 npm run test                 # All unit tests (lint + typecheck + TS + Python)
-npm run test:local           # Local integration (Docker + real Benchling)
+npm run test:native          # Local Flask (mocked)
 npm run test:dev             # Dev deployment integration (auto-deploys if needed)
 npm run test:prod            # Production deployment integration (via API Gateway)
 
@@ -160,7 +160,7 @@ npm run lint                 # Linting and auto-fix
 
 # Low-level Docker commands (rarely needed)
 make -C docker test-unit     # Python unit tests
-make -C docker test-local    # Local Flask server
+make -C docker test-native    # Local Flask server
 make -C docker test-ecr      # ECR image validation
 ```
 

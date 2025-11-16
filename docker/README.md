@@ -50,7 +50,7 @@ make run-local-ngrok       # Launch using ngrok
 
 ```bash
 make run-local              # Mocked AWS, port 5001
-make test-local             # Test webhooks
+make test-native             # Test webhooks
 ```
 
 **Docker development (requires AWS):**
@@ -132,7 +132,7 @@ Run `make help` for full command list. Key commands:
 
 - `make test-unit` - Run pytest unit tests
 - `make test-integration` - Integration tests (needs AWS)
-- `make test-local` - Test webhooks with auto-managed local server
+- `make test-native` - Test webhooks with auto-managed local server
 - `make test-dev` - Test webhooks against docker dev
 - `make test-prod` - Test webhooks against docker prod
 - `make test-ecr` - Test ECR image (pulls, runs, tests, cleans up)
