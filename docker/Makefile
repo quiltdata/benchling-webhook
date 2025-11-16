@@ -15,14 +15,14 @@ PROFILE_DIR = $(XDG_CONFIG)/$(PROFILE)
 LOG_LEVEL ?= INFO
 
 # Port configuration
-PORT_LOCAL := 5001
+PORT_NATIVE := 5001
 PORT_DOCKER_DEV := 5002
 PORT_DOCKER_PROD := 5003
 
 .PHONY: help build test clean install lint ngrok kill \
-        check-xdg check-ngrok run-local run-local-verbose run-dev run run-local-ngrok run-ecr \
-        test test-unit test-integration test-dev test-docker-prod test-deployed-dev test-deployed-dev-direct test-deployed-prod test-ecr test-local test-benchling test-query \
-        health-local health-dev health logs-dev logs
+        check-xdg check-ngrok run-native run-native-verbose run-dev run run-native-ngrok run-ecr \
+        test test-unit test-integration test-dev test-docker-prod test-deployed-dev test-deployed-dev-direct test-deployed-prod test-ecr test-native test-benchling test-query \
+        health-native health-dev health logs-dev logs
 
 # Default target
 help:
@@ -36,15 +36,15 @@ help:
 	@echo "Development Servers:"
 	@echo "  run / run-dev         - Docker dev with hot-reload (needs AWS, port $(PORT_DOCKER_DEV))"
 	@echo "  run-ngrok             - Docker dev + ngrok tunnel (port $(PORT_DOCKER_DEV))"
-	@echo "  run-local             - Local Flask with mocked AWS (port $(PORT_LOCAL))"
-	@echo "  run-local-verbose     - Local Flask with debug logging (port $(PORT_LOCAL))"
-	@echo "  run-local-ngrok       - Local server + ngrok tunnel (port $(PORT_LOCAL))"
+	@echo "  run-native            - Native Flask with mocked AWS (port $(PORT_NATIVE))"
+	@echo "  run-native-verbose    - Native Flask with debug logging (port $(PORT_NATIVE))"
+	@echo "  run-native-ngrok      - Native server + ngrok tunnel (port $(PORT_NATIVE))"
 	@echo "  run-ecr               - Pull and run image from ECR (port $(PORT_DOCKER_PROD))"
 	@echo ""
 	@echo "Testing:"
 	@echo "  test                  - Run all tests (unit + integration + docker)"
 	@echo "  test-unit             - Run unit tests (pytest)"
-	@echo "  test-local            - Test webhooks with auto-managed local server"
+	@echo "  test-native           - Test webhooks with auto-managed native server"
 	@echo "  test-dev              - Test webhooks against docker dev (port $(PORT_DOCKER_DEV))"
 	@echo "  test-docker-prod      - Test local docker prod container (port $(PORT_DOCKER_PROD))"
 	@echo "  test-deployed-dev     - Test dev stack via API Gateway (auto-deploys if needed)"
@@ -57,7 +57,7 @@ help:
 	@echo ""
 	@echo "Health & Monitoring:"
 	@echo "  health                - Check docker prod health (port $(PORT_DOCKER_PROD))"
-	@echo "  health-local          - Check local server health (port $(PORT_LOCAL))"
+	@echo "  health-native         - Check native server health (port $(PORT_NATIVE))"
 	@echo "  health-dev            - Check docker dev health (port $(PORT_DOCKER_DEV))"
 	@echo "  logs                  - Show docker prod logs"
 	@echo "  logs-dev              - Show docker dev logs"
@@ -83,9 +83,9 @@ help:
 	@echo "  SKIP_AUTO_DEPLOY      - Skip auto-deployment in test-deployed-dev"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make test-local                - Test with dev profile (default)"
-	@echo "  make test-local PROFILE=sales  - Test with sales profile"
-	@echo "  make run-local PROFILE=prod    - Run local server with prod profile"
+	@echo "  make test-native               - Test with dev profile (default)"
+	@echo "  make test-native PROFILE=sales - Test with sales profile"
+	@echo "  make run-native PROFILE=prod   - Run native server with prod profile"
 
 # Setup
 
@@ -143,19 +143,19 @@ run-prod: build check-xdg
 	@sleep 10
 	@make health-prod
 
-# Local Flask server with mocked AWS (no credentials needed)
-run-local: check-xdg
-	uv run python scripts/run_local.py --profile $(PROFILE)
+# Native Flask server with mocked AWS (no credentials needed)
+run-native: check-xdg
+	uv run python scripts/run_native.py --profile $(PROFILE)
 
-# Local Flask server with verbose logging
-run-local-verbose: check-xdg
-	uv run python scripts/run_local.py --verbose --profile $(PROFILE)
+# Native Flask server with verbose logging
+run-native-verbose: check-xdg
+	uv run python scripts/run_native.py --verbose --profile $(PROFILE)
 
-# Local server + ngrok tunnel
-run-local-ngrok: check-xdg
-	@echo "Starting local server and ngrok tunnel..."
+# Native server + ngrok tunnel
+run-native-ngrok: check-xdg
+	@echo "Starting native server and ngrok tunnel..."
 	@echo "Press Ctrl+C to stop both ngrok and server"
-	@make run-local-verbose &
+	@make run-native-verbose &
 	@make ngrok
 
 # Run ECR image locally (assumes image exists in ECR)
@@ -203,11 +203,11 @@ test-integration: test-benchling
 		--entry-id $(BENCHLING_TEST_ENTRY) \
 		--wait-for-health
 
-# Test webhooks against local dev server (auto-starts and stops server)
+# Test webhooks against native dev server (auto-starts and stops server)
 # Uses dev profile by default, errors if profile doesn't exist
-test-local: check-xdg kill
-	@echo "Running local server tests (profile: $(PROFILE))..."
-	uv run python scripts/run_local.py --test --profile $(PROFILE)
+test-native: check-xdg kill
+	@echo "Running native server tests (profile: $(PROFILE))..."
+	uv run python scripts/run_native.py --test --profile $(PROFILE)
 
 # Test webhooks against docker dev server (requires server running)
 test-dev:
@@ -340,12 +340,12 @@ health-prod:
 	@echo "\nChecking readiness..."
 	@curl -s http://localhost:$(PORT_DOCKER_PROD)/health/ready | jq .
 
-# Check local server health
-health-local:
-	@echo "Checking local server health..."
-	@curl -s http://localhost:$(PORT_LOCAL)/health | jq .
+# Check native server health
+health-native:
+	@echo "Checking native server health..."
+	@curl -s http://localhost:$(PORT_NATIVE)/health | jq .
 	@echo "\nChecking readiness..."
-	@curl -s http://localhost:$(PORT_LOCAL)/health/ready | jq .
+	@curl -s http://localhost:$(PORT_NATIVE)/health/ready | jq .
 
 # Check docker dev health
 health-dev:
@@ -384,10 +384,10 @@ ngrok: check-ngrok
 
 # Maintenance
 
-# Smart kill: stop Docker containers and kill local Python processes
+# Smart kill: stop Docker containers and kill native Python processes
 kill:
 	@echo "Stopping servers..."
-	@pkill -f "python scripts/run_local.py" 2>/dev/null && echo "✅ Killed local Flask server" || echo "ℹ️  No local Flask server running"
+	@pkill -f "python scripts/run_native.py" 2>/dev/null && echo "✅ Killed native Flask server" || echo "ℹ️  No native Flask server running"
 	@docker-compose --profile dev down 2>/dev/null && echo "✅ Stopped Docker containers" || echo "ℹ️  No Docker containers running"
 	@echo "✅ Done"
 
