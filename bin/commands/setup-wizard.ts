@@ -175,12 +175,11 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
 
     // Load existing configuration if it exists
     let existingConfig: ProfileConfig | null = null;
-    let inheritFrom: string | null = null;
 
     try {
         existingConfig = xdg.readProfile(profile);
         console.log(chalk.dim(`\nLoading existing configuration for profile: ${profile}\n`));
-    } catch (error) {
+    } catch (_error) {
         // Profile doesn't exist - offer to copy from default
         if (profile !== "default" && !yes) {
             try {
@@ -197,7 +196,6 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
 
                 if (copy) {
                     existingConfig = defaultConfig;
-                    inheritFrom = "default";
                     console.log(chalk.dim("\nCopying configuration from profile: default\n"));
                 } else {
                     console.log(chalk.dim(`\nCreating new configuration for profile: ${profile}\n`));

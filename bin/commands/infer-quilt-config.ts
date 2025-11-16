@@ -265,7 +265,6 @@ export async function inferQuiltConfig(options: {
 
     // Step 1.5: If we have a catalog URL but no region specified, fetch config.json to get the region
     let searchRegion = region;
-    let catalogNameFromUrl: string | undefined;
 
     if (quilt3Config?.catalogUrl && !searchRegion) {
         try {
@@ -279,11 +278,6 @@ export async function inferQuiltConfig(options: {
                 console.log(`✓ Found catalog region: ${searchRegion}`);
             } else {
                 console.log("⚠️  config.json does not contain region field");
-            }
-
-            // Extract catalog name from config.json if available
-            if (catalogConfig.stackName) {
-                catalogNameFromUrl = catalogConfig.stackName as string;
             }
         } catch (error) {
             console.log(`⚠️  Could not fetch config.json: ${(error as Error).message}`);
