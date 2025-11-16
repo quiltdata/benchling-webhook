@@ -11,7 +11,8 @@
 import chalk from "chalk";
 import { CloudFormationClient, DescribeStacksCommand, DescribeStackEventsCommand, DescribeStackResourcesCommand } from "@aws-sdk/client-cloudformation";
 import { ECSClient, DescribeServicesCommand } from "@aws-sdk/client-ecs";
-import { ElasticLoadBalancingV2Client, DescribeTargetHealthCommand, DescribeTargetGroupsCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
+import { ElasticLoadBalancingV2Client, DescribeTargetHealthCommand, DescribeTargetGroupsCommand, DescribeRulesCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
+import { SecretsManagerClient, DescribeSecretCommand } from "@aws-sdk/client-secrets-manager";
 import { fromIni } from "@aws-sdk/credential-providers";
 import { XDGConfig } from "../../lib/xdg-config";
 import type { XDGBase } from "../../lib/xdg-base";
@@ -35,6 +36,22 @@ export interface StatusResult {
     stackArn?: string;
     region?: string;
     error?: string;
+    stackOutputs?: {
+        benchlingUrl?: string;
+        secretArn?: string;
+        dockerImage?: string;
+    };
+    secretInfo?: {
+        name: string;
+        lastModified?: Date;
+        accessible: boolean;
+        error?: string;
+    };
+    listenerRules?: Array<{
+        priority: string;
+        path: string;
+        targetGroupArn: string;
+    }>;
     ecsServices?: Array<{
         serviceName: string;
         status: string;
@@ -100,6 +117,14 @@ async function getStackStatus(
         const param = stack.Parameters?.find((p) => p.ParameterKey === "BenchlingIntegration");
         const benchlingIntegrationEnabled = param?.ParameterValue === "Enabled";
 
+        // Extract stack outputs
+        const outputs = stack.Outputs || [];
+        const stackOutputs = {
+            benchlingUrl: outputs.find((o) => o.OutputKey === "QuiltWebHost")?.OutputValue,
+            secretArn: outputs.find((o) => o.OutputKey === "BenchlingSecretArn" || o.OutputKey === "BenchlingClientSecretArn" || o.OutputKey === "SecretArn")?.OutputValue,
+            dockerImage: outputs.find((o) => o.OutputKey === "BenchlingDockerImage" || o.OutputKey === "DockerImage")?.OutputValue,
+        };
+
         return {
             success: true,
             stackStatus: stack.StackStatus,
@@ -107,6 +132,7 @@ async function getStackStatus(
             lastUpdateTime: stack.LastUpdatedTime?.toISOString() || stack.CreationTime?.toISOString(),
             stackArn,
             region,
+            stackOutputs,
         };
     } catch (error) {
         return {
@@ -323,6 +349,113 @@ async function getAlbTargetHealth(
 }
 
 /**
+ * Gets Secrets Manager secret information
+ */
+async function getSecretInfo(
+    secretArn: string,
+    region: string,
+    awsProfile?: string,
+): Promise<StatusResult["secretInfo"]> {
+    try {
+        // Configure AWS SDK client
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
+        if (awsProfile) {
+            clientConfig.credentials = fromIni({ profile: awsProfile });
+        }
+        const client = new SecretsManagerClient(clientConfig);
+
+        const command = new DescribeSecretCommand({
+            SecretId: secretArn,
+        });
+        const response = await client.send(command);
+
+        return {
+            name: response.Name || secretArn,
+            lastModified: response.LastChangedDate,
+            accessible: true,
+        };
+    } catch (error) {
+        const secretName = secretArn.split(":").pop() || secretArn;
+        return {
+            name: secretName,
+            accessible: false,
+            error: (error as Error).message,
+        };
+    }
+}
+
+/**
+ * Gets ALB listener rules information
+ */
+async function getListenerRules(
+    stackName: string,
+    region: string,
+    awsProfile?: string,
+): Promise<StatusResult["listenerRules"]> {
+    try {
+        // Configure AWS SDK clients
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
+        if (awsProfile) {
+            clientConfig.credentials = fromIni({ profile: awsProfile });
+        }
+
+        const cfClient = new CloudFormationClient(clientConfig);
+        const elbClient = new ElasticLoadBalancingV2Client(clientConfig);
+
+        // Find Listener Rule resources in stack
+        const resourcesCommand = new DescribeStackResourcesCommand({
+            StackName: stackName,
+        });
+        const resourcesResponse = await cfClient.send(resourcesCommand);
+
+        const listenerRules = resourcesResponse.StackResources?.filter(
+            (r) => r.ResourceType === "AWS::ElasticLoadBalancingV2::ListenerRule"
+        ) || [];
+
+        if (listenerRules.length === 0) {
+            return undefined;
+        }
+
+        const result: StatusResult["listenerRules"] = [];
+
+        // Get details for each listener rule
+        for (const ruleResource of listenerRules) {
+            const ruleArn = ruleResource.PhysicalResourceId;
+            if (!ruleArn) continue;
+
+            // Extract listener ARN from rule ARN
+            const listenerArnMatch = ruleArn.match(/(arn:aws:elasticloadbalancing:[^:]+:[^:]+:listener\/[^/]+\/[^/]+\/[^/]+)/);
+            if (!listenerArnMatch) continue;
+
+            const listenerArn = listenerArnMatch[1];
+            const rulesCommand = new DescribeRulesCommand({
+                ListenerArn: listenerArn,
+            });
+            const rulesResponse = await elbClient.send(rulesCommand);
+
+            const rule = rulesResponse.Rules?.find((r) => r.RuleArn === ruleArn);
+            if (rule) {
+                const pathCondition = rule.Conditions?.find((c) => c.Field === "path-pattern");
+                const path = pathCondition?.Values?.[0] || "N/A";
+                const targetGroupArn = rule.Actions?.[0]?.TargetGroupArn || "N/A";
+
+                result.push({
+                    priority: rule.Priority || "N/A",
+                    path,
+                    targetGroupArn: targetGroupArn.split("/").pop() || targetGroupArn,
+                });
+            }
+        }
+
+        return result.length > 0 ? result : undefined;
+    } catch (error) {
+        // Listener rules are optional, don't fail the entire command
+        console.error(chalk.dim(`  Could not retrieve listener rules: ${(error as Error).message}`));
+        return undefined;
+    }
+}
+
+/**
  * Status command implementation
  */
 export async function statusCommand(options: StatusCommandOptions = {}): Promise<StatusResult> {
@@ -370,15 +503,20 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
         return result;
     }
 
-    // Get ECS service health, ALB target health, and recent events in parallel
-    const [ecsServices, albTargetGroups, stackEvents] = await Promise.all([
+    // Get additional info in parallel
+    const secretArn = result.stackOutputs?.secretArn;
+    const [ecsServices, albTargetGroups, secretInfo, listenerRules, stackEvents] = await Promise.all([
         getEcsServiceHealth(stackName, region, awsProfile),
         getAlbTargetHealth(stackName, region, awsProfile),
+        secretArn ? getSecretInfo(secretArn, region, awsProfile) : Promise.resolve(undefined),
+        getListenerRules(stackName, region, awsProfile),
         getRecentStackEvents(stackName, region, awsProfile, 3),
     ]);
 
     result.ecsServices = ecsServices;
     result.albTargetGroups = albTargetGroups;
+    result.secretInfo = secretInfo;
+    result.listenerRules = listenerRules;
     result.stackEvents = stackEvents;
 
     // Format last updated time in local timezone
@@ -403,6 +541,47 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
     console.log(`${chalk.bold("Stack:")} ${chalk.cyan(stackName)}  ${chalk.bold("Region:")} ${chalk.cyan(region)}`);
     console.log(`${chalk.bold("Stack Status:")} ${formatStackStatus(result.stackStatus!)}  ${chalk.bold("BenchlingIntegration:")} ${result.benchlingIntegrationEnabled ? chalk.green("✓ Enabled") : chalk.yellow("⚠ Disabled")}`);
     console.log("");
+
+    // Display stack outputs
+    if (result.stackOutputs) {
+        console.log(chalk.bold("Stack Outputs:"));
+        if (result.stackOutputs.benchlingUrl) {
+            console.log(`  ${chalk.bold("Benchling URL:")} ${chalk.cyan(result.stackOutputs.benchlingUrl)}`);
+        }
+        if (result.stackOutputs.dockerImage) {
+            console.log(`  ${chalk.bold("Docker Image:")} ${chalk.dim(result.stackOutputs.dockerImage)}`);
+        }
+        if (result.stackOutputs.secretArn) {
+            console.log(`  ${chalk.bold("Secret ARN:")} ${chalk.dim(result.stackOutputs.secretArn)}`);
+        }
+        console.log("");
+    }
+
+    // Display secret info
+    if (result.secretInfo) {
+        console.log(chalk.bold("Secrets Manager:"));
+        const secretIcon = result.secretInfo.accessible ? "✓" : "✗";
+        const secretColor = result.secretInfo.accessible ? chalk.green : chalk.red;
+        console.log(`  ${secretColor(secretIcon)} ${chalk.cyan(result.secretInfo.name)}`);
+        if (result.secretInfo.accessible && result.secretInfo.lastModified) {
+            const timeSince = Math.floor((Date.now() - result.secretInfo.lastModified.getTime()) / 86400000);
+            console.log(`    Last modified: ${chalk.dim(`${timeSince} days ago`)}`);
+        }
+        if (!result.secretInfo.accessible && result.secretInfo.error) {
+            console.log(`    ${chalk.red("Error:")} ${chalk.dim(result.secretInfo.error)}`);
+        }
+        console.log("");
+    }
+
+    // Display listener rules
+    if (result.listenerRules && result.listenerRules.length > 0) {
+        console.log(chalk.bold("ALB Listener Rules:"));
+        for (const rule of result.listenerRules) {
+            console.log(`  ${chalk.cyan(rule.path)} ${chalk.dim(`(priority: ${rule.priority})`)}`);
+            console.log(`    → ${chalk.dim(rule.targetGroupArn)}`);
+        }
+        console.log("");
+    }
 
     // Display ECS service health
     if (result.ecsServices && result.ecsServices.length > 0) {
