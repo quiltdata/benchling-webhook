@@ -542,36 +542,43 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
     console.log(`${chalk.bold("Stack Status:")} ${formatStackStatus(result.stackStatus!)}  ${chalk.bold("BenchlingIntegration:")} ${result.benchlingIntegrationEnabled ? chalk.green("✓ Enabled") : chalk.yellow("⚠ Disabled")}`);
     console.log("");
 
-    // Display stack outputs
+    // Display stack outputs and secret info on one line each
     if (result.stackOutputs) {
-        console.log(chalk.bold("Stack Outputs:"));
         if (result.stackOutputs.benchlingUrl) {
-            console.log(`  ${chalk.bold("Benchling URL:")} ${chalk.cyan(result.stackOutputs.benchlingUrl)}`);
+            console.log(`${chalk.bold("Benchling URL:")} ${chalk.cyan(result.stackOutputs.benchlingUrl)}`);
         }
         if (result.stackOutputs.dockerImage) {
-            console.log(`  ${chalk.bold("Docker Image:")} ${chalk.dim(result.stackOutputs.dockerImage)}`);
+            console.log(`${chalk.bold("Docker Image:")} ${chalk.dim(result.stackOutputs.dockerImage)}`);
         }
-        if (result.stackOutputs.secretArn) {
-            console.log(`  ${chalk.bold("Secret ARN:")} ${chalk.dim(result.stackOutputs.secretArn)}`);
-        }
-        console.log("");
     }
 
-    // Display secret info
+    // Display secret info on one line
     if (result.secretInfo) {
-        console.log(chalk.bold("Secrets Manager:"));
-        const secretIcon = result.secretInfo.accessible ? "✓" : "✗";
-        const secretColor = result.secretInfo.accessible ? chalk.green : chalk.red;
-        console.log(`  ${secretColor(secretIcon)} ${chalk.cyan(result.secretInfo.name)}`);
-        if (result.secretInfo.accessible && result.secretInfo.lastModified) {
-            const timeSince = Math.floor((Date.now() - result.secretInfo.lastModified.getTime()) / 86400000);
-            console.log(`    Last modified: ${chalk.dim(`${timeSince} days ago`)}`);
+        let secretLine = `${chalk.bold("Secrets Manager:")} `;
+        if (result.secretInfo.accessible) {
+            secretLine += `${chalk.green("✓")} ${chalk.cyan(result.secretInfo.name)}`;
+            if (result.secretInfo.lastModified) {
+                const deltaMs = Date.now() - result.secretInfo.lastModified.getTime();
+                const hours = Math.floor(deltaMs / 3600000);
+                const days = Math.floor(hours / 24);
+
+                let timeStr: string;
+                if (days > 0) {
+                    timeStr = `${days} day${days !== 1 ? "s" : ""} ago`;
+                } else if (hours > 0) {
+                    timeStr = `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+                } else {
+                    timeStr = "recently";
+                }
+                secretLine += chalk.dim(` (Last modified: ${timeStr})`);
+            }
+        } else {
+            secretLine += `${chalk.red("✗")} ${chalk.red(result.secretInfo.name)} - ${chalk.dim(result.secretInfo.error || "Inaccessible")}`;
         }
-        if (!result.secretInfo.accessible && result.secretInfo.error) {
-            console.log(`    ${chalk.red("Error:")} ${chalk.dim(result.secretInfo.error)}`);
-        }
-        console.log("");
+        console.log(secretLine);
     }
+
+    console.log("");
 
     // Display listener rules
     if (result.listenerRules && result.listenerRules.length > 0) {
