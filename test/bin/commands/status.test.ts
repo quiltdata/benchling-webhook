@@ -131,7 +131,8 @@ describe("statusCommand", () => {
             expect(result.success).toBe(true);
             expect(result.stackStatus).toBe("UPDATE_COMPLETE");
             expect(result.benchlingIntegrationEnabled).toBe(true);
-            expect(mockSend).toHaveBeenCalledTimes(1);
+            // Status command now makes multiple CF API calls for health checks (stack, resources, events, etc.)
+            expect(mockSend).toHaveBeenCalled();
         });
 
         it("should reject non-integrated profiles with clear error message", async () => {
@@ -693,8 +694,9 @@ describe("statusCommand", () => {
 
             expect(result.success).toBe(true);
             expect(result.lastUpdateTime).toBe("2025-11-13T15:30:00.000Z");
+            // Timestamp is now shown in the header line, not as a separate "Last Updated:" label
             expect(mockConsoleLog).toHaveBeenCalledWith(
-                expect.stringContaining("Last Updated:")
+                expect.stringMatching(/Stack Status for Profile.*@.*\(.*\)/)
             );
         });
 
@@ -728,8 +730,8 @@ describe("statusCommand", () => {
                 configStorage: mockStorage,
             });
 
-            // Verify CloudFormation API was called
-            expect(mockSend).toHaveBeenCalledTimes(1);
+            // Verify CloudFormation API was called (multiple times for health checks)
+            expect(mockSend).toHaveBeenCalled();
             // Verify success
             expect(mockConsoleLog).toHaveBeenCalledWith(
                 expect.stringContaining("Stack is up to date")

@@ -26,6 +26,8 @@ export interface StatusCommandOptions {
     configStorage?: XDGBase;
     /** Show detailed stack events */
     detailed?: boolean;
+    /** Auto-refresh interval in seconds (0 or non-numeric to disable) */
+    timer?: string | number;
 }
 
 export interface StatusResult {
@@ -120,7 +122,7 @@ async function getStackStatus(
         // Extract stack outputs
         const outputs = stack.Outputs || [];
         const stackOutputs = {
-            benchlingUrl: outputs.find((o) => o.OutputKey === "QuiltWebHost")?.OutputValue,
+            benchlingUrl: outputs.find((o) => o.OutputKey === "BenchlingUrl")?.OutputValue,
             secretArn: outputs.find((o) => o.OutputKey === "BenchlingSecretArn" || o.OutputKey === "BenchlingClientSecretArn" || o.OutputKey === "SecretArn")?.OutputValue,
             dockerImage: outputs.find((o) => o.OutputKey === "BenchlingDockerImage" || o.OutputKey === "DockerImage")?.OutputValue,
         };
@@ -160,6 +162,46 @@ export function formatStackStatus(status: string): string {
 }
 
 /**
+ * Checks if stack status is terminal (no further updates expected)
+ */
+function isTerminalStatus(status?: string): boolean {
+    if (!status) return false;
+    return status.endsWith("_COMPLETE") || status.endsWith("_FAILED");
+}
+
+/**
+ * Parses timer value (string or number) and returns interval in milliseconds
+ * Returns null if timer is disabled (0 or non-numeric string)
+ */
+function parseTimerValue(timer?: string | number): number | null {
+    if (timer === undefined) return 10000; // Default 10 seconds
+
+    const numValue = typeof timer === "string" ? parseFloat(timer) : timer;
+
+    // If NaN or 0, disable timer
+    if (isNaN(numValue) || numValue === 0) {
+        return null;
+    }
+
+    // Return milliseconds
+    return numValue * 1000;
+}
+
+/**
+ * Sleep helper
+ */
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Clear screen and move cursor to top
+ */
+function clearScreen(): void {
+    process.stdout.write("\x1b[2J\x1b[H");
+}
+
+/**
  * Gets ECS service health information
  */
 async function getEcsServiceHealth(
@@ -184,7 +226,7 @@ async function getEcsServiceHealth(
         const resourcesResponse = await cfClient.send(resourcesCommand);
 
         const ecsServices = resourcesResponse.StackResources?.filter(
-            (r) => r.ResourceType === "AWS::ECS::Service"
+            (r) => r.ResourceType === "AWS::ECS::Service",
         ) || [];
 
         if (ecsServices.length === 0) {
@@ -193,7 +235,7 @@ async function getEcsServiceHealth(
 
         // Get cluster name (assuming all services use the same cluster)
         const clusterResource = resourcesResponse.StackResources?.find(
-            (r) => r.ResourceType === "AWS::ECS::Cluster"
+            (r) => r.ResourceType === "AWS::ECS::Cluster",
         );
         const clusterName = clusterResource?.PhysicalResourceId || stackName;
 
@@ -287,7 +329,7 @@ async function getAlbTargetHealth(
         const resourcesResponse = await cfClient.send(resourcesCommand);
 
         const targetGroups = resourcesResponse.StackResources?.filter(
-            (r) => r.ResourceType === "AWS::ElasticLoadBalancingV2::TargetGroup"
+            (r) => r.ResourceType === "AWS::ElasticLoadBalancingV2::TargetGroup",
         ) || [];
 
         if (targetGroups.length === 0) {
@@ -411,7 +453,7 @@ async function getListenerRules(
         const resourcesResponse = await cfClient.send(resourcesCommand);
 
         const listenerRules = resourcesResponse.StackResources?.filter(
-            (r) => r.ResourceType === "AWS::ElasticLoadBalancingV2::ListenerRule"
+            (r) => r.ResourceType === "AWS::ElasticLoadBalancingV2::ListenerRule",
         ) || [];
 
         if (listenerRules.length === 0) {
@@ -458,50 +500,17 @@ async function getListenerRules(
 }
 
 /**
- * Status command implementation
+ * Fetches complete status including all health checks
  */
-export async function statusCommand(options: StatusCommandOptions = {}): Promise<StatusResult> {
-    const {
-        profile = "default",
-        awsProfile,
-        configStorage,
-    } = options;
-
-    const xdg = configStorage || new XDGConfig();
-
-    // Load configuration
-    let config;
-    try {
-        config = xdg.readProfile(profile);
-    } catch {
-        const errorMsg = `Profile '${profile}' not found. Run setup first.`;
-        console.error(chalk.red(`\n❌ ${errorMsg}\n`));
-        return {
-            success: false,
-            error: errorMsg,
-        };
-    }
-
-    // Check if integrated stack
-    if (!config.integratedStack) {
-        const errorMsg = "Status command is only available for integrated stack mode";
-        console.log(chalk.yellow(`\n⚠️  ${errorMsg}\n`));
-        console.log(chalk.dim("This profile is configured for standalone deployment."));
-        console.log(chalk.dim("Use CloudFormation console to check webhook stack status.\n"));
-        return {
-            success: false,
-            error: errorMsg,
-        };
-    }
-
-    // Get stack status
-    const stackArn = config.quilt.stackArn;
-    const region = config.deployment.region;
-    const stackName = stackArn.match(/stack\/([^/]+)\//)?.[1] || stackArn;
+async function fetchCompleteStatus(
+    stackArn: string,
+    stackName: string,
+    region: string,
+    awsProfile?: string,
+): Promise<StatusResult> {
     const result = await getStackStatus(stackArn, region, awsProfile);
 
     if (!result.success) {
-        console.error(chalk.red(`❌ Failed to get stack status: ${result.error}\n`));
         return result;
     }
 
@@ -520,6 +529,16 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
     result.secretInfo = secretInfo;
     result.listenerRules = listenerRules;
     result.stackEvents = stackEvents;
+
+    return result;
+}
+
+/**
+ * Displays status result to console
+ */
+function displayStatusResult(result: StatusResult, profile: string): void {
+    const stackName = result.stackArn?.match(/stack\/([^/]+)\//)?.[1] || result.stackArn || "Unknown";
+    const region = result.region || "Unknown";
 
     // Format last updated time in local timezone
     let lastUpdatedStr = "";
@@ -689,7 +708,7 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
     if (result.stackStatus?.includes("IN_PROGRESS")) {
         console.log(chalk.bold("Status:"));
         console.log(chalk.yellow("  ⏳ Stack update in progress..."));
-        console.log(chalk.dim("  Run this command again in a few minutes to check progress\n"));
+        console.log(chalk.dim("  Auto-refreshing until complete...\n"));
     } else if (result.stackStatus?.includes("COMPLETE") && !result.stackStatus.includes("ROLLBACK")) {
         console.log(chalk.bold("Status:"));
         console.log(chalk.green("  ✓ Stack is up to date\n"));
@@ -706,11 +725,128 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
     }
 
     // CloudFormation console link
+    const stackArn = result.stackArn || "";
     const consoleUrl = `https://${region}.console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/stackinfo?stackId=${encodeURIComponent(stackArn)}`;
     console.log(chalk.bold("CloudFormation Console:"));
     console.log(chalk.cyan(`  ${consoleUrl}\n`));
 
     console.log(chalk.dim("─".repeat(80)));
+}
 
-    return result;
+/**
+ * Status command implementation
+ */
+export async function statusCommand(options: StatusCommandOptions = {}): Promise<StatusResult> {
+    const {
+        profile = "default",
+        awsProfile,
+        configStorage,
+        timer,
+    } = options;
+
+    const xdg = configStorage || new XDGConfig();
+
+    // Load configuration
+    let config;
+    try {
+        config = xdg.readProfile(profile);
+    } catch {
+        const errorMsg = `Profile '${profile}' not found. Run setup first.`;
+        console.error(chalk.red(`\n❌ ${errorMsg}\n`));
+        return {
+            success: false,
+            error: errorMsg,
+        };
+    }
+
+    // Check if integrated stack
+    if (!config.integratedStack) {
+        const errorMsg = "Status command is only available for integrated stack mode";
+        console.log(chalk.yellow(`\n⚠️  ${errorMsg}\n`));
+        console.log(chalk.dim("This profile is configured for standalone deployment."));
+        console.log(chalk.dim("Use CloudFormation console to check webhook stack status.\n"));
+        return {
+            success: false,
+            error: errorMsg,
+        };
+    }
+
+    // Extract stack info
+    const stackArn = config.quilt.stackArn;
+    const region = config.deployment.region;
+    const stackName = stackArn.match(/stack\/([^/]+)\//)?.[1] || stackArn;
+
+    // Parse timer value
+    const refreshInterval = parseTimerValue(timer);
+
+    // Setup Ctrl+C handler for graceful exit
+    let shouldExit = false;
+    const exitHandler = (): void => {
+        shouldExit = true;
+        console.log(chalk.dim("\n\n⚠️  Interrupted by user. Exiting...\n"));
+        process.exit(0);
+    };
+    process.on("SIGINT", exitHandler);
+
+    try {
+        let result: StatusResult;
+        let isFirstRun = true;
+
+        // Watch loop
+        while (true) {
+            // Clear screen on subsequent runs
+            if (!isFirstRun && refreshInterval) {
+                clearScreen();
+            }
+
+            // Fetch and display status
+            result = await fetchCompleteStatus(stackArn, stackName, region, awsProfile);
+
+            if (!result.success) {
+                console.error(chalk.red(`❌ Failed to get stack status: ${result.error}\n`));
+                return result;
+            }
+
+            displayStatusResult(result, profile);
+
+            // Check if we should exit (no timer or user disabled it)
+            if (!refreshInterval) {
+                break;
+            }
+
+            // If terminal status, announce completion and exit
+            if (isTerminalStatus(result.stackStatus)) {
+                if (result.stackStatus?.includes("COMPLETE") && !result.stackStatus.includes("ROLLBACK")) {
+                    console.log(chalk.green("✓ Stack reached stable state. Monitoring complete.\n"));
+                } else if (result.stackStatus?.includes("FAILED") || result.stackStatus?.includes("ROLLBACK")) {
+                    console.log(chalk.red("✗ Stack operation failed. Monitoring stopped.\n"));
+                } else {
+                    console.log(chalk.dim("⟳ Stack reached terminal state. Auto-refresh stopped.\n"));
+                }
+                break;
+            }
+
+            // Show refresh message
+            const seconds = refreshInterval / 1000;
+            console.log(chalk.dim(`⟳ Refreshing in ${seconds} seconds... (Ctrl+C to exit)`));
+
+            // Wait before next refresh
+            await sleep(refreshInterval);
+
+            if (shouldExit) {
+                break;
+            }
+
+            isFirstRun = false;
+        }
+
+        // Clean up handler
+        process.off("SIGINT", exitHandler);
+
+        return result!;
+    } catch (error) {
+        // Clean up handler on error
+        process.off("SIGINT", exitHandler);
+        throw error;
+    }
 }
