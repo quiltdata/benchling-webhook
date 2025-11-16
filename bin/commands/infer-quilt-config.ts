@@ -393,7 +393,7 @@ export async function inferQuiltConfig(options: {
 
             // For non-explicit catalog (quilt3 CLI), allow fallback to selection
             console.log(`No stack found matching catalog URL: ${result.catalog}`);
-            console.log(`Available stacks:`);
+            console.log("Available stacks:");
             stacks.forEach((s) => console.log(`  - ${s.catalogUrl || s.stackName}`));
 
             if (interactive) {
