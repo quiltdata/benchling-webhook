@@ -31,21 +31,21 @@ export interface StackParameterUpdateResult {
  * @returns Update result
  */
 export async function updateStackParameter(
-    options: StackParameterUpdateOptions
+    options: StackParameterUpdateOptions,
 ): Promise<StackParameterUpdateResult> {
     const { stackArn, region, parameterKey, parameterValue, awsProfile } = options;
 
     try {
         // Extract stack name from ARN
         // ARN format: arn:aws:cloudformation:REGION:ACCOUNT:stack/STACK_NAME/STACK_ID
-        const stackNameMatch = stackArn.match(/stack\/([^\/]+)\//);
+        const stackNameMatch = stackArn.match(/stack\/([^/]+)\//);
         if (!stackNameMatch) {
             throw new Error(`Invalid stack ARN format: ${stackArn}`);
         }
         const stackName = stackNameMatch[1];
 
         // Configure AWS SDK client
-        const clientConfig: any = { region };
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
         if (awsProfile) {
             clientConfig.credentials = fromIni({ profile: awsProfile });
         }
@@ -121,16 +121,16 @@ export async function getStackParameter(
     stackArn: string,
     region: string,
     parameterKey: string,
-    awsProfile?: string
+    awsProfile?: string,
 ): Promise<string | undefined> {
     try {
-        const stackNameMatch = stackArn.match(/stack\/([^\/]+)\//);
+        const stackNameMatch = stackArn.match(/stack\/([^/]+)\//);
         if (!stackNameMatch) {
             throw new Error(`Invalid stack ARN format: ${stackArn}`);
         }
         const stackName = stackNameMatch[1];
 
-        const clientConfig: any = { region };
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
         if (awsProfile) {
             clientConfig.credentials = fromIni({ profile: awsProfile });
         }

@@ -130,21 +130,30 @@ program
     )
     .option("--aws-profile <name>", "AWS credentials profile")
     .option("--detailed", "Show detailed stack events")
+    .option(
+        "--timer <seconds>",
+        "Auto-refresh interval in seconds (default: 10, use 0 or non-numeric to disable)",
+        "10",
+    )
     .addHelpText(
         "after",
         `
 
 Examples:
-  Check status of default profile:
+  Check status of default profile (auto-refreshes every 10 seconds):
     $ npx @quiltdata/benchling-webhook status
 
   Check status of specific profile:
     $ npx @quiltdata/benchling-webhook status --profile prod
 
-  Check with detailed events:
-    $ npx @quiltdata/benchling-webhook status --profile prod --detailed
+  One-shot mode (no auto-refresh):
+    $ npx @quiltdata/benchling-webhook status --timer 0
+
+  Custom refresh interval (30 seconds):
+    $ npx @quiltdata/benchling-webhook status --timer 30
 
 Note: This command only works for integrated stack mode profiles.
+Auto-refresh stops when stack reaches a terminal state (*_COMPLETE or *_FAILED).
 `,
     )
     .action(async (options) => {

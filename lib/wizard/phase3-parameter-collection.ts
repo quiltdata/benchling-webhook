@@ -26,7 +26,7 @@ import { ParameterCollectionInput, ParameterCollectionResult } from "./types";
  * @returns Parameter collection result
  */
 export async function runParameterCollection(
-    input: ParameterCollectionInput
+    input: ParameterCollectionInput,
 ): Promise<ParameterCollectionResult> {
     const { stackQuery, existingConfig, yes = false } = input;
 
@@ -56,7 +56,7 @@ export async function runParameterCollection(
                 name: "tenant",
                 message: "Benchling Tenant:",
                 default: existingConfig?.benchling?.tenant || "",
-                validate: (value: string) =>
+                validate: (value: string): boolean | string =>
                     value.trim().length > 0 || "Tenant is required",
             },
         ]);
@@ -71,7 +71,7 @@ export async function runParameterCollection(
         // Show catalog change warning if applicable
         if (catalogChanged) {
             console.log("\n" + chalk.yellow(
-                `Catalog changed from ${existingConfig.quilt.catalog} to ${stackQuery.catalog}`
+                `Catalog changed from ${existingConfig.quilt.catalog} to ${stackQuery.catalog}`,
             ));
         }
 
@@ -116,7 +116,7 @@ export async function runParameterCollection(
                 name: "appDefinitionId",
                 message: "Benchling App Definition ID:",
                 default: existingConfig.benchling.appDefinitionId,
-                validate: (value: string) =>
+                validate: (value: string): boolean | string =>
                     value.trim().length > 0 || "App definition ID is required",
             },
         ]);
@@ -144,7 +144,7 @@ export async function runParameterCollection(
                     type: "input",
                     name: "appDefinitionId",
                     message: "Benchling App Definition ID:",
-                    validate: (value: string) =>
+                    validate: (value: string): boolean | string =>
                         value.trim().length > 0 || "App definition ID is required",
                 },
             ]);
@@ -162,7 +162,7 @@ export async function runParameterCollection(
         });
 
         console.log("\n" + chalk.yellow(
-            "After you have installed the app in Benchling and have the App Definition ID, you can continue."
+            "After you have installed the app in Benchling and have the App Definition ID, you can continue.",
         ) + "\n");
 
         // Now ask for the app definition ID
@@ -171,7 +171,7 @@ export async function runParameterCollection(
                 type: "input",
                 name: "appDefinitionId",
                 message: "Benchling App Definition ID:",
-                validate: (value: string) =>
+                validate: (value: string): boolean | string =>
                     value.trim().length > 0 || "App definition ID is required to continue",
             },
         ]);
@@ -213,7 +213,7 @@ export async function runParameterCollection(
                 name: "clientId",
                 message: "Benchling OAuth Client ID:",
                 default: hasExistingCreds ? existingConfig?.benchling?.clientId : "",
-                validate: (value: string) =>
+                validate: (value: string): boolean | string =>
                     value.trim().length > 0 || "Client ID is required",
             },
             {
@@ -222,7 +222,7 @@ export async function runParameterCollection(
                 message: "Benchling OAuth Client Secret" +
                     (hasExistingCreds ? " (press Enter to keep existing):" : ":"),
                 default: hasExistingCreds ? existingConfig?.benchling?.clientSecret : "",
-                validate: (value: string) => {
+                validate: (value: string): boolean | string => {
                     // Allow empty input if we have existing credentials (will use default)
                     if (hasExistingCreds && value.trim().length === 0) {
                         return true;
@@ -296,9 +296,9 @@ export async function runParameterCollection(
             throw new Error("--user-bucket is required in non-interactive mode");
         }
 
-        console.log(`  Bucket: ${bucket} (from ${input.userBucket ? 'CLI' : 'existing config'})`);
-        console.log(`  Prefix: ${prefix} (from ${input.pkgPrefix ? 'CLI' : existingConfig?.packages?.prefix ? 'existing config' : 'default'})`);
-        console.log(`  Metadata Key: ${metadataKey} (from ${input.pkgKey ? 'CLI' : existingConfig?.packages?.metadataKey ? 'existing config' : 'default'})`);
+        console.log(`  Bucket: ${bucket} (from ${input.userBucket ? "CLI" : "existing config"})`);
+        console.log(`  Prefix: ${prefix} (from ${input.pkgPrefix ? "CLI" : existingConfig?.packages?.prefix ? "existing config" : "default"})`);
+        console.log(`  Metadata Key: ${metadataKey} (from ${input.pkgKey ? "CLI" : existingConfig?.packages?.metadataKey ? "existing config" : "default"})`);
     } else {
         // Always show prompts with defaults from existing config
         const packageAnswers = await inquirer.prompt([
@@ -307,7 +307,7 @@ export async function runParameterCollection(
                 name: "bucket",
                 message: "Package S3 Bucket:",
                 default: existingConfig?.packages?.bucket || "",
-                validate: (value: string) =>
+                validate: (value: string): boolean | string =>
                     value.trim().length > 0 || "Bucket name is required",
             },
             {
@@ -356,8 +356,8 @@ export async function runParameterCollection(
         // In non-interactive mode, use CLI args or existing config or defaults
         logLevel = (input.logLevel as "DEBUG" | "INFO" | "WARNING" | "ERROR") || existingConfig?.logging?.level || "INFO";
         webhookAllowList = input.webhookAllowList ?? existingConfig?.security?.webhookAllowList ?? "";
-        console.log(`  Log Level: ${logLevel} (from ${input.logLevel ? 'CLI' : existingConfig?.logging?.level ? 'existing config' : 'default'})`);
-        console.log(`  Webhook Allow List: ${webhookAllowList || "(none)"} (from ${input.webhookAllowList !== undefined ? 'CLI' : existingConfig?.security?.webhookAllowList ? 'existing config' : 'default'})`);
+        console.log(`  Log Level: ${logLevel} (from ${input.logLevel ? "CLI" : existingConfig?.logging?.level ? "existing config" : "default"})`);
+        console.log(`  Webhook Allow List: ${webhookAllowList || "(none)"} (from ${input.webhookAllowList !== undefined ? "CLI" : existingConfig?.security?.webhookAllowList ? "existing config" : "default"})`);
     } else {
         // Always show prompts with defaults from existing config
         const optionalAnswers = await inquirer.prompt([

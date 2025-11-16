@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.10] - 2025-11-15
+
+### Added
+
+- Enhanced `status` command with comprehensive deployment health checks (ECS service status, ALB target health, recent stack events, secret accessibility, listener rules)
+- Auto-refresh status monitoring with `--timer` flag (default: 10 seconds, watches until stack reaches terminal state)
+- Catalog validation now shows progress when searching CloudFormation stacks
+
+### Changed
+
+- Status command displays stack outputs, secrets metadata, and minutes since last modified
+- Stack outputs and secrets display made more concise and readable
+- Status command now auto-refreshes by default when monitoring deployments (use `--timer 0` to disable)
+
+### Fixed
+
+- Catalog matching now enforces exact QuiltWebHost match (prevents ambiguous catalog detection)
+- Setup wizard fails fast on catalog mismatch instead of proceeding with wrong configuration
+- CDK destroy command no longer requires valid configuration to run
+- Removed duplicate completion message in integrated stack mode
+
 ## [0.7.9] - 2025-11-15
 
 ### Added
