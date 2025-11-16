@@ -369,6 +369,8 @@ async function getSecretInfo(
         });
         const response = await client.send(command);
 
+        // Only use LastChangedDate - do NOT fall back to CreatedDate
+        // If LastChangedDate is undefined, the secret has never been modified
         return {
             name: response.Name || secretArn,
             lastModified: response.LastChangedDate,
@@ -556,8 +558,9 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
     if (result.secretInfo) {
         let secretLine = `${chalk.bold("Secrets Manager:")} `;
         if (result.secretInfo.accessible) {
-            secretLine += `${chalk.green("✓")} ${chalk.cyan(result.secretInfo.name)}`;
             if (result.secretInfo.lastModified) {
+                // Secret has been modified - show with green checkmark
+                secretLine += `${chalk.green("✓")} ${chalk.cyan(result.secretInfo.name)}`;
                 const deltaMs = Date.now() - result.secretInfo.lastModified.getTime();
                 const minutes = Math.floor(deltaMs / 60000);
                 const hours = Math.floor(minutes / 60);
@@ -574,6 +577,9 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
                     timeStr = "just now";
                 }
                 secretLine += chalk.dim(` (Last modified: ${timeStr})`);
+            } else {
+                // Secret never modified - needs attention!
+                secretLine += `${chalk.red(result.secretInfo.name)} ${chalk.red("(NEVER MODIFIED - needs updating)")}`;
             }
         } else {
             secretLine += `${chalk.red("✗")} ${chalk.red(result.secretInfo.name)} - ${chalk.dim(result.secretInfo.error || "Inaccessible")}`;
