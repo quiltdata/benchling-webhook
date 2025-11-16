@@ -29,6 +29,8 @@ export interface StatusCommandOptions {
     detailed?: boolean;
     /** Auto-refresh interval in seconds (0 or non-numeric to disable) */
     timer?: string | number;
+    /** Continue monitoring even after reaching terminal status */
+    noExit?: boolean;
 }
 
 export interface StatusResult {
@@ -839,6 +841,7 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
         awsProfile,
         configStorage,
         timer,
+        noExit = false,
     } = options;
 
     const xdg = configStorage || new XDGConfig();
@@ -870,6 +873,12 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
 
     // Extract stack info
     const stackArn = config.quilt.stackArn;
+    if (!stackArn) {
+        return {
+            success: false,
+            error: "Quilt stack ARN not found in configuration. This command requires a Quilt stack ARN to check integration status.",
+        };
+    }
     const region = config.deployment.region;
     const stackName = stackArn.match(/stack\/([^/]+)\//)?.[1] || stackArn;
 
@@ -911,16 +920,19 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
                 break;
             }
 
-            // If terminal status, announce completion and exit
+            // If terminal status, announce completion and exit (unless --no-exit is set)
             if (isTerminalStatus(result.stackStatus)) {
-                if (result.stackStatus?.includes("COMPLETE") && !result.stackStatus.includes("ROLLBACK")) {
-                    console.log(chalk.green("✓ Stack reached stable state. Monitoring complete.\n"));
-                } else if (result.stackStatus?.includes("FAILED") || result.stackStatus?.includes("ROLLBACK")) {
-                    console.log(chalk.red("✗ Stack operation failed. Monitoring stopped.\n"));
-                } else {
-                    console.log(chalk.dim("⟳ Stack reached terminal state. Auto-refresh stopped.\n"));
+                if (!noExit) {
+                    if (result.stackStatus?.includes("COMPLETE") && !result.stackStatus.includes("ROLLBACK")) {
+                        console.log(chalk.green("✓ Stack reached stable state. Monitoring complete.\n"));
+                    } else if (result.stackStatus?.includes("FAILED") || result.stackStatus?.includes("ROLLBACK")) {
+                        console.log(chalk.red("✗ Stack operation failed. Monitoring stopped.\n"));
+                    } else {
+                        console.log(chalk.dim("⟳ Stack reached terminal state. Auto-refresh stopped.\n"));
+                    }
+                    break;
                 }
-                break;
+                // If --no-exit is set, continue monitoring even after terminal status
             }
 
             // Show countdown with live updates
