@@ -40,7 +40,7 @@ export async function runStackQuery(
     catalogDns: string,
     options: StackQueryOptions = {},
 ): Promise<StackQueryResult> {
-    const { awsProfile, awsRegion, yes = false } = options;
+    const { awsProfile, awsRegion } = options;
 
     console.log(`Querying CloudFormation stack for catalog: ${catalogDns}...\n`);
 
