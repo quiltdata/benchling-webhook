@@ -51,7 +51,7 @@ export async function runModeDecision(input: ModeDecisionInput): Promise<ModeDec
     const hasBenchlingSecret = Boolean(stackQuery.benchlingSecretArn);
 
     // Use integrated mode if: (1) secret exists AND (2) user confirms usage
-    if (hasBenchlingSecret && await shouldUseExisting(yes)) {
+    if (hasBenchlingSecret && (await shouldUseExisting(yes))) {
         console.log(chalk.blue("Using integrated webhook mode (built-in secret)\n"));
         return {
             mode: "integrated",

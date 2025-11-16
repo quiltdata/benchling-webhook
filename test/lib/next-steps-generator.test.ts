@@ -80,7 +80,7 @@ describe('generateNextSteps', () => {
       // Phase 3 now includes health check as third step
       expect(result).toContain('Next steps:');
       expect(result).toContain('Deploy to AWS: npm run deploy -- --profile staging --stage staging');
-      expect(result).toContain('npx ts-node scripts/check-logs.ts --profile staging');
+      expect(result).toContain('npx @quiltdata/benchling-webhook test --profile staging');
     });
   });
 
@@ -157,14 +157,14 @@ describe('generateNextSteps', () => {
         const result = generateNextSteps({ profile: 'staging', context });
 
         expect(result).toContain('npm run deploy -- --profile staging --stage staging');
-        expect(result).toContain('npx ts-node scripts/check-logs.ts --profile staging');
+        expect(result).toContain('npx @quiltdata/benchling-webhook test --profile staging');
       });
 
       it('should work with different custom profile names', () => {
         const result = generateNextSteps({ profile: 'test-env', context });
 
         expect(result).toContain('--profile test-env');
-        expect(result).toContain('npx ts-node scripts/check-logs.ts --profile test-env');
+        expect(result).toContain('npx @quiltdata/benchling-webhook test --profile test-env');
       });
 
       it('should show 2 steps for custom profiles', () => {
@@ -172,7 +172,7 @@ describe('generateNextSteps', () => {
         const expected = [
           'Next steps:',
           '  1. Deploy to AWS: npm run deploy -- --profile staging --stage staging',
-          '  2. Test integration: npx ts-node scripts/check-logs.ts --profile staging'
+          '  2. Test integration: npx @quiltdata/benchling-webhook test --profile staging'
         ].join('\n');
 
         expect(result).toBe(expected);
@@ -183,7 +183,7 @@ describe('generateNextSteps', () => {
         const expected = [
           'Next steps:',
           '  1. Deploy to AWS: npm run deploy -- --profile staging --stage staging',
-          '  2. Test integration: npx ts-node scripts/check-logs.ts --profile staging',
+          '  2. Test integration: npx @quiltdata/benchling-webhook test --profile staging',
           '  3. Check configuration: npm run setup:health -- --profile staging'
         ].join('\n');
 
@@ -279,7 +279,7 @@ describe('generateNextSteps', () => {
         const result = generateNextSteps({ profile: 'test-env', context });
 
         expect(result).toContain('npx @quiltdata/benchling-webhook test --profile test-env');
-        expect(result).not.toContain('check-logs.ts');
+        expect(result).not.toContain('npx ts-node scripts');
       });
 
       it('should show 2 steps for custom profiles', () => {
@@ -350,7 +350,7 @@ describe('generateNextSteps', () => {
       const result = generateNextSteps({ profile: 'test-env-2', context: repoContext });
 
       expect(result).toContain('--profile test-env-2');
-      expect(result).toContain('npx ts-node scripts/check-logs.ts --profile test-env-2');
+      expect(result).toContain('npx @quiltdata/benchling-webhook test --profile test-env-2');
     });
 
     it('should handle undefined stage', () => {
@@ -394,7 +394,7 @@ describe('generateNextSteps', () => {
       const npxResult = generateNextSteps({ profile: 'staging', context: npxContext });
 
       expect(repoResult).toContain('npm run deploy -- --profile staging');
-      expect(repoResult).toContain('check-logs.ts');
+      expect(repoResult).toContain('Test integration');
       expect(npxResult).toContain('npx @quiltdata/benchling-webhook deploy --profile staging');
       expect(npxResult).toContain('npx @quiltdata/benchling-webhook test');
     });

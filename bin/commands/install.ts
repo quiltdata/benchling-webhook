@@ -122,26 +122,16 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
         throw new Error("Setup failed. Please check the errors above and try again.");
     }
 
-    console.log(chalk.green("\n✓ Setup complete!\n"));
-
     // Check if integrated stack mode - no deployment needed
     const isIntegratedMode = setupResult.config.integratedStack === true;
 
     if (isIntegratedMode) {
-        // Integrated stack mode - no deployment needed
-        console.log(chalk.blue("═══════════════════════════════════════════════════════════\n"));
-        console.log(chalk.bold("Using Integrated Stack Mode"));
-        console.log(chalk.dim("─".repeat(80)));
-        console.log(chalk.green("✓ BenchlingSecret updated in Quilt stack"));
-        console.log(chalk.dim("✓ No separate webhook deployment needed"));
-        console.log(chalk.dim("✓ Quilt stack will handle webhook events\n"));
-        console.log(chalk.bold("Next steps:"));
-        console.log("  1. Configure webhook URL in Benchling app settings");
-        console.log(`     (Get the webhook URL from your Quilt stack outputs)`);
-        console.log("  2. Test the webhook integration");
-        console.log(`  3. Monitor logs: npx ts-node scripts/check-logs.ts --profile ${setupResult.profile}\n`);
+        // Integrated mode already displayed complete message in phase6
+        // Just return early without additional output
         return;
     }
+
+    console.log(chalk.green("\n✓ Setup complete!\n"));
 
     // Step 2: Determine if we should deploy
     if (setupOnly) {

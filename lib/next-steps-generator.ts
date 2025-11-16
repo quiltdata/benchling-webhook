@@ -70,7 +70,7 @@ export function generateNextSteps(options: NextStepsOptions): string {
             lines.push("Next steps:");
             lines.push("  1. Configure webhook URL in Benchling app settings");
             lines.push(`  2. Test webhook: ${formatTestCommand(profile, execContext)}`);
-            lines.push(`  3. Check logs: ${formatHealthCheckCommand(profile, execContext)}`);
+            lines.push(`  3. Check logs: ${formatLogsCommand(profile, execContext)}`);
         } else if (!deployment.success) {
             // Failed deployment - show recovery steps
             lines.push("");
@@ -124,11 +124,11 @@ function formatDeployCommand(profile: string, context: { isRepository: boolean; 
 }
 
 /**
- * Format test/logs command for given profile and context
+ * Format test command for given profile and context
  *
  * @param profile - Profile name
  * @param context - Execution context
- * @returns Formatted test or logs command
+ * @returns Formatted test command
  */
 function formatTestCommand(profile: string, context: { isRepository: boolean; packageName: string }): string {
     if (context.isRepository) {
@@ -136,13 +136,32 @@ function formatTestCommand(profile: string, context: { isRepository: boolean; pa
         if (profile === "default") return "npm run test";
         if (profile === "dev") return "npm run test:dev";
         if (profile === "prod") return "npm run test:prod";
-        return `npx ts-node scripts/check-logs.ts --profile ${profile}`;
+        return `npx ${context.packageName} test --profile ${profile}`;
     } else {
         // NPX context - use npx commands
         if (profile === "default") return `npx ${context.packageName} test`;
         if (profile === "dev") return `npx ${context.packageName} test --profile ${profile}`;
         if (profile === "prod") return `npx ${context.packageName} test --profile ${profile}`;
         return `npx ${context.packageName} test --profile ${profile}`;
+    }
+}
+
+/**
+ * Format logs command for given profile and context
+ *
+ * @param profile - Profile name
+ * @param context - Execution context
+ * @returns Formatted logs command
+ */
+function formatLogsCommand(profile: string, context: { isRepository: boolean; packageName: string }): string {
+    if (context.isRepository) {
+        // Repository context - use npm scripts
+        if (profile === "default") return "npm run logs";
+        return `npx ${context.packageName} logs --profile ${profile}`;
+    } else {
+        // NPX context - use npx commands
+        if (profile === "default") return `npx ${context.packageName} logs`;
+        return `npx ${context.packageName} logs --profile ${profile}`;
     }
 }
 

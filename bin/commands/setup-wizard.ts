@@ -175,12 +175,11 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
 
     // Load existing configuration if it exists
     let existingConfig: ProfileConfig | null = null;
-    let inheritFrom: string | null = null;
 
     try {
         existingConfig = xdg.readProfile(profile);
         console.log(chalk.dim(`\nLoading existing configuration for profile: ${profile}\n`));
-    } catch (error) {
+    } catch {
         // Profile doesn't exist - offer to copy from default
         if (profile !== "default" && !yes) {
             try {
@@ -197,8 +196,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
 
                 if (copy) {
                     existingConfig = defaultConfig;
-                    inheritFrom = "default";
-                    console.log(chalk.dim(`\nCopying configuration from profile: default\n`));
+                    console.log(chalk.dim("\nCopying configuration from profile: default\n"));
                 } else {
                     console.log(chalk.dim(`\nCreating new configuration for profile: ${profile}\n`));
                 }
@@ -329,6 +327,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             benchlingSecretArn: modeDecision.benchlingSecretArn!,
             configStorage: xdg,
             awsProfile,
+            yes,
         });
 
         // CRITICAL: Explicit return for integrated mode

@@ -38,7 +38,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const { config } = props;
 
         // Validate required configuration fields
-        if (!config.benchling.secretArn) {
+        // Skip validation if SKIP_CONFIG_VALIDATION is set (for destroy operations)
+        const skipValidation = process.env.SKIP_CONFIG_VALIDATION === "true";
+        if (!skipValidation && !config.benchling.secretArn) {
             throw new Error(
                 "Configuration validation failed. Required fields:\n" +
                 "  - config.benchling.secretArn: Secrets Manager secret ARN\n\n" +
