@@ -308,10 +308,21 @@ export async function inferQuiltConfig(options: {
                 result.region = searchRegion;
                 console.log(`✓ Found catalog region: ${searchRegion}`);
             } else {
-                console.log("⚠️  config.json does not contain region field");
+                // FAIL FAST: config.json must have region field for exact catalog matching
+                throw new Error(
+                    `config.json from catalog ${quilt3Config.catalogUrl} does not contain 'region' field. ` +
+                    "Cannot determine which AWS region to search for the CloudFormation stack. " +
+                    "This catalog may be using an older version of Quilt that doesn't support automatic region detection.",
+                );
             }
         } catch (error) {
-            console.log(`⚠️  Could not fetch config.json: ${(error as Error).message}`);
+            const err = error as Error;
+            // Re-throw if this is our explicit region validation error
+            if (err.message.includes("does not contain 'region' field")) {
+                throw err;
+            }
+            // Otherwise, just warn about fetch failure and continue
+            console.log(`⚠️  Could not fetch config.json: ${err.message}`);
             console.log("   Falling back to default region search...");
         }
     }
@@ -416,8 +427,16 @@ export async function inferQuiltConfig(options: {
         selectedStack = stacks[selectedIndex];
         console.log(`\nSelected: ${selectedStack.stackName}`);
     } else {
+        // Non-interactive mode with multiple stacks and no catalog to match - cannot determine which to use
+        if (stacks.length > 1) {
+            throw new Error(
+                "Cannot determine which Quilt stack to use in non-interactive mode. " +
+                `Found ${stacks.length} stacks: ${stacks.map((s) => s.stackName).join(", ")}. ` +
+                "Please specify a catalog URL or use interactive mode.",
+            );
+        }
         selectedStack = stacks[0];
-        console.log(`Using first stack: ${selectedStack.stackName}`);
+        console.log(`Using stack: ${selectedStack.stackName}`);
     }
 
     // Populate result from selected stack
