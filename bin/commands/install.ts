@@ -139,7 +139,9 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
         console.log("  1. Configure webhook URL in Benchling app settings");
         console.log(`     (Get the webhook URL from your Quilt stack outputs)`);
         console.log("  2. Test the webhook integration");
-        console.log(`  3. Monitor logs: npx ts-node scripts/check-logs.ts --profile ${setupResult.profile}\n`);
+        console.log("  3. Monitor logs:");
+        console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook logs --profile ${setupResult.profile}`));
+        console.log("");
         return;
     }
 
