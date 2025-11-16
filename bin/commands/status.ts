@@ -559,7 +559,8 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
             secretLine += `${chalk.green("✓")} ${chalk.cyan(result.secretInfo.name)}`;
             if (result.secretInfo.lastModified) {
                 const deltaMs = Date.now() - result.secretInfo.lastModified.getTime();
-                const hours = Math.floor(deltaMs / 3600000);
+                const minutes = Math.floor(deltaMs / 60000);
+                const hours = Math.floor(minutes / 60);
                 const days = Math.floor(hours / 24);
 
                 let timeStr: string;
@@ -567,8 +568,10 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
                     timeStr = `${days} day${days !== 1 ? "s" : ""} ago`;
                 } else if (hours > 0) {
                     timeStr = `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+                } else if (minutes > 0) {
+                    timeStr = `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
                 } else {
-                    timeStr = "recently";
+                    timeStr = "just now";
                 }
                 secretLine += chalk.dim(` (Last modified: ${timeStr})`);
             }
