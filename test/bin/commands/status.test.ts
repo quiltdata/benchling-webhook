@@ -1035,18 +1035,18 @@ describe("Auto-refresh Timer Functionality", () => {
         });
 
         // Since --no-exit means it would loop indefinitely, we test with timer: 0 to verify the logic
-        // The key is that with noExit: true, it should NOT show "Stack reached stable state" message
+        // The key is that with exit: false, it should NOT show "Stack reached stable state" message
         const result = await statusCommand({
             profile: "default",
             configStorage: mockStorage,
             timer: 0, // Disable auto-refresh to avoid infinite loop
-            noExit: true,
+            exit: false, // Commander.js sets this to false when --no-exit is passed
         });
 
         expect(result.success).toBe(true);
         expect(result.stackStatus).toBe("UPDATE_COMPLETE");
-        // With noExit: true and timer: 0, it should just display once without exit messages
-        // It won't show "Stack reached stable state" because noExit prevents that message
+        // With exit: false and timer: 0, it should just display once without exit messages
+        // It won't show "Stack reached stable state" because exit: false prevents that message
     });
 });
 
