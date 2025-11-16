@@ -253,7 +253,7 @@ async function validateS3BucketAccess(
  * @returns Validation result
  */
 export async function runValidation(input: ValidationInput): Promise<ValidationResult> {
-    const { stackQuery, parameters, awsProfile } = input;
+    const { parameters, awsProfile } = input;
 
     const result: ValidationResult = {
         success: true,

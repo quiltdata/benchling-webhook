@@ -56,7 +56,7 @@ export async function runParameterCollection(
                 name: "tenant",
                 message: "Benchling Tenant:",
                 default: existingConfig?.benchling?.tenant || "",
-                validate: (value: string) =>
+                validate: (value: string): boolean | string =>
                     value.trim().length > 0 || "Tenant is required",
             },
         ]);
@@ -116,7 +116,7 @@ export async function runParameterCollection(
                 name: "appDefinitionId",
                 message: "Benchling App Definition ID:",
                 default: existingConfig.benchling.appDefinitionId,
-                validate: (value: string) =>
+                validate: (value: string): boolean | string =>
                     value.trim().length > 0 || "App definition ID is required",
             },
         ]);
@@ -144,7 +144,7 @@ export async function runParameterCollection(
                     type: "input",
                     name: "appDefinitionId",
                     message: "Benchling App Definition ID:",
-                    validate: (value: string) =>
+                    validate: (value: string): boolean | string =>
                         value.trim().length > 0 || "App definition ID is required",
                 },
             ]);
@@ -171,7 +171,7 @@ export async function runParameterCollection(
                 type: "input",
                 name: "appDefinitionId",
                 message: "Benchling App Definition ID:",
-                validate: (value: string) =>
+                validate: (value: string): boolean | string =>
                     value.trim().length > 0 || "App definition ID is required to continue",
             },
         ]);
@@ -213,7 +213,7 @@ export async function runParameterCollection(
                 name: "clientId",
                 message: "Benchling OAuth Client ID:",
                 default: hasExistingCreds ? existingConfig?.benchling?.clientId : "",
-                validate: (value: string) =>
+                validate: (value: string): boolean | string =>
                     value.trim().length > 0 || "Client ID is required",
             },
             {
@@ -222,7 +222,7 @@ export async function runParameterCollection(
                 message: "Benchling OAuth Client Secret" +
                     (hasExistingCreds ? " (press Enter to keep existing):" : ":"),
                 default: hasExistingCreds ? existingConfig?.benchling?.clientSecret : "",
-                validate: (value: string) => {
+                validate: (value: string): boolean | string => {
                     // Allow empty input if we have existing credentials (will use default)
                     if (hasExistingCreds && value.trim().length === 0) {
                         return true;
@@ -307,7 +307,7 @@ export async function runParameterCollection(
                 name: "bucket",
                 message: "Package S3 Bucket:",
                 default: existingConfig?.packages?.bucket || "",
-                validate: (value: string) =>
+                validate: (value: string): boolean | string =>
                     value.trim().length > 0 || "Bucket name is required",
             },
             {
