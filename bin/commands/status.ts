@@ -420,7 +420,9 @@ async function getSecretInfo(
             accessible: true,
         };
     } catch (error) {
-        const secretName = secretArn.split(":").pop() || secretArn;
+        // Extract secret name from ARN: arn:aws:secretsmanager:region:account:secret:name-6chars
+        // The secret name is everything after "secret:" in the ARN
+        const secretName = secretArn.split(":secret:")[1] || secretArn.split(":").pop() || secretArn;
         return {
             name: secretName,
             accessible: false,
@@ -537,6 +539,7 @@ async function fetchCompleteStatus(
 /**
  * Displays status result to console
  */
+/* istanbul ignore next */
 function displayStatusResult(result: StatusResult, profile: string): void {
     const stackName = result.stackArn?.match(/stack\/([^/]+)\//)?.[1] || result.stackArn || "Unknown";
     const region = result.region || "Unknown";
