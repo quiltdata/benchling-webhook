@@ -235,6 +235,7 @@ describe("statusCommand", () => {
             const result = await statusCommand({
                 profile: "default",
                 configStorage: mockStorage,
+                timer: 0, // Disable auto-refresh
             });
 
             expect(result.success).toBe(true);
@@ -257,6 +258,7 @@ describe("statusCommand", () => {
             const result = await statusCommand({
                 profile: "default",
                 configStorage: mockStorage,
+                timer: 0, // Disable auto-refresh
             });
 
             expect(result.success).toBe(true);
@@ -433,13 +435,14 @@ describe("statusCommand", () => {
             await statusCommand({
                 profile: "default",
                 configStorage: mockStorage,
+                timer: 0, // Disable auto-refresh
             });
 
             expect(mockConsoleLog).toHaveBeenCalledWith(
                 expect.stringContaining("Stack update in progress")
             );
             expect(mockConsoleLog).toHaveBeenCalledWith(
-                expect.stringContaining("Run this command again in a few minutes to check progress")
+                expect.stringContaining("Auto-refreshing until complete")
             );
         });
 
