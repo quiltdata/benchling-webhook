@@ -101,10 +101,8 @@ export async function getStackResources(
     // Use ListStackResourcesCommand instead of DescribeStackResourcesCommand
     // because DescribeStackResources only returns first 100 resources
     let nextToken: string | undefined;
-    let pageCount = 0;
 
     do {
-        pageCount++;
         const command = new ListStackResourcesCommand({
             StackName: stackName,
             ...(nextToken && { NextToken: nextToken }),
@@ -124,7 +122,6 @@ export async function getStackResources(
         nextToken = response.NextToken;
     } while (nextToken);
 
-    console.log(`[DEBUG] getStackResources: Found ${Object.keys(resourceMap).length} resources in stack ${stackName} (${pageCount} page(s))`);
     return resourceMap;
 }
 
