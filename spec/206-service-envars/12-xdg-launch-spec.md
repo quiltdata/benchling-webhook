@@ -351,24 +351,20 @@ function buildEnvVars(
     // Quilt Services (NEW - service-specific)
     QUILT_WEB_HOST: config.quilt.catalog,
     ATHENA_USER_DATABASE: config.quilt.database,
-    PACKAGER_SQS_URL: config.quilt.queueUrl,
+    ATHENA_WORKGROUP: config.quilt.workgroup,
     ICEBERG_DATABASE: config.quilt.icebergDatabase || '',
+    ICEBERG_WORKGROUP: config.quilt.icebergWorkgroup || '',
+    PACKAGER_SQS_URL: config.quilt.queueUrl,
 
     // AWS Configuration
-    AWS_REGION: config.deployment.region,
-    AWS_DEFAULT_REGION: config.deployment.region,
+    AWS_REGION: config.quilt.region || config.deployment.region,
+    AWS_DEFAULT_REGION: config.quilt.region || config.deployment.region,
 
     // Benchling Configuration
     BENCHLING_SECRET_ARN: config.benchling.secretArn,
-    BENCHLING_TENANT: config.benchling.tenant,
-
-    // Package Configuration
-    PACKAGE_BUCKET: config.packages.bucket,
-    PACKAGE_PREFIX: config.packages.prefix,
-    PACKAGE_METADATA_KEY: config.packages.metadataKey,
+    BENCHLING_LOG_LEVEL: config.logging.level,
 
     // Application Configuration
-    LOG_LEVEL: config.logging.level,
     ENABLE_WEBHOOK_VERIFICATION: String(config.security.enableVerification),
   };
 

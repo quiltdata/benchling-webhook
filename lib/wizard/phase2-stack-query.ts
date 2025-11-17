@@ -77,8 +77,11 @@ export async function runStackQuery(
         const benchlingSecretArn = inferenceResult.benchlingSecretArn;
         const benchlingIntegrationEnabled = inferenceResult.benchlingIntegrationEnabled;
         const athenaUserWorkgroup = inferenceResult.athenaUserWorkgroup;
-        const athenaIcebergWorkgroup = inferenceResult.athenaIcebergWorkgroup;
+        const athenaUserPolicy = inferenceResult.athenaUserPolicy;
+        const icebergWorkgroup = inferenceResult.icebergWorkgroup;
         const icebergDatabase = inferenceResult.icebergDatabase;
+        const athenaResultsBucket = inferenceResult.athenaResultsBucket;
+        const athenaResultsBucketPolicy = inferenceResult.athenaResultsBucketPolicy;
 
         // Log what we found
         console.log(chalk.green("✓ Stack query succeeded\n"));
@@ -88,15 +91,24 @@ export async function runStackQuery(
         console.log(chalk.dim(`Region: ${region}`));
         console.log(chalk.dim(`Account: ${account}`));
 
-        // Display discovered Athena workgroups
+        // Display discovered Athena workgroups and resources
         if (athenaUserWorkgroup) {
             console.log(chalk.dim(`Athena User Workgroup: ${athenaUserWorkgroup}`));
         }
-        if (athenaIcebergWorkgroup) {
-            console.log(chalk.dim(`Athena Iceberg Workgroup: ${athenaIcebergWorkgroup}`));
+        if (athenaUserPolicy) {
+            console.log(chalk.dim(`Athena User Policy: ${athenaUserPolicy}`));
+        }
+        if (icebergWorkgroup) {
+            console.log(chalk.dim(`Athena Iceberg Workgroup: ${icebergWorkgroup}`));
         }
         if (icebergDatabase) {
             console.log(chalk.dim(`Iceberg Database: ${icebergDatabase}`));
+        }
+        if (athenaResultsBucket) {
+            console.log(chalk.dim(`Athena Results Bucket: ${athenaResultsBucket}`));
+        }
+        if (athenaResultsBucketPolicy) {
+            console.log(chalk.dim(`Athena Results Bucket Policy: ${athenaResultsBucketPolicy}`));
         }
 
         if (benchlingSecretArn) {
@@ -121,8 +133,11 @@ export async function runStackQuery(
             benchlingSecretArn,
             benchlingIntegrationEnabled,
             athenaUserWorkgroup,
-            athenaIcebergWorkgroup,
+            athenaUserPolicy,
+            icebergWorkgroup,
             icebergDatabase,
+            athenaResultsBucket,
+            athenaResultsBucketPolicy,
             stackQuerySucceeded: true,
         };
     } catch (error) {
