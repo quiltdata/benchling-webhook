@@ -245,4 +245,3 @@ class TestFlaskApp:
 
             assert isinstance(markdown_block, MarkdownUiBlockUpdate)
             assert "test.txt" in markdown_block.value
-

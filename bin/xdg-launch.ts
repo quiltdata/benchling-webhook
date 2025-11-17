@@ -11,7 +11,7 @@
  * @version 0.8.0
  */
 
-import { spawn, ChildProcess } from "child_process";
+import { spawn } from "child_process";
 import { resolve } from "path";
 import { existsSync } from "fs";
 import { XDGConfig } from "../lib/xdg-config";
@@ -328,7 +328,7 @@ async function waitForHealth(url: string, maxAttempts = 30, delayMs = 1000): Pro
                 console.log(`✅ Server is healthy (attempt ${attempt}/${maxAttempts})\n`);
                 return;
             }
-        } catch (error) {
+        } catch {
             // Ignore errors and retry
         }
 
