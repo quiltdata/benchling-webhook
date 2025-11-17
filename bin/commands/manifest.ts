@@ -9,9 +9,7 @@
 import { writeFileSync } from "fs";
 import chalk from "chalk";
 import boxen from "boxen";
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pkg = require("../../package.json");
+import pkg from "../../package.json";
 
 interface ManifestOptions {
     output?: string;

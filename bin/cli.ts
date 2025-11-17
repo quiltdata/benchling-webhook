@@ -13,10 +13,7 @@ import { configShowCommand } from "./commands/config-show";
 import { installCommand } from "./commands/install";
 import { statusCommand } from "./commands/status";
 import { logsCommand } from "./commands/logs";
-
-// Load package.json for version
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pkg = require("../package.json");
+import pkg from "../package.json";
 
 const program = new Command();
 
