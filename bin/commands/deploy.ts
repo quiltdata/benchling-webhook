@@ -313,7 +313,7 @@ export async function deploy(
         console.log("  3. Check that the stack outputs include required values:");
         console.log("     - PackagerQueueUrl (SQS queue URL)");
         console.log("     - UserAthenaDatabaseName (Athena database)");
-        console.log("     - Catalog/CatalogDomain/ApiGatewayEndpoint (catalog URL)");
+        console.log("     - QuiltWebHost (catalog web host)");
         console.log();
         process.exit(1);
     }

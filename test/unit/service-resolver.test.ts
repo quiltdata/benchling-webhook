@@ -143,7 +143,7 @@ describe("resolveQuiltServices", () => {
                         OutputValue: "quilt_catalog",
                     },
                     {
-                        OutputKey: "Catalog",
+                        OutputKey: "QuiltWebHost",
                         OutputValue: "quilt.example.com",
                     },
                 ]),
@@ -164,7 +164,7 @@ describe("resolveQuiltServices", () => {
         });
     });
 
-    test("normalizes catalog URL from Catalog output", async () => {
+    test("normalizes catalog URL from QuiltWebHost output", async () => {
         cfnMock.on(DescribeStacksCommand).resolves({
             Stacks: [
                 mockStack([
@@ -178,7 +178,7 @@ describe("resolveQuiltServices", () => {
                         OutputValue: "quilt_db",
                     },
                     {
-                        OutputKey: "Catalog",
+                        OutputKey: "QuiltWebHost",
                         OutputValue: "https://quilt.example.com/",
                     },
                 ]),
@@ -192,69 +192,6 @@ describe("resolveQuiltServices", () => {
         });
 
         expect(services.quiltWebHost).toBe("quilt.example.com");
-    });
-
-    test("uses CatalogDomain output if Catalog not available", async () => {
-        cfnMock.on(DescribeStacksCommand).resolves({
-            Stacks: [
-                mockStack([
-                    {
-                        OutputKey: "PackagerQueueUrl",
-                        OutputValue:
-                            "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
-                    },
-                    {
-                        OutputKey: "UserAthenaDatabaseName",
-                        OutputValue: "quilt_db",
-                    },
-                    {
-                        OutputKey: "CatalogDomain",
-                        OutputValue: "quilt.example.com",
-                    },
-                ]),
-            ],
-        });
-
-        const services = await resolveQuiltServices({
-            stackArn:
-                "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/id",
-            mockCloudFormation: cfnMock as unknown as CloudFormationClient,
-        });
-
-        expect(services.quiltWebHost).toBe("quilt.example.com");
-    });
-
-    test("extracts hostname from ApiGatewayEndpoint", async () => {
-        cfnMock.on(DescribeStacksCommand).resolves({
-            Stacks: [
-                mockStack([
-                    {
-                        OutputKey: "PackagerQueueUrl",
-                        OutputValue:
-                            "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
-                    },
-                    {
-                        OutputKey: "UserAthenaDatabaseName",
-                        OutputValue: "quilt_db",
-                    },
-                    {
-                        OutputKey: "ApiGatewayEndpoint",
-                        OutputValue:
-                            "https://abc123.execute-api.us-east-1.amazonaws.com/prod",
-                    },
-                ]),
-            ],
-        });
-
-        const services = await resolveQuiltServices({
-            stackArn:
-                "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/id",
-            mockCloudFormation: cfnMock as unknown as CloudFormationClient,
-        });
-
-        expect(services.quiltWebHost).toBe(
-            "abc123.execute-api.us-east-1.amazonaws.com",
-        );
     });
 
     test("includes optional Iceberg database when available", async () => {
@@ -271,7 +208,7 @@ describe("resolveQuiltServices", () => {
                         OutputValue: "quilt_catalog",
                     },
                     {
-                        OutputKey: "Catalog",
+                        OutputKey: "QuiltWebHost",
                         OutputValue: "quilt.example.com",
                     },
                     {
@@ -305,7 +242,7 @@ describe("resolveQuiltServices", () => {
                         OutputValue: "quilt_catalog",
                     },
                     {
-                        OutputKey: "Catalog",
+                        OutputKey: "QuiltWebHost",
                         OutputValue: "quilt.example.com",
                     },
                 ]),
@@ -330,7 +267,7 @@ describe("resolveQuiltServices", () => {
                         OutputValue: "quilt_db",
                     },
                     {
-                        OutputKey: "Catalog",
+                        OutputKey: "QuiltWebHost",
                         OutputValue: "quilt.example.com",
                     },
                 ]),
@@ -364,7 +301,7 @@ describe("resolveQuiltServices", () => {
                             "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
                     },
                     {
-                        OutputKey: "Catalog",
+                        OutputKey: "QuiltWebHost",
                         OutputValue: "quilt.example.com",
                     },
                 ]),
@@ -380,7 +317,7 @@ describe("resolveQuiltServices", () => {
         ).rejects.toThrow(/UserAthenaDatabaseName/);
     });
 
-    test("throws error for missing catalog output", async () => {
+    test("throws error for missing QuiltWebHost output", async () => {
         cfnMock.on(DescribeStacksCommand).resolves({
             Stacks: [
                 mockStack([
@@ -403,7 +340,7 @@ describe("resolveQuiltServices", () => {
                     "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/id",
                 mockCloudFormation: cfnMock as unknown as CloudFormationClient,
             }),
-        ).rejects.toThrow(/No catalog URL output found/);
+        ).rejects.toThrow(/No QuiltWebHost output found/);
     });
 
     test("throws error for invalid queue URL format", async () => {
@@ -419,7 +356,7 @@ describe("resolveQuiltServices", () => {
                         OutputValue: "quilt_db",
                     },
                     {
-                        OutputKey: "Catalog",
+                        OutputKey: "QuiltWebHost",
                         OutputValue: "quilt.example.com",
                     },
                 ]),
