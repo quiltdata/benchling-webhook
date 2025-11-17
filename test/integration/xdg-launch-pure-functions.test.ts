@@ -57,8 +57,10 @@ describe("XDG Launch Pure Functions - Integration", () => {
             expect(envVars.AWS_DEFAULT_REGION).toBe(defaultConfig.quilt.region || defaultConfig.deployment.region);
 
             // Verify Benchling configuration
-            expect(envVars.BENCHLING_TENANT).toBe(defaultConfig.benchling.tenant);
-            expect(envVars.BENCHLING_SECRET_ARN).toBe(defaultConfig.benchling.secretArn || "");
+            // Note: In v0.8.0+, only BenchlingSecret (secret name) is set, not ARN or tenant
+            // Tenant and credentials are fetched from Secrets Manager at runtime
+            expect(envVars.BenchlingSecret).toBeTruthy();
+            expect(typeof envVars.BenchlingSecret).toBe("string");
 
             // Verify package storage configuration
             expect(envVars.PACKAGE_BUCKET).toBe(defaultConfig.packages.bucket);
@@ -197,7 +199,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
             expect(() => validateConfig(invalidVars, "default")).toThrow(/Invalid SQS URL format/);
         });
 
-        it("should validate Secrets Manager ARN format if present", () => {
+        it("should validate BenchlingSecret is present", () => {
             const envVars = buildEnvVars(defaultConfig, "native", {
                 mode: "native",
                 profile: "default",
@@ -205,15 +207,16 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 test: false,
             });
 
-            // Replace with invalid ARN (only if BENCHLING_SECRET_ARN is set)
-            if (envVars.BENCHLING_SECRET_ARN) {
-                const invalidVars = {
-                    ...envVars,
-                    BENCHLING_SECRET_ARN: "not-a-valid-arn",
-                };
+            // BenchlingSecret should always be present
+            expect(envVars.BenchlingSecret).toBeTruthy();
 
-                expect(() => validateConfig(invalidVars, "default")).toThrow(/Invalid Secrets Manager ARN/);
-            }
+            // Validate that missing BenchlingSecret is caught
+            const invalidVars = {
+                ...envVars,
+                BenchlingSecret: "",
+            };
+
+            expect(() => validateConfig(invalidVars, "default")).toThrow(/Missing required configuration.*BenchlingSecret/s);
         });
 
         it("should provide helpful error messages with profile path", () => {
@@ -235,14 +238,14 @@ describe("XDG Launch Pure Functions - Integration", () => {
     describe("filterSecrets()", () => {
         it("should mask environment variables containing SECRET", () => {
             const envVars = {
-                BENCHLING_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:123:secret:foo",
+                BenchlingSecret: "benchling-webhook-prod",
                 QUILT_WEB_HOST: "example.quiltdata.com",
                 MY_SECRET_KEY: "should-be-hidden",
             };
 
             const filtered = filterSecrets(envVars);
 
-            expect(filtered.BENCHLING_SECRET_ARN).toBe("***REDACTED***");
+            expect(filtered.BenchlingSecret).toBe("***REDACTED***");
             expect(filtered.MY_SECRET_KEY).toBe("***REDACTED***");
             expect(filtered.QUILT_WEB_HOST).toBe("example.quiltdata.com");
         });
@@ -279,8 +282,8 @@ describe("XDG Launch Pure Functions - Integration", () => {
 
         it("should perform case-insensitive matching", () => {
             const envVars = {
-                BENCHLING_SECRET_ARN: "should-be-hidden",
-                benchling_secret_arn: "should-be-hidden", // lowercase matches due to case-insensitive check
+                BenchlingSecret: "should-be-hidden",
+                benchling_secret: "should-be-hidden", // lowercase matches due to case-insensitive check
                 MY_API_TOKEN: "should-be-hidden",
                 my_api_token: "should-be-hidden", // lowercase matches due to case-insensitive check
                 MyPasswordValue: "should-be-hidden",
@@ -289,8 +292,8 @@ describe("XDG Launch Pure Functions - Integration", () => {
             const filtered = filterSecrets(envVars);
 
             // All variations should be masked (case-insensitive)
-            expect(filtered.BENCHLING_SECRET_ARN).toBe("***REDACTED***");
-            expect(filtered.benchling_secret_arn).toBe("***REDACTED***");
+            expect(filtered.BenchlingSecret).toBe("***REDACTED***");
+            expect(filtered.benchling_secret).toBe("***REDACTED***");
             expect(filtered.MY_API_TOKEN).toBe("***REDACTED***");
             expect(filtered.my_api_token).toBe("***REDACTED***");
             expect(filtered.MyPasswordValue).toBe("***REDACTED***");
@@ -541,8 +544,8 @@ describe("XDG Launch Pure Functions - Integration", () => {
             const filtered = filterSecrets(envVars);
 
             // 4. Verify secrets are masked
-            if (envVars.BENCHLING_SECRET_ARN) {
-                expect(filtered.BENCHLING_SECRET_ARN).toBe("***REDACTED***");
+            if (envVars.BenchlingSecret) {
+                expect(filtered.BenchlingSecret).toBe("***REDACTED***");
             }
 
             // 5. Verify non-secrets are preserved
