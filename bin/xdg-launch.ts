@@ -200,14 +200,8 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         // Benchling Configuration (credentials from Secrets Manager, NOT environment)
         BenchlingSecret: extractSecretName(config.benchling.secretArn || ""),
 
-        // Package Storage
-        PACKAGE_BUCKET: config.packages.bucket,
-        PACKAGE_PREFIX: config.packages.prefix,
-        PACKAGE_METADATA_KEY: config.packages.metadataKey,
-
         // Security Configuration
         ENABLE_WEBHOOK_VERIFICATION: String(config.security?.enableVerification !== false),
-        WEBHOOK_ALLOW_LIST: config.security?.webhookAllowList || "",
     };
 
     // Mode-specific variables
