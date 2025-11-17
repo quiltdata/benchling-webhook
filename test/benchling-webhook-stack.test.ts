@@ -235,18 +235,10 @@ describe("BenchlingWebhookStack", () => {
             "ICEBERG_DATABASE",
         ];
 
-        // Benchling configuration
+        // Benchling configuration - only BenchlingSecret name is passed
+        // All other Benchling config comes from Secrets Manager at runtime
         const expectedBenchlingVars = [
-            "BENCHLING_SECRET_ARN",
-            "BENCHLING_TENANT",
-            "BENCHLING_PKG_BUCKET",
-            "BENCHLING_PKG_PREFIX",
-            "BENCHLING_PKG_KEY",
-        ];
-
-        // Deprecated but still present for backward compatibility
-        const deprecatedVars = [
-            "BenchlingSecret",  // Old name for BENCHLING_SECRET_ARN
+            "BenchlingSecret",  // Secret name (NOT ARN) - used to fetch credentials at runtime
         ];
 
         // Common/system variables
@@ -269,11 +261,6 @@ describe("BenchlingWebhookStack", () => {
             expect(actualEnvVars.has(varName)).toBe(true);
         });
 
-        // Verify deprecated variables still present (for now)
-        deprecatedVars.forEach((varName) => {
-            expect(actualEnvVars.has(varName)).toBe(true);
-        });
-
         // Verify common variables are present
         expectedCommonVars.forEach((varName) => {
             expect(actualEnvVars.has(varName)).toBe(true);
@@ -284,6 +271,11 @@ describe("BenchlingWebhookStack", () => {
             "BENCHLING_CLIENT_ID",
             "BENCHLING_CLIENT_SECRET",
             "BENCHLING_APP_DEFINITION_ID",
+            "BENCHLING_SECRET_ARN",  // We pass BenchlingSecret (name), not ARN
+            "BENCHLING_TENANT",  // Comes from Secrets Manager
+            "BENCHLING_PKG_BUCKET",  // Comes from Secrets Manager
+            "BENCHLING_PKG_PREFIX",  // Comes from Secrets Manager
+            "BENCHLING_PKG_KEY",  // Comes from Secrets Manager
         ];
 
         prohibitedVars.forEach((varName) => {
@@ -296,6 +288,10 @@ describe("BenchlingWebhookStack", () => {
             "QUILT_USER_BUCKET",
             "QUILT_CATALOG",
             "QUILT_DATABASE",
+            "PACKAGE_BUCKET",  // Package config comes from Secrets Manager
+            "PACKAGE_PREFIX",  // Package config comes from Secrets Manager
+            "PACKAGE_METADATA_KEY",  // Package config comes from Secrets Manager
+            "WEBHOOK_ALLOW_LIST",  // Security config comes from Secrets Manager
         ];
 
         removedVars.forEach((varName) => {
