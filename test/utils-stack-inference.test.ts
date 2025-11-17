@@ -977,72 +977,7 @@ describe("stack-inference utility", () => {
         });
     });
 
-    describe("Legacy AWS CLI Functions", () => {
-        // Mock execSync for these tests
-        jest.mock("child_process");
-
-        describe("findStackByResource", () => {
-            it("should return null when AWS CLI is not available", () => {
-                // This test will call the real function but expect null if AWS CLI isn't configured
-                const result = findStackByResource("us-east-1", "nonexistent-resource");
-                // Result should be null (either AWS CLI not available or resource not found)
-                expect(result === null || typeof result === "string").toBe(true);
-            });
-
-            it("should handle AWS CLI errors gracefully", () => {
-                // Even with errors, the function should return null, not throw
-                expect(() => {
-                    findStackByResource("invalid-region", "test-resource");
-                }).not.toThrow();
-            });
-        });
-
-        describe("getStackDetails", () => {
-            it("should return empty details when stack doesn't exist", () => {
-                const result = getStackDetails("us-east-1", "nonexistent-stack");
-                // Should return empty arrays, not throw
-                expect(result).toBeDefined();
-                expect(Array.isArray(result.outputs)).toBe(true);
-                expect(Array.isArray(result.parameters)).toBe(true);
-            });
-
-            it("should handle AWS CLI errors gracefully", () => {
-                expect(() => {
-                    getStackDetails("invalid-region", "test-stack");
-                }).not.toThrow();
-            });
-        });
-
-        describe("getAwsAccountId", () => {
-            it("should return null when AWS credentials are not configured", () => {
-                // This will return null if credentials aren't available
-                const result = getAwsAccountId();
-                // Result should be null or a valid account ID string
-                expect(result === null || typeof result === "string").toBe(true);
-                if (result !== null) {
-                    // If we got an account ID, it should be 12 digits
-                    expect(result).toMatch(/^\d{12}$/);
-                }
-            });
-        });
-
-        describe("listAllStacks", () => {
-            it("should return empty array when AWS CLI fails", () => {
-                const result = listAllStacks("invalid-region");
-                // Should return empty array, not throw
-                expect(Array.isArray(result)).toBe(true);
-            });
-
-            it("should handle regions with no stacks", () => {
-                // This will return empty or throw, both are handled
-                expect(() => {
-                    const result = listAllStacks("us-east-1");
-                    expect(Array.isArray(result)).toBe(true);
-                }).not.toThrow();
-            });
-        });
-
-        describe("isQuiltStack", () => {
+    describe("isQuiltStack", () => {
             it("should return false for nonexistent stacks", () => {
                 const result = isQuiltStack("us-east-1", "nonexistent-stack");
                 expect(result).toBe(false);

@@ -5,6 +5,8 @@ jest.mock("https", () => ({
     request: jest.fn(),
 }));
 
+import * as https from "https";
+
 describe("BenchlingAuthValidator", () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -163,8 +165,8 @@ describe("BenchlingAuthValidator", () => {
  * Mock HTTPS request helper
  */
 function mockHttpsRequest(statusCode: number, responseBody: Record<string, unknown>): void {
-    const https = require("https");
-    https.request.mockImplementation((options: unknown, callback: (res: unknown) => void) => {
+    const mockHttps = jest.mocked(https);
+    mockHttps.request.mockImplementation((options: unknown, callback: (res: unknown) => void) => {
         const mockResponse = {
             statusCode,
             on: jest.fn((event: string, handler: (data: Buffer) => void) => {
@@ -189,8 +191,8 @@ function mockHttpsRequest(statusCode: number, responseBody: Record<string, unkno
  * Mock HTTPS request error helper
  */
 function mockHttpsRequestError(error: Error): void {
-    const https = require("https");
-    https.request.mockImplementation(() => {
+    const mockHttps = jest.mocked(https);
+    mockHttps.request.mockImplementation(() => {
         return {
             on: jest.fn((event: string, handler: (err: Error) => void) => {
                 if (event === "error") {
