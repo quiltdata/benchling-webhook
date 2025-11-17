@@ -20,6 +20,7 @@ import {
     DescribeSecretCommand,
     ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
+import { fromIni } from "@aws-sdk/credential-providers";
 import { XDGConfig } from "../../lib/xdg-config";
 import type { XDGBase } from "../../lib/xdg-base";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
@@ -68,7 +69,6 @@ async function getSecretsManagerClient(region: string, awsProfile?: string): Pro
     const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region };
 
     if (awsProfile) {
-        const { fromIni } = await import("@aws-sdk/credential-providers");
         clientConfig.credentials = fromIni({ profile: awsProfile });
     }
 

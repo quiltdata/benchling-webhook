@@ -13,6 +13,7 @@
 import { execSync } from "child_process";
 import * as readline from "readline";
 import chalk from "chalk";
+import { fromIni } from "@aws-sdk/credential-providers";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { isQueueUrl } from "../../lib/utils/sqs";
@@ -103,7 +104,6 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
 
         if (profile) {
             // Load AWS profile credentials
-            const { fromIni } = await import("@aws-sdk/credential-providers");
             clientConfig.credentials = fromIni({ profile });
         }
 

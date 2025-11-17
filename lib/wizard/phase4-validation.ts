@@ -9,6 +9,7 @@
 import * as https from "https";
 import chalk from "chalk";
 import { S3Client, HeadBucketCommand, ListObjectsV2Command, GetBucketLocationCommand } from "@aws-sdk/client-s3";
+import { fromIni } from "@aws-sdk/credential-providers";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { ValidationInput, ValidationResult } from "./types";
 
@@ -22,7 +23,6 @@ async function detectBucketRegion(bucketName: string, awsProfile?: string): Prom
         };
 
         if (awsProfile) {
-            const { fromIni } = await import("@aws-sdk/credential-providers");
             clientConfig.credentials = fromIni({ profile: awsProfile });
         }
 
@@ -192,7 +192,6 @@ async function validateS3BucketAccess(
         const clientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region: regionToUse };
 
         if (awsProfile) {
-            const { fromIni } = await import("@aws-sdk/credential-providers");
             clientConfig.credentials = fromIni({ profile: awsProfile });
         }
 
