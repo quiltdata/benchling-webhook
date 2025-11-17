@@ -52,6 +52,36 @@ export class FargateService extends Construct {
     public readonly cluster: ecs.Cluster;
     public readonly logGroup: logs.ILogGroup;
 
+    /**
+     * Extract secret name from Secrets Manager ARN
+     *
+     * AWS Secrets Manager automatically appends a 6-character random suffix to secret names
+     * in ARNs (e.g., "my-secret-Ab12Cd"). This function extracts the base secret name by
+     * removing the suffix.
+     *
+     * @param arn - Secrets Manager ARN
+     * @returns Secret name without the random suffix
+     */
+    private extractSecretName(arn: string): string {
+        if (!arn) {
+            return "";
+        }
+        // ARN format: arn:aws:secretsmanager:region:account:secret:name-XXXXXX
+        // where XXXXXX is a 6-character random suffix added by AWS
+        const match = arn.match(/secret:([^:]+)/);
+        if (!match) {
+            return arn;
+        }
+
+        const fullName = match[1];
+
+        // Remove the AWS-generated 6-character suffix (format: -XXXXXX)
+        // The suffix is always a hyphen followed by 6 alphanumeric characters
+        const withoutSuffix = fullName.replace(/-[A-Za-z0-9]{6}$/, "");
+
+        return withoutSuffix;
+    }
+
     constructor(scope: Construct, id: string, props: FargateServiceProps) {
         super(scope, id);
 
@@ -243,54 +273,37 @@ export class FargateService extends Construct {
 
         // Build environment variables using new config structure
         // v1.0.0+: Explicit service parameters eliminate runtime CloudFormation calls
-        // CRITICAL: These must match bin/xdg-launch.ts:buildEnvVars() exactly (lines 152-208)
+        // CRITICAL: These must match bin/xdg-launch.ts:buildEnvVars() exactly (lines 182-234)
         const environmentVars: { [key: string]: string } = {
             // AWS Configuration
             AWS_REGION: region,
             AWS_DEFAULT_REGION: region,
 
-            // Quilt Services (v1.0.0+ - explicit parameters)
+            // Quilt Services (v0.8.0+ service-specific - NO MORE STACK ARN!)
             QUILT_WEB_HOST: props.quiltWebHost,
             ATHENA_USER_DATABASE: props.athenaUserDatabase,
-            ICEBERG_DATABASE: props.icebergDatabase,
+            ATHENA_USER_WORKGROUP: props.athenaUserWorkgroup || "primary",
+            ATHENA_RESULTS_BUCKET: props.athenaResultsBucket || "",
+            ICEBERG_DATABASE: props.icebergDatabase || "",
+            ICEBERG_WORKGROUP: props.icebergWorkgroup || "",
             PACKAGER_SQS_URL: props.packagerQueueUrl,
 
-            // Benchling Configuration
-            BENCHLING_SECRET_ARN: props.benchlingSecret,
-            BENCHLING_TENANT: config.benchling.tenant,
-            BENCHLING_LOG_LEVEL: props.logLevel || config.logging?.level || "INFO",
+            // Benchling Configuration (credentials from Secrets Manager, NOT environment)
+            BenchlingSecret: this.extractSecretName(props.benchlingSecret),
 
-            // Package Storage (RENAMED - standardized with XDG Launch)
+            // Package Storage
             PACKAGE_BUCKET: config.packages.bucket,
             PACKAGE_PREFIX: config.packages.prefix,
             PACKAGE_METADATA_KEY: config.packages.metadataKey,
 
+            // Security Configuration
+            ENABLE_WEBHOOK_VERIFICATION: String(config.security?.enableVerification !== false),
+            WEBHOOK_ALLOW_LIST: config.security?.webhookAllowList || "",
+
             // Application Configuration
             FLASK_ENV: "production",
-            ENABLE_WEBHOOK_VERIFICATION: config.security?.enableVerification !== false ? "true" : "false",
-            BENCHLING_WEBHOOK_VERSION: props.stackVersion || props.imageTag || "latest",
+            LOG_LEVEL: props.logLevel || config.logging?.level || "INFO",
         };
-
-        // Add optional Athena resources (NEW - from Quilt stack discovery)
-        // These are used by the Python application for Athena queries
-        // If not provided, the app falls back to defaults (primary workgroup, default results bucket)
-        if (props.icebergWorkgroup) {
-            environmentVars.ICEBERG_WORKGROUP = props.icebergWorkgroup;
-        }
-        if (props.athenaUserWorkgroup) {
-            environmentVars.ATHENA_USER_WORKGROUP = props.athenaUserWorkgroup;
-        }
-        if (props.athenaResultsBucket) {
-            environmentVars.ATHENA_RESULTS_BUCKET = props.athenaResultsBucket;
-        }
-
-        // DEPRECATED: Keep old variable names temporarily for backward compatibility
-        // These will be removed in a future release
-        environmentVars.LOG_LEVEL = props.logLevel || config.logging?.level || "INFO";
-        environmentVars.BENCHLING_PKG_BUCKET = config.packages.bucket;
-        environmentVars.BENCHLING_PKG_PREFIX = config.packages.prefix;
-        environmentVars.BENCHLING_PKG_KEY = config.packages.metadataKey;
-        environmentVars.BenchlingSecret = props.benchlingSecret;
 
         // Add container with configured environment
         const container = taskDefinition.addContainer("BenchlingWebhookContainer", {
