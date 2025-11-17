@@ -202,10 +202,7 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                 // NEW: Query stack resources for additional data - FAIL LOUDLY on errors
                 try {
                     const resources = await getStackResources(region, stack.StackName);
-                    console.log(`[DEBUG] Retrieved ${Object.keys(resources).length} resources from stack`);
-
                     const discovered = extractQuiltResources(resources);
-                    console.log("[DEBUG] Extracted resources:", JSON.stringify(discovered, null, 2));
 
                     // Destructure discovered resources and assign to stackInfo
                     const {

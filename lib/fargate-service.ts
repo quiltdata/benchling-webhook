@@ -34,15 +34,16 @@ export interface FargateServiceProps {
     readonly quiltWebHost: string;
     readonly icebergDatabase: string;
 
+    // NEW: Optional Athena resources (from Quilt stack discovery)
+    readonly icebergWorkgroup?: string;
+    readonly athenaUserWorkgroup?: string;
+    readonly athenaResultsBucket?: string;
+
     // Runtime-configurable parameters (from CloudFormation)
     readonly benchlingSecret: string;
     readonly packageBucket: string;
     readonly quiltDatabase: string;
     readonly logLevel?: string;
-
-    // Optional Athena resources (from Quilt stack discovery)
-    readonly athenaUserWorkgroup?: string;
-    readonly athenaResultsBucket?: string;
 }
 
 export class FargateService extends Construct {
@@ -242,35 +243,40 @@ export class FargateService extends Construct {
 
         // Build environment variables using new config structure
         // v1.0.0+: Explicit service parameters eliminate runtime CloudFormation calls
+        // CRITICAL: These must match bin/xdg-launch.ts:buildEnvVars() exactly (lines 152-208)
         const environmentVars: { [key: string]: string } = {
             // AWS Configuration
             AWS_REGION: region,
             AWS_DEFAULT_REGION: region,
 
-            // Application Configuration
-            FLASK_ENV: "production",
-            LOG_LEVEL: props.logLevel || config.logging?.level || "INFO",
-            ENABLE_WEBHOOK_VERIFICATION: config.security?.enableVerification !== false ? "true" : "false",
-            BENCHLING_WEBHOOK_VERSION: props.stackVersion || props.imageTag || "latest",
-
-            // Explicit Quilt Service Parameters (v1.0.0+)
-            // Resolved at deployment time, no runtime CloudFormation calls needed
-            PACKAGER_SQS_URL: props.packagerQueueUrl,
-            ATHENA_USER_DATABASE: props.athenaUserDatabase,
+            // Quilt Services (v1.0.0+ - explicit parameters)
             QUILT_WEB_HOST: props.quiltWebHost,
+            ATHENA_USER_DATABASE: props.athenaUserDatabase,
             ICEBERG_DATABASE: props.icebergDatabase,
+            PACKAGER_SQS_URL: props.packagerQueueUrl,
 
             // Benchling Configuration
             BENCHLING_SECRET_ARN: props.benchlingSecret,
             BENCHLING_TENANT: config.benchling.tenant,
-            BENCHLING_PKG_BUCKET: config.packages.bucket,
-            BENCHLING_PKG_PREFIX: config.packages.prefix,
-            BENCHLING_PKG_KEY: config.packages.metadataKey,
+            BENCHLING_LOG_LEVEL: props.logLevel || config.logging?.level || "INFO",
+
+            // Package Storage (RENAMED - standardized with XDG Launch)
+            PACKAGE_BUCKET: config.packages.bucket,
+            PACKAGE_PREFIX: config.packages.prefix,
+            PACKAGE_METADATA_KEY: config.packages.metadataKey,
+
+            // Application Configuration
+            FLASK_ENV: "production",
+            ENABLE_WEBHOOK_VERIFICATION: config.security?.enableVerification !== false ? "true" : "false",
+            BENCHLING_WEBHOOK_VERSION: props.stackVersion || props.imageTag || "latest",
         };
 
-        // Add optional Athena resources (from Quilt stack discovery)
+        // Add optional Athena resources (NEW - from Quilt stack discovery)
         // These are used by the Python application for Athena queries
         // If not provided, the app falls back to defaults (primary workgroup, default results bucket)
+        if (props.icebergWorkgroup) {
+            environmentVars.ICEBERG_WORKGROUP = props.icebergWorkgroup;
+        }
         if (props.athenaUserWorkgroup) {
             environmentVars.ATHENA_USER_WORKGROUP = props.athenaUserWorkgroup;
         }
@@ -278,8 +284,12 @@ export class FargateService extends Construct {
             environmentVars.ATHENA_RESULTS_BUCKET = props.athenaResultsBucket;
         }
 
-        // DEPRECATED: BenchlingSecret renamed to BENCHLING_SECRET_ARN for consistency
-        // Keep old name temporarily for backward compatibility
+        // DEPRECATED: Keep old variable names temporarily for backward compatibility
+        // These will be removed in a future release
+        environmentVars.LOG_LEVEL = props.logLevel || config.logging?.level || "INFO";
+        environmentVars.BENCHLING_PKG_BUCKET = config.packages.bucket;
+        environmentVars.BENCHLING_PKG_PREFIX = config.packages.prefix;
+        environmentVars.BENCHLING_PKG_KEY = config.packages.metadataKey;
         environmentVars.BenchlingSecret = props.benchlingSecret;
 
         // Add container with configured environment
