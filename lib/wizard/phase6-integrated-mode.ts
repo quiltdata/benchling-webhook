@@ -65,15 +65,24 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
         config.benchling.testEntryId = parameters.benchling.testEntryId;
     }
 
-    // Add discovered workgroups if present
+    // Add discovered workgroups and resources if present
     if (stackQuery.athenaUserWorkgroup) {
         config.quilt.athenaUserWorkgroup = stackQuery.athenaUserWorkgroup;
     }
-    if (stackQuery.athenaIcebergWorkgroup) {
-        config.quilt.athenaIcebergWorkgroup = stackQuery.athenaIcebergWorkgroup;
+    if (stackQuery.athenaUserPolicy) {
+        config.quilt.athenaUserPolicy = stackQuery.athenaUserPolicy;
+    }
+    if (stackQuery.icebergWorkgroup) {
+        config.quilt.icebergWorkgroup = stackQuery.icebergWorkgroup;
     }
     if (stackQuery.icebergDatabase) {
         config.quilt.icebergDatabase = stackQuery.icebergDatabase;
+    }
+    if (stackQuery.athenaResultsBucket) {
+        config.quilt.athenaResultsBucket = stackQuery.athenaResultsBucket;
+    }
+    if (stackQuery.athenaResultsBucketPolicy) {
+        config.quilt.athenaResultsBucketPolicy = stackQuery.athenaResultsBucketPolicy;
     }
 
     return config;

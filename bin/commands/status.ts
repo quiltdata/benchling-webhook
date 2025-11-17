@@ -671,7 +671,8 @@ function displayStatusResult(result: StatusResult, profile: string, quiltConfig?
     if (quiltConfig) {
         const resources = [];
         if (quiltConfig.athenaUserWorkgroup) resources.push({ label: "User Workgroup", value: quiltConfig.athenaUserWorkgroup });
-        if (quiltConfig.athenaIcebergWorkgroup) resources.push({ label: "Iceberg Workgroup", value: quiltConfig.athenaIcebergWorkgroup });
+        if (quiltConfig.athenaUserPolicy) resources.push({ label: "User Policy", value: quiltConfig.athenaUserPolicy });
+        if (quiltConfig.icebergWorkgroup) resources.push({ label: "Iceberg Workgroup", value: quiltConfig.icebergWorkgroup });
         if (quiltConfig.icebergDatabase) resources.push({ label: "Iceberg Database", value: quiltConfig.icebergDatabase });
         if (quiltConfig.athenaResultsBucket) resources.push({ label: "Athena Results Bucket", value: quiltConfig.athenaResultsBucket });
         if (quiltConfig.athenaResultsBucketPolicy) resources.push({ label: "Results Bucket Policy", value: quiltConfig.athenaResultsBucketPolicy });

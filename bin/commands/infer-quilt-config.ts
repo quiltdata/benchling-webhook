@@ -38,8 +38,11 @@ interface QuiltStackInfo {
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
     athenaUserWorkgroup?: string;
-    athenaIcebergWorkgroup?: string;
+    athenaUserPolicy?: string;
+    icebergWorkgroup?: string;
     icebergDatabase?: string;
+    athenaResultsBucket?: string;
+    athenaResultsBucketPolicy?: string;
 }
 
 /**
@@ -55,8 +58,11 @@ interface InferenceResult {
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
     athenaUserWorkgroup?: string;
-    athenaIcebergWorkgroup?: string;
+    athenaUserPolicy?: string;
+    icebergWorkgroup?: string;
     icebergDatabase?: string;
+    athenaResultsBucket?: string;
+    athenaResultsBucketPolicy?: string;
     source: string;
 }
 
@@ -201,12 +207,21 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     if (discovered.athenaUserWorkgroup) {
                         stackInfo.athenaUserWorkgroup = discovered.athenaUserWorkgroup;
                     }
-                    if (discovered.athenaIcebergWorkgroup) {
-                        stackInfo.athenaIcebergWorkgroup = discovered.athenaIcebergWorkgroup;
+                    if (discovered.athenaUserPolicy) {
+                        stackInfo.athenaUserPolicy = discovered.athenaUserPolicy;
+                    }
+                    if (discovered.icebergWorkgroup) {
+                        stackInfo.icebergWorkgroup = discovered.icebergWorkgroup;
                     }
                     // Prefer resource over output for IcebergDatabase
                     if (discovered.icebergDatabase) {
                         stackInfo.icebergDatabase = discovered.icebergDatabase;
+                    }
+                    if (discovered.athenaResultsBucket) {
+                        stackInfo.athenaResultsBucket = discovered.athenaResultsBucket;
+                    }
+                    if (discovered.athenaResultsBucketPolicy) {
+                        stackInfo.athenaResultsBucketPolicy = discovered.athenaResultsBucketPolicy;
                     }
                 } catch {
                     // Resource discovery is best-effort, don't fail stack inference
@@ -496,16 +511,25 @@ export async function inferQuiltConfig(options: {
         result.benchlingIntegrationEnabled = selectedStack.benchlingIntegrationEnabled;
         console.log(`✓ BenchlingIntegration: ${selectedStack.benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`);
     }
-    // NEW: Add discovered workgroups to result
+    // NEW: Add discovered workgroups and resources to result
     if (selectedStack.athenaUserWorkgroup) {
         result.athenaUserWorkgroup = selectedStack.athenaUserWorkgroup;
     }
-    if (selectedStack.athenaIcebergWorkgroup) {
-        result.athenaIcebergWorkgroup = selectedStack.athenaIcebergWorkgroup;
+    if (selectedStack.athenaUserPolicy) {
+        result.athenaUserPolicy = selectedStack.athenaUserPolicy;
+    }
+    if (selectedStack.icebergWorkgroup) {
+        result.icebergWorkgroup = selectedStack.icebergWorkgroup;
     }
     // icebergDatabase already handled (prefer resource over output)
     if (selectedStack.icebergDatabase) {
         result.icebergDatabase = selectedStack.icebergDatabase;
+    }
+    if (selectedStack.athenaResultsBucket) {
+        result.athenaResultsBucket = selectedStack.athenaResultsBucket;
+    }
+    if (selectedStack.athenaResultsBucketPolicy) {
+        result.athenaResultsBucketPolicy = selectedStack.athenaResultsBucketPolicy;
     }
 
     if (result.source === "quilt3-cli") {

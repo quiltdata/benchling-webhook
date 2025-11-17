@@ -209,6 +209,16 @@ export interface QuiltConfig {
     athenaUserWorkgroup?: string;
 
     /**
+     * IAM policy for Athena user workgroup (non-managed role)
+     *
+     * Resolved from UserAthenaNonManagedRolePolicy stack resource
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * @example "quilt-prod-UserAthenaNonManagedRolePolicy-ABC123"
+     */
+    athenaUserPolicy?: string;
+
+    /**
      * Athena workgroup for Iceberg queries
      *
      * Resolved from IcebergWorkGroup stack resource
@@ -216,7 +226,7 @@ export interface QuiltConfig {
      *
      * @example "quilt-iceberg-workgroup-prod"
      */
-    athenaIcebergWorkgroup?: string;
+    icebergWorkgroup?: string;
 
     /**
      * User Athena results bucket (S3 bucket for query results)
@@ -638,7 +648,7 @@ export const ProfileConfigSchema = {
                 region: { type: "string", pattern: "^[a-z]{2}-[a-z]+-[0-9]$" },
                 icebergDatabase: { type: "string", minLength: 1 },
                 athenaUserWorkgroup: { type: "string", minLength: 1 },
-                athenaIcebergWorkgroup: { type: "string", minLength: 1 },
+                icebergWorkgroup: { type: "string", minLength: 1 },
             },
         },
         benchling: {

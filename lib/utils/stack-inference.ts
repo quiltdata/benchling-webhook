@@ -62,6 +62,7 @@ export interface StackResourceMap {
  *
  * Target resources:
  * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
+ * - UserAthenaNonManagedRolePolicy (AWS::IAM::Policy)
  * - IcebergWorkGroup (AWS::Athena::WorkGroup)
  * - IcebergDatabase (AWS::Glue::Database)
  * - UserAthenaResultsBucket (AWS::S3::Bucket)
@@ -69,7 +70,8 @@ export interface StackResourceMap {
  */
 export interface DiscoveredQuiltResources {
     athenaUserWorkgroup?: string;
-    athenaIcebergWorkgroup?: string;
+    athenaUserPolicy?: string;
+    icebergWorkgroup?: string;
     icebergDatabase?: string;
     athenaResultsBucket?: string;
     athenaResultsBucketPolicy?: string;
@@ -121,10 +123,11 @@ export async function getStackResources(
 }
 
 /**
- * Extract Athena workgroups, Glue databases, and S3 buckets from stack resources
+ * Extract Athena workgroups, IAM policies, Glue databases, and S3 buckets from stack resources
  *
  * Target resources:
  * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
+ * - UserAthenaNonManagedRolePolicy (AWS::IAM::Policy)
  * - IcebergWorkGroup (AWS::Athena::WorkGroup)
  * - IcebergDatabase (AWS::Glue::Database)
  * - UserAthenaResultsBucket (AWS::S3::Bucket)
@@ -144,9 +147,15 @@ export function extractQuiltResources(
             resources.UserAthenaNonManagedRoleWorkgroup.physicalResourceId;
     }
 
+    // Extract UserAthenaNonManagedRolePolicy
+    if (resources.UserAthenaNonManagedRolePolicy) {
+        discovered.athenaUserPolicy =
+            resources.UserAthenaNonManagedRolePolicy.physicalResourceId;
+    }
+
     // Extract IcebergWorkGroup
     if (resources.IcebergWorkGroup) {
-        discovered.athenaIcebergWorkgroup =
+        discovered.icebergWorkgroup =
             resources.IcebergWorkGroup.physicalResourceId;
     }
 
