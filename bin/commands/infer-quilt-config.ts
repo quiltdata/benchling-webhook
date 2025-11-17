@@ -12,6 +12,7 @@
 
 import { execSync } from "child_process";
 import * as readline from "readline";
+import chalk from "chalk";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { isQueueUrl } from "../../lib/utils/sqs";
@@ -198,34 +199,36 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     }
                 }
 
-                // NEW: Query stack resources for additional data
+                // NEW: Query stack resources for additional data - FAIL LOUDLY on errors
                 try {
                     const resources = await getStackResources(region, stack.StackName);
-                    const discovered = extractQuiltResources(resources);
+                    console.log(`[DEBUG] Retrieved ${Object.keys(resources).length} resources from stack`);
 
-                    // Add discovered resources to stackInfo
-                    if (discovered.athenaUserWorkgroup) {
-                        stackInfo.athenaUserWorkgroup = discovered.athenaUserWorkgroup;
-                    }
-                    if (discovered.athenaUserPolicy) {
-                        stackInfo.athenaUserPolicy = discovered.athenaUserPolicy;
-                    }
-                    if (discovered.icebergWorkgroup) {
-                        stackInfo.icebergWorkgroup = discovered.icebergWorkgroup;
-                    }
-                    // Prefer resource over output for IcebergDatabase
-                    if (discovered.icebergDatabase) {
-                        stackInfo.icebergDatabase = discovered.icebergDatabase;
-                    }
-                    if (discovered.athenaResultsBucket) {
-                        stackInfo.athenaResultsBucket = discovered.athenaResultsBucket;
-                    }
-                    if (discovered.athenaResultsBucketPolicy) {
-                        stackInfo.athenaResultsBucketPolicy = discovered.athenaResultsBucketPolicy;
-                    }
-                } catch {
-                    // Resource discovery is best-effort, don't fail stack inference
-                    // Error already logged by getStackResources
+                    const discovered = extractQuiltResources(resources);
+                    console.log("[DEBUG] Extracted resources:", JSON.stringify(discovered, null, 2));
+
+                    // Destructure discovered resources and assign to stackInfo
+                    const {
+                        athenaUserWorkgroup,
+                        athenaUserPolicy,
+                        icebergWorkgroup,
+                        icebergDatabase,
+                        athenaResultsBucket,
+                        athenaResultsBucketPolicy,
+                    } = discovered;
+
+                    Object.assign(stackInfo, {
+                        athenaUserWorkgroup,
+                        athenaUserPolicy,
+                        icebergWorkgroup,
+                        icebergDatabase,
+                        athenaResultsBucket,
+                        athenaResultsBucketPolicy,
+                    });
+                } catch (error) {
+                    // FAIL LOUDLY - show the error with full stack trace
+                    console.error(chalk.red(`[ERROR] Failed to query stack resources: ${(error as Error).message}`));
+                    console.error(chalk.red("[ERROR] Stack:"), (error as Error).stack);
                 }
 
                 stackInfos.push(stackInfo);

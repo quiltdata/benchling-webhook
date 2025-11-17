@@ -91,24 +91,31 @@ export async function runStackQuery(
         console.log(chalk.dim(`Region: ${region}`));
         console.log(chalk.dim(`Account: ${account}`));
 
-        // Display discovered Athena workgroups and resources
-        if (athenaUserWorkgroup) {
-            console.log(chalk.dim(`Athena User Workgroup: ${athenaUserWorkgroup}`));
-        }
-        if (athenaUserPolicy) {
-            console.log(chalk.dim(`Athena User Policy: ${athenaUserPolicy}`));
-        }
+        // Display discovered Athena workgroups and resources - FAIL LOUDLY if missing
+        console.log(chalk.bold("\nDiscovered Stack Resources:"));
+        console.log(athenaUserWorkgroup
+            ? chalk.green(`✓ Athena User Workgroup: ${athenaUserWorkgroup}`)
+            : chalk.yellow("⚠ Athena User Workgroup: NOT FOUND"));
+        console.log(athenaUserPolicy
+            ? chalk.green(`✓ Athena User Policy: ${athenaUserPolicy}`)
+            : chalk.yellow("⚠ Athena User Policy: NOT FOUND"));
+        console.log(athenaResultsBucket
+            ? chalk.green(`✓ Athena Results Bucket: ${athenaResultsBucket}`)
+            : chalk.yellow("⚠ Athena Results Bucket: NOT FOUND"));
+        console.log(athenaResultsBucketPolicy
+            ? chalk.green(`✓ Athena Results Bucket Policy: ${athenaResultsBucketPolicy}`)
+            : chalk.yellow("⚠ Athena Results Bucket Policy: NOT FOUND"));
+
+        // Iceberg resources are optional (recent addition to Quilt stacks)
         if (icebergWorkgroup) {
-            console.log(chalk.dim(`Athena Iceberg Workgroup: ${icebergWorkgroup}`));
+            console.log(chalk.green(`✓ Iceberg Workgroup: ${icebergWorkgroup}`));
+        } else {
+            console.log(chalk.dim("  Iceberg Workgroup: Not available (optional)"));
         }
         if (icebergDatabase) {
-            console.log(chalk.dim(`Iceberg Database: ${icebergDatabase}`));
-        }
-        if (athenaResultsBucket) {
-            console.log(chalk.dim(`Athena Results Bucket: ${athenaResultsBucket}`));
-        }
-        if (athenaResultsBucketPolicy) {
-            console.log(chalk.dim(`Athena Results Bucket Policy: ${athenaResultsBucketPolicy}`));
+            console.log(chalk.green(`✓ Iceberg Database: ${icebergDatabase}`));
+        } else {
+            console.log(chalk.dim("  Iceberg Database: Not available (optional)"));
         }
 
         if (benchlingSecretArn) {
