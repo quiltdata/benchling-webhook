@@ -11,7 +11,7 @@
  * @version 0.8.0
  */
 
-import { spawn } from "child_process";
+import { spawn, ChildProcess } from "child_process";
 import { resolve } from "path";
 import { existsSync } from "fs";
 import { XDGConfig } from "../lib/xdg-config";
@@ -142,16 +142,31 @@ function loadProfile(profileName: string): ProfileConfig {
 /**
  * Extract secret name from Secrets Manager ARN
  *
+ * AWS Secrets Manager automatically appends a 6-character random suffix to secret names
+ * in ARNs (e.g., "my-secret-Ab12Cd"). This function extracts the base secret name by
+ * removing the suffix.
+ *
  * @param arn - Secrets Manager ARN
- * @returns Secret name only
+ * @returns Secret name without the random suffix
  */
 function extractSecretName(arn: string): string {
     if (!arn) {
         return "";
     }
-    // ARN format: arn:aws:secretsmanager:region:account:secret:name-randomchars
+    // ARN format: arn:aws:secretsmanager:region:account:secret:name-XXXXXX
+    // where XXXXXX is a 6-character random suffix added by AWS
     const match = arn.match(/secret:([^:]+)/);
-    return match ? match[1] : arn;
+    if (!match) {
+        return arn;
+    }
+
+    const fullName = match[1];
+
+    // Remove the AWS-generated 6-character suffix (format: -XXXXXX)
+    // The suffix is always a hyphen followed by 6 alphanumeric characters
+    const withoutSuffix = fullName.replace(/-[A-Za-z0-9]{6}$/, "");
+
+    return withoutSuffix;
 }
 
 /**
@@ -293,6 +308,73 @@ function filterSecrets(envVars: EnvVars): EnvVars {
 }
 
 /**
+ * Wait for server to be healthy
+ *
+ * @param url - Server URL to check
+ * @param maxAttempts - Maximum number of attempts
+ * @param delayMs - Delay between attempts in milliseconds
+ * @returns Promise that resolves when server is healthy
+ */
+async function waitForHealth(url: string, maxAttempts = 30, delayMs = 1000): Promise<void> {
+    console.log(`\n⏳ Waiting for server to be healthy at ${url}...`);
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            const response = await fetch(`${url}/health`, {
+                signal: AbortSignal.timeout(5000),
+            });
+
+            if (response.ok) {
+                console.log(`✅ Server is healthy (attempt ${attempt}/${maxAttempts})\n`);
+                return;
+            }
+        } catch (error) {
+            // Ignore errors and retry
+        }
+
+        if (attempt < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    }
+
+    throw new Error(`Server did not become healthy after ${maxAttempts} attempts`);
+}
+
+/**
+ * Run tests against the server
+ *
+ * @param url - Server URL to test
+ * @param profile - Profile name
+ * @returns Promise that resolves with test exit code
+ */
+async function runTests(url: string, profile: string): Promise<number> {
+    console.log("🧪 Running tests...\n");
+
+    const dockerDir = resolve(__dirname, "..", "docker");
+    const testScript = resolve(dockerDir, "scripts", "test_webhook.py");
+
+    if (!existsSync(testScript)) {
+        throw new Error(`Test script not found: ${testScript}`);
+    }
+
+    return new Promise((resolve) => {
+        const proc = spawn("uv", ["run", "python", testScript, url, "--profile", profile], {
+            cwd: dockerDir,
+            stdio: "inherit",
+        });
+
+        proc.on("exit", (code) => {
+            resolve(code || 0);
+        });
+
+        proc.on("error", (error) => {
+            console.error(`\n❌ Failed to run tests: ${error.message}`);
+            resolve(1);
+        });
+    });
+}
+
+/**
  * Launch Flask application in native mode
  *
  * Runs Flask directly on host using uv.
@@ -300,7 +382,7 @@ function filterSecrets(envVars: EnvVars): EnvVars {
  * @param envVars - Environment variables
  * @param options - Launch options
  */
-function launchNative(envVars: EnvVars, options: LaunchOptions): void {
+async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<void> {
     const port = options.port || 5001;
     envVars.PORT = String(port);
 
@@ -327,33 +409,54 @@ function launchNative(envVars: EnvVars, options: LaunchOptions): void {
     const proc = spawn("uv", ["run", "python", "-m", "src.app"], {
         cwd: dockerDir,
         env: envVars,
-        stdio: "inherit",
+        stdio: options.test ? "pipe" : "inherit",
     });
 
-    // Graceful shutdown
-    const cleanup = (): void => {
-        console.log("\n\n🛑 Shutting down...");
-        proc.kill("SIGTERM");
-    };
+    // If in test mode, run tests after server is healthy
+    if (options.test) {
+        try {
+            const serverUrl = `http://localhost:${port}`;
+            await waitForHealth(serverUrl);
+            const exitCode = await runTests(serverUrl, options.profile);
 
-    process.on("SIGINT", cleanup);
-    process.on("SIGTERM", cleanup);
+            console.log("\n🛑 Shutting down server...");
+            proc.kill("SIGTERM");
 
-    proc.on("error", (error: Error & { code?: string }) => {
-        console.error(`\n❌ Failed to start native Flask: ${error.message}`);
-        if (error.code === "ENOENT") {
-            console.error("\nIs \"uv\" installed and in your PATH?");
-            console.error("Install uv: https://docs.astral.sh/uv/getting-started/installation/");
+            // Wait a moment for cleanup
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            process.exit(exitCode);
+        } catch (error) {
+            console.error(`\n❌ Test failed: ${(error as Error).message}`);
+            proc.kill("SIGTERM");
+            process.exit(1);
         }
-        process.exit(1);
-    });
+    } else {
+        // Non-test mode: run server interactively with graceful shutdown
+        const cleanup = (): void => {
+            console.log("\n\n🛑 Shutting down...");
+            proc.kill("SIGTERM");
+        };
 
-    proc.on("exit", (code) => {
-        if (code !== 0 && code !== null) {
-            console.error(`\n❌ Native Flask exited with code ${code}`);
-        }
-        process.exit(code || 0);
-    });
+        process.on("SIGINT", cleanup);
+        process.on("SIGTERM", cleanup);
+
+        proc.on("error", (error: Error & { code?: string }) => {
+            console.error(`\n❌ Failed to start native Flask: ${error.message}`);
+            if (error.code === "ENOENT") {
+                console.error("\nIs \"uv\" installed and in your PATH?");
+                console.error("Install uv: https://docs.astral.sh/uv/getting-started/installation/");
+            }
+            process.exit(1);
+        });
+
+        proc.on("exit", (code) => {
+            if (code !== 0 && code !== null) {
+                console.error(`\n❌ Native Flask exited with code ${code}`);
+            }
+            process.exit(code || 0);
+        });
+    }
 }
 
 /**
@@ -364,7 +467,7 @@ function launchNative(envVars: EnvVars, options: LaunchOptions): void {
  * @param envVars - Environment variables
  * @param options - Launch options
  */
-function launchDocker(envVars: EnvVars, options: LaunchOptions): void {
+async function launchDocker(envVars: EnvVars, options: LaunchOptions): Promise<void> {
     const port = options.port || 5003;
     envVars.PORT = String(port);
 
@@ -390,37 +493,64 @@ function launchDocker(envVars: EnvVars, options: LaunchOptions): void {
     const proc = spawn("docker-compose", ["up", "app"], {
         cwd: dockerDir,
         env: envVars,
-        stdio: "inherit",
+        stdio: options.test ? "pipe" : "inherit",
     });
 
-    // Graceful shutdown
-    const cleanup = (): void => {
-        console.log("\n\n🛑 Shutting down Docker container...");
-        // Use docker-compose down for clean shutdown
-        spawn("docker-compose", ["down"], {
-            cwd: dockerDir,
-            stdio: "inherit",
+    // If in test mode, run tests after server is healthy
+    if (options.test) {
+        const dockerCleanup = (): void => {
+            spawn("docker-compose", ["down"], {
+                cwd: dockerDir,
+                stdio: "inherit",
+            });
+        };
+
+        try {
+            const serverUrl = `http://localhost:${port}`;
+            await waitForHealth(serverUrl);
+            const exitCode = await runTests(serverUrl, options.profile);
+
+            console.log("\n🛑 Shutting down Docker container...");
+            dockerCleanup();
+
+            // Wait a moment for cleanup
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            process.exit(exitCode);
+        } catch (error) {
+            console.error(`\n❌ Test failed: ${(error as Error).message}`);
+            dockerCleanup();
+            process.exit(1);
+        }
+    } else {
+        // Non-test mode: run server interactively with graceful shutdown
+        const cleanup = (): void => {
+            console.log("\n\n🛑 Shutting down Docker container...");
+            spawn("docker-compose", ["down"], {
+                cwd: dockerDir,
+                stdio: "inherit",
+            });
+            proc.kill("SIGTERM");
+        };
+
+        process.on("SIGINT", cleanup);
+        process.on("SIGTERM", cleanup);
+
+        proc.on("error", (error: Error & { code?: string }) => {
+            console.error(`\n❌ Failed to start Docker: ${error.message}`);
+            if (error.code === "ENOENT") {
+                console.error("\nIs \"docker-compose\" installed and in your PATH?");
+            }
+            process.exit(1);
         });
-        proc.kill("SIGTERM");
-    };
 
-    process.on("SIGINT", cleanup);
-    process.on("SIGTERM", cleanup);
-
-    proc.on("error", (error: Error & { code?: string }) => {
-        console.error(`\n❌ Failed to start Docker: ${error.message}`);
-        if (error.code === "ENOENT") {
-            console.error("\nIs \"docker-compose\" installed and in your PATH?");
-        }
-        process.exit(1);
-    });
-
-    proc.on("exit", (code) => {
-        if (code !== 0 && code !== null) {
-            console.error(`\n❌ Docker exited with code ${code}`);
-        }
-        process.exit(code || 0);
-    });
+        proc.on("exit", (code) => {
+            if (code !== 0 && code !== null) {
+                console.error(`\n❌ Docker exited with code ${code}`);
+            }
+            process.exit(code || 0);
+        });
+    }
 }
 
 /**
@@ -431,7 +561,7 @@ function launchDocker(envVars: EnvVars, options: LaunchOptions): void {
  * @param envVars - Environment variables
  * @param options - Launch options
  */
-function launchDockerDev(envVars: EnvVars, options: LaunchOptions): void {
+async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promise<void> {
     const port = options.port || 5002;
     envVars.PORT = String(port);
 
@@ -457,43 +587,70 @@ function launchDockerDev(envVars: EnvVars, options: LaunchOptions): void {
     const proc = spawn("docker-compose", ["--profile", "dev", "up", "app-dev"], {
         cwd: dockerDir,
         env: envVars,
-        stdio: "inherit",
+        stdio: options.test ? "pipe" : "inherit",
     });
 
-    // Graceful shutdown
-    const cleanup = (): void => {
-        console.log("\n\n🛑 Shutting down Docker dev container...");
-        // Use docker-compose down for clean shutdown
-        spawn("docker-compose", ["--profile", "dev", "down"], {
-            cwd: dockerDir,
-            stdio: "inherit",
+    // If in test mode, run tests after server is healthy
+    if (options.test) {
+        const dockerCleanup = (): void => {
+            spawn("docker-compose", ["--profile", "dev", "down"], {
+                cwd: dockerDir,
+                stdio: "inherit",
+            });
+        };
+
+        try {
+            const serverUrl = `http://localhost:${port}`;
+            await waitForHealth(serverUrl);
+            const exitCode = await runTests(serverUrl, options.profile);
+
+            console.log("\n🛑 Shutting down Docker dev container...");
+            dockerCleanup();
+
+            // Wait a moment for cleanup
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            process.exit(exitCode);
+        } catch (error) {
+            console.error(`\n❌ Test failed: ${(error as Error).message}`);
+            dockerCleanup();
+            process.exit(1);
+        }
+    } else {
+        // Non-test mode: run server interactively with graceful shutdown
+        const cleanup = (): void => {
+            console.log("\n\n🛑 Shutting down Docker dev container...");
+            spawn("docker-compose", ["--profile", "dev", "down"], {
+                cwd: dockerDir,
+                stdio: "inherit",
+            });
+            proc.kill("SIGTERM");
+        };
+
+        process.on("SIGINT", cleanup);
+        process.on("SIGTERM", cleanup);
+
+        proc.on("error", (error: Error & { code?: string }) => {
+            console.error(`\n❌ Failed to start Docker dev: ${error.message}`);
+            if (error.code === "ENOENT") {
+                console.error("\nIs \"docker-compose\" installed and in your PATH?");
+            }
+            process.exit(1);
         });
-        proc.kill("SIGTERM");
-    };
 
-    process.on("SIGINT", cleanup);
-    process.on("SIGTERM", cleanup);
-
-    proc.on("error", (error: Error & { code?: string }) => {
-        console.error(`\n❌ Failed to start Docker dev: ${error.message}`);
-        if (error.code === "ENOENT") {
-            console.error("\nIs \"docker-compose\" installed and in your PATH?");
-        }
-        process.exit(1);
-    });
-
-    proc.on("exit", (code) => {
-        if (code !== 0 && code !== null) {
-            console.error(`\n❌ Docker dev exited with code ${code}`);
-        }
-        process.exit(code || 0);
-    });
+        proc.on("exit", (code) => {
+            if (code !== 0 && code !== null) {
+                console.error(`\n❌ Docker dev exited with code ${code}`);
+            }
+            process.exit(code || 0);
+        });
+    }
 }
 
 /**
  * Main entry point
  */
-function main(): void {
+async function main(): Promise<void> {
     try {
         // Parse command-line arguments
         const options = parseArguments(process.argv);
@@ -510,13 +667,13 @@ function main(): void {
         // Launch appropriate mode
         switch (options.mode) {
         case "native":
-            launchNative(envVars, options);
+            await launchNative(envVars, options);
             break;
         case "docker":
-            launchDocker(envVars, options);
+            await launchDocker(envVars, options);
             break;
         case "docker-dev":
-            launchDockerDev(envVars, options);
+            await launchDockerDev(envVars, options);
             break;
         default:
             throw new Error(`Unknown mode: ${options.mode}`);
@@ -529,7 +686,10 @@ function main(): void {
 
 // Run if called directly
 if (require.main === module) {
-    main();
+    main().catch((error) => {
+        console.error(`\n❌ Fatal error: ${error.message}\n`);
+        process.exit(1);
+    });
 }
 
 // Export for testing
