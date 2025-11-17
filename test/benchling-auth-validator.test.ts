@@ -6,6 +6,7 @@ jest.mock("https", () => ({
 }));
 
 import * as https from "https";
+import type { ClientRequest } from "http";
 
 describe("BenchlingAuthValidator", () => {
     beforeEach(() => {
@@ -166,7 +167,9 @@ describe("BenchlingAuthValidator", () => {
  */
 function mockHttpsRequest(statusCode: number, responseBody: Record<string, unknown>): void {
     const mockHttps = jest.mocked(https);
-    mockHttps.request.mockImplementation((options: unknown, callback: (res: unknown) => void) => {
+    const mockImpl = ((arg1: unknown, arg2: unknown, arg3?: unknown) => {
+        // https.request can be called with (options, callback) or (url, options, callback)
+        const callback = (arg3 || arg2) as (res: unknown) => void;
         const mockResponse = {
             statusCode,
             on: jest.fn((event: string, handler: (data: Buffer) => void) => {
@@ -183,8 +186,9 @@ function mockHttpsRequest(statusCode: number, responseBody: Record<string, unkno
             on: jest.fn(),
             write: jest.fn(),
             end: jest.fn(),
-        };
-    });
+        } as unknown as ClientRequest;
+    }) as typeof https.request;
+    mockHttps.request.mockImplementation(mockImpl);
 }
 
 /**
@@ -192,7 +196,7 @@ function mockHttpsRequest(statusCode: number, responseBody: Record<string, unkno
  */
 function mockHttpsRequestError(error: Error): void {
     const mockHttps = jest.mocked(https);
-    mockHttps.request.mockImplementation(() => {
+    const mockImpl = (() => {
         return {
             on: jest.fn((event: string, handler: (err: Error) => void) => {
                 if (event === "error") {
@@ -201,6 +205,7 @@ function mockHttpsRequestError(error: Error): void {
             }),
             write: jest.fn(),
             end: jest.fn(),
-        };
-    });
+        } as unknown as ClientRequest;
+    }) as typeof https.request;
+    mockHttps.request.mockImplementation(mockImpl);
 }

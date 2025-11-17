@@ -5,28 +5,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.8.0] - 2025-11-16
+## [0.8.0] - 2025-11-17
+
+### Breaking Changes
+
+- **QuiltStackARN removed from runtime environment** - Services now resolved at deployment time instead of container startup
+  - Container startup faster (no CloudFormation API calls)
+  - Task role has no CloudFormation permissions (improved security)
+  - Existing configurations work unchanged (stackArn still used at deploy time)
 
 ### Added
 
-- Deployment-time service resolution via new CloudFormation parameters (PACKAGER_SQS_URL, ATHENA_USER_DATABASE, QUILT_WEB_HOST, ICEBERG_DATABASE)
-- Service resolver implementation for deployment-time CloudFormation query and resolution
-- Comprehensive merge conflict resolution documentation in spec/206-service-envars/
+- **`xdg-launch` command** - Unified configuration bridge for native/Docker modes (eliminates .env files)
+- **`test:local` npm script** - Test Docker containers locally with hot-reload
+- **`status --no-exit` flag** - Continuous deployment monitoring
+- **Optional Athena/Iceberg configuration** - Support for ATHENA_USER_WORKGROUP, ATHENA_RESULTS_BUCKET, ICEBERG_DATABASE, ICEBERG_WORKGROUP
 
 ### Changed
 
-- QuiltStackARN now optional in configuration (services resolved at deployment time, not runtime)
-- Container startup faster without runtime CloudFormation API calls
-- Removed runtime CloudFormation IAM permissions from ECS task role
-- Status command now validates stackArn presence before execution
+- **Deployment-time service resolution** - Services resolved once during deployment (PACKAGER_SQS_URL, ATHENA_USER_DATABASE, QUILT_WEB_HOST, ICEBERG_DATABASE)
+- **Docker environment simplified** - No more .env file, explicit service environment variables
+- **Catalog validation** - Shows progress when searching CloudFormation stacks
+- **Health endpoint** - Now displays version from pyproject.toml
+- **Stack inference** - Added pagination support for large deployments
 
 ### Fixed
 
 - Status command handles optional stackArn gracefully with clear error messages
+- Validate command handles optional stackArn with clear error messages
+- QuiltWebHost now only catalog URL source (eliminates ambiguity)
+- Removed redundant Phase 2 deployment prompt from wizard
 
 ### Migration
 
-Existing configurations work unchanged. The QuiltStackARN field is now optional as services are resolved during deployment rather than at container runtime. See [spec/206-service-envars/MIGRATION.md](./spec/206-service-envars/MIGRATION.md) for details.
+Existing configurations work unchanged. See [spec/206-service-envars/MIGRATION.md](./spec/206-service-envars/MIGRATION.md) for details.
 
 ## [0.7.10] - 2025-11-15
 
