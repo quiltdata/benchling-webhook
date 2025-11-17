@@ -39,7 +39,6 @@
     "setup:profile": "ts-node bin/cli.ts setup-profile",
     "setup:sync-secrets": "ts-node bin/commands/sync-secrets.ts",
     "test": "npm run lint && npm run build:typecheck && npm run test:ts && npm run test:python",
-    "test:ci": "npm run lint && npm run build:typecheck && npm run test:unit",
     "test:unit": "cross-env NODE_ENV=test jest --testPathIgnorePatterns='/test/integration/' --maxWorkers=50%",
     "test:local": "npm run launch -- --mode docker-dev --profile dev --test",
     "test:local:prod": "npm run launch -- --mode docker --profile dev --test",
