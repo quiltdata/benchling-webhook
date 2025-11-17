@@ -301,6 +301,28 @@ function filterSecrets(envVars: EnvVars): EnvVars {
 }
 
 /**
+ * Spawn docker-compose command with consistent environment
+ *
+ * @param args - docker-compose arguments
+ * @param dockerDir - Docker working directory
+ * @param envVars - Environment variables
+ * @param stdio - stdio option for spawn
+ * @returns Child process
+ */
+function spawnDockerCompose(
+    args: string[],
+    dockerDir: string,
+    envVars: EnvVars,
+    stdio: "inherit" | "pipe" = "inherit",
+): ReturnType<typeof spawn> {
+    return spawn("docker-compose", args, {
+        cwd: dockerDir,
+        env: envVars,
+        stdio,
+    });
+}
+
+/**
  * Wait for server to be healthy
  *
  * @param url - Server URL to check
@@ -483,19 +505,17 @@ async function launchDocker(envVars: EnvVars, options: LaunchOptions): Promise<v
     console.log(`Working directory: ${dockerDir}`);
     console.log("Command: docker-compose up app\n");
 
-    const proc = spawn("docker-compose", ["up", "app"], {
-        cwd: dockerDir,
-        env: envVars,
-        stdio: options.test ? "pipe" : "inherit",
-    });
+    const proc = spawnDockerCompose(
+        ["up", "app"],
+        dockerDir,
+        envVars,
+        options.test ? "pipe" : "inherit",
+    );
 
     // If in test mode, run tests after server is healthy
     if (options.test) {
         const dockerCleanup = (): void => {
-            spawn("docker-compose", ["down"], {
-                cwd: dockerDir,
-                stdio: "inherit",
-            });
+            spawnDockerCompose(["down"], dockerDir, envVars);
         };
 
         try {
@@ -519,10 +539,7 @@ async function launchDocker(envVars: EnvVars, options: LaunchOptions): Promise<v
         // Non-test mode: run server interactively with graceful shutdown
         const cleanup = (): void => {
             console.log("\n\n🛑 Shutting down Docker container...");
-            spawn("docker-compose", ["down"], {
-                cwd: dockerDir,
-                stdio: "inherit",
-            });
+            spawnDockerCompose(["down"], dockerDir, envVars);
             proc.kill("SIGTERM");
         };
 
@@ -577,19 +594,17 @@ async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promis
     console.log(`Working directory: ${dockerDir}`);
     console.log("Command: docker-compose --profile dev up app-dev\n");
 
-    const proc = spawn("docker-compose", ["--profile", "dev", "up", "app-dev"], {
-        cwd: dockerDir,
-        env: envVars,
-        stdio: options.test ? "pipe" : "inherit",
-    });
+    const proc = spawnDockerCompose(
+        ["--profile", "dev", "up", "app-dev"],
+        dockerDir,
+        envVars,
+        options.test ? "pipe" : "inherit",
+    );
 
     // If in test mode, run tests after server is healthy
     if (options.test) {
         const dockerCleanup = (): void => {
-            spawn("docker-compose", ["--profile", "dev", "down"], {
-                cwd: dockerDir,
-                stdio: "inherit",
-            });
+            spawnDockerCompose(["--profile", "dev", "down"], dockerDir, envVars);
         };
 
         try {
@@ -613,10 +628,7 @@ async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promis
         // Non-test mode: run server interactively with graceful shutdown
         const cleanup = (): void => {
             console.log("\n\n🛑 Shutting down Docker dev container...");
-            spawn("docker-compose", ["--profile", "dev", "down"], {
-                cwd: dockerDir,
-                stdio: "inherit",
-            });
+            spawnDockerCompose(["--profile", "dev", "down"], dockerDir, envVars);
             proc.kill("SIGTERM");
         };
 
