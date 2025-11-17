@@ -228,13 +228,13 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
  * @param profile - Profile name (for error messages)
  */
 function validateConfig(envVars: EnvVars, profile: string): void {
-    // Required service variables
+    // Required service variables (NO BENCHLING_TENANT - comes from Secrets Manager!)
     const required = [
         "QUILT_WEB_HOST",
         "ATHENA_USER_DATABASE",
         "PACKAGER_SQS_URL",
         "AWS_REGION",
-        "BENCHLING_TENANT",
+        "BenchlingSecret",
         "PACKAGE_BUCKET",
     ];
 
@@ -263,12 +263,12 @@ function validateConfig(envVars: EnvVars, profile: string): void {
         );
     }
 
-    // Validate Secrets Manager ARN if present
-    if (envVars.BENCHLING_SECRET_ARN && !envVars.BENCHLING_SECRET_ARN.startsWith("arn:aws:secretsmanager:")) {
+    // Validate BenchlingSecret is present (secret name, not ARN)
+    if (!envVars.BenchlingSecret) {
         throw new Error(
-            `Invalid Secrets Manager ARN: ${envVars.BENCHLING_SECRET_ARN}\n\n` +
-            "Expected format:\n" +
-            "  arn:aws:secretsmanager:{region}:{account}:secret:{name}",
+            "Missing BenchlingSecret\n\n" +
+            "BenchlingSecret must be the name of your AWS Secrets Manager secret.\n" +
+            "Example: benchling-webhook-prod",
         );
     }
 }
