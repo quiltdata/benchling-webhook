@@ -273,7 +273,8 @@ export class FargateService extends Construct {
 
         // Build environment variables using new config structure
         // v1.0.0+: Explicit service parameters eliminate runtime CloudFormation calls
-        // CRITICAL: These must match bin/xdg-launch.ts:buildEnvVars() exactly (lines 182-234)
+        // CRITICAL: These must match bin/xdg-launch.ts:buildEnvVars() exactly (lines 182-229)
+        // Package configuration comes from AWS Secrets Manager, NOT environment variables
         const environmentVars: { [key: string]: string } = {
             // AWS Configuration
             AWS_REGION: region,
@@ -291,14 +292,8 @@ export class FargateService extends Construct {
             // Benchling Configuration (credentials from Secrets Manager, NOT environment)
             BenchlingSecret: this.extractSecretName(props.benchlingSecret),
 
-            // Package Storage
-            PACKAGE_BUCKET: config.packages.bucket,
-            PACKAGE_PREFIX: config.packages.prefix,
-            PACKAGE_METADATA_KEY: config.packages.metadataKey,
-
-            // Security Configuration
+            // Security Configuration (verification can be disabled for dev/test)
             ENABLE_WEBHOOK_VERIFICATION: String(config.security?.enableVerification !== false),
-            WEBHOOK_ALLOW_LIST: config.security?.webhookAllowList || "",
 
             // Application Configuration
             FLASK_ENV: "production",

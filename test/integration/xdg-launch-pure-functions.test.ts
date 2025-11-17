@@ -62,10 +62,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
             expect(envVars.BenchlingSecret).toBeTruthy();
             expect(typeof envVars.BenchlingSecret).toBe("string");
 
-            // Verify package storage configuration
-            expect(envVars.PACKAGE_BUCKET).toBe(defaultConfig.packages.bucket);
-            expect(envVars.PACKAGE_PREFIX).toBe(defaultConfig.packages.prefix);
-            expect(envVars.PACKAGE_METADATA_KEY).toBe(defaultConfig.packages.metadataKey);
+            // Package configuration comes from Secrets Manager, NOT environment variables
 
             // Verify native mode-specific variables
             expect(envVars.FLASK_ENV).toBe("development");
