@@ -33,21 +33,22 @@ help:
 	@echo "  check-ngrok           - Verify ngrok is configured (auto-adds authtoken if needed)"
 	@echo "  install               - Install dependencies with uv"
 	@echo ""
-	@echo "Development Servers:"
-	@echo "  run / run-dev         - Docker dev with hot-reload (needs AWS, port $(PORT_DOCKER_DEV))"
+	@echo "Development Servers (all use xdg-launch):"
+	@echo "  run / run-dev         - Docker dev with hot-reload (port $(PORT_DOCKER_DEV))"
+	@echo "  run-prod              - Docker production mode (port $(PORT_DOCKER_PROD))"
 	@echo "  run-ngrok             - Docker dev + ngrok tunnel (port $(PORT_DOCKER_DEV))"
-	@echo "  run-native            - Native Flask with mocked AWS (port $(PORT_NATIVE))"
-	@echo "  run-native-verbose    - Native Flask with debug logging (port $(PORT_NATIVE))"
+	@echo "  run-native            - Native Flask with dev profile (port $(PORT_NATIVE))"
+	@echo "  run-native-verbose    - Alias for run-native (always verbose)"
 	@echo "  run-native-ngrok      - Native server + ngrok tunnel (port $(PORT_NATIVE))"
 	@echo "  run-ecr               - Pull and run image from ECR (port $(PORT_DOCKER_PROD))"
 	@echo ""
-	@echo "Testing:"
+	@echo "Testing (xdg-launch-based tests marked with *):"
 	@echo "  test                  - Run all tests (unit + integration + docker)"
 	@echo "  test-unit             - Run unit tests (pytest)"
-	@echo "  test-native           - Test webhooks with auto-managed native server"
+	@echo "  test-native *         - Test native Flask (uses xdg-launch)"
 	@echo "  test-dev              - Test webhooks against docker dev (port $(PORT_DOCKER_DEV))"
-	@echo "  test-docker-dev       - Test local docker dev container (auto-start, port $(PORT_DOCKER_DEV))"
-	@echo "  test-docker-prod      - Test local docker prod container (port $(PORT_DOCKER_PROD))"
+	@echo "  test-docker-dev *     - Test local docker dev (uses xdg-launch)"
+	@echo "  test-docker-prod *    - Test local docker prod (uses xdg-launch)"
 	@echo "  test-deployed-dev     - Test dev stack via API Gateway (auto-deploys if needed)"
 	@echo "  test-deployed-prod    - Test prod stack via API Gateway endpoint"
 	@echo "  test-ecr              - Test webhooks against ECR image (port $(PORT_DOCKER_PROD))"
@@ -124,11 +125,11 @@ test-query: check-xdg
 
 # Run Servers
 
-# Docker development server with hot-reload (requires AWS credentials)
-run: build check-xdg
+# Docker development server with hot-reload (uses xdg-launch via npm)
+run: check-xdg
 	@echo "Starting dev server with hot-reload..."
 	@echo "💡 If you encounter issues, run 'make docker-clean' first"
-	docker-compose --profile dev up app-dev
+	cd .. && npm run dev:docker
 
 # Alias for run (for consistency with test-dev)
 run-dev: run
@@ -137,20 +138,17 @@ run-ngrok:
 	@make run &
 	@make ngrok PORT=$(PORT_DOCKER_DEV) SLEEP=10
 
-# Docker production server (requires AWS credentials) - DEFAULT
-run-prod: build check-xdg
-	docker-compose up -d
-	@echo "Waiting for application to start..."
-	@sleep 10
-	@make health-prod
+# Docker production server (uses xdg-launch via npm)
+run-prod: check-xdg
+	@echo "Starting production server..."
+	cd .. && npm run dev:prod
 
-# Native Flask server with mocked AWS (no credentials needed)
+# Native Flask server (uses xdg-launch via npm)
 run-native: check-xdg
-	uv run python scripts/run_native.py --profile $(PROFILE)
+	cd .. && npm run launch -- --mode native --profile $(PROFILE) --verbose
 
-# Native Flask server with verbose logging
-run-native-verbose: check-xdg
-	uv run python scripts/run_native.py --verbose --profile $(PROFILE)
+# Native Flask server with verbose logging (alias for backward compatibility)
+run-native-verbose: run-native
 
 # Native server + ngrok tunnel
 run-native-ngrok: check-xdg
@@ -204,11 +202,11 @@ test-integration: test-benchling
 		--entry-id $(BENCHLING_TEST_ENTRY) \
 		--wait-for-health
 
-# Test webhooks against native dev server (auto-starts and stops server)
+# Test webhooks against native dev server (uses xdg-launch via npm)
 # Uses dev profile by default, errors if profile doesn't exist
 test-native: check-xdg kill
 	@echo "Running native server tests (profile: $(PROFILE))..."
-	uv run python scripts/run_native.py --test --profile $(PROFILE)
+	cd .. && npm run test:native
 
 # Test webhooks against docker dev server (requires server running)
 test-dev:
@@ -220,15 +218,15 @@ test-dev:
 	@echo "Testing webhooks against http://localhost:$(PORT_DOCKER_DEV)"
 	uv run python scripts/test_webhook.py http://localhost:$(PORT_DOCKER_DEV)
 
-# Test webhooks against local docker dev container (auto-starts if not running)
-test-docker-dev: run-dev health-dev
-	@echo "Running webhook tests against http://localhost:$(PORT_DOCKER_DEV)"
-	uv run python scripts/test_webhook.py http://localhost:$(PORT_DOCKER_DEV)
+# Test webhooks against local docker dev container (uses xdg-launch via npm)
+test-docker-dev: check-xdg
+	@echo "Running local docker dev tests (profile: $(PROFILE))..."
+	cd .. && npm run test:local
 
-# Test webhooks against local docker production container (auto-starts if not running)
-test-docker-prod: run-prod health-prod
-	@echo "Running webhook tests against http://localhost:$(PORT_DOCKER_PROD)"
-	uv run python scripts/test_webhook.py http://localhost:$(PORT_DOCKER_PROD)
+# Test webhooks against local docker production container (uses xdg-launch via npm)
+test-docker-prod: check-xdg
+	@echo "Running local docker prod tests (profile: $(PROFILE))..."
+	cd .. && npm run test:local:prod
 
 # Test ECR image (auto-starts, tests, and cleans up)
 test-ecr: check-xdg
