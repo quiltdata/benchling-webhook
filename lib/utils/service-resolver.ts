@@ -197,7 +197,7 @@ export function validateQueueUrl(url: string): boolean {
  * **Required Stack Outputs**:
  * - `PackagerQueueUrl`: SQS queue URL for package creation
  * - `UserAthenaDatabaseName`: Athena database name for catalog
- * - One of: `Catalog`, `CatalogDomain`, or `ApiGatewayEndpoint` for catalog URL
+ * - `QuiltWebHost`: Quilt catalog web host (e.g., catalog.example.com)
  *
  * **Optional Stack Outputs**:
  * - `IcebergDatabase`: Iceberg database name (if available)
@@ -290,31 +290,16 @@ export async function resolveQuiltServices(
         );
     }
 
-    // Step 5: Resolve catalog URL (multiple fallback options)
-    let quiltWebHost: string;
-
-    if (outputs.Catalog) {
-        quiltWebHost = normalizeCatalogUrl(outputs.Catalog);
-    } else if (outputs.CatalogDomain) {
-        quiltWebHost = normalizeCatalogUrl(outputs.CatalogDomain);
-    } else if (outputs.ApiGatewayEndpoint) {
-        try {
-            const url = new URL(outputs.ApiGatewayEndpoint);
-            quiltWebHost = url.hostname;
-        } catch (error) {
-            throw new ServiceResolverError(
-                `Failed to extract hostname from ApiGatewayEndpoint: ${outputs.ApiGatewayEndpoint}`,
-                "Verify ApiGatewayEndpoint output is a valid URL",
-                error instanceof Error ? error.message : String(error),
-            );
-        }
-    } else {
+    // Step 5: Resolve catalog URL from QuiltWebHost output
+    if (!outputs.QuiltWebHost) {
         throw new ServiceResolverError(
-            "No catalog URL output found",
-            "Quilt stack must provide one of: Catalog, CatalogDomain, or ApiGatewayEndpoint",
+            "No QuiltWebHost output found",
+            "Quilt stack must provide QuiltWebHost output",
             `Available outputs: ${Object.keys(outputs).join(", ")}`,
         );
     }
+
+    const quiltWebHost = normalizeCatalogUrl(outputs.QuiltWebHost);
 
     // Step 6: Extract optional Iceberg database
     const icebergDatabase = outputs.IcebergDatabase;
