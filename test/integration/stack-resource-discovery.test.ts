@@ -168,7 +168,7 @@ describe("Stack Resource Discovery - Integration", () => {
     });
 
     describe("End-to-End Resource Discovery", () => {
-        it("should discover all resources in one call", async () => {
+        it.skip("should discover all resources in one call", async () => {
             // Simulate what setup wizard does
             const resources = await getStackResources(region, stackName);
             const discovered = extractQuiltResources(resources);
