@@ -81,6 +81,25 @@ export class BenchlingWebhookStack extends cdk.Stack {
             default: "",
         });
 
+        // NEW: Optional Athena resources (from Quilt stack discovery)
+        const icebergWorkgroupParam = new cdk.CfnParameter(this, "IcebergWorkgroup", {
+            type: "String",
+            description: "Iceberg workgroup name (optional, from Quilt stack discovery)",
+            default: "",
+        });
+
+        const athenaUserWorkgroupParam = new cdk.CfnParameter(this, "AthenaUserWorkgroup", {
+            type: "String",
+            description: "Athena workgroup for user queries (optional, from Quilt stack discovery)",
+            default: "",
+        });
+
+        const athenaResultsBucketParam = new cdk.CfnParameter(this, "AthenaResultsBucket", {
+            type: "String",
+            description: "S3 bucket for Athena query results (optional, from Quilt stack discovery)",
+            default: "",
+        });
+
         const benchlingSecretParam = new cdk.CfnParameter(this, "BenchlingSecretARN", {
             type: "String",
             description: "ARN of Secrets Manager secret with Benchling credentials",
@@ -118,6 +137,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const athenaUserDatabaseValue = athenaUserDatabaseParam.valueAsString;
         const quiltWebHostValue = quiltWebHostParam.valueAsString;
         const icebergDatabaseValue = icebergDatabaseParam.valueAsString;
+        const icebergWorkgroupValue = icebergWorkgroupParam.valueAsString;
+        const athenaUserWorkgroupValue = athenaUserWorkgroupParam.valueAsString;
+        const athenaResultsBucketValue = athenaResultsBucketParam.valueAsString;
         const benchlingSecretValue = benchlingSecretParam.valueAsString;
         const logLevelValue = logLevelParam.valueAsString;
         const imageTagValue = imageTagParam.valueAsString;
@@ -161,14 +183,15 @@ export class BenchlingWebhookStack extends cdk.Stack {
             athenaUserDatabase: athenaUserDatabaseValue,
             quiltWebHost: quiltWebHostValue,
             icebergDatabase: icebergDatabaseValue,
+            // NEW: Optional Athena resources (from Quilt stack discovery)
+            icebergWorkgroup: icebergWorkgroupValue,
+            athenaUserWorkgroup: athenaUserWorkgroupValue,
+            athenaResultsBucket: athenaResultsBucketValue,
             // Legacy parameters
             benchlingSecret: benchlingSecretValue,
             packageBucket: packageBucketValue,
             quiltDatabase: quiltDatabaseValue,
             logLevel: logLevelValue,
-            // Optional Athena resources (from Quilt stack discovery)
-            athenaUserWorkgroup: config.quilt.athenaUserWorkgroup,
-            athenaResultsBucket: config.quilt.athenaResultsBucket,
         });
 
         // Create API Gateway that routes to the ALB

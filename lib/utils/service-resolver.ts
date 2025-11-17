@@ -43,6 +43,24 @@ export interface QuiltServices {
      * @example "quilt_iceberg"
      */
     icebergDatabase?: string;
+
+    /**
+     * Athena workgroup for user queries (optional, from Quilt stack discovery)
+     * @example "quilt-user-workgroup"
+     */
+    athenaUserWorkgroup?: string;
+
+    /**
+     * S3 bucket for Athena query results (optional, from Quilt stack discovery)
+     * @example "aws-athena-query-results-123456789012-us-east-1"
+     */
+    athenaResultsBucket?: string;
+
+    /**
+     * Iceberg workgroup name (optional, from Quilt stack discovery)
+     * @example "quilt-iceberg-workgroup"
+     */
+    icebergWorkgroup?: string;
 }
 
 /**
@@ -183,6 +201,9 @@ export function validateQueueUrl(url: string): boolean {
  *
  * **Optional Stack Outputs**:
  * - `IcebergDatabase`: Iceberg database name (if available)
+ * - `UserAthenaWorkgroupName`: Athena workgroup for user queries
+ * - `AthenaResultsBucketName`: S3 bucket for Athena query results
+ * - `IcebergWorkgroupName`: Iceberg workgroup name
  *
  * @param options - Service resolver options
  * @returns Resolved service endpoints
@@ -197,7 +218,10 @@ export function validateQueueUrl(url: string): boolean {
  * //   packagerQueueUrl: 'https://sqs.us-east-1.amazonaws.com/123/quilt-queue',
  * //   athenaUserDatabase: 'quilt_catalog',
  * //   quiltWebHost: 'quilt.example.com',
- * //   icebergDatabase: 'quilt_iceberg' (optional)
+ * //   icebergDatabase: 'quilt_iceberg' (optional),
+ * //   athenaUserWorkgroup: 'quilt-user-workgroup' (optional),
+ * //   athenaResultsBucket: 'aws-athena-query-results-...' (optional),
+ * //   icebergWorkgroup: 'quilt-iceberg-workgroup' (optional)
  * // }
  */
 export async function resolveQuiltServices(
@@ -295,10 +319,18 @@ export async function resolveQuiltServices(
     // Step 6: Extract optional Iceberg database
     const icebergDatabase = outputs.IcebergDatabase;
 
+    // Step 7: Extract optional Athena resources (NEW - from Quilt stack discovery)
+    const athenaUserWorkgroup = outputs.UserAthenaWorkgroupName;
+    const athenaResultsBucket = outputs.AthenaResultsBucketName;
+    const icebergWorkgroup = outputs.IcebergWorkgroupName;
+
     return {
         packagerQueueUrl,
         athenaUserDatabase,
         quiltWebHost,
         ...(icebergDatabase && { icebergDatabase }),
+        ...(athenaUserWorkgroup && { athenaUserWorkgroup }),
+        ...(athenaResultsBucket && { athenaResultsBucket }),
+        ...(icebergWorkgroup && { icebergWorkgroup }),
     };
 }

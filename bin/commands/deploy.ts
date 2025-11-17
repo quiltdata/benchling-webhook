@@ -106,7 +106,7 @@ export async function deployCommand(options: {
     }
 
     // Get required parameters with priority: CLI options > Profile config
-    const quiltStackArn = options. stackArn || config.quilt.stackArn;
+    const quiltStackArn = options.stackArn || config.quilt.stackArn;
     const benchlingSecret = options.benchlingSecret || config.benchling.secretArn;
 
     // Auto-detect image tag based on profile
@@ -342,6 +342,15 @@ export async function deploy(
     if (services.icebergDatabase) {
         console.log(`    ${chalk.bold("Iceberg Database:")}        ${services.icebergDatabase}`);
     }
+    if (services.icebergWorkgroup) {
+        console.log(`    ${chalk.bold("Iceberg Workgroup:")}       ${services.icebergWorkgroup}`);
+    }
+    if (services.athenaUserWorkgroup) {
+        console.log(`    ${chalk.bold("Athena Workgroup:")}        ${services.athenaUserWorkgroup}`);
+    }
+    if (services.athenaResultsBucket) {
+        console.log(`    ${chalk.bold("Athena Results Bucket:")}   ${services.athenaResultsBucket}`);
+    }
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
     console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)} ${chalk.dim("(deployment-time resolution only)")}`);
@@ -387,11 +396,17 @@ export async function deploy(
             `AthenaUserDatabase=${services.athenaUserDatabase}`,
             `QuiltWebHost=${services.quiltWebHost}`,
             `IcebergDatabase=${services.icebergDatabase || ""}`,
+
+            // NEW: Optional Athena resources (from Quilt stack discovery)
+            `IcebergWorkgroup=${services.icebergWorkgroup || ""}`,
+            `AthenaUserWorkgroup=${services.athenaUserWorkgroup || ""}`,
+            `AthenaResultsBucket=${services.athenaResultsBucket || ""}`,
+
             // Legacy parameters
             `BenchlingSecretARN=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
             `PackageBucket=${config.packages.bucket}`,
-            `QuiltDatabase=${config.quilt.database || ""}`,
+            `QuiltDatabase=${config.quilt.database || ""}`,  // IAM permissions only (same value as AthenaUserDatabase)
             `LogLevel=${config.logging?.level || "INFO"}`,
         ];
 
