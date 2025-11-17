@@ -22,15 +22,6 @@ services:
 
       # Benchling Configuration (credentials from Secrets Manager)
       - BenchlingSecret=${BenchlingSecret}
-
-      # Package Storage
-      - PACKAGE_BUCKET=${PACKAGE_BUCKET}
-      - PACKAGE_PREFIX=${PACKAGE_PREFIX:-benchling}
-      - PACKAGE_METADATA_KEY=${PACKAGE_METADATA_KEY:-experiment_id}
-
-      # Security Configuration
-      - ENABLE_WEBHOOK_VERIFICATION=${ENABLE_WEBHOOK_VERIFICATION:-true}
-      - WEBHOOK_ALLOW_LIST=${WEBHOOK_ALLOW_LIST:-}
     volumes:
       - ~/.aws:/home/appuser/.aws:ro
     restart: unless-stopped
@@ -72,14 +63,8 @@ services:
       # Benchling Configuration (credentials from Secrets Manager)
       - BenchlingSecret=${BenchlingSecret}
 
-      # Package Storage
-      - PACKAGE_BUCKET=${PACKAGE_BUCKET}
-      - PACKAGE_PREFIX=${PACKAGE_PREFIX:-benchling}
-      - PACKAGE_METADATA_KEY=${PACKAGE_METADATA_KEY:-experiment_id}
-
-      # Security Configuration
+      # Security Configuration (dev mode - disable verification for testing)
       - ENABLE_WEBHOOK_VERIFICATION=${ENABLE_WEBHOOK_VERIFICATION:-false}
-      - WEBHOOK_ALLOW_LIST=${WEBHOOK_ALLOW_LIST:-}
 
       # Test Mode
       - BENCHLING_TEST_MODE=${BENCHLING_TEST_MODE:-false}

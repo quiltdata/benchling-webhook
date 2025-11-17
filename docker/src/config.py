@@ -47,38 +47,37 @@ class Config:
             - ATHENA_USER_DATABASE: Athena database name
             - PACKAGER_SQS_URL: SQS queue URL for package creation
             - AWS_REGION: AWS region
-            - PACKAGE_BUCKET: S3 bucket for package storage
             - BenchlingSecret: Secrets Manager secret name for Benchling credentials
 
         Optional environment variables:
-            - PACKAGE_PREFIX: S3 key prefix (default: benchling)
-            - PACKAGE_METADATA_KEY: Metadata key (default: experiment_id)
             - FLASK_ENV: Flask environment (default: production)
             - LOG_LEVEL: Logging level (default: INFO)
             - ENABLE_WEBHOOK_VERIFICATION: Enable verification (default: true)
-            - WEBHOOK_ALLOW_LIST: IP allowlist (default: empty)
             - BENCHLING_TEST_MODE: Disable verification for testing (default: false)
+
+        Package configuration (bucket, prefix, metadata_key) comes from Secrets Manager.
+        Security configuration (webhook_allow_list) comes from Secrets Manager.
         """
         # Read Quilt service environment variables (NO CLOUDFORMATION!)
         self.quilt_catalog = os.getenv("QUILT_WEB_HOST", "")
         self.quilt_database = os.getenv("ATHENA_USER_DATABASE", "")
         self.queue_url = os.getenv("PACKAGER_SQS_URL", "")
         self.aws_region = os.getenv("AWS_REGION", "")
-        self.s3_bucket_name = os.getenv("PACKAGE_BUCKET", "")
 
-        # Package configuration
-        self.s3_prefix = os.getenv("PACKAGE_PREFIX", "benchling")
-        self.package_key = os.getenv("PACKAGE_METADATA_KEY", "experiment_id")
-        self.pkg_prefix = self.s3_prefix  # Alias for compatibility
+        # Package configuration - initialized to defaults, will be set from Secrets Manager
+        self.s3_bucket_name = ""
+        self.s3_prefix = "benchling"
+        self.package_key = "experiment_id"
+        self.pkg_prefix = "benchling"
 
         # Flask configuration
         self.flask_env = os.getenv("FLASK_ENV", "production")
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
 
-        # Security configuration
+        # Security configuration - ENABLE_WEBHOOK_VERIFICATION can be overridden for testing
         enable_verification = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "true").lower()
         self.enable_webhook_verification = enable_verification in ("true", "1", "yes")
-        self.webhook_allow_list = os.getenv("WEBHOOK_ALLOW_LIST", "")
+        self.webhook_allow_list = ""  # Will be set from Secrets Manager
 
         # Test mode override: disable webhook verification for local integration tests
         test_mode = os.getenv("BENCHLING_TEST_MODE", "").lower() in ("true", "1", "yes")
@@ -120,22 +119,19 @@ class Config:
         self.benchling_client_secret = secret_data.client_secret
         self.benchling_app_definition_id = secret_data.app_definition_id
 
-        # Override package/security config from secret if not in test mode
+        # Set package/security config from secret (NOT environment variables!)
         if not test_mode:
-            # Secret can override package configuration
-            if secret_data.pkg_prefix:
-                self.s3_prefix = secret_data.pkg_prefix
-                self.pkg_prefix = secret_data.pkg_prefix
-            if secret_data.pkg_key:
-                self.package_key = secret_data.pkg_key
-            if secret_data.user_bucket:
-                self.s3_bucket_name = secret_data.user_bucket
+            # Package configuration ALWAYS comes from secret
+            self.s3_bucket_name = secret_data.user_bucket
+            self.s3_prefix = secret_data.pkg_prefix or "benchling"
+            self.pkg_prefix = self.s3_prefix
+            self.package_key = secret_data.pkg_key or "experiment_id"
 
-            # Secret can override security configuration
+            # Security configuration ALWAYS comes from secret
             self.enable_webhook_verification = secret_data.enable_webhook_verification
             self.webhook_allow_list = secret_data.webhook_allow_list
 
-            # Secret can override log level
+            # Log level from secret
             if secret_data.log_level:
                 self.log_level = secret_data.log_level
 
@@ -149,7 +145,6 @@ class Config:
             "ATHENA_USER_DATABASE": self.quilt_database,
             "PACKAGER_SQS_URL": self.queue_url,
             "AWS_REGION": self.aws_region,
-            "PACKAGE_BUCKET": self.s3_bucket_name,
             "benchling_tenant": self.benchling_tenant,
             "benchling_client_id": self.benchling_client_id,
             "benchling_client_secret": self.benchling_client_secret,
@@ -167,8 +162,9 @@ class Config:
                 "  - ATHENA_USER_DATABASE: Athena database name\n"
                 "  - PACKAGER_SQS_URL: SQS queue URL\n"
                 "  - AWS_REGION: AWS region (e.g., us-east-1)\n"
-                "  - PACKAGE_BUCKET: S3 bucket for package storage\n"
                 "  - BenchlingSecret: Secrets Manager secret name\n"
+                "\n"
+                "Package configuration comes from AWS Secrets Manager.\n"
                 "\n"
                 "For local development, use:\n"
                 "  npm run test:local\n"

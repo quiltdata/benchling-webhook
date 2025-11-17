@@ -244,7 +244,6 @@ function validateConfig(envVars: EnvVars, profile: string): void {
         "PACKAGER_SQS_URL",
         "AWS_REGION",
         "BenchlingSecret",
-        "PACKAGE_BUCKET",
     ];
 
     const missing = required.filter((key) => !envVars[key]);
