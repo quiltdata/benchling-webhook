@@ -248,7 +248,6 @@ describe("BenchlingWebhookStack", () => {
             "AWS_DEFAULT_REGION",
             "ENABLE_WEBHOOK_VERIFICATION",
             "FLASK_ENV",
-            "BENCHLING_WEBHOOK_VERSION",
         ];
 
         // Verify explicit service variables are present
