@@ -85,25 +85,20 @@ export async function runStackQuery(
 
         // Log what we found
         console.log(chalk.green("✓ Stack query succeeded\n"));
-        console.log(chalk.dim(`Stack ARN: ${stackArn}`));
-        console.log(chalk.dim(`Database: ${database}`));
-        console.log(chalk.dim(`Queue URL: ${queueUrl}`));
-        console.log(chalk.dim(`Region: ${region}`));
-        console.log(chalk.dim(`Account: ${account}`));
-
-        // Display discovered Athena workgroups and resources - FAIL LOUDLY if missing
-        console.log(chalk.bold("\nDiscovered Stack Resources:"));
-        console.log(athenaUserWorkgroup
-            ? chalk.green(`✓ Athena User Workgroup: ${athenaUserWorkgroup}`)
-            : chalk.yellow("⚠ Athena User Workgroup: NOT FOUND"));
+        console.log(chalk.dim(`✓ Stack ARN: ${stackArn}`));
+        console.log(chalk.dim(`✓ Database: ${database}`));
+        console.log(chalk.dim(`✓ Workgroup: ${athenaUserWorkgroup}`));
+        console.log(chalk.dim(`✓ Queue URL: ${queueUrl}`));
+        console.log(chalk.dim(`✓ Region: ${region}`));
+        console.log(chalk.dim(`✓ Account: ${account}`));
         console.log(athenaUserPolicy
-            ? chalk.green(`✓ Athena User Policy: ${athenaUserPolicy}`)
+            ? chalk.dim(`✓ Athena User Policy: ${athenaUserPolicy}`)
             : chalk.yellow("⚠ Athena User Policy: NOT FOUND"));
         console.log(athenaResultsBucket
-            ? chalk.green(`✓ Athena Results Bucket: ${athenaResultsBucket}`)
+            ? chalk.dim(`✓ Athena Results Bucket: ${athenaResultsBucket}`)
             : chalk.yellow("⚠ Athena Results Bucket: NOT FOUND"));
         console.log(athenaResultsBucketPolicy
-            ? chalk.green(`✓ Athena Results Bucket Policy: ${athenaResultsBucketPolicy}`)
+            ? chalk.dim(`✓ Athena Results Bucket Policy: ${athenaResultsBucketPolicy}`)
             : chalk.yellow("⚠ Athena Results Bucket Policy: NOT FOUND"));
 
         // Iceberg resources are optional (recent addition to Quilt stacks)
@@ -119,13 +114,17 @@ export async function runStackQuery(
         }
 
         if (benchlingSecretArn) {
-            console.log(chalk.dim(`BenchlingSecret: ${benchlingSecretArn}`));
+            console.log(chalk.green(`✓ BenchlingSecret: ${benchlingSecretArn}`));
         } else {
-            console.log(chalk.dim("BenchlingSecret: Not found in stack"));
+            console.log(chalk.dim("⚠ BenchlingSecret: Not found in stack"));
         }
 
         if (benchlingIntegrationEnabled !== undefined) {
-            console.log(chalk.dim(`BenchlingIntegration: ${benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`));
+            console.log(
+                benchlingIntegrationEnabled
+                    ? chalk.green("✓ Benchling Integration: Enabled")
+                    : chalk.yellow("⚠ Benchling Integration: Disabled"),
+            );
         }
 
         console.log("");
