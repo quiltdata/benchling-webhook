@@ -81,6 +81,8 @@ export interface SetupWizardResult {
     success: boolean;
     profile: string;
     config: ProfileConfig;
+    /** Whether deployment decision was already handled by the wizard (standalone mode only) */
+    deploymentHandled?: boolean;
 }
 
 /**
@@ -337,6 +339,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             success: true,
             profile,
             config: finalConfig,
+            deploymentHandled: true, // Integrated mode completes in phase 6, no deployment needed
         };
     } else {
         // =====================================================================
@@ -345,7 +348,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         // Create new dedicated secret
         // Optionally deploy as separate stack
         printStepHeader(6, STEP_TITLES.standaloneMode);
-        await runStandaloneMode({
+        const standaloneResult = await runStandaloneMode({
             profile,
             catalogDns: catalogResult.catalogDns,
             stackQuery,
@@ -362,6 +365,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             success: true,
             profile,
             config: finalConfig,
+            deploymentHandled: standaloneResult.deploymentHandled,
         };
     }
 }

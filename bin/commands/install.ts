@@ -133,7 +133,16 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
 
     console.log(chalk.green("\n✓ Setup complete!\n"));
 
-    // Step 2: Determine if we should deploy
+    // Step 2: Check if Phase 7 already handled deployment
+    if (setupResult.deploymentHandled) {
+        // Phase 7 already asked about deployment or deployed
+        // If deployed, Phase 7 showed success message
+        // If user declined, Phase 7 showed next steps
+        // Either way, we're done here
+        return;
+    }
+
+    // Step 3: Determine if we should deploy
     if (setupOnly) {
         // User explicitly requested setup only
         console.log(chalk.blue("═══════════════════════════════════════════════════════════\n"));
@@ -151,7 +160,7 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
         return;
     }
 
-    // Step 3: Prompt for deployment (unless --yes)
+    // Step 4: Prompt for deployment (unless --yes)
     let shouldDeploy = yes;
 
     if (!yes && !yes) {
