@@ -171,27 +171,6 @@ See [Complete Guide](../../../meta/docs/enterprise_benchling.md) for details.
 
 See the [Complete Guide](../../../meta/docs/enterprise_benchling.md) for complete API documentation.
 
-## Environment Configuration
-
-The `env.template` file in the project root is organized into three sections:
-
-### 1. Required User Values (Set before deployment)
-
-- `QUILT_USER_BUCKET` - S3 bucket for package storage
-- `QUILT_CATALOG` - Quilt catalog URL
-- `QUEUE_URL` - SQS queue for Quilt packaging
-- `BENCHLING_TENANT` - Your Benchling tenant ID
-- `BENCHLING_CLIENT_ID` - Benchling OAuth client ID
-- `BENCHLING_CLIENT_SECRET` - Benchling OAuth client secret
-- `BENCHLING_APP_DEFINITION_ID` - App definition ID for webhook verification (format: `appdef_xxxx`)
-
-### 2. Optional Values (Defaults provided)
-
-- `FLASK_ENV` - Application environment (default: production)
-- `AWS_REGION` - AWS region (default: us-west-2)
-- `PKG_PREFIX` - S3 key prefix (default: benchling)
-- `ENABLE_WEBHOOK_VERIFICATION` - Enable webhook signature verification (default: true)
-
 ## Architecture
 
 The service uses Python-based workflow orchestration for all webhook processing, execution tracking, and OAuth handling.
