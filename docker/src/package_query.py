@@ -17,12 +17,15 @@ Requires:
 import json
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import boto3
 import structlog
 
 from src.packages import Package
+
+if TYPE_CHECKING:
+    from src.config import Config
 
 logger = structlog.get_logger(__name__)
 
@@ -46,6 +49,7 @@ class PackageQuery:
         region: Optional[str] = None,
         athena_output_bucket: Optional[str] = None,
         workgroup: Optional[str] = None,
+        config: Optional["Config"] = None,
     ):
         """Initialize Athena query client.
 
@@ -57,6 +61,9 @@ class PackageQuery:
             athena_output_bucket: S3 bucket for Athena query results
                 (defaults to ATHENA_RESULTS_BUCKET env var, then aws-athena-query-results-{account_id}-{region})
             workgroup: Athena workgroup name (defaults to ATHENA_USER_WORKGROUP env var, then 'primary')
+            config: Optional Config instance for reading configuration (v0.8.0+)
+                If provided, will use config.athena_user_workgroup and config.athena_results_bucket
+                as fallbacks before reading from environment variables.
         """
         self.bucket = bucket
         self.catalog_url = catalog_url
@@ -70,13 +77,21 @@ class PackageQuery:
         # Initialize Athena client
         self.athena = boto3.client("athena", region_name=self.region)
 
-        # Determine Athena workgroup (from env var or parameter, default to 'primary')
-        self.workgroup = workgroup or os.getenv("ATHENA_USER_WORKGROUP", "primary")
+        # Determine Athena workgroup
+        # Priority: parameter > config.athena_user_workgroup > ATHENA_USER_WORKGROUP env var > 'primary'
+        if workgroup:
+            self.workgroup = workgroup
+        elif config and config.athena_user_workgroup:
+            self.workgroup = config.athena_user_workgroup
+        else:
+            self.workgroup = os.getenv("ATHENA_USER_WORKGROUP", "primary")
 
         # Determine Athena output location
-        # Priority: parameter > ATHENA_RESULTS_BUCKET env var > default pattern
+        # Priority: parameter > config.athena_results_bucket > ATHENA_RESULTS_BUCKET env var > default pattern
         if athena_output_bucket:
             self.output_location = f"s3://{athena_output_bucket}/"
+        elif config and config.athena_results_bucket:
+            self.output_location = f"s3://{config.athena_results_bucket}/"
         elif os.getenv("ATHENA_RESULTS_BUCKET"):
             self.output_location = f"s3://{os.getenv('ATHENA_RESULTS_BUCKET')}/"
         else:
