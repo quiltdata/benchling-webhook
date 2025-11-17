@@ -6,7 +6,7 @@
 import { execSync } from "child_process";
 import * as https from "https";
 import * as http from "http";
-import { CloudFormationClient, DescribeStackResourcesCommand } from "@aws-sdk/client-cloudformation";
+import { CloudFormationClient, ListStackResourcesCommand } from "@aws-sdk/client-cloudformation";
 import { isQueueUrl } from "./sqs";
 import { IAwsProvider, IHttpClient, StackDetails } from "../interfaces/aws-provider";
 import { ExecSyncAwsProvider } from "../providers/exec-sync-aws-provider";
@@ -93,16 +93,25 @@ export async function getStackResources(
     stackName: string,
     _awsProvider?: IAwsProvider,
 ): Promise<StackResourceMap> {
-    try {
-        const client = new CloudFormationClient({ region });
-        const command = new DescribeStackResourcesCommand({
+    // FAIL LOUDLY - don't swallow errors silently
+    const client = new CloudFormationClient({ region });
+    const resourceMap: StackResourceMap = {};
+
+    // Handle pagination to fetch all resources (not just first 100)
+    // Use ListStackResourcesCommand instead of DescribeStackResourcesCommand
+    // because DescribeStackResources only returns first 100 resources
+    let nextToken: string | undefined;
+    let pageCount = 0;
+
+    do {
+        pageCount++;
+        const command = new ListStackResourcesCommand({
             StackName: stackName,
+            ...(nextToken && { NextToken: nextToken }),
         });
         const response = await client.send(command);
 
-        const resourceMap: StackResourceMap = {};
-
-        for (const resource of response.StackResources || []) {
+        for (const resource of response.StackResourceSummaries || []) {
             if (resource.LogicalResourceId && resource.PhysicalResourceId) {
                 resourceMap[resource.LogicalResourceId] = {
                     physicalResourceId: resource.PhysicalResourceId,
@@ -112,14 +121,11 @@ export async function getStackResources(
             }
         }
 
-        return resourceMap;
-    } catch (error) {
-        // Resource discovery is best-effort, don't fail the calling operation
-        console.error(
-            `Warning: Could not get stack resources: ${(error as Error).message}`,
-        );
-        return {};
-    }
+        nextToken = response.NextToken;
+    } while (nextToken);
+
+    console.log(`[DEBUG] getStackResources: Found ${Object.keys(resourceMap).length} resources in stack ${stackName} (${pageCount} page(s))`);
+    return resourceMap;
 }
 
 /**
@@ -131,7 +137,7 @@ export async function getStackResources(
  * - IcebergWorkGroup (AWS::Athena::WorkGroup)
  * - IcebergDatabase (AWS::Glue::Database)
  * - UserAthenaResultsBucket (AWS::S3::Bucket)
- * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
+ * - UserAthenaResultsBucket Policy (AWS::S3::BucketPolicy)
  *
  * @param resources Stack resource map from getStackResources
  * @returns Discovered Quilt resources
@@ -139,42 +145,23 @@ export async function getStackResources(
 export function extractQuiltResources(
     resources: StackResourceMap,
 ): DiscoveredQuiltResources {
+    // Map logical resource IDs to discovered resource properties
+    const resourceMapping: Record<string, keyof DiscoveredQuiltResources> = {
+        UserAthenaNonManagedRoleWorkgroup: "athenaUserWorkgroup",
+        UserAthenaNonManagedRolePolicy: "athenaUserPolicy",
+        IcebergWorkGroup: "icebergWorkgroup",
+        IcebergDatabase: "icebergDatabase",
+        UserAthenaResultsBucket: "athenaResultsBucket",
+        UserAthenaResultsBucketPolicy: "athenaResultsBucketPolicy",
+    };
+
     const discovered: DiscoveredQuiltResources = {};
 
-    // Extract UserAthenaNonManagedRoleWorkgroup
-    if (resources.UserAthenaNonManagedRoleWorkgroup) {
-        discovered.athenaUserWorkgroup =
-            resources.UserAthenaNonManagedRoleWorkgroup.physicalResourceId;
-    }
-
-    // Extract UserAthenaNonManagedRolePolicy
-    if (resources.UserAthenaNonManagedRolePolicy) {
-        discovered.athenaUserPolicy =
-            resources.UserAthenaNonManagedRolePolicy.physicalResourceId;
-    }
-
-    // Extract IcebergWorkGroup
-    if (resources.IcebergWorkGroup) {
-        discovered.icebergWorkgroup =
-            resources.IcebergWorkGroup.physicalResourceId;
-    }
-
-    // Extract IcebergDatabase
-    if (resources.IcebergDatabase) {
-        discovered.icebergDatabase =
-            resources.IcebergDatabase.physicalResourceId;
-    }
-
-    // Extract UserAthenaResultsBucket
-    if (resources.UserAthenaResultsBucket) {
-        discovered.athenaResultsBucket =
-            resources.UserAthenaResultsBucket.physicalResourceId;
-    }
-
-    // Extract UserAthenaResultsBucketPolicy
-    if (resources.UserAthenaResultsBucketPolicy) {
-        discovered.athenaResultsBucketPolicy =
-            resources.UserAthenaResultsBucketPolicy.physicalResourceId;
+    // Extract physical resource IDs for each target resource
+    for (const [logicalId, propertyName] of Object.entries(resourceMapping)) {
+        if (resources[logicalId]) {
+            discovered[propertyName] = resources[logicalId].physicalResourceId;
+        }
     }
 
     return discovered;
