@@ -200,4 +200,6 @@ export interface StandaloneModeResult {
     secretArn: string;
     /** Whether deployment was executed */
     deployed: boolean;
+    /** Whether Phase 7 already handled deployment decision (asked user or deployed) */
+    deploymentHandled: boolean;
 }

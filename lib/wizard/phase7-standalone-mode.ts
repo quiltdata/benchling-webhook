@@ -11,7 +11,6 @@ import inquirer from "inquirer";
 import chalk from "chalk";
 import { ProfileConfig } from "../types/config";
 import { syncSecretsToAWS } from "../../bin/commands/sync-secrets";
-import { generateNextSteps } from "../next-steps-generator";
 import { StandaloneModeInput, StandaloneModeResult } from "./types";
 
 /**
@@ -189,14 +188,10 @@ export async function runStandaloneMode(input: StandaloneModeInput): Promise<Sta
     console.log("║   Setup Complete!                                         ║");
     console.log("╚═══════════════════════════════════════════════════════════╝\n");
 
-    if (!deployed && !setupOnly) {
-        const nextSteps = generateNextSteps({
-            profile,
-            stage: profile === "prod" ? "prod" : "dev",
-        });
-        console.log(nextSteps + "\n");
-    } else if (setupOnly) {
-        console.log(chalk.bold("Configuration saved. Use deploy command to deploy:\n"));
+    // Only show next steps if --setup-only was used
+    // If user declined deployment interactively, respect their choice without nagging
+    if (setupOnly) {
+        console.log(chalk.bold("Configuration saved. Deploy when ready:\n"));
         console.log(chalk.cyan(`   npm run deploy:${profile === "prod" ? "prod" : "dev"} -- --profile ${profile}\n`));
     }
 
@@ -205,5 +200,6 @@ export async function runStandaloneMode(input: StandaloneModeInput): Promise<Sta
         configPath: `~/.config/benchling-webhook/${profile}/config.json`,
         secretArn,
         deployed,
+        deploymentHandled: !setupOnly, // True if we asked about deployment
     };
 }
