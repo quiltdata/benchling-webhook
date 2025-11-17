@@ -140,6 +140,21 @@ function loadProfile(profileName: string): ProfileConfig {
 }
 
 /**
+ * Extract secret name from Secrets Manager ARN
+ *
+ * @param arn - Secrets Manager ARN
+ * @returns Secret name only
+ */
+function extractSecretName(arn: string): string {
+    if (!arn) {
+        return "";
+    }
+    // ARN format: arn:aws:secretsmanager:region:account:secret:name-randomchars
+    const match = arn.match(/secret:([^:]+)/);
+    return match ? match[1] : arn;
+}
+
+/**
  * Build environment variables from profile configuration
  *
  * Maps XDG config fields to service-specific environment variables.
@@ -154,10 +169,11 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         // Preserve existing process.env
         ...process.env as EnvVars,
 
-        // Quilt Services (v0.8.0+ service-specific)
+        // Quilt Services (v0.8.0+ service-specific - NO MORE STACK ARN!)
         QUILT_WEB_HOST: config.quilt.catalog,
         ATHENA_USER_DATABASE: config.quilt.database,
         ATHENA_USER_WORKGROUP: config.quilt.athenaUserWorkgroup || "primary",
+        ATHENA_RESULTS_BUCKET: config.quilt.athenaResultsBucket || "",
         ICEBERG_DATABASE: config.quilt.icebergDatabase || "",
         ICEBERG_WORKGROUP: config.quilt.icebergWorkgroup || "",
         PACKAGER_SQS_URL: config.quilt.queueUrl,
@@ -166,10 +182,8 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         AWS_REGION: config.quilt.region || config.deployment.region,
         AWS_DEFAULT_REGION: config.quilt.region || config.deployment.region,
 
-        // Benchling Configuration
-        BENCHLING_SECRET_ARN: config.benchling.secretArn || "",
-        BENCHLING_TENANT: config.benchling.tenant,
-        BENCHLING_LOG_LEVEL: config.logging?.level || "INFO",
+        // Benchling Configuration (credentials from Secrets Manager, NOT environment)
+        BenchlingSecret: extractSecretName(config.benchling.secretArn || ""),
 
         // Package Storage
         PACKAGE_BUCKET: config.packages.bucket,
@@ -178,9 +192,7 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
 
         // Security Configuration
         ENABLE_WEBHOOK_VERIFICATION: String(config.security?.enableVerification !== false),
-
-        // Optional: Athena results bucket
-        ATHENA_RESULTS_BUCKET: config.quilt.athenaResultsBucket || "",
+        WEBHOOK_ALLOW_LIST: config.security?.webhookAllowList || "",
     };
 
     // Mode-specific variables
