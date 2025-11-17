@@ -113,54 +113,6 @@ def create_app():
         """Liveness probe for orchestration."""
         return jsonify({"status": "alive"})
 
-    @app.route("/health/secrets", methods=["GET"])
-    def secrets_health():
-        """Report secret resolution status (secrets-only mode).
-
-        Note: This endpoint only works in secrets-only mode. If the app is running,
-        it means QuiltStackARN and BenchlingSecret were successfully resolved.
-        """
-        try:
-            # Verify required environment variables are present
-            quilt_stack_arn = os.getenv("QuiltStackARN")
-            benchling_secret = os.getenv("BenchlingSecret")
-
-            if not quilt_stack_arn or not benchling_secret:
-                # This should never happen - app initialization would have failed
-                return (
-                    jsonify(
-                        {
-                            "status": "unhealthy",
-                            "error": "Missing required environment variables - app should not be running",
-                        }
-                    ),
-                    503,
-                )
-
-            # Determine secret source
-            if benchling_secret.startswith("arn:aws:secretsmanager:"):
-                source = "secrets_manager_arn"
-            else:
-                source = "secrets_manager_name"
-
-            # Check if secrets are valid
-            secrets_valid = bool(
-                config.benchling_tenant and config.benchling_client_id and config.benchling_client_secret
-            )
-
-            return jsonify(
-                {
-                    "status": "healthy" if secrets_valid else "unhealthy",
-                    "source": source,
-                    "secrets_valid": secrets_valid,
-                    "tenant_configured": bool(config.benchling_tenant),
-                    "quilt_stack_configured": bool(quilt_stack_arn),
-                }
-            )
-        except Exception as e:
-            logger.error("Secrets health check failed", error=str(e))
-            return jsonify({"status": "unhealthy", "error": str(e)}), 503
-
     @app.route("/config", methods=["GET"])
     def config_status():
         """Display resolved configuration (secrets masked).
