@@ -232,7 +232,14 @@ describe("BenchlingWebhookStack", () => {
             "PACKAGER_SQS_URL",
             "ATHENA_USER_DATABASE",
             "QUILT_WEB_HOST",
+        ];
+
+        // Optional service parameters (may be empty string)
+        const optionalServiceVars = [
+            "ATHENA_USER_WORKGROUP",
+            "ATHENA_RESULTS_BUCKET",
             "ICEBERG_DATABASE",
+            "ICEBERG_WORKGROUP",
         ];
 
         // Benchling configuration - only BenchlingSecret name is passed
@@ -254,6 +261,9 @@ describe("BenchlingWebhookStack", () => {
         expectedServiceVars.forEach((varName) => {
             expect(actualEnvVars.has(varName)).toBe(true);
         });
+
+        // Optional service variables (may or may not be present, no assertion needed)
+        // optionalServiceVars - just acknowledged, not asserted
 
         // Verify Benchling config values are present
         expectedBenchlingVars.forEach((varName) => {
