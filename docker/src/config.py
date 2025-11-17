@@ -31,6 +31,10 @@ class Config:
     quilt_catalog: str = ""
     quilt_database: str = ""
     queue_url: str = ""
+    athena_user_workgroup: str = ""
+    athena_results_bucket: str = ""
+    iceberg_database: str = ""
+    iceberg_workgroup: str = ""
     benchling_tenant: str = ""
     benchling_client_id: str = ""
     benchling_client_secret: str = ""
@@ -54,6 +58,10 @@ class Config:
             - LOG_LEVEL: Logging level (default: INFO)
             - ENABLE_WEBHOOK_VERIFICATION: Enable verification (default: true)
             - BENCHLING_TEST_MODE: Disable verification for testing (default: false)
+            - ATHENA_USER_WORKGROUP: Athena workgroup (default: primary, v0.8.0+)
+            - ATHENA_RESULTS_BUCKET: Athena results S3 bucket (default: "", v0.8.0+)
+            - ICEBERG_DATABASE: Iceberg database name (default: "", v0.8.0+)
+            - ICEBERG_WORKGROUP: Iceberg Athena workgroup (default: "", v0.8.0+)
 
         Package configuration (bucket, prefix, metadata_key) comes from Secrets Manager.
         Security configuration (webhook_allow_list) comes from Secrets Manager.
@@ -63,6 +71,13 @@ class Config:
         self.quilt_database = os.getenv("ATHENA_USER_DATABASE", "")
         self.queue_url = os.getenv("PACKAGER_SQS_URL", "")
         self.aws_region = os.getenv("AWS_REGION", "")
+
+        # Optional Quilt service configuration (v0.8.0+)
+        # These are used by PackageQuery for Athena/Iceberg queries
+        self.athena_user_workgroup = os.getenv("ATHENA_USER_WORKGROUP", "primary")
+        self.athena_results_bucket = os.getenv("ATHENA_RESULTS_BUCKET", "")
+        self.iceberg_database = os.getenv("ICEBERG_DATABASE", "")
+        self.iceberg_workgroup = os.getenv("ICEBERG_WORKGROUP", "")
 
         # Package configuration - initialized to defaults, will be set from Secrets Manager
         self.s3_bucket_name = ""

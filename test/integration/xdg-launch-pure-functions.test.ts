@@ -143,6 +143,27 @@ describe("XDG Launch Pure Functions - Integration", () => {
             }
         });
 
+        it("should handle optional Athena configuration gracefully", () => {
+            const envVars = buildEnvVars(defaultConfig, "native", {
+                mode: "native",
+                profile: "default",
+                verbose: false,
+                test: false,
+            });
+
+            // Athena user workgroup should default to "primary"
+            expect(envVars).toHaveProperty("ATHENA_USER_WORKGROUP");
+            if (!defaultConfig.quilt.athenaUserWorkgroup) {
+                expect(envVars.ATHENA_USER_WORKGROUP).toBe("primary");
+            }
+
+            // Athena results bucket is optional
+            expect(envVars).toHaveProperty("ATHENA_RESULTS_BUCKET");
+            if (!defaultConfig.quilt.athenaResultsBucket) {
+                expect(envVars.ATHENA_RESULTS_BUCKET).toBe("");
+            }
+        });
+
         it("should preserve existing process.env variables", () => {
             const originalPath = process.env.PATH;
 

@@ -69,6 +69,7 @@ class CanvasManager:
             bucket=config.s3_bucket_name,
             catalog_url=config.quilt_catalog,
             database=config.quilt_database,
+            config=config,
         )
         self._package_file_fetcher = package_file_fetcher or PackageFileFetcher(
             catalog_url=config.quilt_catalog,
