@@ -978,42 +978,41 @@ describe("stack-inference utility", () => {
     });
 
     describe("isQuiltStack", () => {
-            it("should return false for nonexistent stacks", () => {
-                const result = isQuiltStack("us-east-1", "nonexistent-stack");
-                expect(result).toBe(false);
-            });
-
-            it("should handle AWS CLI errors gracefully", () => {
-                const result = isQuiltStack("invalid-region", "test-stack");
-                expect(result).toBe(false);
-            });
+        it("should return false for nonexistent stacks", () => {
+            const result = isQuiltStack("us-east-1", "nonexistent-stack");
+            expect(result).toBe(false);
         });
 
-        describe("findAllQuiltStacks", () => {
-            it("should return empty array when no stacks found", () => {
-                const result = findAllQuiltStacks("us-east-1", false);
-                expect(Array.isArray(result)).toBe(true);
-            });
+        it("should handle AWS CLI errors gracefully", () => {
+            const result = isQuiltStack("invalid-region", "test-stack");
+            expect(result).toBe(false);
+        });
+    });
 
-            it("should handle verbose mode", () => {
-                const originalLog = console.log;
-                const logs: string[] = [];
-                console.log = (message: string) => logs.push(message);
+    describe("findAllQuiltStacks", () => {
+        it("should return empty array when no stacks found", () => {
+            const result = findAllQuiltStacks("us-east-1", false);
+            expect(Array.isArray(result)).toBe(true);
+        });
 
-                const result = findAllQuiltStacks("us-east-1", true);
+        it("should handle verbose mode", () => {
+            const originalLog = console.log;
+            const logs: string[] = [];
+            console.log = (message: string) => logs.push(message);
 
-                console.log = originalLog;
+            const result = findAllQuiltStacks("us-east-1", true);
 
-                expect(Array.isArray(result)).toBe(true);
-                // In verbose mode, it should log something (even if AWS CLI fails)
-                expect(logs.length).toBeGreaterThan(0);
-            });
+            console.log = originalLog;
 
-            it("should handle AWS CLI errors gracefully", () => {
-                expect(() => {
-                    findAllQuiltStacks("invalid-region", false);
-                }).not.toThrow();
-            });
+            expect(Array.isArray(result)).toBe(true);
+            // In verbose mode, it should log something (even if AWS CLI fails)
+            expect(logs.length).toBeGreaterThan(0);
+        });
+
+        it("should handle AWS CLI errors gracefully", () => {
+            expect(() => {
+                findAllQuiltStacks("invalid-region", false);
+            }).not.toThrow();
         });
     });
 });
