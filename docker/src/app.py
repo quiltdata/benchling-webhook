@@ -13,6 +13,7 @@ from .canvas import CanvasManager
 from .config import get_config
 from .entry_packager import EntryPackager
 from .payload import Payload
+from .version import __version__
 from .webhook_verification import require_webhook_verification
 
 # Load environment variables
@@ -80,13 +81,10 @@ def create_app():
         configured with secrets-only mode. The app cannot start without QuiltStackARN
         and BenchlingSecret environment variables.
         """
-        # Get version from environment (set by CDK) or package default
-        app_version = os.getenv("BENCHLING_WEBHOOK_VERSION", "0.7.3")
-
         response = {
             "status": "healthy",
             "service": "benchling-webhook",
-            "version": app_version,
+            "version": __version__,
         }
 
         return jsonify(response)
