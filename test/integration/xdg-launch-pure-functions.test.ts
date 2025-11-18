@@ -2,47 +2,58 @@
  * Integration tests for XDG Launch pure functions
  *
  * These tests verify the pure transformation and validation functions
- * using the real default profile configuration.
+ * using mock configuration data.
  *
- * Requirements:
- * - Default profile configured at ~/.config/benchling-webhook/default/config.json
- * - Run: npm run setup (if not already done)
+ * NOTE: This test uses mock ProfileConfig objects to ensure consistent
+ * test behavior regardless of local configuration state.
  */
 
 import { buildEnvVars, validateConfig, filterSecrets } from "../../bin/xdg-launch";
 import { extractQuiltResources, buildInferredConfig } from "../../lib/utils/stack-inference";
-import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig } from "../../lib/types/config";
 import { StackResourceMap, DiscoveredQuiltResources } from "../../lib/utils/stack-inference";
+import { createMockConfig } from "../helpers/test-config";
 
 describe("XDG Launch Pure Functions - Integration", () => {
-    let defaultConfig: ProfileConfig;
+    let mockConfig: ProfileConfig;
 
     beforeAll(() => {
-        const xdg = new XDGConfig();
-
-        try {
-            if (!xdg.profileExists("default")) {
-                throw new Error(
-                    "Default profile not found. Run: npm run setup"
-                );
-            }
-
-            defaultConfig = xdg.readProfile("default");
-            console.log(`\n  Using profile: default\n`);
-        } catch (error) {
-            throw new Error(
-                `Failed to load default profile: ${(error as Error).message}\n\n` +
-                "Setup required:\n" +
-                "  1. Run: npm run setup\n" +
-                "  2. Complete the configuration wizard\n"
-            );
-        }
+        // Use mock config instead of loading real profile
+        mockConfig = createMockConfig({
+            quilt: {
+                catalog: "https://quilt.example.com",
+                database: "test_db",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+                region: "us-east-1",
+            },
+            benchling: {
+                tenant: "test-tenant",
+                clientId: "test-client",
+                secretArn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-secret",
+                appDefinitionId: "app_test123",
+            },
+            packages: {
+                bucket: "test-packages",
+                prefix: "benchling",
+                metadataKey: "experiment_id",
+            },
+            deployment: {
+                region: "us-east-1",
+                account: "123456789012",
+            },
+            logging: {
+                level: "INFO",
+            },
+            security: {
+                enableVerification: true,
+            },
+        });
+        console.log(`\n  Using mock config for pure function testing\n`);
     });
 
     describe("buildEnvVars()", () => {
-        it("should produce valid environment variables from default profile in native mode", () => {
-            const envVars = buildEnvVars(defaultConfig, "native", {
+        it("should produce valid environment variables from mock config in native mode", () => {
+            const envVars = buildEnvVars(mockConfig, "native", {
                 mode: "native",
                 profile: "default",
                 verbose: false,
@@ -50,11 +61,11 @@ describe("XDG Launch Pure Functions - Integration", () => {
             });
 
             // Verify required Quilt service variables
-            expect(envVars.QUILT_WEB_HOST).toBe(defaultConfig.quilt.catalog);
-            expect(envVars.ATHENA_USER_DATABASE).toBe(defaultConfig.quilt.database);
-            expect(envVars.PACKAGER_SQS_URL).toBe(defaultConfig.quilt.queueUrl);
-            expect(envVars.AWS_REGION).toBe(defaultConfig.quilt.region || defaultConfig.deployment.region);
-            expect(envVars.AWS_DEFAULT_REGION).toBe(defaultConfig.quilt.region || defaultConfig.deployment.region);
+            expect(envVars.QUILT_WEB_HOST).toBe(mockConfig.quilt.catalog);
+            expect(envVars.ATHENA_USER_DATABASE).toBe(mockConfig.quilt.database);
+            expect(envVars.PACKAGER_SQS_URL).toBe(mockConfig.quilt.queueUrl);
+            expect(envVars.AWS_REGION).toBe(mockConfig.quilt.region || mockConfig.deployment.region);
+            expect(envVars.AWS_DEFAULT_REGION).toBe(mockConfig.quilt.region || mockConfig.deployment.region);
 
             // Verify Benchling configuration
             // Note: In v0.8.0+, only BenchlingSecret (secret name) is set, not ARN or tenant
@@ -67,16 +78,16 @@ describe("XDG Launch Pure Functions - Integration", () => {
             // Verify native mode-specific variables
             expect(envVars.FLASK_ENV).toBe("development");
             expect(envVars.FLASK_DEBUG).toBe("true");
-            expect(envVars.LOG_LEVEL).toBe(defaultConfig.logging?.level || "DEBUG");
+            expect(envVars.LOG_LEVEL).toBe(mockConfig.logging?.level || "DEBUG");
 
             // Verify security configuration
             expect(envVars.ENABLE_WEBHOOK_VERIFICATION).toBe(
-                String(defaultConfig.security?.enableVerification !== false)
+                String(mockConfig.security?.enableVerification !== false)
             );
         });
 
-        it("should produce valid environment variables from default profile in docker mode", () => {
-            const envVars = buildEnvVars(defaultConfig, "docker", {
+        it("should produce valid environment variables from mock config in docker mode", () => {
+            const envVars = buildEnvVars(mockConfig, "docker", {
                 mode: "docker",
                 profile: "default",
                 verbose: false,
@@ -85,17 +96,17 @@ describe("XDG Launch Pure Functions - Integration", () => {
 
             // Docker production mode should have production settings
             expect(envVars.FLASK_ENV).toBe("production");
-            expect(envVars.LOG_LEVEL).toBe(defaultConfig.logging?.level || "INFO");
+            expect(envVars.LOG_LEVEL).toBe(mockConfig.logging?.level || "INFO");
             expect(envVars.FLASK_DEBUG).toBeUndefined();
 
             // Security should be enabled in production
             expect(envVars.ENABLE_WEBHOOK_VERIFICATION).toBe(
-                String(defaultConfig.security?.enableVerification !== false)
+                String(mockConfig.security?.enableVerification !== false)
             );
         });
 
-        it("should produce valid environment variables from default profile in docker-dev mode", () => {
-            const envVars = buildEnvVars(defaultConfig, "docker-dev", {
+        it("should produce valid environment variables from mock config in docker-dev mode", () => {
+            const envVars = buildEnvVars(mockConfig, "docker-dev", {
                 mode: "docker-dev",
                 profile: "default",
                 verbose: false,
@@ -105,14 +116,14 @@ describe("XDG Launch Pure Functions - Integration", () => {
             // Docker dev mode should have development settings
             expect(envVars.FLASK_ENV).toBe("development");
             expect(envVars.FLASK_DEBUG).toBe("true");
-            expect(envVars.LOG_LEVEL).toBe(defaultConfig.logging?.level || "DEBUG");
+            expect(envVars.LOG_LEVEL).toBe(mockConfig.logging?.level || "DEBUG");
 
             // Webhook verification should be disabled in docker-dev for easier testing
             expect(envVars.ENABLE_WEBHOOK_VERIFICATION).toBe("false");
         });
 
         it("should set test mode flag when --test is enabled", () => {
-            const envVars = buildEnvVars(defaultConfig, "native", {
+            const envVars = buildEnvVars(mockConfig, "native", {
                 mode: "native",
                 profile: "default",
                 verbose: false,
@@ -123,7 +134,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
         });
 
         it("should handle optional Iceberg resources gracefully", () => {
-            const envVars = buildEnvVars(defaultConfig, "native", {
+            const envVars = buildEnvVars(mockConfig, "native", {
                 mode: "native",
                 profile: "default",
                 verbose: false,
@@ -135,16 +146,16 @@ describe("XDG Launch Pure Functions - Integration", () => {
             expect(envVars).toHaveProperty("ICEBERG_WORKGROUP");
 
             // Should be empty string if not configured
-            if (!defaultConfig.quilt.icebergDatabase) {
+            if (!mockConfig.quilt.icebergDatabase) {
                 expect(envVars.ICEBERG_DATABASE).toBe("");
             }
-            if (!defaultConfig.quilt.icebergWorkgroup) {
+            if (!mockConfig.quilt.icebergWorkgroup) {
                 expect(envVars.ICEBERG_WORKGROUP).toBe("");
             }
         });
 
         it("should handle optional Athena configuration gracefully", () => {
-            const envVars = buildEnvVars(defaultConfig, "native", {
+            const envVars = buildEnvVars(mockConfig, "native", {
                 mode: "native",
                 profile: "default",
                 verbose: false,
@@ -153,13 +164,13 @@ describe("XDG Launch Pure Functions - Integration", () => {
 
             // Athena user workgroup should default to "primary"
             expect(envVars).toHaveProperty("ATHENA_USER_WORKGROUP");
-            if (!defaultConfig.quilt.athenaUserWorkgroup) {
+            if (!mockConfig.quilt.athenaUserWorkgroup) {
                 expect(envVars.ATHENA_USER_WORKGROUP).toBe("primary");
             }
 
             // Athena results bucket is optional
             expect(envVars).toHaveProperty("ATHENA_RESULTS_BUCKET");
-            if (!defaultConfig.quilt.athenaResultsBucket) {
+            if (!mockConfig.quilt.athenaResultsBucket) {
                 expect(envVars.ATHENA_RESULTS_BUCKET).toBe("");
             }
         });
@@ -167,7 +178,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
         it("should preserve existing process.env variables", () => {
             const originalPath = process.env.PATH;
 
-            const envVars = buildEnvVars(defaultConfig, "native", {
+            const envVars = buildEnvVars(mockConfig, "native", {
                 mode: "native",
                 profile: "default",
                 verbose: false,
@@ -179,8 +190,8 @@ describe("XDG Launch Pure Functions - Integration", () => {
     });
 
     describe("validateConfig()", () => {
-        it("should succeed with valid default profile configuration", () => {
-            const envVars = buildEnvVars(defaultConfig, "native", {
+        it("should succeed with valid mock config configuration", () => {
+            const envVars = buildEnvVars(mockConfig, "native", {
                 mode: "native",
                 profile: "default",
                 verbose: false,
@@ -201,7 +212,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
         });
 
         it("should validate SQS URL format", () => {
-            const envVars = buildEnvVars(defaultConfig, "native", {
+            const envVars = buildEnvVars(mockConfig, "native", {
                 mode: "native",
                 profile: "default",
                 verbose: false,
@@ -218,7 +229,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
         });
 
         it("should validate BenchlingSecret is present", () => {
-            const envVars = buildEnvVars(defaultConfig, "native", {
+            const envVars = buildEnvVars(mockConfig, "native", {
                 mode: "native",
                 profile: "default",
                 verbose: false,
@@ -449,7 +460,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
 
     describe("buildInferredConfig()", () => {
         it("should build inferred configuration from stack details", () => {
-            const mockConfig = {
+            const mockStackConfig = {
                 region: "us-east-1",
                 apiGatewayEndpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/prod",
                 analyticsBucket: "quilt-analytics",
@@ -466,7 +477,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
             };
 
             const inferred = buildInferredConfig(
-                mockConfig,
+                mockStackConfig,
                 "quilt-stack",
                 stackDetails,
                 "us-east-1",
@@ -483,7 +494,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
         });
 
         it("should handle missing stack outputs gracefully", () => {
-            const mockConfig = {
+            const mockStackConfig = {
                 region: "us-west-2",
                 apiGatewayEndpoint: "https://xyz789.execute-api.us-west-2.amazonaws.com/prod",
                 analyticsBucket: "quilt-analytics",
@@ -496,7 +507,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
             };
 
             const inferred = buildInferredConfig(
-                mockConfig,
+                mockStackConfig,
                 null,
                 stackDetails,
                 "us-west-2",
@@ -511,7 +522,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
         });
 
         it("should be a pure function (no side effects)", () => {
-            const mockConfig = {
+            const mockStackConfig = {
                 region: "eu-west-1",
                 apiGatewayEndpoint: "https://api.example.com",
                 analyticsBucket: "analytics",
@@ -524,7 +535,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
             };
 
             const result1 = buildInferredConfig(
-                mockConfig,
+                mockStackConfig,
                 "stack-1",
                 stackDetails,
                 "eu-west-1",
@@ -533,7 +544,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
             );
 
             const result2 = buildInferredConfig(
-                mockConfig,
+                mockStackConfig,
                 "stack-1",
                 stackDetails,
                 "eu-west-1",
@@ -546,9 +557,9 @@ describe("XDG Launch Pure Functions - Integration", () => {
     });
 
     describe("End-to-End Integration", () => {
-        it("should transform default profile through complete pipeline", () => {
+        it("should transform mock config through complete pipeline", () => {
             // 1. Build environment variables from profile
-            const envVars = buildEnvVars(defaultConfig, "native", {
+            const envVars = buildEnvVars(mockConfig, "native", {
                 mode: "native",
                 profile: "default",
                 verbose: false,
@@ -579,8 +590,8 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 test: false,
             };
 
-            const result1 = buildEnvVars(defaultConfig, "docker", options);
-            const result2 = buildEnvVars(defaultConfig, "docker", options);
+            const result1 = buildEnvVars(mockConfig, "docker", options);
+            const result2 = buildEnvVars(mockConfig, "docker", options);
 
             expect(result1).toEqual(result2);
         });
