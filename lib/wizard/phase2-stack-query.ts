@@ -86,11 +86,11 @@ export async function runStackQuery(
         // Log what we found
         console.log(chalk.green("✓ Stack query succeeded\n"));
         console.log(chalk.dim(`✓ Stack ARN: ${stackArn}`));
+        console.log(chalk.dim(`✓ Account: ${account}`));
+        console.log(chalk.dim(`✓ Region: ${region}`));
+        console.log(chalk.dim(`✓ Queue URL: ${queueUrl}`));
         console.log(chalk.dim(`✓ Database: ${database}`));
         console.log(chalk.dim(`✓ Workgroup: ${athenaUserWorkgroup}`));
-        console.log(chalk.dim(`✓ Queue URL: ${queueUrl}`));
-        console.log(chalk.dim(`✓ Region: ${region}`));
-        console.log(chalk.dim(`✓ Account: ${account}`));
         console.log(athenaUserPolicy
             ? chalk.dim(`✓ Athena User Policy: ${athenaUserPolicy}`)
             : chalk.yellow("⚠ Athena User Policy: NOT FOUND"));
@@ -102,15 +102,15 @@ export async function runStackQuery(
             : chalk.yellow("⚠ Athena Results Bucket Policy: NOT FOUND"));
 
         // Iceberg resources are optional (recent addition to Quilt stacks)
-        if (icebergWorkgroup) {
-            console.log(chalk.green(`✓ Iceberg Workgroup: ${icebergWorkgroup}`));
-        } else {
-            console.log(chalk.dim("  Iceberg Workgroup: Not available (optional)"));
-        }
         if (icebergDatabase) {
             console.log(chalk.green(`✓ Iceberg Database: ${icebergDatabase}`));
         } else {
             console.log(chalk.dim("  Iceberg Database: Not available (optional)"));
+        }
+        if (icebergWorkgroup) {
+            console.log(chalk.green(`✓ Iceberg Workgroup: ${icebergWorkgroup}`));
+        } else {
+            console.log(chalk.dim("  Iceberg Workgroup: Not available (optional)"));
         }
 
         if (benchlingSecretArn) {
