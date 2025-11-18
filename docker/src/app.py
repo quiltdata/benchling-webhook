@@ -105,9 +105,7 @@ def create_app():
                             error=validation_results["role"]["error"],
                         )
                         # Fail container startup to prevent writing to wrong account
-                        raise RuntimeError(
-                            f"IAM role validation failed: {validation_results['role']['error']}"
-                        )
+                        raise RuntimeError(f"IAM role validation failed: {validation_results['role']['error']}")
 
             except Exception as e:
                 # Role validation failure is critical - crash container
