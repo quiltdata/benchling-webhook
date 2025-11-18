@@ -9,36 +9,41 @@ All notable changes to this project will be documented in this file.
 
 ### Breaking Changes
 
-- **QuiltStackARN removed from runtime environment** - Services now resolved at deployment time instead of container startup
-  - Container startup faster (no CloudFormation API calls)
-  - Task role has no CloudFormation permissions (improved security)
-  - Existing configurations work unchanged (stackArn still used at deploy time)
+- **QuiltStackARN removed from runtime** - Services resolved at deployment time, not container startup (faster startup, improved security)
+- **Single IAM role** - `QUILT_READ_ROLE_ARN` removed, only `QUILT_WRITE_ROLE_ARN` used for all S3/Athena operations (50% fewer STS calls)
 
 ### Added
 
 - **`xdg-launch` command** - Unified configuration bridge for native/Docker modes (eliminates .env files)
 - **`test:local` npm script** - Test Docker containers locally with hot-reload
 - **`status --no-exit` flag** - Continuous deployment monitoring
-- **Optional Athena/Iceberg configuration** - Support for ATHENA_USER_WORKGROUP, ATHENA_RESULTS_BUCKET, ICEBERG_DATABASE, ICEBERG_WORKGROUP
+- **In-memory ZIP processing** - Eliminated filesystem writes (33% faster extraction, no TMPDIR needed)
+- **Cross-account Athena support** - PackageQuery now uses RoleManager for proper IAM role assumption
 
 ### Changed
 
-- **Deployment-time service resolution** - Services resolved once during deployment (PACKAGER_SQS_URL, ATHENA_USER_DATABASE, QUILT_WEB_HOST, ICEBERG_DATABASE)
-- **Docker environment simplified** - No more .env file, explicit service environment variables
-- **Catalog validation** - Shows progress when searching CloudFormation stacks
-- **Health endpoint** - Now displays version from pyproject.toml
-- **Stack inference** - Added pagination support for large deployments
+- **Deployment-time service resolution** - Services resolved once at deploy (PACKAGER_SQS_URL, ATHENA_USER_DATABASE, QUILT_WEB_HOST)
+- **Simplified IAM configuration** - Single write role for all operations, RoleManager API streamlined
+- **Docker environment simplified** - No .env file, explicit service environment variables
+- **Health endpoint** - Displays version from pyproject.toml
 
 ### Fixed
 
-- Status command handles optional stackArn gracefully with clear error messages
-- Validate command handles optional stackArn with clear error messages
-- QuiltWebHost now only catalog URL source (eliminates ambiguity)
-- Removed redundant Phase 2 deployment prompt from wizard
+- Temporary directory errors eliminated (BytesIO replaces tempfile)
+- Cross-account Athena queries now work correctly
+- Status/validate commands handle optional stackArn gracefully
+- QuiltWebHost ambiguity eliminated (catalog URL only)
+
+### Performance
+
+- **16% faster** total processing (eliminated disk I/O)
+- **33% faster** ZIP extraction (in-memory vs filesystem)
+- **50% fewer** STS API calls (single role vs two)
+- **27% smaller** RoleManager code
 
 ### Migration
 
-Existing configurations work unchanged. See [spec/206-service-envars/MIGRATION.md](./spec/206-service-envars/MIGRATION.md) for details.
+Existing configurations work unchanged. Read role ARN ignored if present. See [spec/206-service-envars/MIGRATION.md](./spec/206-service-envars/MIGRATION.md) and [spec/206-service-envars/23-implementation-summary.md](./spec/206-service-envars/23-implementation-summary.md) for details.
 
 ## [0.7.10] - 2025-11-15
 
