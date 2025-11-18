@@ -347,20 +347,16 @@ export async function deploy(
     console.log(`  ${chalk.bold("Profile:")}                   ${options.profileName}`);
     console.log();
     console.log(chalk.bold("  Resolved Quilt Services:"));
+    console.log(`    ${chalk.bold("Catalog Host:")}            ${services.quiltWebHost}`);
     console.log(`    ${chalk.bold("Packager Queue:")}          ${services.packagerQueueUrl}`);
     console.log(`    ${chalk.bold("Athena Database:")}         ${services.athenaUserDatabase}`);
-    console.log(`    ${chalk.bold("Catalog Host:")}            ${services.quiltWebHost}`);
+    console.log(`    ${chalk.bold("Athena Workgroup:")}        ${services.athenaUserWorkgroup}`);
+    console.log(`    ${chalk.bold("Athena Results Bucket:")}   ${services.athenaResultsBucket}`);
     if (services.icebergDatabase) {
         console.log(`    ${chalk.bold("Iceberg Database:")}        ${services.icebergDatabase}`);
     }
     if (services.icebergWorkgroup) {
         console.log(`    ${chalk.bold("Iceberg Workgroup:")}       ${services.icebergWorkgroup}`);
-    }
-    if (services.athenaUserWorkgroup) {
-        console.log(`    ${chalk.bold("Athena Workgroup:")}        ${services.athenaUserWorkgroup}`);
-    }
-    if (services.athenaResultsBucket) {
-        console.log(`    ${chalk.bold("Athena Results Bucket:")}   ${services.athenaResultsBucket}`);
     }
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
