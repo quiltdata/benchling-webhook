@@ -346,3 +346,108 @@ Structured logging with `structlog` is working well:
 - Python `tempfile` module documentation: <https://docs.python.org/3/library/tempfile.html>
 - Docker best practices for non-root users: <https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#user>
 - Amazon Linux 2023 container image: <https://github.com/amazonlinux/container-images>
+
+---
+
+## Resolution
+
+**Status:** ✅ Resolved
+**Implementation:** See [22-remove-tempfile-and-read-role.md](22-remove-tempfile-and-read-role.md)
+**Commits:**
+
+- `1774dca` - feat(python): replace temporary file with BytesIO for in-memory ZIP processing
+- `3286993` - feat(python): consolidate to single IAM role for S3/Athena access
+- `95f9812` - feat(cdk): remove read role from infrastructure, consolidate to single write role
+
+### Solution Implemented
+
+#### 1. In-Memory ZIP Processing (Phase 1)
+
+Instead of creating a writable temporary directory, the ZIP file processing was refactored to work entirely in memory:
+
+**Before:**
+
+```python
+with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as temp_file:
+    for chunk in response.iter_content(chunk_size=8192):
+        temp_file.write(chunk)
+    zip_path = temp_file.name
+
+with zipfile.ZipFile(zip_path, "r") as zip_file:
+    # process ZIP...
+```
+
+**After:**
+
+```python
+import io
+
+zip_buffer = io.BytesIO()
+for chunk in response.iter_content(chunk_size=8192):
+    zip_buffer.write(chunk)
+zip_buffer.seek(0)  # Reset to beginning for reading
+
+with zipfile.ZipFile(zip_buffer, "r") as zip_file:
+    # process ZIP...
+```
+
+**Benefits:**
+
+- No temporary file creation required
+- No `TMPDIR` environment variable needed
+- No writable temp directory required in container
+- Faster processing (no disk I/O overhead)
+- Same memory footprint (ZIP content already loaded for S3 upload)
+- Cleaner error handling (no temp files to clean up)
+
+#### 2. Single IAM Role Consolidation (Phases 2-3)
+
+Analysis revealed that `QUILT_READ_ROLE_ARN` was never actually used in the application—all S3 operations used `QUILT_WRITE_ROLE_ARN`. The read role infrastructure was removed:
+
+**Changes made:**
+
+1. **Python Application (Phase 2):**
+
+   - Removed `QUILT_READ_ROLE_ARN` from `docker/src/config.py`
+   - Simplified `RoleManager` to use single role ARN
+   - Updated `entry_packager.py` to pass single role to `RoleManager`
+   - Updated `package_query.py` to use `RoleManager` for cross-account Athena/S3 access
+   - Removed read role validation from health checks
+
+2. **CDK Infrastructure (Phase 3):**
+   - Removed `QUILT_READ_ROLE_ARN` environment variable from `fargate-service.ts`
+   - Simplified `FargateServiceProps` interface to single `roleArn`
+   - Updated `benchling-webhook-stack.ts` to pass only write role
+   - Removed `readRoleArn` from `QuiltConfig` type definition
+   - Updated `infer-quilt-config.ts` to only save write role
+
+**Rationale:**
+- Write role includes read permissions (S3 write access implies read access)
+- Simpler credential management (single session cache)
+- Fewer STS AssumeRole calls
+- Clearer intent (one role for all Quilt S3 operations)
+- Read role kept in setup wizard for potential future use cases
+
+#### 3. Dockerfile Cleanup (Phase 4)
+
+The `TMPDIR` environment variable was found to be already absent from the Dockerfile, and no `/app/tmp` directory existed. The container configuration was already clean, so Phase 4 required no changes.
+
+### Testing Results
+
+All phases were tested and verified:
+
+- ✅ Unit tests pass (Python + TypeScript)
+- ✅ Local Docker testing succeeds (no temp file errors)
+- ✅ Integration tests pass with real Benchling exports
+- ✅ S3 upload and Quilt package creation work end-to-end
+- ✅ Health checks pass with single role validation
+- ✅ No temporary directory errors in production logs
+
+### Impact
+
+This implementation completely resolved the temporary directory error by eliminating filesystem writes entirely, while simultaneously simplifying the IAM role management infrastructure. The solution is cleaner, faster, and easier to maintain than the original approach.
+
+### Related Documentation
+
+- [22-remove-tempfile-and-read-role.md](22-remove-tempfile-and-read-role.md) - Complete implementation specification
+- [23-implementation-summary.md](23-implementation-summary.md) - Implementation summary with before/after comparisons
