@@ -45,6 +45,8 @@ interface QuiltStackInfo {
     icebergDatabase?: string;
     athenaResultsBucket?: string;
     athenaResultsBucketPolicy?: string;
+    readRoleArn?: string;
+    writeRoleArn?: string;
 }
 
 /**
@@ -65,6 +67,8 @@ interface InferenceResult {
     icebergDatabase?: string;
     athenaResultsBucket?: string;
     athenaResultsBucketPolicy?: string;
+    readRoleArn?: string;
+    writeRoleArn?: string;
     source: string;
 }
 
@@ -199,7 +203,7 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     }
                 }
 
-                // NEW: Query stack resources for additional data - FAIL LOUDLY on errors
+                // Query stack resources for additional data - FAIL LOUDLY on errors
                 try {
                     const resources = await getStackResources(region, stack.StackName);
                     const discovered = extractQuiltResources(resources);
@@ -212,6 +216,8 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                         icebergDatabase,
                         athenaResultsBucket,
                         athenaResultsBucketPolicy,
+                        readRoleArn,
+                        writeRoleArn,
                     } = discovered;
 
                     Object.assign(stackInfo, {
@@ -221,6 +227,8 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                         icebergDatabase,
                         athenaResultsBucket,
                         athenaResultsBucketPolicy,
+                        readRoleArn,
+                        writeRoleArn,
                     });
                 } catch (error) {
                     // FAIL LOUDLY - show the error with full stack trace
@@ -511,7 +519,7 @@ export async function inferQuiltConfig(options: {
         result.benchlingIntegrationEnabled = selectedStack.benchlingIntegrationEnabled;
         console.log(`✓ BenchlingIntegration: ${selectedStack.benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`);
     }
-    // NEW: Add discovered workgroups and resources to result
+    // Add discovered workgroups and resources to result
     if (selectedStack.athenaUserWorkgroup) {
         result.athenaUserWorkgroup = selectedStack.athenaUserWorkgroup;
     }
@@ -530,6 +538,19 @@ export async function inferQuiltConfig(options: {
     }
     if (selectedStack.athenaResultsBucketPolicy) {
         result.athenaResultsBucketPolicy = selectedStack.athenaResultsBucketPolicy;
+    }
+    // NEW: Add IAM role ARNs to result
+    if (selectedStack.readRoleArn) {
+        result.readRoleArn = selectedStack.readRoleArn;
+        console.log(`✓ T4BucketReadRole: ${selectedStack.readRoleArn}`);
+    } else {
+        console.log(chalk.yellow("⚠ T4BucketReadRole: NOT FOUND (optional - will use task role for S3 access)"));
+    }
+    if (selectedStack.writeRoleArn) {
+        result.writeRoleArn = selectedStack.writeRoleArn;
+        console.log(`✓ T4BucketWriteRole: ${selectedStack.writeRoleArn}`);
+    } else {
+        console.log(chalk.yellow("⚠ T4BucketWriteRole: NOT FOUND (optional - will use task role for S3 access)"));
     }
 
     if (result.source === "quilt3-cli") {
@@ -576,6 +597,8 @@ async function main(): Promise<void> {
     if (result.region) console.log(`Region: ${result.region}`);
     if (result.account) console.log(`AWS Account ID: ${result.account}`);
     if (result.queueUrl) console.log(`Queue URL: ${result.queueUrl}`);
+    if (result.readRoleArn) console.log(`Read Role ARN: ${result.readRoleArn}`);
+    if (result.writeRoleArn) console.log(`Write Role ARN: ${result.writeRoleArn}`);
 }
 
 // Run main if executed directly

@@ -82,6 +82,8 @@ export async function runStackQuery(
         const icebergDatabase = inferenceResult.icebergDatabase;
         const athenaResultsBucket = inferenceResult.athenaResultsBucket;
         const athenaResultsBucketPolicy = inferenceResult.athenaResultsBucketPolicy;
+        const readRoleArn = inferenceResult.readRoleArn;
+        const writeRoleArn = inferenceResult.writeRoleArn;
 
         // Log what we found
         console.log(chalk.green("✓ Stack query succeeded\n"));
@@ -112,6 +114,8 @@ export async function runStackQuery(
         } else {
             console.log(chalk.dim("  Iceberg Workgroup: Not available (optional)"));
         }
+
+        // IAM role ARNs are logged by inferQuiltConfig, so no need to log again here
 
         if (benchlingSecretArn) {
             console.log(chalk.green(`✓ BenchlingSecret: ${benchlingSecretArn}`));
@@ -144,6 +148,8 @@ export async function runStackQuery(
             icebergDatabase,
             athenaResultsBucket,
             athenaResultsBucketPolicy,
+            readRoleArn,
+            writeRoleArn,
             stackQuerySucceeded: true,
         };
     } catch (error) {

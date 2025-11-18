@@ -56,6 +56,10 @@ export interface StackQueryResult {
     athenaResultsBucket?: string;
     /** User Athena results bucket policy ARN */
     athenaResultsBucketPolicy?: string;
+    /** IAM role ARN for read-only S3 access (from T4BucketReadRole) */
+    readRoleArn?: string;
+    /** IAM role ARN for read-write S3 access (from T4BucketWriteRole) */
+    writeRoleArn?: string;
 }
 
 /**

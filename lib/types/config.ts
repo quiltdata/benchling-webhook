@@ -248,6 +248,36 @@ export interface QuiltConfig {
      * @example "arn:aws:s3:::my-stack-userathenar-abc123"
      */
     athenaResultsBucketPolicy?: string;
+
+    /**
+     * IAM role ARN for read-only S3 access (from T4BucketReadRole)
+     *
+     * Container assumes this role for S3 read operations to access the Quilt S3 bucket.
+     * Discovered from CloudFormation stack resources during setup.
+     *
+     * Resolved from T4BucketReadRole stack resource (AWS::IAM::Role)
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * Passed to container as `QUILT_READ_ROLE_ARN` environment variable.
+     *
+     * @example "arn:aws:iam::123456789012:role/quilt-stack-T4BucketReadRole-ABC123"
+     */
+    readRoleArn?: string;
+
+    /**
+     * IAM role ARN for read-write S3 access (from T4BucketWriteRole)
+     *
+     * Container assumes this role for S3 write operations to access the Quilt S3 bucket.
+     * Discovered from CloudFormation stack resources during setup.
+     *
+     * Resolved from T4BucketWriteRole stack resource (AWS::IAM::Role)
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * Passed to container as `QUILT_WRITE_ROLE_ARN` environment variable.
+     *
+     * @example "arn:aws:iam::123456789012:role/quilt-stack-T4BucketWriteRole-XYZ789"
+     */
+    writeRoleArn?: string;
 }
 
 /**
@@ -650,6 +680,8 @@ export const ProfileConfigSchema = {
                 icebergDatabase: { type: "string", minLength: 1 },
                 athenaUserWorkgroup: { type: "string", minLength: 1 },
                 icebergWorkgroup: { type: "string", minLength: 1 },
+                readRoleArn: { type: "string", pattern: "^arn:aws:iam::\\d{12}:role/.+" },
+                writeRoleArn: { type: "string", pattern: "^arn:aws:iam::\\d{12}:role/.+" },
             },
         },
         benchling: {
