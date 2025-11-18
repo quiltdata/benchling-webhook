@@ -540,19 +540,22 @@ export async function inferQuiltConfig(options: {
         result.athenaResultsBucketPolicy = selectedStack.athenaResultsBucketPolicy;
     }
     // NEW: Add IAM role ARNs to result
+    // IAM role ARNs for cross-account S3 access
+    // Keep read role discovery logic but only save write role to configuration
+    // Read role is still discovered for informational purposes but not configured
     if (selectedStack.readRoleArn) {
-        result.readRoleArn = selectedStack.readRoleArn;
-        console.log(`✓ T4BucketReadRole: ${selectedStack.readRoleArn}`);
+        console.log(`✓ T4BucketReadRole discovered: ${selectedStack.readRoleArn}`);
+        console.log(`  (Read role discovered but not configured - write role used for all operations)`);
     } else {
-        console.log(chalk.yellow("⚠ T4BucketReadRole: NOT FOUND (optional - will use task role for S3 access)"));
+        console.log(chalk.yellow("⚠ T4BucketReadRole: NOT FOUND (valid Quilt stack resource)"));
     }
     if (selectedStack.writeRoleArn) {
         result.writeRoleArn = selectedStack.writeRoleArn;
         console.log(`✓ T4BucketWriteRole: ${selectedStack.writeRoleArn}`);
+        console.log(`  (Write role will be used for all S3 operations)`);
     } else {
         console.log(chalk.yellow("⚠ T4BucketWriteRole: NOT FOUND (optional - will use task role for S3 access)"));
     }
-
     if (result.source === "quilt3-cli") {
         result.source = "quilt3-cli+cloudformation";
     } else {

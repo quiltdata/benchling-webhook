@@ -39,8 +39,7 @@ export interface FargateServiceProps {
     readonly athenaUserWorkgroup?: string;
     readonly athenaResultsBucket?: string;
 
-    // NEW: Optional IAM role ARNs for cross-account S3 access (from Quilt stack discovery)
-    readonly readRoleArn?: string;
+    // NEW: Optional IAM role ARN for cross-account S3 access (from Quilt stack discovery)
     readonly writeRoleArn?: string;
 
     // Runtime-configurable parameters (from CloudFormation)
@@ -175,16 +174,15 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Grant permission to assume Quilt stack IAM roles for cross-account S3 access
-        // These roles are discovered from the Quilt stack resources during setup
-        if (props.readRoleArn || props.writeRoleArn) {
+        // Grant permission to assume Quilt stack IAM role for cross-account S3 access
+        // This role is discovered from the Quilt stack resources during setup
+        if (props.writeRoleArn) {
             taskRole.addToPolicy(
                 new iam.PolicyStatement({
                     actions: ["sts:AssumeRole"],
                     resources: [
                         // Use wildcard pattern to match any account/stack name
                         // This supports cross-account deployments and different stack names
-                        "arn:aws:iam::*:role/*-T4BucketReadRole-*",
                         "arn:aws:iam::*:role/*-T4BucketWriteRole-*",
                     ],
                 }),
@@ -310,8 +308,7 @@ export class FargateService extends Construct {
             ...(props.icebergWorkgroup ? { ICEBERG_WORKGROUP: props.icebergWorkgroup } : {}),
             PACKAGER_SQS_URL: props.packagerQueueUrl,
 
-            // IAM Role ARNs for cross-account S3 access (optional)
-            ...(props.readRoleArn ? { QUILT_READ_ROLE_ARN: props.readRoleArn } : {}),
+            // IAM Role ARN for cross-account S3 access (optional)
             ...(props.writeRoleArn ? { QUILT_WRITE_ROLE_ARN: props.writeRoleArn } : {}),
 
             // Benchling Configuration (credentials from Secrets Manager, NOT environment)
