@@ -104,6 +104,13 @@ function legacyConfigToProfileConfig(config: Config): ProfileConfig {
             ecrRepository: config.ecrRepositoryName || "quiltdata/benchling",
             imageTag: config.imageTag || "latest",
         },
+        resolvedServices: {
+            packagerQueueUrl: config.queueUrl,
+            athenaUserDatabase: config.quiltDatabase,
+            quiltWebHost: config.quiltCatalog.replace(/^https?:\/\//, ""),
+            resolvedAt: new Date().toISOString(),
+            sourceStackArn: config.quiltStackArn || "arn:aws:cloudformation:us-east-1:123456789012:stack/placeholder/placeholder",
+        },
         logging: {
             level: (config.logLevel as "DEBUG" | "INFO" | "WARNING" | "ERROR") || "INFO",
         },
@@ -180,6 +187,13 @@ if (require.main === module) {
             account: process.env.CDK_DEFAULT_ACCOUNT,
             ecrRepository: process.env.ECR_REPOSITORY_NAME || "quiltdata/benchling",
             imageTag: process.env.IMAGE_TAG || "latest",
+        },
+        resolvedServices: {
+            packagerQueueUrl: process.env.QUEUE_URL || "https://sqs.us-east-1.amazonaws.com/123456789012/placeholder-queue",
+            athenaUserDatabase: process.env.QUILT_DATABASE || "placeholder_database",
+            quiltWebHost: process.env.QUILT_CATALOG?.replace(/^https?:\/\//, "") || "placeholder.quiltdata.com",
+            resolvedAt: new Date().toISOString(),
+            sourceStackArn: process.env.QUILT_STACK_ARN || "arn:aws:cloudformation:us-east-1:123456789012:stack/placeholder/placeholder",
         },
         logging: {
             level: (process.env.LOG_LEVEL as "DEBUG" | "INFO" | "WARNING" | "ERROR") || "INFO",

@@ -114,6 +114,13 @@ class ProfileManager {
             deployment: {
                 region: "us-east-1",
             },
+            resolvedServices: {
+                packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/placeholder-queue",
+                athenaUserDatabase: "placeholder_database",
+                quiltWebHost: "placeholder.quiltdata.com",
+                resolvedAt: new Date().toISOString(),
+                sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/placeholder/placeholder",
+            },
             _metadata: {
                 version: "0.7.0",
                 createdAt: new Date().toISOString(),
