@@ -184,14 +184,14 @@ async function getLogGroupsFromStack(
     region: string,
     integratedMode: boolean,
     awsProfile?: string,
-): Promise<{ ecsLogGroup?: string; apiLogGroup?: string; apiExecLogGroup?: string }> {
+): Promise<Record<string, string>> {
     try {
         const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
         if (awsProfile) {
             clientConfig.credentials = fromIni({ profile: awsProfile });
         }
 
-        // For integrated mode, discover log groups from ECS services
+        // For integrated mode, discover log groups from ALL ECS services
         if (integratedMode) {
             const { CloudFormationClient: CF, DescribeStackResourcesCommand } = await import("@aws-sdk/client-cloudformation");
             const { ECSClient, DescribeServicesCommand, DescribeTaskDefinitionCommand } = await import("@aws-sdk/client-ecs");
@@ -213,51 +213,57 @@ async function getLogGroupsFromStack(
                 return {};
             }
 
-            // Find the benchling service specifically
-            const benchlingService = ecsServices.find((s) =>
-                s.LogicalResourceId?.toLowerCase().includes("benchling") &&
-                !s.LogicalResourceId?.toLowerCase().includes("bulk") &&
-                !s.LogicalResourceId?.toLowerCase().includes("scanner"),
-            );
-
-            if (!benchlingService?.PhysicalResourceId) {
-                return {};
-            }
-
             // Get cluster name
             const clusterResource = resourcesResponse.StackResources?.find(
                 (r) => r.ResourceType === "AWS::ECS::Cluster",
             );
             const clusterName = clusterResource?.PhysicalResourceId || stackName;
 
-            // Describe the service to get task definition
-            const servicesCommand = new DescribeServicesCommand({
-                cluster: clusterName,
-                services: [benchlingService.PhysicalResourceId],
-            });
-            const servicesResponse = await ecsClient.send(servicesCommand);
+            // Get service ARNs
+            const serviceArns = ecsServices
+                .map((s) => s.PhysicalResourceId)
+                .filter((arn): arn is string => !!arn);
 
-            const service = servicesResponse.services?.[0];
-            const taskDefArn = service?.deployments?.[0]?.taskDefinition;
-
-            if (!taskDefArn) {
+            if (serviceArns.length === 0) {
                 return {};
             }
 
-            // Get task definition to extract log group
-            const taskDefCommand = new DescribeTaskDefinitionCommand({
-                taskDefinition: taskDefArn,
+            // Describe all services
+            const servicesCommand = new DescribeServicesCommand({
+                cluster: clusterName,
+                services: serviceArns,
             });
-            const taskDefResponse = await ecsClient.send(taskDefCommand);
+            const servicesResponse = await ecsClient.send(servicesCommand);
 
-            const logConfig = taskDefResponse.taskDefinition?.containerDefinitions?.[0]?.logConfiguration;
-            if (logConfig?.logDriver === "awslogs") {
-                return {
-                    ecsLogGroup: logConfig.options?.["awslogs-group"],
-                };
+            // Get log groups from ALL services
+            const logGroups: Record<string, string> = {};
+
+            for (const svc of servicesResponse.services || []) {
+                const taskDefArn = svc.deployments?.[0]?.taskDefinition;
+                if (!taskDefArn) continue;
+
+                try {
+                    const taskDefCommand = new DescribeTaskDefinitionCommand({
+                        taskDefinition: taskDefArn,
+                    });
+                    const taskDefResponse = await ecsClient.send(taskDefCommand);
+
+                    const logConfig = taskDefResponse.taskDefinition?.containerDefinitions?.[0]?.logConfiguration;
+                    if (logConfig?.logDriver === "awslogs") {
+                        const logGroupName = logConfig.options?.["awslogs-group"];
+                        if (logGroupName) {
+                            // Use service name as the key
+                            const serviceName = svc.serviceName || "unknown";
+                            logGroups[serviceName] = logGroupName;
+                        }
+                    }
+                } catch {
+                    // Skip this service if we can't get its task definition
+                    continue;
+                }
             }
 
-            return {};
+            return logGroups;
         }
 
         // For standalone mode, use stack outputs
@@ -271,11 +277,17 @@ async function getLogGroupsFromStack(
         }
 
         const outputs = stack.Outputs || [];
-        return {
-            ecsLogGroup: outputs.find((o) => o.OutputKey === "EcsLogGroup")?.OutputValue,
-            apiLogGroup: outputs.find((o) => o.OutputKey === "ApiGatewayLogGroup")?.OutputValue,
-            apiExecLogGroup: outputs.find((o) => o.OutputKey === "ApiGatewayExecutionLogGroup")?.OutputValue,
-        };
+        const logGroups: Record<string, string> = {};
+
+        const ecsLogGroup = outputs.find((o) => o.OutputKey === "EcsLogGroup")?.OutputValue;
+        const apiLogGroup = outputs.find((o) => o.OutputKey === "ApiGatewayLogGroup")?.OutputValue;
+        const apiExecLogGroup = outputs.find((o) => o.OutputKey === "ApiGatewayExecutionLogGroup")?.OutputValue;
+
+        if (ecsLogGroup) logGroups["ecs"] = ecsLogGroup;
+        if (apiLogGroup) logGroups["api"] = apiLogGroup;
+        if (apiExecLogGroup) logGroups["api-exec"] = apiExecLogGroup;
+
+        return logGroups;
     } catch (error) {
         console.warn(chalk.dim(`Could not retrieve log groups from stack: ${(error as Error).message}`));
         return {};
@@ -409,37 +421,80 @@ async function fetchAllLogs(
     awsProfile?: string,
 ): Promise<LogGroupInfo[]> {
     // Get log groups from stack
-    const logGroups = await getLogGroupsFromStack(stackName, region, integratedMode, awsProfile);
+    const discoveredLogGroups = await getLogGroupsFromStack(stackName, region, integratedMode, awsProfile);
 
     const result: LogGroupInfo[] = [];
 
-    // Determine which log groups to query based on type
+    // For integrated mode, query all discovered log groups
+    if (integratedMode) {
+        // If type is specified and not "all", filter to only matching services
+        const logGroupEntries = Object.entries(discoveredLogGroups);
+
+        for (const [serviceName, logGroupName] of logGroupEntries) {
+            // If type filter is specified, only show matching services
+            if (type !== "all") {
+                // For integrated mode, "ecs" type shows all ECS services
+                // Other types (api, api-exec) are not available in integrated mode
+                if (type !== "ecs") {
+                    continue;
+                }
+            }
+
+            // Fetch logs from this group
+            const entries = await fetchLogsFromGroup(
+                logGroupName,
+                region,
+                since,
+                limit,
+                filterPattern,
+                awsProfile,
+            );
+
+            // Sort by timestamp descending (most recent first) and limit
+            const sortedEntries = entries
+                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                .slice(0, limit);
+
+            // Create friendly display name from service name
+            const displayName = serviceName
+                .split("-")
+                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(" ");
+
+            result.push({
+                name: logGroupName,
+                displayName: `${displayName} (ECS)`,
+                entries: sortedEntries,
+            });
+        }
+
+        return result;
+    }
+
+    // For standalone mode, use the traditional type-based approach
     const typesToQuery = type === "all" ? ["ecs", "api", "api-exec"] : [type];
 
     for (const logType of typesToQuery) {
-        let logGroupName: string | undefined;
-        let displayName: string;
-
-        switch (logType) {
-        case "ecs":
-            logGroupName = logGroups.ecsLogGroup;
-            displayName = "ECS Container Logs";
-            break;
-        case "api":
-            logGroupName = logGroups.apiLogGroup;
-            displayName = "API Gateway Access Logs";
-            break;
-        case "api-exec":
-            logGroupName = logGroups.apiExecLogGroup;
-            displayName = "API Gateway Execution Logs";
-            break;
-        default:
-            continue;
-        }
+        const logGroupName = discoveredLogGroups[logType];
 
         if (!logGroupName) {
             // Don't warn on first attempt, we'll handle it at the result level
             continue;
+        }
+
+        let displayName: string;
+        switch (logType) {
+        case "ecs":
+            displayName = "ECS Container Logs";
+            break;
+        case "api":
+            displayName = "API Gateway Access Logs";
+            break;
+        case "api-exec":
+            displayName = "API Gateway Execution Logs";
+            break;
+        default:
+            displayName = logType;
         }
 
         // Fetch logs from this group
