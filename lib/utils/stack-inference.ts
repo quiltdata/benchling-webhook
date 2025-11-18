@@ -141,6 +141,22 @@ export function validateRoleArn(arn: string): boolean {
 }
 
 /**
+ * Convert a role name to a full IAM role ARN
+ *
+ * @param roleNameOrArn - Role name (e.g., "ReadQuiltV2-tf-rc") or existing ARN
+ * @param account - AWS account ID
+ * @returns Full IAM role ARN
+ */
+export function toRoleArn(roleNameOrArn: string, account: string): string {
+    // If already an ARN, return as-is
+    if (validateRoleArn(roleNameOrArn)) {
+        return roleNameOrArn;
+    }
+    // Convert role name to ARN
+    return `arn:aws:iam::${account}:role/${roleNameOrArn}`;
+}
+
+/**
  * Extract Athena workgroups, IAM policies, Glue databases, S3 buckets, and IAM roles from stack resources
  *
  * Target resources:
@@ -154,10 +170,14 @@ export function validateRoleArn(arn: string): boolean {
  * - T4BucketWriteRole (AWS::IAM::Role)
  *
  * @param resources Stack resource map from getStackResources
+ * @param account Optional AWS account ID for converting role names to ARNs
+ * @param region Optional AWS region (currently unused but reserved for future use)
  * @returns Discovered Quilt resources
  */
 export function extractQuiltResources(
     resources: StackResourceMap,
+    account?: string,
+    _region?: string,
 ): DiscoveredQuiltResources {
     // Map logical resource IDs to discovered resource properties
     const resourceMapping: Record<string, keyof DiscoveredQuiltResources> = {
@@ -178,13 +198,17 @@ export function extractQuiltResources(
         if (resources[logicalId]) {
             const physicalId = resources[logicalId].physicalResourceId;
 
-            // For IAM roles, validate the ARN format before storing
+            // For IAM roles, convert role names to ARNs if account ID is available
             if (propertyName === "readRoleArn" || propertyName === "writeRoleArn") {
                 if (validateRoleArn(physicalId)) {
+                    // Already a valid ARN
                     discovered[propertyName] = physicalId;
+                } else if (account) {
+                    // Convert role name to ARN using account ID
+                    discovered[propertyName] = toRoleArn(physicalId, account);
                 } else {
-                    // Log warning but don't fail - role ARNs are optional
-                    console.warn(`Warning: Invalid ARN format for ${logicalId}: ${physicalId}`);
+                    // Log warning if we can't convert - need account ID
+                    console.warn(`Warning: Cannot convert role name to ARN for ${logicalId}: ${physicalId} (missing account ID)`);
                 }
             } else {
                 discovered[propertyName] = physicalId;
