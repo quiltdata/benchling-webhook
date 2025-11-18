@@ -82,8 +82,10 @@ def create_app():
             config=config,
         )
 
-        # Validate role assumption at startup (non-blocking)
-        if config.quilt_write_role_arn:
+        # Validate role assumption at startup (blocking - fail fast)
+        # Only validate if role_arn is a non-empty string (not Mock object in tests)
+        role_arn = getattr(config, "quilt_write_role_arn", None)
+        if role_arn and isinstance(role_arn, str):
             logger.info("Validating IAM role assumption at startup")
             try:
                 validation_results = entry_packager.role_manager.validate_roles()
@@ -93,21 +95,28 @@ def create_app():
                     if validation_results["role"]["valid"]:
                         logger.info(
                             "Role validated successfully",
-                            role_arn=config.quilt_write_role_arn,
+                            role_arn=role_arn,
                         )
                     else:
-                        logger.warning(
-                            "Role validation failed - will fall back to default credentials",
-                            role_arn=config.quilt_write_role_arn,
+                        # Role is configured but validation failed - this is critical
+                        logger.error(
+                            "Role validation failed at startup - container cannot function correctly",
+                            role_arn=role_arn,
                             error=validation_results["role"]["error"],
+                        )
+                        # Fail container startup to prevent writing to wrong account
+                        raise RuntimeError(
+                            f"IAM role validation failed: {validation_results['role']['error']}"
                         )
 
             except Exception as e:
-                # Role validation failure should not crash the container
-                logger.warning(
-                    "Role validation failed - container will use fallback credentials",
+                # Role validation failure is critical - crash container
+                logger.error(
+                    "Role validation failed at startup - failing container to prevent data misrouting",
                     error=str(e),
+                    error_type=type(e).__name__,
                 )
+                raise
 
     except Exception as e:
         logger.error("Failed to initialize application", error=str(e))

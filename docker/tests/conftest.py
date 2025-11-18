@@ -78,6 +78,7 @@ def mock_config_resolver(monkeypatch):
         webhook_allow_list="",
         # Optional infrastructure outputs
         benchling_api_url=None,
+        quilt_write_role_arn=None,  # No role ARN for tests by default
     )
 
     # Mock ConfigResolver.resolve() to return our test config

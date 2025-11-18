@@ -48,6 +48,14 @@ class RoleManager:
             role_arn: ARN of IAM role for S3 access (from T4BucketWriteRole)
             region: AWS region for STS and S3 clients (default: us-east-1)
         """
+        # Guard against Mock objects in tests - treat them as None
+        if role_arn is not None and not isinstance(role_arn, str):
+            logger.warning(
+                "RoleManager received non-string role_arn (likely Mock object in tests) - treating as None",
+                role_arn_type=type(role_arn).__name__,
+            )
+            role_arn = None
+
         self.role_arn = role_arn
         self.region = region
 
@@ -74,7 +82,12 @@ class RoleManager:
         """
         try:
             hostname = socket.gethostname()
-        except Exception:
+        except Exception as e:
+            logger.warning(
+                "Failed to get hostname for session name - using 'unknown' instead",
+                error=str(e),
+                error_type=type(e).__name__,
+            )
             hostname = "unknown"
 
         # Truncate hostname to fit AWS session name limits (64 chars max)
@@ -222,14 +235,19 @@ class RoleManager:
             session, expiration = self._create_session_with_assumed_role(role_arn)
             return session, expiration
         except Exception as e:
-            logger.warning(
-                "Role assumption failed, falling back to default credentials",
+            # Log error at ERROR level - this is a critical failure
+            logger.error(
+                "Failed to assume IAM role - this may indicate insufficient permissions",
                 role_arn=role_arn,
                 error=str(e),
+                error_type=type(e).__name__,
             )
-            if not self._default_session:
-                self._default_session = boto3.Session(region_name=self.region)
-            return self._default_session, None
+            # Re-raise - do not silently fall back to default credentials
+            # Falling back could write data to wrong AWS account
+            raise RuntimeError(
+                f"Failed to assume role {role_arn}. "
+                f"Please verify IAM permissions and trust relationship. Error: {str(e)}"
+            ) from e
 
     def get_s3_client(self):
         """Get S3 client with write role credentials.
@@ -284,11 +302,14 @@ class RoleManager:
                 results["role"]["valid"] = True
                 logger.info("Role validated successfully", role_arn=self.role_arn)
             except Exception as e:
-                results["role"]["error"] = str(e)
+                error_type = type(e).__name__
+                results["role"]["error"] = f"{error_type}: {str(e)}"
                 logger.error(
                     "Role validation failed",
                     role_arn=self.role_arn,
                     error=str(e),
+                    error_type=error_type,
+                    exc_info=True,
                 )
 
         return results

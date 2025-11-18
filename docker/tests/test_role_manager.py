@@ -239,25 +239,24 @@ class TestFallbackBehavior:
     """Test graceful fallback to default credentials."""
 
     @patch("src.auth.role_manager.RoleManager._assume_role", side_effect=Exception("AccessDenied"))
-    @patch("boto3.Session")
-    def test_fallback_on_assume_role_failure(self, mock_session_class, mock_assume_role, sample_role_arn):
-        """Test fallback to default credentials when role assumption fails."""
-        mock_session = MagicMock()
-        mock_s3_client = MagicMock()
-        mock_session.client.return_value = mock_s3_client
-        mock_session_class.return_value = mock_session
+    def test_no_fallback_on_assume_role_failure(self, mock_assume_role, sample_role_arn):
+        """Test that role assumption failures raise exceptions instead of falling back.
 
+        This is critical security behavior - we must fail fast rather than silently
+        falling back to default credentials, which could write to the wrong AWS account.
+        """
         manager = RoleManager(role_arn=sample_role_arn)
 
-        # Should not raise exception, should fall back to default credentials
-        s3_client = manager.get_s3_client()
+        # Should raise RuntimeError, not fall back to default credentials
+        with pytest.raises(RuntimeError) as exc_info:
+            manager.get_s3_client()
 
-        # Verify attempt to assume role
+        # Verify the error message is informative
+        assert "Failed to assume role" in str(exc_info.value)
+        assert sample_role_arn in str(exc_info.value)
+
+        # Verify attempt to assume role was made
         mock_assume_role.assert_called_once()
-
-        # Verify fallback session created
-        mock_session_class.assert_called()
-        assert s3_client == mock_s3_client
 
 
 class TestRoleValidation:

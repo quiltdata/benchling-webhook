@@ -214,11 +214,13 @@ class CanvasManager:
         except Exception as e:
             error_msg = f"Failed to search for linked packages: {str(e)}"
             self._errors.append(error_msg)
-            logger.warning(
-                "Failed to search for linked packages",
+            # Infrastructure failures (Athena, permissions) should be logged as errors
+            logger.error(
+                "Failed to search for linked packages - may indicate infrastructure issue",
                 entry_id=self.entry_id,
                 display_id=self.entry.display_id,
                 error=str(e),
+                error_type=type(e).__name__,
             )
             # Continue without linked packages if search fails
 
@@ -293,7 +295,13 @@ class CanvasManager:
             return {"success": True, "canvas_id": result.id}
 
         except Exception as e:
-            logger.error("Canvas update failed", error=str(e))
+            logger.error(
+                "Canvas update failed",
+                canvas_id=self.canvas_id,
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
             return {"success": False, "error": str(e)}
 
     def _make_file_table_markdown(
