@@ -67,6 +67,8 @@ export interface StackResourceMap {
  * - IcebergDatabase (AWS::Glue::Database)
  * - UserAthenaResultsBucket (AWS::S3::Bucket)
  * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
+ * - T4BucketReadRole (AWS::IAM::Role)
+ * - T4BucketWriteRole (AWS::IAM::Role)
  */
 export interface DiscoveredQuiltResources {
     athenaUserWorkgroup?: string;
@@ -75,6 +77,8 @@ export interface DiscoveredQuiltResources {
     icebergDatabase?: string;
     athenaResultsBucket?: string;
     athenaResultsBucketPolicy?: string;
+    readRoleArn?: string;
+    writeRoleArn?: string;
 }
 
 /**
@@ -126,7 +130,18 @@ export async function getStackResources(
 }
 
 /**
- * Extract Athena workgroups, IAM policies, Glue databases, and S3 buckets from stack resources
+ * Validate IAM role ARN format
+ *
+ * @param arn - ARN to validate
+ * @returns true if valid IAM role ARN, false otherwise
+ */
+export function validateRoleArn(arn: string): boolean {
+    const arnPattern = /^arn:aws:iam::\d{12}:role\/.+$/;
+    return arnPattern.test(arn);
+}
+
+/**
+ * Extract Athena workgroups, IAM policies, Glue databases, S3 buckets, and IAM roles from stack resources
  *
  * Target resources:
  * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
@@ -134,7 +149,9 @@ export async function getStackResources(
  * - IcebergWorkGroup (AWS::Athena::WorkGroup)
  * - IcebergDatabase (AWS::Glue::Database)
  * - UserAthenaResultsBucket (AWS::S3::Bucket)
- * - UserAthenaResultsBucket Policy (AWS::S3::BucketPolicy)
+ * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
+ * - T4BucketReadRole (AWS::IAM::Role)
+ * - T4BucketWriteRole (AWS::IAM::Role)
  *
  * @param resources Stack resource map from getStackResources
  * @returns Discovered Quilt resources
@@ -150,6 +167,8 @@ export function extractQuiltResources(
         IcebergDatabase: "icebergDatabase",
         UserAthenaResultsBucket: "athenaResultsBucket",
         UserAthenaResultsBucketPolicy: "athenaResultsBucketPolicy",
+        T4BucketReadRole: "readRoleArn",
+        T4BucketWriteRole: "writeRoleArn",
     };
 
     const discovered: DiscoveredQuiltResources = {};
@@ -157,7 +176,19 @@ export function extractQuiltResources(
     // Extract physical resource IDs for each target resource
     for (const [logicalId, propertyName] of Object.entries(resourceMapping)) {
         if (resources[logicalId]) {
-            discovered[propertyName] = resources[logicalId].physicalResourceId;
+            const physicalId = resources[logicalId].physicalResourceId;
+
+            // For IAM roles, validate the ARN format before storing
+            if (propertyName === "readRoleArn" || propertyName === "writeRoleArn") {
+                if (validateRoleArn(physicalId)) {
+                    discovered[propertyName] = physicalId;
+                } else {
+                    // Log warning but don't fail - role ARNs are optional
+                    console.warn(`Warning: Invalid ARN format for ${logicalId}: ${physicalId}`);
+                }
+            } else {
+                discovered[propertyName] = physicalId;
+            }
         }
     }
 

@@ -84,6 +84,13 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
     if (stackQuery.athenaResultsBucketPolicy) {
         config.quilt.athenaResultsBucketPolicy = stackQuery.athenaResultsBucketPolicy;
     }
+    // Add IAM role ARNs if discovered
+    if (stackQuery.readRoleArn) {
+        config.quilt.readRoleArn = stackQuery.readRoleArn;
+    }
+    if (stackQuery.writeRoleArn) {
+        config.quilt.writeRoleArn = stackQuery.writeRoleArn;
+    }
 
     return config;
 }
