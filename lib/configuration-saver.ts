@@ -65,8 +65,10 @@ export class ConfigurationSaver {
             try {
                 const existingConfig = xdgConfig.readProfile(profile);
                 finalConfig = merge({}, existingConfig, config);
-            } catch {
+            } catch (error) {
                 // If no existing config, just use the new config
+                console.warn(`Warning: Could not read existing configuration for merge: ${(error as Error).message}`);
+                console.warn("Using new configuration only (existing config not merged).\n");
                 finalConfig = { ...config };
             }
         }
