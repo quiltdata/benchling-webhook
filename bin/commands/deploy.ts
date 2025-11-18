@@ -298,59 +298,36 @@ export async function deploy(
         }
     }
 
-    // Read cached Quilt services from config (resolved at setup time)
-    // This eliminates runtime CloudFormation API calls - services are resolved once during setup
-    spinner.start("Loading cached Quilt services from config...");
-
-    if (!config.resolvedServices) {
-        spinner.fail("Configuration missing resolved services");
-        console.log();
-        console.error(chalk.red("Error: Configuration is missing resolved Quilt services."));
-        console.log();
-        suggestSetup(
-            options.profileName,
-            "This configuration was created with an older version of the setup wizard.\nPlease re-run setup to resolve and cache Quilt services:",
-        );
-        process.exit(1);
-    }
+    // Load Quilt configuration from config.quilt.*
+    spinner.start("Loading Quilt configuration...");
 
     // Validate required fields
-    const { resolvedServices } = config;
     const missingFields: string[] = [];
-    if (!resolvedServices.packagerQueueUrl) missingFields.push("packagerQueueUrl");
-    if (!resolvedServices.athenaUserDatabase) missingFields.push("athenaUserDatabase");
-    if (!resolvedServices.quiltWebHost) missingFields.push("quiltWebHost");
+    if (!config.quilt.queueUrl) missingFields.push("queueUrl");
+    if (!config.quilt.database) missingFields.push("database");
+    if (!config.quilt.catalog) missingFields.push("catalog");
 
     if (missingFields.length > 0) {
-        spinner.fail("Invalid resolved services in config");
+        spinner.fail("Invalid Quilt configuration");
         console.log();
-        console.error(chalk.red(`Error: Required service fields are missing: ${missingFields.join(", ")}`));
+        console.error(chalk.red(`Error: Required fields missing: ${missingFields.join(", ")}`));
         console.log();
-        suggestSetup(options.profileName, "Please re-run setup to resolve services:");
+        suggestSetup(options.profileName, "Please re-run setup:");
         process.exit(1);
     }
 
-    // Convert cached services to QuiltServices format
+    // Convert to QuiltServices format for deployment
     const services: QuiltServices = {
-        packagerQueueUrl: resolvedServices.packagerQueueUrl,
-        athenaUserDatabase: resolvedServices.athenaUserDatabase,
-        quiltWebHost: resolvedServices.quiltWebHost,
-        icebergDatabase: resolvedServices.icebergDatabase,
-        athenaUserWorkgroup: resolvedServices.athenaUserWorkgroup,
-        athenaResultsBucket: resolvedServices.athenaResultsBucket,
-        icebergWorkgroup: resolvedServices.icebergWorkgroup,
+        packagerQueueUrl: config.quilt.queueUrl,
+        athenaUserDatabase: config.quilt.database,
+        quiltWebHost: config.quilt.catalog,
+        icebergDatabase: config.quilt.icebergDatabase,
+        athenaUserWorkgroup: config.quilt.athenaUserWorkgroup,
+        athenaResultsBucket: config.quilt.athenaResultsBucket,
+        icebergWorkgroup: config.quilt.icebergWorkgroup,
     };
 
-    spinner.succeed("Cached Quilt services loaded from config");
-
-    // Warn if services are stale (>30 days old)
-    const resolvedAt = new Date(resolvedServices.resolvedAt);
-    const daysSinceResolution = Math.floor((Date.now() - resolvedAt.getTime()) / (1000 * 60 * 60 * 24));
-    if (daysSinceResolution > 30) {
-        console.log();
-        console.log(chalk.yellow(`⚠️  Warning: Resolved services are ${daysSinceResolution} days old (resolved at ${resolvedAt.toISOString()})`));
-        suggestSetup(options.profileName, "Consider re-running setup to refresh service resolution:");
-    }
+    spinner.succeed("Quilt configuration loaded");
 
     // Build ECR image URI for display
     // HARDCODED: Always use the quiltdata AWS account for ECR images
@@ -396,7 +373,7 @@ export async function deploy(
     console.log(`    ${chalk.bold("Image Tag:")}               ${options.imageTag}`);
     console.log(`    ${chalk.bold("Full Image URI:")}          ${ecrImageUri}`);
     console.log();
-    console.log(chalk.dim("  ℹ️  Services resolved at deployment time - no runtime CloudFormation calls"));
+    console.log(chalk.dim("  ℹ️  Configuration loaded from profile - single source of truth"));
     console.log(chalk.gray("─".repeat(80)));
     console.log();
 
