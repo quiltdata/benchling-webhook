@@ -5,7 +5,6 @@ import boxen from "boxen";
 import { prompt } from "enquirer";
 import { maskArn } from "../../lib/utils/config";
 import {
-    resolveQuiltServices,
     QuiltServices,
     ServiceResolverError,
     parseStackArn,
@@ -289,33 +288,64 @@ export async function deploy(
         }
     }
 
-    // Resolve Quilt services from CloudFormation stack (v1.0.0+)
-    // This eliminates runtime CloudFormation API calls by resolving services at deployment time
-    let services: QuiltServices;
-    spinner.start("Resolving Quilt services from CloudFormation stack...");
-    try {
-        services = await resolveQuiltServices({
-            stackArn,
-        });
-        spinner.succeed("Quilt services resolved from CloudFormation stack");
-    } catch (error) {
-        spinner.fail("Failed to resolve Quilt services");
+    // Read cached Quilt services from config (resolved at setup time)
+    // This eliminates runtime CloudFormation API calls - services are resolved once during setup
+    spinner.start("Loading cached Quilt services from config...");
+
+    if (!config.resolvedServices) {
+        spinner.fail("Configuration missing resolved services");
         console.log();
-        if (error instanceof ServiceResolverError) {
-            console.error(chalk.red(error.format()));
-        } else {
-            console.error(chalk.red((error as Error).message));
-        }
+        console.error(chalk.red("Error: Configuration is missing resolved Quilt services."));
         console.log();
-        console.log(chalk.yellow("Troubleshooting:"));
-        console.log("  1. Verify the Quilt CloudFormation stack exists and is deployed");
-        console.log("  2. Ensure your AWS credentials have cloudformation:DescribeStacks permission");
-        console.log("  3. Check that the stack outputs include required values:");
-        console.log("     - PackagerQueueUrl (SQS queue URL)");
-        console.log("     - UserAthenaDatabaseName (Athena database)");
-        console.log("     - QuiltWebHost (catalog web host)");
+        console.log(chalk.yellow("This configuration was created with an older version of the setup wizard."));
+        console.log(chalk.yellow("Please re-run setup to resolve and cache Quilt services:"));
+        console.log();
+        console.log(chalk.cyan(`  npm run setup -- --profile ${options.profileName}`));
         console.log();
         process.exit(1);
+    }
+
+    // Validate required fields
+    const { resolvedServices } = config;
+    const missingFields: string[] = [];
+    if (!resolvedServices.packagerQueueUrl) missingFields.push("packagerQueueUrl");
+    if (!resolvedServices.athenaUserDatabase) missingFields.push("athenaUserDatabase");
+    if (!resolvedServices.quiltWebHost) missingFields.push("quiltWebHost");
+
+    if (missingFields.length > 0) {
+        spinner.fail("Invalid resolved services in config");
+        console.log();
+        console.error(chalk.red(`Error: Required service fields are missing: ${missingFields.join(", ")}`));
+        console.log();
+        console.log(chalk.yellow("Please re-run setup to resolve services:"));
+        console.log();
+        console.log(chalk.cyan(`  npm run setup -- --profile ${options.profileName}`));
+        console.log();
+        process.exit(1);
+    }
+
+    // Convert cached services to QuiltServices format
+    const services: QuiltServices = {
+        packagerQueueUrl: resolvedServices.packagerQueueUrl,
+        athenaUserDatabase: resolvedServices.athenaUserDatabase,
+        quiltWebHost: resolvedServices.quiltWebHost,
+        icebergDatabase: resolvedServices.icebergDatabase,
+        athenaUserWorkgroup: resolvedServices.athenaUserWorkgroup,
+        athenaResultsBucket: resolvedServices.athenaResultsBucket,
+        icebergWorkgroup: resolvedServices.icebergWorkgroup,
+    };
+
+    spinner.succeed("Cached Quilt services loaded from config");
+
+    // Warn if services are stale (>30 days old)
+    const resolvedAt = new Date(resolvedServices.resolvedAt);
+    const daysSinceResolution = Math.floor((Date.now() - resolvedAt.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceResolution > 30) {
+        console.log();
+        console.log(chalk.yellow(`⚠️  Warning: Resolved services are ${daysSinceResolution} days old (resolved at ${resolvedAt.toISOString()})`));
+        console.log(chalk.yellow("   Consider re-running setup to refresh service resolution:"));
+        console.log(chalk.cyan(`   npm run setup -- --profile ${options.profileName}`));
+        console.log();
     }
 
     // Build ECR image URI for display
