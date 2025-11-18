@@ -42,7 +42,18 @@ describe("Profile Inheritance", () => {
                 deployment: {
                     region: "us-east-1",
                     imageTag: "stable",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -76,7 +87,18 @@ describe("Profile Inheritance", () => {
                     bucket: "default-packages",
                     prefix: "benchling",
                     metadataKey: "experiment_id",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -123,7 +145,18 @@ describe("Profile Inheritance", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -154,7 +187,18 @@ describe("Profile Inheritance", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -192,7 +236,18 @@ describe("Profile Inheritance", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -240,7 +295,18 @@ describe("Profile Inheritance", () => {
                 security: {
                     webhookAllowList: "192.168.1.0/24",
                     enableVerification: true,
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -276,7 +342,18 @@ describe("Profile Inheritance", () => {
                 },
                 logging: {
                     level: "DEBUG",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -329,7 +406,18 @@ describe("Profile Inheritance", () => {
                 security: {
                     webhookAllowList: "192.168.1.0/24",
                     enableVerification: true,
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -365,7 +453,18 @@ describe("Profile Inheritance", () => {
                 security: {
                     webhookAllowList: "10.0.0.0/8",
                     enableVerification: false,
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -406,7 +505,18 @@ describe("Profile Inheritance", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -442,7 +552,18 @@ describe("Profile Inheritance", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -472,7 +593,18 @@ describe("Profile Inheritance", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -510,7 +642,18 @@ describe("Profile Inheritance", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -540,7 +683,18 @@ describe("Profile Inheritance", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -570,7 +724,18 @@ describe("Profile Inheritance", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -611,7 +776,18 @@ describe("Profile Inheritance", () => {
                 deployment: {
                     region: "us-east-1",
                     imageTag: "stable",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -645,7 +821,18 @@ describe("Profile Inheritance", () => {
                 deployment: {
                     region: "us-east-1",
                     imageTag: "latest",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -679,7 +866,18 @@ describe("Profile Inheritance", () => {
                 deployment: {
                     region: "us-east-1",
                     imageTag: "rc",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T12:00:00Z",

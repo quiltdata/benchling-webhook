@@ -43,7 +43,18 @@ describe("Multi-Profile Integration", () => {
                 deployment: {
                     region: "us-east-1",
                     imageTag: "0.7.0",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -79,7 +90,18 @@ describe("Multi-Profile Integration", () => {
                 },
                 logging: {
                     level: "DEBUG",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -126,7 +148,18 @@ describe("Multi-Profile Integration", () => {
                 deployment: {
                     region: "us-east-1",
                     imageTag: "stable",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -163,7 +196,18 @@ describe("Multi-Profile Integration", () => {
                 },
                 logging: {
                     level: "DEBUG",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -209,7 +253,18 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -241,7 +296,18 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -313,7 +379,18 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -394,7 +471,18 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -423,7 +511,18 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -488,7 +587,18 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -517,7 +627,18 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },
+                },        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "test_db",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "test_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        },
+
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
