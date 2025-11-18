@@ -18,6 +18,16 @@ import * as fs from "fs";
 import * as path from "path";
 
 /**
+ * Helper function to display setup command suggestion
+ */
+function suggestSetup(profileName: string, message: string): void {
+    console.log(chalk.yellow(message));
+    console.log();
+    console.log(chalk.cyan(`  npm run setup -- --profile ${profileName}`));
+    console.log();
+}
+
+/**
  * Get the most recent dev version tag (without 'v' prefix)
  * Returns null if no dev tags found
  */
@@ -297,11 +307,10 @@ export async function deploy(
         console.log();
         console.error(chalk.red("Error: Configuration is missing resolved Quilt services."));
         console.log();
-        console.log(chalk.yellow("This configuration was created with an older version of the setup wizard."));
-        console.log(chalk.yellow("Please re-run setup to resolve and cache Quilt services:"));
-        console.log();
-        console.log(chalk.cyan(`  npm run setup -- --profile ${options.profileName}`));
-        console.log();
+        suggestSetup(
+            options.profileName,
+            "This configuration was created with an older version of the setup wizard.\nPlease re-run setup to resolve and cache Quilt services:",
+        );
         process.exit(1);
     }
 
@@ -317,10 +326,7 @@ export async function deploy(
         console.log();
         console.error(chalk.red(`Error: Required service fields are missing: ${missingFields.join(", ")}`));
         console.log();
-        console.log(chalk.yellow("Please re-run setup to resolve services:"));
-        console.log();
-        console.log(chalk.cyan(`  npm run setup -- --profile ${options.profileName}`));
-        console.log();
+        suggestSetup(options.profileName, "Please re-run setup to resolve services:");
         process.exit(1);
     }
 
@@ -343,9 +349,7 @@ export async function deploy(
     if (daysSinceResolution > 30) {
         console.log();
         console.log(chalk.yellow(`⚠️  Warning: Resolved services are ${daysSinceResolution} days old (resolved at ${resolvedAt.toISOString()})`));
-        console.log(chalk.yellow("   Consider re-running setup to refresh service resolution:"));
-        console.log(chalk.cyan(`   npm run setup -- --profile ${options.profileName}`));
-        console.log();
+        suggestSetup(options.profileName, "Consider re-running setup to refresh service resolution:");
     }
 
     // Build ECR image URI for display
