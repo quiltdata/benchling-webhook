@@ -18,116 +18,6 @@
  */
 export type ProfileName = string;
 
-/**
- * Resolved Quilt Services (Cached at Setup Time)
- *
- * These values are resolved from the Quilt CloudFormation stack during setup
- * and cached in the profile configuration. At deployment time, these cached
- * values are passed directly to the container without re-querying AWS.
- *
- * **Architecture**: Setup resolves once → Deploy reads from config
- *
- * @example
- * ```json
- * {
- *   "packagerQueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-queue",
- *   "athenaUserDatabase": "quilt_catalog",
- *   "quiltWebHost": "quilt.example.com",
- *   "icebergDatabase": "quilt_iceberg",
- *   "athenaUserWorkgroup": "quilt-user-workgroup",
- *   "athenaResultsBucket": "aws-athena-query-results-123456789012-us-east-1",
- *   "icebergWorkgroup": "quilt-iceberg-workgroup",
- *   "resolvedAt": "2025-11-17T10:00:00Z",
- *   "sourceStackArn": "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123"
- * }
- * ```
- */
-export interface ResolvedQuiltServices {
-    /**
-     * SQS queue URL for package creation jobs
-     *
-     * Resolved from stack output `PackagerQueueUrl`.
-     * Passed to container as `PACKAGER_SQS_URL` environment variable.
-     *
-     * @example "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-queue"
-     */
-    packagerQueueUrl: string;
-
-    /**
-     * Athena/Glue database name for catalog metadata
-     *
-     * Resolved from stack output `UserAthenaDatabaseName`.
-     * Passed to container as `ATHENA_USER_DATABASE` environment variable.
-     *
-     * @example "quilt_catalog"
-     */
-    athenaUserDatabase: string;
-
-    /**
-     * Quilt catalog web host (without protocol)
-     *
-     * Resolved from stack output `QuiltWebHost`.
-     * Passed to container as `QUILT_WEB_HOST` environment variable.
-     *
-     * @example "quilt.example.com"
-     */
-    quiltWebHost: string;
-
-    /**
-     * Iceberg database name (optional)
-     *
-     * Resolved from stack output `IcebergDatabase` if available.
-     * Passed to container as `ICEBERG_DATABASE` environment variable.
-     *
-     * @example "quilt_iceberg"
-     */
-    icebergDatabase?: string;
-
-    /**
-     * Athena workgroup for user queries (optional)
-     *
-     * Resolved from stack output `UserAthenaWorkgroupName` if available.
-     *
-     * @example "quilt-user-workgroup"
-     */
-    athenaUserWorkgroup?: string;
-
-    /**
-     * S3 bucket for Athena query results (optional)
-     *
-     * Resolved from stack output `AthenaResultsBucketName` if available.
-     *
-     * @example "aws-athena-query-results-123456789012-us-east-1"
-     */
-    athenaResultsBucket?: string;
-
-    /**
-     * Iceberg workgroup name (optional)
-     *
-     * Resolved from stack output `IcebergWorkgroupName` if available.
-     *
-     * @example "quilt-iceberg-workgroup"
-     */
-    icebergWorkgroup?: string;
-
-    /**
-     * ISO 8601 timestamp when services were resolved
-     *
-     * Used to detect stale configuration (warn if > 30 days old).
-     *
-     * @example "2025-11-17T10:00:00Z"
-     */
-    resolvedAt: string;
-
-    /**
-     * Quilt CloudFormation stack ARN used for resolution
-     *
-     * Must match `quilt.stackArn` for validation.
-     *
-     * @example "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123"
-     */
-    sourceStackArn: string;
-}
 
 /**
  * Profile Configuration (Single Source of Truth)
@@ -161,13 +51,6 @@ export interface ResolvedQuiltServices {
  *     "region": "us-east-1",
  *     "imageTag": "latest"
  *   },
- *   "resolvedServices": {
- *     "packagerQueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-queue",
- *     "athenaUserDatabase": "quilt_catalog",
- *     "quiltWebHost": "quilt.example.com",
- *     "resolvedAt": "2025-11-17T10:00:00Z",
- *     "sourceStackArn": "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123"
- *   },
  *   "integratedStack": true,
  *   "_metadata": {
  *     "version": "0.7.0",
@@ -198,17 +81,6 @@ export interface ProfileConfig {
      * AWS deployment configuration (CDK)
      */
     deployment: DeploymentConfig;
-
-    /**
-     * Resolved Quilt services (cached at setup time)
-     *
-     * These values are passed directly to deployment without re-querying AWS.
-     * Setup wizard resolves services from CloudFormation stack and caches them here.
-     *
-     * **REQUIRED**: Must be present for deployment to succeed.
-     * If missing, user must re-run setup wizard.
-     */
-    resolvedServices: ResolvedQuiltServices;
 
     /**
      * Deployment mode flag
@@ -764,7 +636,7 @@ export const ProfileConfigSchema = {
     title: "ProfileConfig",
     description: "Benchling Webhook Profile Configuration (v0.7.0)",
     type: "object",
-    required: ["quilt", "benchling", "packages", "deployment", "resolvedServices", "_metadata"],
+    required: ["quilt", "benchling", "packages", "deployment", "_metadata"],
     properties: {
         quilt: {
             type: "object",
@@ -809,21 +681,6 @@ export const ProfileConfigSchema = {
                 account: { type: "string", pattern: "^[0-9]{12}$" },
                 ecrRepository: { type: "string" },
                 imageTag: { type: "string" },
-            },
-        },
-        resolvedServices: {
-            type: "object",
-            required: ["packagerQueueUrl", "athenaUserDatabase", "quiltWebHost", "resolvedAt", "sourceStackArn"],
-            properties: {
-                packagerQueueUrl: { type: "string", pattern: "^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/\\d{12}/.+" },
-                athenaUserDatabase: { type: "string", minLength: 1 },
-                quiltWebHost: { type: "string", minLength: 1 },
-                icebergDatabase: { type: "string", minLength: 1 },
-                athenaUserWorkgroup: { type: "string", minLength: 1 },
-                athenaResultsBucket: { type: "string", minLength: 1 },
-                icebergWorkgroup: { type: "string", minLength: 1 },
-                resolvedAt: { type: "string", format: "date-time" },
-                sourceStackArn: { type: "string", pattern: "^arn:aws:cloudformation:" },
             },
         },
         integratedStack: { type: "boolean" },
