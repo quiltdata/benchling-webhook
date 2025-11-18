@@ -203,11 +203,6 @@ export async function setupProfileCommand(
             ...baseConfig.deployment,
             imageTag: answers.imageTag,
         },
-        resolvedServices: {
-            ...baseConfig.resolvedServices,
-            // Update resolvedAt timestamp for the new profile
-            resolvedAt: new Date().toISOString(),
-        },
         logging: baseConfig.logging,
         security: baseConfig.security,
         _metadata: {
