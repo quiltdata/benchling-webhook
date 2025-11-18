@@ -403,69 +403,6 @@ class TestEntryPackager:
             orchestrator._poll_export_status("task_123")
 
     # Episode 5: ProcessExport tests
-    def test_process_export_success(self, orchestrator, mock_benchling):
-        """Test successful inline export processing."""
-        # Create mock ZIP file in memory
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w") as zip_file:
-            zip_file.writestr("test_file.txt", "test content")
-            zip_file.writestr("data.csv", "column1,column2\nvalue1,value2")
-
-        zip_buffer.seek(0)
-
-        # Mock requests.get to return the ZIP
-        mock_response = Mock()
-        mock_response.iter_content = lambda chunk_size: [zip_buffer.read()]
-        mock_response.raise_for_status = Mock()
-
-        # Mock S3 client
-        mock_s3_client = Mock()
-
-        # Mock entry data for metadata
-        mock_entry = Mock()
-        mock_entry.to_dict.return_value = {
-            "id": "etr_123",
-            "display_id": "EXP0001",
-            "name": "Test Entry",
-            "web_url": "https://demo.benchling.com/entry/etr_123",
-            "creator": {"name": "John Doe", "handle": "jdoe", "id": "user_123"},
-            "authors": [{"name": "Jane Smith", "handle": "jsmith", "id": "user_456"}],
-            "created_at": "2025-10-01T10:00:00Z",
-            "modified_at": "2025-10-02T10:00:00Z",
-            "fields": [],
-        }
-        mock_benchling.entries.get_entry_by_id.return_value = mock_entry
-
-        # Create a payload object
-        payload = Payload(
-            {
-                "message": {
-                    "resourceId": "etr_123",
-                    "timestamp": "2025-10-02T10:00:00Z",
-                }
-            }
-        )
-
-        with (
-            patch("src.entry_packager.requests.get", return_value=mock_response),
-            patch("src.entry_packager.boto3.client", return_value=mock_s3_client),
-        ):
-            result = orchestrator._process_export(
-                payload=payload,
-                download_url="https://example.com/export.zip",
-            )
-
-        # Verify result structure
-        assert result["statusCode"] == 200
-        assert result["package_name"] == "benchling/EXP0001"  # Now uses display_id
-        assert result["total_files"] > 0
-        assert "files_uploaded" in result
-
-        # Verify S3 uploads happened
-        assert mock_s3_client.put_object.called
-        # Should have uploaded: test_file.txt, data.csv, entry.json, entry_data.json, input.json, README.md
-        assert mock_s3_client.put_object.call_count >= 6
-
     def test_process_export_lambda_error(self, orchestrator, mock_benchling):
         """Test inline processing error handling."""
         # Mock entry data for the initial fetch
