@@ -113,6 +113,38 @@ function parseTimeRange(since: string): number {
 }
 
 /**
+ * Format milliseconds to human-readable time range string
+ */
+function formatTimeRange(ms: number): string {
+    const minutes = ms / (60 * 1000);
+    const hours = minutes / 60;
+    const days = hours / 24;
+
+    if (days >= 1) {
+        return `${Math.round(days)}d`;
+    } else if (hours >= 1) {
+        return `${Math.round(hours)}h`;
+    } else {
+        return `${Math.round(minutes)}m`;
+    }
+}
+
+/**
+ * Double the time range, capping at 7 days
+ */
+function expandTimeRange(currentSince: string): string {
+    const currentMs = parseTimeRange(currentSince);
+    const doubledMs = currentMs * 2;
+    const maxMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+    if (doubledMs >= maxMs) {
+        return "7d";
+    }
+
+    return formatTimeRange(doubledMs);
+}
+
+/**
  * Parse timer value (string or number) and returns interval in milliseconds
  * Returns null if timer is disabled (0 or non-numeric string)
  */
@@ -145,11 +177,12 @@ function clearScreen(): void {
 }
 
 /**
- * Get log group names from CloudFormation stack outputs
+ * Get log group names from CloudFormation stack outputs or ECS services
  */
 async function getLogGroupsFromStack(
     stackName: string,
     region: string,
+    integratedMode: boolean,
     awsProfile?: string,
 ): Promise<{ ecsLogGroup?: string; apiLogGroup?: string; apiExecLogGroup?: string }> {
     try {
@@ -157,8 +190,78 @@ async function getLogGroupsFromStack(
         if (awsProfile) {
             clientConfig.credentials = fromIni({ profile: awsProfile });
         }
-        const cfClient = new CloudFormationClient(clientConfig);
 
+        // For integrated mode, discover log groups from ECS services
+        if (integratedMode) {
+            const { CloudFormationClient: CF, DescribeStackResourcesCommand } = await import("@aws-sdk/client-cloudformation");
+            const { ECSClient, DescribeServicesCommand, DescribeTaskDefinitionCommand } = await import("@aws-sdk/client-ecs");
+
+            const cfClient = new CF(clientConfig);
+            const ecsClient = new ECSClient(clientConfig);
+
+            // Find ECS resources in stack
+            const resourcesCommand = new DescribeStackResourcesCommand({
+                StackName: stackName,
+            });
+            const resourcesResponse = await cfClient.send(resourcesCommand);
+
+            const ecsServices = resourcesResponse.StackResources?.filter(
+                (r) => r.ResourceType === "AWS::ECS::Service",
+            ) || [];
+
+            if (ecsServices.length === 0) {
+                return {};
+            }
+
+            // Find the benchling service specifically
+            const benchlingService = ecsServices.find((s) =>
+                s.LogicalResourceId?.toLowerCase().includes("benchling") &&
+                !s.LogicalResourceId?.toLowerCase().includes("bulk") &&
+                !s.LogicalResourceId?.toLowerCase().includes("scanner"),
+            );
+
+            if (!benchlingService?.PhysicalResourceId) {
+                return {};
+            }
+
+            // Get cluster name
+            const clusterResource = resourcesResponse.StackResources?.find(
+                (r) => r.ResourceType === "AWS::ECS::Cluster",
+            );
+            const clusterName = clusterResource?.PhysicalResourceId || stackName;
+
+            // Describe the service to get task definition
+            const servicesCommand = new DescribeServicesCommand({
+                cluster: clusterName,
+                services: [benchlingService.PhysicalResourceId],
+            });
+            const servicesResponse = await ecsClient.send(servicesCommand);
+
+            const service = servicesResponse.services?.[0];
+            const taskDefArn = service?.deployments?.[0]?.taskDefinition;
+
+            if (!taskDefArn) {
+                return {};
+            }
+
+            // Get task definition to extract log group
+            const taskDefCommand = new DescribeTaskDefinitionCommand({
+                taskDefinition: taskDefArn,
+            });
+            const taskDefResponse = await ecsClient.send(taskDefCommand);
+
+            const logConfig = taskDefResponse.taskDefinition?.containerDefinitions?.[0]?.logConfiguration;
+            if (logConfig?.logDriver === "awslogs") {
+                return {
+                    ecsLogGroup: logConfig.options?.["awslogs-group"],
+                };
+            }
+
+            return {};
+        }
+
+        // For standalone mode, use stack outputs
+        const cfClient = new CloudFormationClient(clientConfig);
         const command = new DescribeStacksCommand({ StackName: stackName });
         const response = await cfClient.send(command);
         const stack = response.Stacks?.[0];
@@ -223,6 +326,7 @@ function displayLogs(
     region: string,
     since: string,
     limit: number,
+    expanded?: boolean,
 ): void {
     const now = new Date();
     const timeStr = now.toLocaleString("en-US", {
@@ -238,7 +342,7 @@ function displayLogs(
 
     console.log(chalk.bold(`\nLogs for Profile: ${profile} @ ${timeStr} (${timezone})\n`));
     console.log(chalk.dim("─".repeat(80)));
-    console.log(`${chalk.bold("Region:")} ${chalk.cyan(region)}  ${chalk.bold("Time Range:")} ${chalk.cyan(`Last ${since}`)}`);
+    console.log(`${chalk.bold("Region:")} ${chalk.cyan(region)}  ${chalk.bold("Time Range:")} ${chalk.cyan(`Last ${since}`)}${expanded ? chalk.yellow(" (auto-expanded)") : ""}`);
     console.log(`${chalk.bold("Showing:")} ${chalk.cyan(`Last ~${limit} entries per log group`)}`);
     console.log(chalk.dim("─".repeat(80)));
     console.log("");
@@ -300,11 +404,12 @@ async function fetchAllLogs(
     since: string,
     limit: number,
     type: string,
+    integratedMode: boolean,
     filterPattern?: string,
     awsProfile?: string,
 ): Promise<LogGroupInfo[]> {
     // Get log groups from stack
-    const logGroups = await getLogGroupsFromStack(stackName, region, awsProfile);
+    const logGroups = await getLogGroupsFromStack(stackName, region, integratedMode, awsProfile);
 
     const result: LogGroupInfo[] = [];
 
@@ -333,7 +438,7 @@ async function fetchAllLogs(
         }
 
         if (!logGroupName) {
-            console.warn(chalk.dim(`Log group for type '${logType}' not found in stack outputs`));
+            // Don't warn on first attempt, we'll handle it at the result level
             continue;
         }
 
@@ -430,6 +535,8 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
 
         let result: LogsResult = { success: true };
         let isFirstRun = true;
+        let currentSince = since;
+        let wasExpanded = false;
 
         // Watch loop
         while (true) {
@@ -442,17 +549,85 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
             const logGroups = await fetchAllLogs(
                 stackName,
                 region,
-                since,
+                currentSince,
                 limit,
                 type,
+                integratedMode,
                 filter,
                 awsProfile,
             );
 
+            // Check if any log group has entries
+            const totalEntries = logGroups.reduce((sum, lg) => sum + lg.entries.length, 0);
+            const hasLogs = totalEntries > 0;
+            const hasLogGroups = logGroups.length > 0;
+
+            // If no log groups found at all, show error and exit
+            if (!hasLogGroups) {
+                console.error(chalk.red("\n❌ No log groups found in stack outputs."));
+                console.log(chalk.dim("   This could mean:"));
+                console.log(chalk.dim("   - The stack hasn't been deployed yet"));
+                console.log(chalk.dim("   - Log groups haven't been created"));
+                console.log(chalk.dim(`   - Stack name might be incorrect: ${stackName}\n`));
+
+                // Don't loop if there are no log groups
+                if (!refreshInterval) {
+                    break;
+                }
+
+                // Wait before retrying
+                const totalSeconds = Math.floor(refreshInterval / 1000);
+                const spinner = ora({
+                    text: chalk.dim(`⟳ Retrying in ${totalSeconds} second${totalSeconds !== 1 ? "s" : ""}... (Ctrl+C to exit)`),
+                    color: "gray",
+                }).start();
+
+                for (let i = totalSeconds; i > 0; i--) {
+                    spinner.text = chalk.dim(`⟳ Retrying in ${i} second${i !== 1 ? "s" : ""}... (Ctrl+C to exit)`);
+                    await sleep(1000);
+                    if (shouldExit) break;
+                }
+
+                spinner.stop();
+
+                if (shouldExit) {
+                    break;
+                }
+
+                isFirstRun = false;
+                continue;
+            }
+
+            // Smart expansion: if no logs found and not at max, expand time window
+            if (!hasLogs && currentSince !== "7d") {
+                const nextSince = expandTimeRange(currentSince);
+                console.log(chalk.yellow(`⚠️  No logs found in last ${currentSince}. Expanding to ${nextSince}...\n`));
+                currentSince = nextSince;
+                wasExpanded = true;
+
+                // Small delay before retry
+                await sleep(500);
+                continue;
+            }
+
             // Display logs
-            displayLogs(logGroups, profile, region, since, limit);
+            displayLogs(logGroups, profile, region, currentSince, limit, wasExpanded);
 
             result.logGroups = logGroups;
+
+            // If no logs found at max range, show helpful message
+            if (!hasLogs && currentSince === "7d") {
+                console.log(chalk.yellow("\n💡 No logs found in the last 7 days."));
+                console.log(chalk.dim("   This could mean:"));
+                console.log(chalk.dim("   - The service hasn't received any requests"));
+                console.log(chalk.dim("   - Logging is not configured correctly"));
+                console.log(chalk.dim("   - No activity has occurred in this time period\n"));
+            }
+
+            // Reset expansion flag if we found logs
+            if (hasLogs) {
+                wasExpanded = false;
+            }
 
             // Check if we should exit (no timer)
             if (!refreshInterval) {
