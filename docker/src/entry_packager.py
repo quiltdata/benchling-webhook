@@ -20,6 +20,7 @@ import structlog
 from benchling_sdk.benchling import Benchling
 from benchling_sdk.models import ExportItemRequest
 
+from .auth import RoleManager
 from .config import get_config
 from .payload import Payload
 from .retry_utils import LAMBDA_INVOKE_RETRY, REST_API_RETRY
@@ -170,6 +171,13 @@ class EntryPackager:
 
         # AWS clients (Lambda removed - now inline processing)
         self.sqs_client = boto3.client("sqs", region_name=self.config.aws_region)
+
+        # Initialize RoleManager for cross-account S3 access
+        self.role_manager = RoleManager(
+            read_role_arn=self.config.quilt_read_role_arn or None,
+            write_role_arn=self.config.quilt_write_role_arn or None,
+            region=self.config.aws_region,
+        )
 
     @REST_API_RETRY
     def _fetch_entry_data(self, entry_id: str) -> Dict[str, Any]:
@@ -459,8 +467,8 @@ class EntryPackager:
                 zip_path = temp_file.name
 
             try:
-                # Initialize S3 client
-                s3_client = boto3.client("s3", region_name=self.config.aws_region)
+                # Initialize S3 client with role assumption (write access needed)
+                s3_client = self.role_manager.get_s3_client(read_only=False)
                 uploaded_files = []
 
                 # Extract and upload files from ZIP
