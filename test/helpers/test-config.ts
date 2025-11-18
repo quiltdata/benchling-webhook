@@ -49,6 +49,17 @@ export function createMockConfig(overrides?: Partial<ProfileConfig>): ProfileCon
             webhookAllowList: "",
             enableVerification: true,
         },
+        resolvedServices: {
+            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            athenaUserDatabase: "quilt_catalog",
+            quiltWebHost: "quilt.example.com",
+            icebergDatabase: "quilt_iceberg",
+            athenaUserWorkgroup: "primary",
+            athenaResultsBucket: "test-athena-results",
+            icebergWorkgroup: "iceberg-workgroup",
+            resolvedAt: "2025-11-04T10:00:00Z",
+            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/test-123",
+        },
         _metadata: {
             version: "0.7.0",
             createdAt: "2025-11-04T10:00:00Z",
