@@ -20,8 +20,7 @@ describe("IAM Role ARN Propagation", () => {
                 database: "quilt_catalog",
                 queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-queue",
                 region: "us-east-1",
-                // Test role ARNs
-                readRoleArn: "arn:aws:iam::123456789012:role/quilt-stack-T4BucketReadRole-ABC123",
+                // Test role ARN (single write role used for all operations)
                 writeRoleArn: "arn:aws:iam::123456789012:role/quilt-stack-T4BucketWriteRole-XYZ789",
             },
             benchling: {
@@ -49,7 +48,7 @@ describe("IAM Role ARN Propagation", () => {
         };
     });
 
-    test("IAM role ARNs are added to container environment variables", () => {
+    test("IAM role ARN is added to container environment variables", () => {
         const stack = new BenchlingWebhookStack(app, "TestStack", {
             env: {
                 account: "123456789012",
@@ -60,15 +59,11 @@ describe("IAM Role ARN Propagation", () => {
 
         const template = Template.fromStack(stack);
 
-        // Check that environment variables are set in the container definition
+        // Check that environment variable is set in the container definition
         template.hasResourceProperties("AWS::ECS::TaskDefinition", {
             ContainerDefinitions: [
                 Match.objectLike({
                     Environment: Match.arrayWith([
-                        Match.objectLike({
-                            Name: "QUILT_READ_ROLE_ARN",
-                            Value: "arn:aws:iam::123456789012:role/quilt-stack-T4BucketReadRole-ABC123",
-                        }),
                         Match.objectLike({
                             Name: "QUILT_WRITE_ROLE_ARN",
                             Value: "arn:aws:iam::123456789012:role/quilt-stack-T4BucketWriteRole-XYZ789",
@@ -79,7 +74,7 @@ describe("IAM Role ARN Propagation", () => {
         });
     });
 
-    test("Task role has sts:AssumeRole permission for Quilt roles", () => {
+    test("Task role has sts:AssumeRole permission for Quilt write role", () => {
         const stack = new BenchlingWebhookStack(app, "TestStack", {
             env: {
                 account: "123456789012",
@@ -90,26 +85,22 @@ describe("IAM Role ARN Propagation", () => {
 
         const template = Template.fromStack(stack);
 
-        // Check that the task role has the correct IAM policy for assuming roles
+        // Check that the task role has the correct IAM policy for assuming write role
         template.hasResourceProperties("AWS::IAM::Policy", {
             PolicyDocument: {
                 Statement: Match.arrayWith([
                     Match.objectLike({
                         Action: "sts:AssumeRole",
                         Effect: "Allow",
-                        Resource: [
-                            "arn:aws:iam::*:role/*-T4BucketReadRole-*",
-                            "arn:aws:iam::*:role/*-T4BucketWriteRole-*",
-                        ],
+                        Resource: "arn:aws:iam::*:role/*-T4BucketWriteRole-*",
                     }),
                 ]),
             },
         });
     });
 
-    test("Environment variables are not added when role ARNs are not provided", () => {
-        // Remove role ARNs from config
-        delete config.quilt.readRoleArn;
+    test("Environment variables are not added when role ARN is not provided", () => {
+        // Remove role ARN from config
         delete config.quilt.writeRoleArn;
 
         const stack = new BenchlingWebhookStack(app, "TestStack", {
@@ -122,14 +113,14 @@ describe("IAM Role ARN Propagation", () => {
 
         const template = Template.fromStack(stack);
 
-        // Check that environment variables are NOT set when role ARNs are missing
+        // Check that environment variable is NOT set when role ARN is missing
         template.hasResourceProperties("AWS::ECS::TaskDefinition", {
             ContainerDefinitions: [
                 Match.objectLike({
                     Environment: Match.not(
                         Match.arrayWith([
                             Match.objectLike({
-                                Name: "QUILT_READ_ROLE_ARN",
+                                Name: "QUILT_WRITE_ROLE_ARN",
                             }),
                         ])
                     ),
@@ -138,9 +129,8 @@ describe("IAM Role ARN Propagation", () => {
         });
     });
 
-    test("IAM policy is not added when role ARNs are not provided", () => {
-        // Remove role ARNs from config
-        delete config.quilt.readRoleArn;
+    test("IAM policy is not added when role ARN is not provided", () => {
+        // Remove role ARN from config
         delete config.quilt.writeRoleArn;
 
         const stack = new BenchlingWebhookStack(app, "TestStack", {
@@ -153,17 +143,14 @@ describe("IAM Role ARN Propagation", () => {
 
         const template = Template.fromStack(stack);
 
-        // Check that the sts:AssumeRole policy is NOT added when role ARNs are missing
+        // Check that the sts:AssumeRole policy is NOT added when role ARN is missing
         template.hasResourceProperties("AWS::IAM::Policy", {
             PolicyDocument: {
                 Statement: Match.not(
                     Match.arrayWith([
                         Match.objectLike({
                             Action: "sts:AssumeRole",
-                            Resource: [
-                                "arn:aws:iam::*:role/*-T4BucketReadRole-*",
-                                "arn:aws:iam::*:role/*-T4BucketWriteRole-*",
-                            ],
+                            Resource: "arn:aws:iam::*:role/*-T4BucketWriteRole-*",
                         }),
                     ])
                 ),
