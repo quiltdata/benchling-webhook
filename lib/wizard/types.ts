@@ -7,7 +7,7 @@
  * @module wizard/types
  */
 
-import { ProfileConfig, ResolvedQuiltServices } from "../types/config";
+import { ProfileConfig } from "../types/config";
 import { XDGBase } from "../xdg-base";
 
 /**
@@ -56,14 +56,6 @@ export interface StackQueryResult {
     athenaResultsBucket?: string;
     /** User Athena results bucket policy ARN */
     athenaResultsBucketPolicy?: string;
-    /**
-     * Resolved Quilt services (cached at setup time)
-     *
-     * These values are resolved from CloudFormation stack outputs during Phase 2
-     * and cached in the profile configuration. At deployment time, these cached
-     * values are passed directly to the container without re-querying AWS.
-     */
-    resolvedServices?: ResolvedQuiltServices;
 }
 
 /**

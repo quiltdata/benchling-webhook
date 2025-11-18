@@ -3,16 +3,13 @@
  *
  * Queries CloudFormation stack for the confirmed catalog and extracts
  * all available parameters including BenchlingSecret ARN.
- * ALSO resolves and caches Quilt services for deployment-time usage.
  *
  * @module wizard/phase2-stack-query
  */
 
 import chalk from "chalk";
 import { inferQuiltConfig } from "../../bin/commands/infer-quilt-config";
-import { resolveQuiltServices } from "../utils/service-resolver";
 import { StackQueryResult } from "./types";
-import { ResolvedQuiltServices } from "../types/config";
 
 /**
  * Phase 2 options
@@ -32,13 +29,12 @@ export interface StackQueryOptions {
  * Responsibilities:
  * - Query CloudFormation stack for the confirmed catalog
  * - Extract ALL available parameters from stack
- * - Resolve and cache Quilt services for deployment
  * - Handle stack query failures gracefully
- * - Return stack configuration with cached services
+ * - Return stack configuration
  *
  * @param catalogDns - Confirmed catalog DNS name
  * @param options - Stack query options
- * @returns Stack query result with cached resolved services
+ * @returns Stack query result
  */
 export async function runStackQuery(
     catalogDns: string,
@@ -133,50 +129,6 @@ export async function runStackQuery(
 
         console.log("");
 
-        // NEW: Resolve Quilt services and cache them for deployment
-        console.log(chalk.cyan("Resolving Quilt services from CloudFormation stack...\n"));
-        let resolvedServices: ResolvedQuiltServices | undefined;
-
-        try {
-            const services = await resolveQuiltServices({ stackArn });
-
-            // Build ResolvedQuiltServices with timestamp and source
-            resolvedServices = {
-                packagerQueueUrl: services.packagerQueueUrl,
-                athenaUserDatabase: services.athenaUserDatabase,
-                quiltWebHost: services.quiltWebHost,
-                icebergDatabase: services.icebergDatabase,
-                athenaUserWorkgroup: services.athenaUserWorkgroup,
-                athenaResultsBucket: services.athenaResultsBucket,
-                icebergWorkgroup: services.icebergWorkgroup,
-                resolvedAt: new Date().toISOString(),
-                sourceStackArn: stackArn,
-            };
-
-            console.log(chalk.green("✓ Services resolved and cached for deployment\n"));
-            console.log(chalk.dim(`  Packager Queue: ${resolvedServices.packagerQueueUrl}`));
-            console.log(chalk.dim(`  Athena Database: ${resolvedServices.athenaUserDatabase}`));
-            console.log(chalk.dim(`  Quilt Web Host: ${resolvedServices.quiltWebHost}`));
-            if (resolvedServices.icebergDatabase) {
-                console.log(chalk.dim(`  Iceberg Database: ${resolvedServices.icebergDatabase}`));
-            }
-            if (resolvedServices.icebergWorkgroup) {
-                console.log(chalk.dim(`  Iceberg Workgroup: ${resolvedServices.icebergWorkgroup}`));
-            }
-            if (resolvedServices.athenaUserWorkgroup) {
-                console.log(chalk.dim(`  Athena Workgroup: ${resolvedServices.athenaUserWorkgroup}`));
-            }
-            if (resolvedServices.athenaResultsBucket) {
-                console.log(chalk.dim(`  Athena Results Bucket: ${resolvedServices.athenaResultsBucket}`));
-            }
-            console.log("");
-        } catch (error) {
-            // Service resolution failed - log warning but don't fail setup
-            // This allows setup to continue even if service resolution has issues
-            console.log(chalk.yellow(`⚠ Service resolution failed: ${(error as Error).message}`));
-            console.log(chalk.yellow("  Setup will continue, but deployment may require manual configuration\n"));
-        }
-
         return {
             stackArn,
             catalog: normalizedConfirmed,
@@ -193,7 +145,6 @@ export async function runStackQuery(
             athenaResultsBucket,
             athenaResultsBucketPolicy,
             stackQuerySucceeded: true,
-            resolvedServices, // Include cached services
         };
     } catch (error) {
         const errorMessage = (error as Error).message;
@@ -210,7 +161,6 @@ export async function runStackQuery(
             benchlingSecretArn: undefined,
             benchlingIntegrationEnabled: undefined,
             stackQuerySucceeded: false,
-            resolvedServices: undefined, // No services if stack query failed
         };
     }
 }
