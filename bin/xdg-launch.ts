@@ -193,6 +193,10 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         ICEBERG_WORKGROUP: config.quilt.icebergWorkgroup || "",
         PACKAGER_SQS_URL: config.quilt.queueUrl,
 
+        // IAM Role ARNs for cross-account S3 access (optional)
+        QUILT_READ_ROLE_ARN: config.quilt.readRoleArn || "",
+        QUILT_WRITE_ROLE_ARN: config.quilt.writeRoleArn || "",
+
         // AWS Configuration
         AWS_REGION: config.quilt.region || config.deployment.region,
         AWS_DEFAULT_REGION: config.quilt.region || config.deployment.region,

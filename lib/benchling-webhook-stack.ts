@@ -187,6 +187,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
             icebergWorkgroup: icebergWorkgroupValue,
             athenaUserWorkgroup: athenaUserWorkgroupValue,
             athenaResultsBucket: athenaResultsBucketValue,
+            // NEW: Optional IAM role ARNs for cross-account S3 access
+            readRoleArn: config.quilt.readRoleArn,
+            writeRoleArn: config.quilt.writeRoleArn,
             // Legacy parameters
             benchlingSecret: benchlingSecretValue,
             packageBucket: packageBucketValue,
