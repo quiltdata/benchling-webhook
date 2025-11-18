@@ -100,11 +100,10 @@ describe("statusCommand", () => {
         },
         deployment: {
             region: "us-east-1",
-                },
             account: "123456789012",
         },
         integratedStack: true,
-                _metadata: {
+        _metadata: {
             version: "0.7.0",
             createdAt: "2025-11-13T00:00:00Z",
             updatedAt: "2025-11-13T00:00:00Z",
@@ -875,11 +874,10 @@ describe("Auto-refresh Timer Functionality", () => {
         },
         deployment: {
             region: "us-east-1",
-                },
             account: "123456789012",
         },
         integratedStack: true,
-                _metadata: {
+        _metadata: {
             version: "0.7.0",
             createdAt: "2025-11-13T00:00:00Z",
             updatedAt: "2025-11-13T00:00:00Z",
@@ -1077,11 +1075,10 @@ describe("Health Check Functions", () => {
         },
         deployment: {
             region: "us-east-1",
-                },
             account: "123456789012",
         },
         integratedStack: true,
-                _metadata: {
+        _metadata: {
             version: "0.7.0",
             createdAt: "2025-11-13T00:00:00Z",
             updatedAt: "2025-11-13T00:00:00Z",
