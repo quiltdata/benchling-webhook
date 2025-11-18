@@ -43,18 +43,7 @@ describe("Multi-Profile Integration", () => {
                 deployment: {
                     region: "us-east-1",
                     imageTag: "0.7.0",
-                },        resolvedServices: {
-            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            athenaUserDatabase: "test_db",
-            quiltWebHost: "quilt.example.com",
-            icebergDatabase: "test_iceberg",
-            athenaUserWorkgroup: "primary",
-            athenaResultsBucket: "test-athena-results",
-            icebergWorkgroup: "iceberg-workgroup",
-            resolvedAt: "2025-11-04T10:00:00Z",
-            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-        },
-
+                },
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -86,22 +75,12 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
+                },
                     imageTag: "latest",
                 },
                 logging: {
                     level: "DEBUG",
-                },        resolvedServices: {
-            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            athenaUserDatabase: "test_db",
-            quiltWebHost: "quilt.example.com",
-            icebergDatabase: "test_iceberg",
-            athenaUserWorkgroup: "primary",
-            athenaResultsBucket: "test-athena-results",
-            icebergWorkgroup: "iceberg-workgroup",
-            resolvedAt: "2025-11-04T10:00:00Z",
-            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-        },
-
+                },
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -147,19 +126,8 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
+                },
                     imageTag: "stable",
-                },        resolvedServices: {
-            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            athenaUserDatabase: "test_db",
-            quiltWebHost: "quilt.example.com",
-            icebergDatabase: "test_iceberg",
-            athenaUserWorkgroup: "primary",
-            athenaResultsBucket: "test-athena-results",
-            icebergWorkgroup: "iceberg-workgroup",
-            resolvedAt: "2025-11-04T10:00:00Z",
-            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-        },
-
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -192,22 +160,12 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
+                },
                     imageTag: "latest",
                 },
                 logging: {
                     level: "DEBUG",
-                },        resolvedServices: {
-            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            athenaUserDatabase: "test_db",
-            quiltWebHost: "quilt.example.com",
-            icebergDatabase: "test_iceberg",
-            athenaUserWorkgroup: "primary",
-            athenaResultsBucket: "test-athena-results",
-            icebergWorkgroup: "iceberg-workgroup",
-            resolvedAt: "2025-11-04T10:00:00Z",
-            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-        },
-
+                },
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -253,18 +211,7 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },        resolvedServices: {
-            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            athenaUserDatabase: "test_db",
-            quiltWebHost: "quilt.example.com",
-            icebergDatabase: "test_iceberg",
-            athenaUserWorkgroup: "primary",
-            athenaResultsBucket: "test-athena-results",
-            icebergWorkgroup: "iceberg-workgroup",
-            resolvedAt: "2025-11-04T10:00:00Z",
-            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-        },
-
+                },
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -296,18 +243,7 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },        resolvedServices: {
-            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            athenaUserDatabase: "test_db",
-            quiltWebHost: "quilt.example.com",
-            icebergDatabase: "test_iceberg",
-            athenaUserWorkgroup: "primary",
-            athenaResultsBucket: "test-athena-results",
-            icebergWorkgroup: "iceberg-workgroup",
-            resolvedAt: "2025-11-04T10:00:00Z",
-            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-        },
-
+                },
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -326,6 +262,7 @@ describe("Multi-Profile Integration", () => {
                 endpoint: "https://prod.execute-api.us-east-1.amazonaws.com/prod",
                 stackName: "BenchlingWebhookStack-Prod",
                 region: "us-east-1",
+                },
                 deployedBy: "ernest@example.com",
                 commit: "abc123",
             };
@@ -340,6 +277,7 @@ describe("Multi-Profile Integration", () => {
                 endpoint: "https://dev.execute-api.us-east-1.amazonaws.com/dev",
                 stackName: "BenchlingWebhookStack-Dev",
                 region: "us-east-1",
+                },
                 deployedBy: "ernest@example.com",
                 commit: "xyz789",
             };
@@ -379,18 +317,7 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },        resolvedServices: {
-            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            athenaUserDatabase: "test_db",
-            quiltWebHost: "quilt.example.com",
-            icebergDatabase: "test_iceberg",
-            athenaUserWorkgroup: "primary",
-            athenaResultsBucket: "test-athena-results",
-            icebergWorkgroup: "iceberg-workgroup",
-            resolvedAt: "2025-11-04T10:00:00Z",
-            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-        },
-
+                },
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -409,6 +336,7 @@ describe("Multi-Profile Integration", () => {
                 endpoint: "https://dev.execute-api.us-east-1.amazonaws.com/dev",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
+                },
             };
 
             mockStorage.recordDeployment("default", devDeployment);
@@ -421,6 +349,7 @@ describe("Multi-Profile Integration", () => {
                 endpoint: "https://staging.execute-api.us-east-1.amazonaws.com/staging",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
+                },
             };
 
             mockStorage.recordDeployment("default", stagingDeployment);
@@ -433,6 +362,7 @@ describe("Multi-Profile Integration", () => {
                 endpoint: "https://prod.execute-api.us-east-1.amazonaws.com/prod",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
+                },
             };
 
             mockStorage.recordDeployment("default", prodDeployment);
@@ -471,18 +401,7 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },        resolvedServices: {
-            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            athenaUserDatabase: "test_db",
-            quiltWebHost: "quilt.example.com",
-            icebergDatabase: "test_iceberg",
-            athenaUserWorkgroup: "primary",
-            athenaResultsBucket: "test-athena-results",
-            icebergWorkgroup: "iceberg-workgroup",
-            resolvedAt: "2025-11-04T10:00:00Z",
-            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-        },
-
+                },
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -511,18 +430,7 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },        resolvedServices: {
-            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            athenaUserDatabase: "test_db",
-            quiltWebHost: "quilt.example.com",
-            icebergDatabase: "test_iceberg",
-            athenaUserWorkgroup: "primary",
-            athenaResultsBucket: "test-athena-results",
-            icebergWorkgroup: "iceberg-workgroup",
-            resolvedAt: "2025-11-04T10:00:00Z",
-            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-        },
-
+                },
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
@@ -552,6 +460,7 @@ describe("Multi-Profile Integration", () => {
                 endpoint: "https://dev.execute-api.us-east-1.amazonaws.com/dev",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
+                },
             };
 
             mockStorage.recordDeployment("dev", deployment);
@@ -587,18 +496,7 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },        resolvedServices: {
-            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            athenaUserDatabase: "test_db",
-            quiltWebHost: "quilt.example.com",
-            icebergDatabase: "test_iceberg",
-            athenaUserWorkgroup: "primary",
-            athenaResultsBucket: "test-athena-results",
-            icebergWorkgroup: "iceberg-workgroup",
-            resolvedAt: "2025-11-04T10:00:00Z",
-            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-        },
-
+                },
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T10:00:00Z",
@@ -627,18 +525,7 @@ describe("Multi-Profile Integration", () => {
                 },
                 deployment: {
                     region: "us-east-1",
-                },        resolvedServices: {
-            packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            athenaUserDatabase: "test_db",
-            quiltWebHost: "quilt.example.com",
-            icebergDatabase: "test_iceberg",
-            athenaUserWorkgroup: "primary",
-            athenaResultsBucket: "test-athena-results",
-            icebergWorkgroup: "iceberg-workgroup",
-            resolvedAt: "2025-11-04T10:00:00Z",
-            sourceStackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
-        },
-
+                },
                 _metadata: {
                     version: "0.7.0",
                     createdAt: "2025-11-04T11:00:00Z",
