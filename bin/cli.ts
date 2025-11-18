@@ -175,7 +175,6 @@ program
     .command("logs")
     .description("View CloudWatch logs from deployed webhook integration")
     .option("--profile <name>", "Configuration profile to use (default: default)")
-    .option("--stage <name>", "Deployment stage: dev or prod (default: prod)")
     .option("--aws-profile <name>", "AWS credentials profile")
     .option(
         "--type <type>",
@@ -188,8 +187,8 @@ program
         "5m",
     )
     .option("--filter <pattern>", "Filter logs by pattern (example: ERROR)")
-    .option("--follow, -f", "Follow log output in real-time (not available with --type=all)")
-    .option("--tail <n>", "Number of lines to show (default: 100, only without --follow)", "100")
+    .option("--limit <n>", "Number of log entries to show per log group (default: 5)", "5")
+    .option("--timer <seconds>", "Auto-refresh interval in seconds (default: 10, use 0 to disable)", "10")
     .addHelpText(
         "after",
         `
@@ -201,26 +200,36 @@ Log Types:
   api-exec  API Gateway execution logs (detailed debugging)
 
 Examples:
-  View all logs from prod deployment:
+  View all logs (auto-refreshes every 10 seconds):
     $ npx @quiltdata/benchling-webhook logs --profile sales
 
-  View ECS logs from dev stage:
-    $ npx @quiltdata/benchling-webhook logs --profile sales --stage dev --type ecs
+  View only ECS logs:
+    $ npx @quiltdata/benchling-webhook logs --profile sales --type ecs
 
-  Follow ECS logs in real-time:
-    $ npx @quiltdata/benchling-webhook logs --profile sales --type ecs --follow
+  Show last 10 entries per log group:
+    $ npx @quiltdata/benchling-webhook logs --profile sales --limit 10
+
+  Disable auto-refresh (single snapshot):
+    $ npx @quiltdata/benchling-webhook logs --profile sales --timer 0
+
+  Auto-refresh every 5 seconds:
+    $ npx @quiltdata/benchling-webhook logs --profile sales --timer 5
 
   Filter for errors in last hour:
     $ npx @quiltdata/benchling-webhook logs --profile sales --since 1h --filter ERROR
 
-  View API Gateway execution logs:
-    $ npx @quiltdata/benchling-webhook logs --profile sales --type api-exec --tail 50
+  View last 2 days of API Gateway logs:
+    $ npx @quiltdata/benchling-webhook logs --profile sales --type api --since 2d
 
 For more information: https://github.com/quiltdata/benchling-webhook#viewing-logs
 `,
     )
     .action(async (options) => {
         try {
+            // Parse limit as integer
+            if (options.limit) {
+                options.limit = parseInt(options.limit, 10);
+            }
             await logsCommand(options);
         } catch (error) {
             console.error(chalk.red((error as Error).message));

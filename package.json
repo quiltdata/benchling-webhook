@@ -93,6 +93,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-cloudformation": "^3.920.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.933.0",
     "@aws-sdk/client-ecs": "^3.932.0",
     "@aws-sdk/client-elastic-load-balancing-v2": "^3.932.0",
     "@aws-sdk/client-s3": "^3.758.0",
