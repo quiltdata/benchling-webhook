@@ -5,9 +5,8 @@ Exports Benchling entries, packages them with metadata, uploads to S3,
 and queues them for Quilt package creation via SQS.
 """
 
+import io
 import json
-import os
-import tempfile
 import threading
 import time
 import zipfile
@@ -461,70 +460,67 @@ class EntryPackager:
             response = requests.get(download_url, stream=True, timeout=300)
             response.raise_for_status()
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as temp_file:
-                for chunk in response.iter_content(chunk_size=8192):
-                    temp_file.write(chunk)
-                zip_path = temp_file.name
+            # Stream ZIP content directly into memory buffer
+            zip_buffer = io.BytesIO()
+            for chunk in response.iter_content(chunk_size=8192):
+                zip_buffer.write(chunk)
+            zip_buffer.seek(0)  # Reset to beginning for reading
 
-            try:
-                # Initialize S3 client with role assumption (write access needed)
-                s3_client = self.role_manager.get_s3_client(read_only=False)
-                uploaded_files = []
+            # Initialize S3 client with role assumption (write access needed)
+            s3_client = self.role_manager.get_s3_client(read_only=False)
+            uploaded_files = []
 
-                # Extract and upload files from ZIP
-                self.logger.info("Extracting and uploading files", zip_path=zip_path)
-                with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                    for file_info in zip_ref.filelist:
-                        if file_info.is_dir():
-                            continue
+            # Extract and upload files from ZIP
+            self.logger.info("Extracting and uploading files from in-memory ZIP buffer")
+            with zipfile.ZipFile(zip_buffer, "r") as zip_ref:
+                for file_info in zip_ref.filelist:
+                    if file_info.is_dir():
+                        continue
 
-                        # Extract file content
-                        file_content = zip_ref.read(file_info.filename)
+                    # Extract file content
+                    file_content = zip_ref.read(file_info.filename)
 
-                        # Upload to S3
-                        s3_key = f"{package_name}/{file_info.filename}"
-                        s3_client.put_object(Bucket=self.config.s3_bucket_name, Key=s3_key, Body=file_content)
+                    # Upload to S3
+                    s3_key = f"{package_name}/{file_info.filename}"
+                    s3_client.put_object(Bucket=self.config.s3_bucket_name, Key=s3_key, Body=file_content)
 
-                        uploaded_files.append(
-                            {
-                                "filename": file_info.filename,
-                                "s3_key": s3_key,
-                                "size": len(file_content),
-                            }
-                        )
-
-                # Create metadata files (entry_data already fetched above)
-                metadata_files = self._create_metadata_files(
-                    package_name=package_name,
-                    entry_id=entry_id,
-                    timestamp=payload.timestamp or "",
-                    base_url=payload.base_url
-                    or getattr(self.benchling, "url", getattr(self.benchling, "base_url", "https://benchling.com")),
-                    webhook_data=payload.webhook_data,
-                    uploaded_files=uploaded_files,
-                    download_url=download_url,
-                    entry_data=entry_data,
-                )
-
-                # Upload metadata files
-                for filename, content in metadata_files.items():
-                    s3_key = f"{package_name}/{filename}"
-                    body = (
-                        content.encode("utf-8")
-                        if isinstance(content, str)
-                        else json.dumps(content, indent=2, cls=DateTimeEncoder).encode("utf-8")
-                    )
-                    s3_client.put_object(Bucket=self.config.s3_bucket_name, Key=s3_key, Body=body)
                     uploaded_files.append(
                         {
-                            "filename": filename,
+                            "filename": file_info.filename,
                             "s3_key": s3_key,
-                            "size": len(body),
+                            "size": len(file_content),
                         }
                     )
-            finally:
-                # Clean up temporary file
-                os.unlink(zip_path)
+
+            # Create metadata files (entry_data already fetched above)
+            metadata_files = self._create_metadata_files(
+                package_name=package_name,
+                entry_id=entry_id,
+                timestamp=payload.timestamp or "",
+                base_url=payload.base_url
+                or getattr(self.benchling, "url", getattr(self.benchling, "base_url", "https://benchling.com")),
+                webhook_data=payload.webhook_data,
+                uploaded_files=uploaded_files,
+                download_url=download_url,
+                entry_data=entry_data,
+            )
+
+            # Upload metadata files
+            for filename, content in metadata_files.items():
+                s3_key = f"{package_name}/{filename}"
+                body = (
+                    content.encode("utf-8")
+                    if isinstance(content, str)
+                    else json.dumps(content, indent=2, cls=DateTimeEncoder).encode("utf-8")
+                )
+                s3_client.put_object(Bucket=self.config.s3_bucket_name, Key=s3_key, Body=body)
+                uploaded_files.append(
+                    {
+                        "filename": filename,
+                        "s3_key": s3_key,
+                        "size": len(body),
+                    }
+                )
 
             self.logger.info(
                 "Export processed successfully",
