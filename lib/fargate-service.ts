@@ -284,9 +284,10 @@ export class FargateService extends Construct {
             QUILT_WEB_HOST: props.quiltWebHost,
             ATHENA_USER_DATABASE: props.athenaUserDatabase,
             ATHENA_USER_WORKGROUP: props.athenaUserWorkgroup || "primary",
-            ATHENA_RESULTS_BUCKET: props.athenaResultsBucket || "",
-            ICEBERG_DATABASE: props.icebergDatabase || "",
-            ICEBERG_WORKGROUP: props.icebergWorkgroup || "",
+            // Only set optional variables if they have values (don't pass empty strings)
+            ...(props.athenaResultsBucket ? { ATHENA_RESULTS_BUCKET: props.athenaResultsBucket } : {}),
+            ...(props.icebergDatabase ? { ICEBERG_DATABASE: props.icebergDatabase } : {}),
+            ...(props.icebergWorkgroup ? { ICEBERG_WORKGROUP: props.icebergWorkgroup } : {}),
             PACKAGER_SQS_URL: props.packagerQueueUrl,
 
             // Benchling Configuration (credentials from Secrets Manager, NOT environment)
