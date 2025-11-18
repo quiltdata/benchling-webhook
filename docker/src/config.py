@@ -14,7 +14,7 @@ class Config:
 
     Quilt/AWS configuration comes from environment variables (set by XDG Launch or CDK):
         - QUILT_WEB_HOST, ATHENA_USER_DATABASE, PACKAGER_SQS_URL, etc.
-        - QUILT_READ_ROLE_ARN, QUILT_WRITE_ROLE_ARN (optional, for cross-account access)
+        - QUILT_WRITE_ROLE_ARN (optional, for cross-account access)
 
     Benchling credentials come from AWS Secrets Manager:
         - BenchlingSecret environment variable points to the secret name
@@ -43,7 +43,6 @@ class Config:
     enable_webhook_verification: bool = True
     webhook_allow_list: str = ""
     pkg_prefix: str = ""
-    quilt_read_role_arn: str = ""
     quilt_write_role_arn: str = ""
 
     def __post_init__(self):
@@ -65,8 +64,7 @@ class Config:
             - ATHENA_RESULTS_BUCKET: Athena results S3 bucket (default: "", v0.8.0+)
             - ICEBERG_DATABASE: Iceberg database name (default: "", v0.8.0+)
             - ICEBERG_WORKGROUP: Iceberg Athena workgroup (default: "", v0.8.0+)
-            - QUILT_READ_ROLE_ARN: IAM role ARN for read-only S3 access (default: "", v1.1.0+)
-            - QUILT_WRITE_ROLE_ARN: IAM role ARN for read-write S3 access (default: "", v1.1.0+)
+            - QUILT_WRITE_ROLE_ARN: IAM role ARN for S3 access (default: "", v1.1.0+)
 
         Package configuration (bucket, prefix, metadata_key) comes from Secrets Manager.
         Security configuration (webhook_allow_list) comes from Secrets Manager.
@@ -77,8 +75,7 @@ class Config:
         self.queue_url = os.getenv("PACKAGER_SQS_URL", "")
         self.aws_region = os.getenv("AWS_REGION", "")
 
-        # Optional IAM role ARNs for cross-account S3 access (v1.1.0+)
-        self.quilt_read_role_arn = os.getenv("QUILT_READ_ROLE_ARN", "")
+        # Optional IAM role ARN for cross-account S3 access (v1.1.0+)
         self.quilt_write_role_arn = os.getenv("QUILT_WRITE_ROLE_ARN", "")
 
         # Optional Quilt service configuration (v0.8.0+)

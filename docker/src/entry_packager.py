@@ -173,8 +173,7 @@ class EntryPackager:
 
         # Initialize RoleManager for cross-account S3 access
         self.role_manager = RoleManager(
-            read_role_arn=self.config.quilt_read_role_arn or None,
-            write_role_arn=self.config.quilt_write_role_arn or None,
+            role_arn=self.config.quilt_write_role_arn or None,
             region=self.config.aws_region,
         )
 
@@ -466,8 +465,8 @@ class EntryPackager:
                 zip_buffer.write(chunk)
             zip_buffer.seek(0)  # Reset to beginning for reading
 
-            # Initialize S3 client with role assumption (write access needed)
-            s3_client = self.role_manager.get_s3_client(read_only=False)
+            # Initialize S3 client with role assumption
+            s3_client = self.role_manager.get_s3_client()
             uploaded_files = []
 
             # Extract and upload files from ZIP

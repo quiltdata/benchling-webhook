@@ -21,57 +21,46 @@ class RoleManager:
     """Manages AWS role assumption for cross-account access.
 
     This class provides S3 clients with automatically refreshed credentials
-    from assumed IAM roles. It caches credentials to avoid repeated STS calls
-    and gracefully falls back to default credentials when role ARNs are not provided.
+    from an assumed IAM role. It caches credentials to avoid repeated STS calls
+    and gracefully falls back to default credentials when role ARN is not provided.
 
     Usage:
         role_manager = RoleManager(
-            read_role_arn="arn:aws:iam::123456789012:role/T4BucketReadRole-ABC",
-            write_role_arn="arn:aws:iam::123456789012:role/T4BucketWriteRole-XYZ"
+            role_arn="arn:aws:iam::123456789012:role/T4BucketWriteRole-XYZ"
         )
 
-        # Get read-only S3 client
-        s3_client = role_manager.get_s3_client(read_only=True)
-
-        # Get read-write S3 client
-        s3_client = role_manager.get_s3_client(read_only=False)
+        # Get S3 client with role credentials
+        s3_client = role_manager.get_s3_client()
 
     Attributes:
-        read_role_arn: Optional ARN of the read-only IAM role
-        write_role_arn: Optional ARN of the read-write IAM role
+        role_arn: Optional ARN of the IAM role for S3 access
         region: AWS region for STS and S3 clients
     """
 
     def __init__(
         self,
-        read_role_arn: Optional[str] = None,
-        write_role_arn: Optional[str] = None,
+        role_arn: Optional[str] = None,
         region: str = "us-east-1",
     ):
-        """Initialize RoleManager with role ARNs.
+        """Initialize RoleManager with write role ARN.
 
         Args:
-            read_role_arn: ARN of IAM role for read-only S3 access (from T4BucketReadRole)
-            write_role_arn: ARN of IAM role for read-write S3 access (from T4BucketWriteRole)
+            role_arn: ARN of IAM role for S3 access (from T4BucketWriteRole)
             region: AWS region for STS and S3 clients (default: us-east-1)
         """
-        self.read_role_arn = read_role_arn
-        self.write_role_arn = write_role_arn
+        self.role_arn = role_arn
         self.region = region
 
-        # Credential caches (key: role_arn, value: boto3.Session)
-        self._read_session: Optional[boto3.Session] = None
-        self._write_session: Optional[boto3.Session] = None
+        # Credential cache
+        self._session: Optional[boto3.Session] = None
         self._default_session: Optional[boto3.Session] = None
 
-        # Track credential expiration times
-        self._read_expires_at: Optional[datetime] = None
-        self._write_expires_at: Optional[datetime] = None
+        # Track credential expiration time
+        self._expires_at: Optional[datetime] = None
 
         logger.info(
             "RoleManager initialized",
-            has_read_role=bool(read_role_arn),
-            has_write_role=bool(write_role_arn),
+            has_role=bool(role_arn),
             region=region,
         )
 
@@ -242,116 +231,63 @@ class RoleManager:
                 self._default_session = boto3.Session(region_name=self.region)
             return self._default_session, None
 
-    def get_s3_client(self, read_only: bool = True):
-        """Get S3 client with appropriate credentials.
-
-        Automatically assumes the correct role based on read_only parameter:
-        - read_only=True: Uses read_role_arn
-        - read_only=False: Uses write_role_arn (falls back to read_role_arn if not provided)
+    def get_s3_client(self):
+        """Get S3 client with write role credentials.
 
         Credentials are cached and automatically refreshed before expiration.
         Falls back to default credentials if role ARN not provided or assumption fails.
 
-        Args:
-            read_only: If True, use read role; if False, use write role
-
         Returns:
             boto3 S3 client with assumed role credentials
         """
-        if read_only:
-            # Use read role
-            role_arn = self.read_role_arn
-            session, expiration = self._get_or_create_session(
-                role_arn,
-                self._read_session,
-                self._read_expires_at,
-            )
-            self._read_session = session
-            self._read_expires_at = expiration
+        session, expiration = self._get_or_create_session(
+            self.role_arn,
+            self._session,
+            self._expires_at,
+        )
+        self._session = session
+        self._expires_at = expiration
 
-            logger.debug(
-                "Creating S3 client with read role",
-                has_role_arn=bool(role_arn),
-                role_arn=role_arn if role_arn else "default-credentials",
-            )
-        else:
-            # Use write role (fallback to read role if write not provided)
-            role_arn = self.write_role_arn or self.read_role_arn
-
-            if role_arn == self.read_role_arn and self.write_role_arn is None:
-                logger.warning(
-                    "Write role not configured, using read role for write operation",
-                    role_arn=role_arn,
-                )
-
-            session, expiration = self._get_or_create_session(
-                role_arn,
-                self._write_session,
-                self._write_expires_at,
-            )
-            self._write_session = session
-            self._write_expires_at = expiration
-
-            logger.debug(
-                "Creating S3 client with write role",
-                has_role_arn=bool(role_arn),
-                role_arn=role_arn if role_arn else "default-credentials",
-            )
+        logger.debug(
+            "Creating S3 client with role credentials",
+            has_role_arn=bool(self.role_arn),
+            role_arn=self.role_arn if self.role_arn else "default-credentials",
+        )
 
         # Create S3 client from session
         return session.client("s3")
 
     def validate_roles(self) -> dict:
-        """Validate that roles can be assumed successfully.
+        """Validate that role can be assumed successfully.
 
-        This method attempts to assume both read and write roles to verify
-        that the ECS task role has permission to assume them.
+        This method attempts to assume the write role to verify
+        that the ECS task role has permission to assume it.
 
         Returns:
             Dictionary with validation results:
             {
-                "read_role": {"configured": bool, "valid": bool, "error": str},
-                "write_role": {"configured": bool, "valid": bool, "error": str}
+                "role": {"configured": bool, "valid": bool, "error": str}
             }
         """
         results = {
-            "read_role": {
-                "configured": bool(self.read_role_arn),
-                "valid": False,
-                "error": None,
-            },
-            "write_role": {
-                "configured": bool(self.write_role_arn),
+            "role": {
+                "configured": bool(self.role_arn),
                 "valid": False,
                 "error": None,
             },
         }
 
-        # Validate read role
-        if self.read_role_arn:
-            try:
-                self._assume_role(self.read_role_arn)
-                results["read_role"]["valid"] = True
-                logger.info("Read role validated successfully", role_arn=self.read_role_arn)
-            except Exception as e:
-                results["read_role"]["error"] = str(e)
-                logger.error(
-                    "Read role validation failed",
-                    role_arn=self.read_role_arn,
-                    error=str(e),
-                )
-
         # Validate write role
-        if self.write_role_arn:
+        if self.role_arn:
             try:
-                self._assume_role(self.write_role_arn)
-                results["write_role"]["valid"] = True
-                logger.info("Write role validated successfully", role_arn=self.write_role_arn)
+                self._assume_role(self.role_arn)
+                results["role"]["valid"] = True
+                logger.info("Role validated successfully", role_arn=self.role_arn)
             except Exception as e:
-                results["write_role"]["error"] = str(e)
+                results["role"]["error"] = str(e)
                 logger.error(
-                    "Write role validation failed",
-                    role_arn=self.write_role_arn,
+                    "Role validation failed",
+                    role_arn=self.role_arn,
                     error=str(e),
                 )
 

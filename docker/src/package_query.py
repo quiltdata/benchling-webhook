@@ -7,10 +7,12 @@ Responsibilities:
 - Query Athena's {bucket}_packages-view
 - Search for packages by metadata key-value pairs using json_extract_scalar
 - Return Package instances matching the search criteria
+- Use RoleManager for cross-account Athena access
 
 Requires:
 - QUILT_DATABASE environment variable with Athena database name
 - QUILT_USER_BUCKET environment variable for the registry (bucket)
+- QUILT_WRITE_ROLE_ARN environment variable for cross-account access (optional)
 - AWS credentials configured for Athena access
 """
 
@@ -22,6 +24,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 import boto3
 import structlog
 
+from src.auth.role_manager import RoleManager
 from src.packages import Package
 
 if TYPE_CHECKING:
@@ -70,12 +73,24 @@ class PackageQuery:
         self.database = database or os.getenv("QUILT_DATABASE")
         self.region = region or os.getenv("AWS_REGION", "us-east-1")
         self.logger = structlog.get_logger(__name__)
+        self.config = config
 
         if not self.database:
             raise ValueError("database parameter or QUILT_DATABASE environment variable required")
 
-        # Initialize Athena client
-        self.athena = boto3.client("athena", region_name=self.region)
+        # Initialize RoleManager for cross-account access
+        role_arn = None
+        if config and config.quilt_write_role_arn:
+            role_arn = config.quilt_write_role_arn
+        self.role_manager = RoleManager(role_arn=role_arn, region=self.region)
+
+        # Initialize Athena client with role assumption
+        athena_session = self.role_manager._get_or_create_session(
+            self.role_manager.role_arn,
+            self.role_manager._session,
+            self.role_manager._expires_at,
+        )[0]
+        self.athena = athena_session.client("athena")
 
         # Determine Athena workgroup
         # Priority: parameter > config.athena_user_workgroup > ATHENA_USER_WORKGROUP env var > 'primary'

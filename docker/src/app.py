@@ -58,19 +58,16 @@ def create_app():
         logger.info("Python orchestration enabled")
 
         # Log IAM role configuration for cross-account S3 access
-        if config.quilt_read_role_arn or config.quilt_write_role_arn:
+        if config.quilt_write_role_arn:
             logger.info(
-                "IAM role ARNs configured for cross-account S3 access",
-                has_read_role=bool(config.quilt_read_role_arn),
-                has_write_role=bool(config.quilt_write_role_arn),
-                read_role_arn=config.quilt_read_role_arn if config.quilt_read_role_arn else "not-configured",
-                write_role_arn=config.quilt_write_role_arn if config.quilt_write_role_arn else "not-configured",
+                "IAM role ARN configured for cross-account S3 access",
+                has_role=bool(config.quilt_write_role_arn),
+                role_arn=config.quilt_write_role_arn,
             )
         else:
             logger.info(
-                "No IAM role ARNs configured - using direct ECS task role credentials",
-                read_role_arn="not-configured",
-                write_role_arn="not-configured",
+                "No IAM role ARN configured - using direct ECS task role credentials",
+                role_arn="not-configured",
             )
 
         # Initialize Benchling SDK with OAuth
@@ -86,36 +83,23 @@ def create_app():
         )
 
         # Validate role assumption at startup (non-blocking)
-        if config.quilt_read_role_arn or config.quilt_write_role_arn:
+        if config.quilt_write_role_arn:
             logger.info("Validating IAM role assumption at startup")
             try:
                 validation_results = entry_packager.role_manager.validate_roles()
 
                 # Log validation results
-                if validation_results["read_role"]["configured"]:
-                    if validation_results["read_role"]["valid"]:
+                if validation_results["role"]["configured"]:
+                    if validation_results["role"]["valid"]:
                         logger.info(
-                            "Read role validated successfully",
-                            role_arn=config.quilt_read_role_arn,
-                        )
-                    else:
-                        logger.warning(
-                            "Read role validation failed - will fall back to default credentials",
-                            role_arn=config.quilt_read_role_arn,
-                            error=validation_results["read_role"]["error"],
-                        )
-
-                if validation_results["write_role"]["configured"]:
-                    if validation_results["write_role"]["valid"]:
-                        logger.info(
-                            "Write role validated successfully",
+                            "Role validated successfully",
                             role_arn=config.quilt_write_role_arn,
                         )
                     else:
                         logger.warning(
-                            "Write role validation failed - will fall back to read role or default credentials",
+                            "Role validation failed - will fall back to default credentials",
                             role_arn=config.quilt_write_role_arn,
-                            error=validation_results["write_role"]["error"],
+                            error=validation_results["role"]["error"],
                         )
 
             except Exception as e:
