@@ -9,18 +9,18 @@
  */
 
 /**
- * Configuration profile identifier
- * Profiles allow multiple named configurations (e.g., "default", "dev", "prod")
+ * Configuration identifier
+ * Configurations allow multiple named config sets (e.g., "default", "dev", "prod")
  *
  * @example "default"
  * @example "dev"
  * @example "prod"
  */
-export type ProfileName = string;
+export type ConfigName = string;
 
 
 /**
- * Profile Configuration (Single Source of Truth)
+ * Configuration (Single Source of Truth)
  *
  * This is the primary configuration interface for v0.7.0, replacing the previous
  * three-tier system (user/derived/deploy). All configuration is now unified in
@@ -61,7 +61,7 @@ export type ProfileName = string;
  * }
  * ```
  */
-export interface ProfileConfig {
+export interface Config {
     /**
      * Quilt catalog and infrastructure configuration
      */
@@ -108,10 +108,10 @@ export interface ProfileConfig {
     _metadata: ConfigMetadata;
 
     /**
-     * Optional profile inheritance (for profile hierarchies)
+     * Optional config inheritance (for config hierarchies)
      *
-     * When present, this profile inherits configuration from the specified base profile.
-     * Values in this profile override inherited values via deep merge.
+     * When present, this config inherits configuration from the specified base config.
+     * Values in this config override inherited values via deep merge.
      *
      * @example "_inherits": "default"
      */
@@ -467,7 +467,7 @@ export interface ConfigMetadata {
 /**
  * Deployment History
  *
- * Tracks all deployments for a profile, with active deployment pointers per stage.
+ * Tracks all deployments for a config, with active deployment pointers per stage.
  */
 export interface DeploymentHistory {
     /**
@@ -488,7 +488,7 @@ export interface DeploymentHistory {
     /**
      * Complete deployment history (newest first)
      *
-     * All past deployments for this profile, ordered by timestamp descending.
+     * All past deployments for this config, ordered by timestamp descending.
      */
     history: DeploymentRecord[];
 }

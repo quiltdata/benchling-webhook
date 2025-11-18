@@ -19,6 +19,9 @@ import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-clo
 import { fromIni } from "@aws-sdk/credential-providers";
 import { XDGConfig } from "../../lib/xdg-config";
 import type { XDGBase } from "../../lib/xdg-base";
+import { discoverECSServiceLogGroups } from "../../lib/utils/ecs-service-discovery";
+import { parseTimeRange, formatTimeRange, formatLocalDateTime, formatLocalTime, getLocalTimezone } from "../../lib/utils/time-format";
+import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers";
 
 const STACK_NAME = "BenchlingWebhookStack";
 
@@ -89,47 +92,6 @@ function getDeploymentInfo(
 }
 
 /**
- * Parse time range string (e.g., "5m", "1h", "2d") to milliseconds
- */
-function parseTimeRange(since: string): number {
-    const match = since.match(/^(\d+)([mhd])$/);
-    if (!match) {
-        throw new Error(`Invalid time format: ${since}. Use format like "5m", "1h", or "2d"`);
-    }
-
-    const value = parseInt(match[1], 10);
-    const unit = match[2];
-
-    switch (unit) {
-    case "m":
-        return value * 60 * 1000;
-    case "h":
-        return value * 60 * 60 * 1000;
-    case "d":
-        return value * 24 * 60 * 60 * 1000;
-    default:
-        throw new Error(`Invalid time unit: ${unit}`);
-    }
-}
-
-/**
- * Format milliseconds to human-readable time range string
- */
-function formatTimeRange(ms: number): string {
-    const minutes = ms / (60 * 1000);
-    const hours = minutes / 60;
-    const days = hours / 24;
-
-    if (days >= 1) {
-        return `${Math.round(days)}d`;
-    } else if (hours >= 1) {
-        return `${Math.round(hours)}h`;
-    } else {
-        return `${Math.round(minutes)}m`;
-    }
-}
-
-/**
  * Double the time range, capping at 7 days
  */
 function expandTimeRange(currentSince: string): string {
@@ -145,38 +107,6 @@ function expandTimeRange(currentSince: string): string {
 }
 
 /**
- * Parse timer value (string or number) and returns interval in milliseconds
- * Returns null if timer is disabled (0 or non-numeric string)
- */
-function parseTimerValue(timer?: string | number): number | null {
-    if (timer === undefined) return 10000; // Default 10 seconds
-
-    const numValue = typeof timer === "string" ? parseFloat(timer) : timer;
-
-    // If NaN or 0, disable timer
-    if (isNaN(numValue) || numValue === 0) {
-        return null;
-    }
-
-    // Return milliseconds
-    return numValue * 1000;
-}
-
-/**
- * Sleep helper
- */
-function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Clear screen and move cursor to top
- */
-function clearScreen(): void {
-    process.stdout.write("\x1b[2J\x1b[H");
-}
-
-/**
  * Get log group names from CloudFormation stack outputs or ECS services
  */
 async function getLogGroupsFromStack(
@@ -186,87 +116,17 @@ async function getLogGroupsFromStack(
     awsProfile?: string,
 ): Promise<Record<string, string>> {
     try {
+        // For integrated mode, use shared ECS service discovery
+        if (integratedMode) {
+            return await discoverECSServiceLogGroups(stackName, region, awsProfile);
+        }
+
+        // For standalone mode, use stack outputs
         const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
         if (awsProfile) {
             clientConfig.credentials = fromIni({ profile: awsProfile });
         }
 
-        // For integrated mode, discover log groups from ALL ECS services
-        if (integratedMode) {
-            const { CloudFormationClient: CF, DescribeStackResourcesCommand } = await import("@aws-sdk/client-cloudformation");
-            const { ECSClient, DescribeServicesCommand, DescribeTaskDefinitionCommand } = await import("@aws-sdk/client-ecs");
-
-            const cfClient = new CF(clientConfig);
-            const ecsClient = new ECSClient(clientConfig);
-
-            // Find ECS resources in stack
-            const resourcesCommand = new DescribeStackResourcesCommand({
-                StackName: stackName,
-            });
-            const resourcesResponse = await cfClient.send(resourcesCommand);
-
-            const ecsServices = resourcesResponse.StackResources?.filter(
-                (r) => r.ResourceType === "AWS::ECS::Service",
-            ) || [];
-
-            if (ecsServices.length === 0) {
-                return {};
-            }
-
-            // Get cluster name
-            const clusterResource = resourcesResponse.StackResources?.find(
-                (r) => r.ResourceType === "AWS::ECS::Cluster",
-            );
-            const clusterName = clusterResource?.PhysicalResourceId || stackName;
-
-            // Get service ARNs
-            const serviceArns = ecsServices
-                .map((s) => s.PhysicalResourceId)
-                .filter((arn): arn is string => !!arn);
-
-            if (serviceArns.length === 0) {
-                return {};
-            }
-
-            // Describe all services
-            const servicesCommand = new DescribeServicesCommand({
-                cluster: clusterName,
-                services: serviceArns,
-            });
-            const servicesResponse = await ecsClient.send(servicesCommand);
-
-            // Get log groups from ALL services
-            const logGroups: Record<string, string> = {};
-
-            for (const svc of servicesResponse.services || []) {
-                const taskDefArn = svc.deployments?.[0]?.taskDefinition;
-                if (!taskDefArn) continue;
-
-                try {
-                    const taskDefCommand = new DescribeTaskDefinitionCommand({
-                        taskDefinition: taskDefArn,
-                    });
-                    const taskDefResponse = await ecsClient.send(taskDefCommand);
-
-                    const logConfig = taskDefResponse.taskDefinition?.containerDefinitions?.[0]?.logConfiguration;
-                    if (logConfig?.logDriver === "awslogs") {
-                        const logGroupName = logConfig.options?.["awslogs-group"];
-                        if (logGroupName) {
-                            // Use service name as the key
-                            const serviceName = svc.serviceName || "unknown";
-                            logGroups[serviceName] = logGroupName;
-                        }
-                    }
-                } catch {
-                    // Skip this service if we can't get its task definition
-                    continue;
-                }
-            }
-
-            return logGroups;
-        }
-
-        // For standalone mode, use stack outputs
         const cfClient = new CloudFormationClient(clientConfig);
         const command = new DescribeStacksCommand({ StackName: stackName });
         const response = await cfClient.send(command);
@@ -340,17 +200,8 @@ function displayLogs(
     limit: number,
     expanded?: boolean,
 ): void {
-    const now = new Date();
-    const timeStr = now.toLocaleString("en-US", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-    });
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const timeStr = formatLocalDateTime(new Date());
+    const timezone = getLocalTimezone();
 
     console.log(chalk.bold(`\nLogs for Profile: ${profile} @ ${timeStr} (${timezone})\n`));
     console.log(chalk.dim("─".repeat(80)));
@@ -375,13 +226,7 @@ function displayLogs(
         for (const entry of logGroup.entries) {
             if (!entry.timestamp || !entry.message) continue;
 
-            const timestamp = new Date(entry.timestamp);
-            const timeDisplay = timestamp.toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-                hour12: false,
-            });
+            const timeDisplay = formatLocalTime(entry.timestamp);
 
             // Color code by log level if detectable
             let message = entry.message.trim();
