@@ -14,6 +14,7 @@ import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileName } from "../../lib/types/config";
 import { statSync } from "fs";
 import { SecretsManagerClient, DescribeSecretCommand } from "@aws-sdk/client-secrets-manager";
+import { fromIni } from "@aws-sdk/credential-providers";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import chalk from "chalk";
 import { join } from "path";
@@ -137,7 +138,6 @@ async function checkSecretsSync(xdgConfig: XDGConfig, profile: ProfileName): Pro
 
         // If AWS profile is configured, use it
         if (process.env.AWS_PROFILE) {
-            const { fromIni } = await import("@aws-sdk/credential-providers");
             clientConfig.credentials = fromIni({ profile: process.env.AWS_PROFILE });
         }
 

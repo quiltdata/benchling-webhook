@@ -53,6 +53,7 @@ jest.mock("../lib/xdg-config", () => {
 });
 
 import { manifestCommand, generateManifest } from "../bin/commands/manifest";
+import pkg from "../package.json";
 
 describe("generateManifest (pure function)", () => {
     describe("manifest content generation", () => {
@@ -67,7 +68,6 @@ describe("generateManifest (pure function)", () => {
 
         it("should include version from package.json", () => {
             const content = generateManifest();
-            const pkg = require("../package.json");
             expect(content).toContain(`version: ${pkg.version}`);
         });
 

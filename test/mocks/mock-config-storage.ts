@@ -38,10 +38,12 @@ export class MockConfigStorage implements IConfigStorage {
             throw new Error(this.buildProfileNotFoundError(profile));
         }
 
-        // Validate before returning
+        // Validate schema - WARN instead of ERROR to allow migration from older schemas
         const validation = this.validateProfile(config);
         if (!validation.isValid) {
-            throw new Error(`Invalid configuration for profile ${profile}:\n${validation.errors.join("\n")}`);
+            console.warn(`Warning: Configuration for profile "${profile}" has validation issues:`);
+            validation.errors.forEach((err) => console.warn(`  - ${err}`));
+            console.warn("The configuration will still be loaded to allow migration. Please run setup again to fix these issues.\n");
         }
 
         // Return a deep copy to prevent mutations

@@ -12,10 +12,12 @@
 
 import { execSync } from "child_process";
 import * as readline from "readline";
+import chalk from "chalk";
+import { fromIni } from "@aws-sdk/credential-providers";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { isQueueUrl } from "../../lib/utils/sqs";
-import { fetchJson } from "../../lib/utils/stack-inference";
+import { fetchJson, getStackResources, extractQuiltResources } from "../../lib/utils/stack-inference";
 
 /**
  * Quilt CLI configuration
@@ -37,6 +39,14 @@ interface QuiltStackInfo {
     catalogUrl?: string;
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
+    athenaUserWorkgroup?: string;
+    athenaUserPolicy?: string;
+    icebergWorkgroup?: string;
+    icebergDatabase?: string;
+    athenaResultsBucket?: string;
+    athenaResultsBucketPolicy?: string;
+    readRoleArn?: string;
+    writeRoleArn?: string;
 }
 
 /**
@@ -51,6 +61,14 @@ interface InferenceResult {
     queueUrl?: string;
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
+    athenaUserWorkgroup?: string;
+    athenaUserPolicy?: string;
+    icebergWorkgroup?: string;
+    icebergDatabase?: string;
+    athenaResultsBucket?: string;
+    athenaResultsBucketPolicy?: string;
+    readRoleArn?: string;
+    writeRoleArn?: string;
     source: string;
 }
 
@@ -90,7 +108,6 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
 
         if (profile) {
             // Load AWS profile credentials
-            const { fromIni } = await import("@aws-sdk/credential-providers");
             clientConfig.credentials = fromIni({ profile });
         }
 
@@ -169,6 +186,9 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     } else if (key === "BenchlingSecretArn" || key === "BenchlingSecret") {
                         // Check for BenchlingSecret output from T4 template
                         stackInfo.benchlingSecretArn = value;
+                    } else if (key === "IcebergDatabase") {
+                        // Extract IcebergDatabase from outputs (fallback)
+                        stackInfo.icebergDatabase = value;
                     }
                 }
 
@@ -181,6 +201,39 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     if (key === "BenchlingIntegration") {
                         stackInfo.benchlingIntegrationEnabled = value === "Enabled";
                     }
+                }
+
+                // Query stack resources for additional data - FAIL LOUDLY on errors
+                try {
+                    const resources = await getStackResources(region, stack.StackName);
+                    const discovered = extractQuiltResources(resources, stackInfo.account, region);
+
+                    // Destructure discovered resources and assign to stackInfo
+                    const {
+                        athenaUserWorkgroup,
+                        athenaUserPolicy,
+                        icebergWorkgroup,
+                        icebergDatabase,
+                        athenaResultsBucket,
+                        athenaResultsBucketPolicy,
+                        readRoleArn,
+                        writeRoleArn,
+                    } = discovered;
+
+                    Object.assign(stackInfo, {
+                        athenaUserWorkgroup,
+                        athenaUserPolicy,
+                        icebergWorkgroup,
+                        icebergDatabase,
+                        athenaResultsBucket,
+                        athenaResultsBucketPolicy,
+                        readRoleArn,
+                        writeRoleArn,
+                    });
+                } catch (error) {
+                    // FAIL LOUDLY - show the error with full stack trace
+                    console.error(chalk.red(`[ERROR] Failed to query stack resources: ${(error as Error).message}`));
+                    console.error(chalk.red("[ERROR] Stack:"), (error as Error).stack);
                 }
 
                 stackInfos.push(stackInfo);
@@ -466,7 +519,43 @@ export async function inferQuiltConfig(options: {
         result.benchlingIntegrationEnabled = selectedStack.benchlingIntegrationEnabled;
         console.log(`✓ BenchlingIntegration: ${selectedStack.benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`);
     }
-
+    // Add discovered workgroups and resources to result
+    if (selectedStack.athenaUserWorkgroup) {
+        result.athenaUserWorkgroup = selectedStack.athenaUserWorkgroup;
+    }
+    if (selectedStack.athenaUserPolicy) {
+        result.athenaUserPolicy = selectedStack.athenaUserPolicy;
+    }
+    if (selectedStack.icebergWorkgroup) {
+        result.icebergWorkgroup = selectedStack.icebergWorkgroup;
+    }
+    // icebergDatabase already handled (prefer resource over output)
+    if (selectedStack.icebergDatabase) {
+        result.icebergDatabase = selectedStack.icebergDatabase;
+    }
+    if (selectedStack.athenaResultsBucket) {
+        result.athenaResultsBucket = selectedStack.athenaResultsBucket;
+    }
+    if (selectedStack.athenaResultsBucketPolicy) {
+        result.athenaResultsBucketPolicy = selectedStack.athenaResultsBucketPolicy;
+    }
+    // NEW: Add IAM role ARNs to result
+    // IAM role ARNs for cross-account S3 access
+    // Keep read role discovery logic but only save write role to configuration
+    // Read role is still discovered for informational purposes but not configured
+    if (selectedStack.readRoleArn) {
+        console.log(`✓ T4BucketReadRole discovered: ${selectedStack.readRoleArn}`);
+        console.log("  (Read role discovered but not configured - write role used for all operations)");
+    } else {
+        console.log(chalk.yellow("⚠ T4BucketReadRole: NOT FOUND (valid Quilt stack resource)"));
+    }
+    if (selectedStack.writeRoleArn) {
+        result.writeRoleArn = selectedStack.writeRoleArn;
+        console.log(`✓ T4BucketWriteRole: ${selectedStack.writeRoleArn}`);
+        console.log("  (Write role will be used for all S3 operations)");
+    } else {
+        console.log(chalk.yellow("⚠ T4BucketWriteRole: NOT FOUND (optional - will use task role for S3 access)"));
+    }
     if (result.source === "quilt3-cli") {
         result.source = "quilt3-cli+cloudformation";
     } else {
@@ -511,6 +600,8 @@ async function main(): Promise<void> {
     if (result.region) console.log(`Region: ${result.region}`);
     if (result.account) console.log(`AWS Account ID: ${result.account}`);
     if (result.queueUrl) console.log(`Queue URL: ${result.queueUrl}`);
+    if (result.readRoleArn) console.log(`Read Role ARN: ${result.readRoleArn}`);
+    if (result.writeRoleArn) console.log(`Write Role ARN: ${result.writeRoleArn}`);
 }
 
 // Run main if executed directly

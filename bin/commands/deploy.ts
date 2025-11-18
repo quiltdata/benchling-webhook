@@ -5,9 +5,10 @@ import boxen from "boxen";
 import { prompt } from "enquirer";
 import { maskArn } from "../../lib/utils/config";
 import {
+    QuiltServices,
+    ServiceResolverError,
     parseStackArn,
-    ConfigResolverError,
-} from "../../lib/utils/config-resolver";
+} from "../../lib/utils/service-resolver";
 import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig } from "../../lib/types/config";
@@ -15,6 +16,16 @@ import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-clo
 import { syncSecretsToAWS } from "./sync-secrets";
 import * as fs from "fs";
 import * as path from "path";
+
+/**
+ * Helper function to display setup command suggestion
+ */
+function suggestSetup(profileName: string, message: string): void {
+    console.log(chalk.yellow(message));
+    console.log();
+    console.log(chalk.cyan(`  npm run setup -- --profile ${profileName}`));
+    console.log();
+}
 
 /**
  * Get the most recent dev version tag (without 'v' prefix)
@@ -104,7 +115,7 @@ export async function deployCommand(options: {
     }
 
     // Get required parameters with priority: CLI options > Profile config
-    const quiltStackArn = options. stackArn || config.quilt.stackArn;
+    const quiltStackArn = options.stackArn || config.quilt.stackArn;
     const benchlingSecret = options.benchlingSecret || config.benchling.secretArn;
 
     // Auto-detect image tag based on profile
@@ -190,8 +201,8 @@ export async function deploy(
     } catch (error) {
         spinner.fail("Invalid Stack ARN");
         console.log();
-        if (error instanceof ConfigResolverError) {
-            console.error(error.format());
+        if (error instanceof ServiceResolverError) {
+            console.error(chalk.red(error.format()));
         } else {
             console.error(chalk.red((error as Error).message));
         }
@@ -287,6 +298,37 @@ export async function deploy(
         }
     }
 
+    // Load Quilt configuration from config.quilt.*
+    spinner.start("Loading Quilt configuration...");
+
+    // Validate required fields
+    const missingFields: string[] = [];
+    if (!config.quilt.queueUrl) missingFields.push("queueUrl");
+    if (!config.quilt.database) missingFields.push("database");
+    if (!config.quilt.catalog) missingFields.push("catalog");
+
+    if (missingFields.length > 0) {
+        spinner.fail("Invalid Quilt configuration");
+        console.log();
+        console.error(chalk.red(`Error: Required fields missing: ${missingFields.join(", ")}`));
+        console.log();
+        suggestSetup(options.profileName, "Please re-run setup:");
+        process.exit(1);
+    }
+
+    // Convert to QuiltServices format for deployment
+    const services: QuiltServices = {
+        packagerQueueUrl: config.quilt.queueUrl,
+        athenaUserDatabase: config.quilt.database,
+        quiltWebHost: config.quilt.catalog,
+        icebergDatabase: config.quilt.icebergDatabase,
+        athenaUserWorkgroup: config.quilt.athenaUserWorkgroup,
+        athenaResultsBucket: config.quilt.athenaResultsBucket,
+        icebergWorkgroup: config.quilt.icebergWorkgroup,
+    };
+
+    spinner.succeed("Quilt configuration loaded");
+
     // Build ECR image URI for display
     // HARDCODED: Always use the quiltdata AWS account for ECR images
     const ecrAccount = "712023778557";
@@ -304,8 +346,21 @@ export async function deploy(
     console.log(`  ${chalk.bold("Stage:")}                     ${options.stage}`);
     console.log(`  ${chalk.bold("Profile:")}                   ${options.profileName}`);
     console.log();
+    console.log(chalk.bold("  Resolved Quilt Services:"));
+    console.log(`    ${chalk.bold("Catalog Host:")}            ${services.quiltWebHost}`);
+    console.log(`    ${chalk.bold("Packager Queue:")}          ${services.packagerQueueUrl}`);
+    console.log(`    ${chalk.bold("Athena Database:")}         ${services.athenaUserDatabase}`);
+    console.log(`    ${chalk.bold("Athena Workgroup:")}        ${services.athenaUserWorkgroup}`);
+    console.log(`    ${chalk.bold("Athena Results Bucket:")}   ${services.athenaResultsBucket}`);
+    if (services.icebergDatabase) {
+        console.log(`    ${chalk.bold("Iceberg Database:")}        ${services.icebergDatabase}`);
+    }
+    if (services.icebergWorkgroup) {
+        console.log(`    ${chalk.bold("Iceberg Workgroup:")}       ${services.icebergWorkgroup}`);
+    }
+    console.log();
     console.log(chalk.bold("  Stack Parameters:"));
-    console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)}`);
+    console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)} ${chalk.dim("(deployment-time resolution only)")}`);
     console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
     console.log();
     console.log(chalk.bold("  Container Image:"));
@@ -314,7 +369,7 @@ export async function deploy(
     console.log(`    ${chalk.bold("Image Tag:")}               ${options.imageTag}`);
     console.log(`    ${chalk.bold("Full Image URI:")}          ${ecrImageUri}`);
     console.log();
-    console.log(chalk.dim("  ℹ️  All other configuration will be resolved from AWS at runtime"));
+    console.log(chalk.dim("  ℹ️  Configuration loaded from profile - single source of truth"));
     console.log(chalk.gray("─".repeat(80)));
     console.log();
 
@@ -343,11 +398,22 @@ export async function deploy(
         // Build CloudFormation parameters
         // Parameter names must match the CfnParameter IDs in BenchlingWebhookStack
         const parameters = [
-            `QuiltStackARN=${stackArn}`,
+            // Explicit service parameters (v1.0.0+)
+            `PackagerQueueUrl=${services.packagerQueueUrl}`,
+            `AthenaUserDatabase=${services.athenaUserDatabase}`,
+            `QuiltWebHost=${services.quiltWebHost}`,
+            `IcebergDatabase=${services.icebergDatabase || ""}`,
+
+            // NEW: Optional Athena resources (from Quilt stack discovery)
+            `IcebergWorkgroup=${services.icebergWorkgroup || ""}`,
+            `AthenaUserWorkgroup=${services.athenaUserWorkgroup || ""}`,
+            `AthenaResultsBucket=${services.athenaResultsBucket || ""}`,
+
+            // Legacy parameters
             `BenchlingSecretARN=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
             `PackageBucket=${config.packages.bucket}`,
-            `QuiltDatabase=${config.quilt.database || ""}`,
+            `QuiltDatabase=${config.quilt.database || ""}`,  // IAM permissions only (same value as AthenaUserDatabase)
             `LogLevel=${config.logging?.level || "INFO"}`,
         ];
 

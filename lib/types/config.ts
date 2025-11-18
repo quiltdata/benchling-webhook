@@ -18,6 +18,7 @@
  */
 export type ProfileName = string;
 
+
 /**
  * Profile Configuration (Single Source of Truth)
  *
@@ -29,7 +30,6 @@ export type ProfileName = string;
  * ```json
  * {
  *   "quilt": {
- *     "stackArn": "arn:aws:cloudformation:...",
  *     "catalog": "https://quilt.example.com",
  *     "bucket": "my-quilt-bucket",
  *     "database": "quilt_catalog",
@@ -121,19 +121,40 @@ export interface ProfileConfig {
 /**
  * Quilt Catalog Configuration
  *
- * Configuration for Quilt data catalog integration, including CloudFormation stack
+ * Configuration for Quilt data catalog integration, including service endpoints
  * and SQS queue for package creation.
+ *
+ * **Breaking Change (v1.0.0)**: `stackArn` is used at deployment time only to resolve services.
+ * Services are passed as explicit environment variables to the container.
+ * No runtime CloudFormation API calls are made.
+ *
+ * **Usage**:
+ * - **Deployment time**: `stackArn` used to resolve service endpoints from stack outputs
+ * - **Runtime**: Explicit environment variables are used (no CloudFormation API calls)
  */
 export interface QuiltConfig {
     /**
-     * Quilt CloudFormation stack ARN
+     * Quilt CloudFormation stack ARN (optional)
+     *
+     * Used at deployment time to resolve service endpoints from stack outputs.
+     * The resolved services are then passed as explicit environment variables to the container.
+     *
+     * **Deployment usage only** - not passed to container runtime.
+     * **Breaking Change (v1.0.0)**: No longer passed as environment variable or CloudFormation parameter.
      *
      * @example "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-stack/..."
      */
-    stackArn: string;
+    stackArn?: string;
 
     /**
      * Quilt catalog domain (without protocol)
+     *
+     * Resolved from stack outputs at deployment time:
+     * - Priority 1: `Catalog` output
+     * - Priority 2: `CatalogDomain` output
+     * - Priority 3: Extract from `ApiGatewayEndpoint` output
+     *
+     * Passed to container as `QUILT_WEB_HOST` environment variable.
      *
      * @example "quilt.example.com"
      */
@@ -142,12 +163,18 @@ export interface QuiltConfig {
     /**
      * Athena/Glue database name for catalog metadata
      *
+     * Resolved from stack output `UserAthenaDatabaseName` at deployment time.
+     * Passed to container as `ATHENA_USER_DATABASE` environment variable.
+     *
      * @example "quilt_catalog"
      */
     database: string;
 
     /**
      * SQS queue URL for package creation jobs
+     *
+     * Resolved from stack output `PackagerQueueUrl` at deployment time.
+     * Passed to container as `PACKAGER_SQS_URL` environment variable.
      *
      * @example "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-package-queue"
      */
@@ -159,6 +186,84 @@ export interface QuiltConfig {
      * @example "us-east-1"
      */
     region: string;
+
+    /**
+     * Iceberg database name (optional)
+     *
+     * If available, use Iceberg database instead of Athena for package* tables.
+     * Resolved from stack output `IcebergDatabase` at deployment time if present.
+     *
+     * Passed to container as `ICEBERG_DATABASE` environment variable.
+     *
+     * @example "quilt_iceberg"
+     */
+    icebergDatabase?: string;
+
+    /**
+     * Athena workgroup for user queries (non-managed role)
+     *
+     * Resolved from UserAthenaNonManagedRoleWorkgroup stack resource
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * @example "quilt-user-workgroup-prod"
+     */
+    athenaUserWorkgroup?: string;
+
+    /**
+     * IAM policy for Athena user workgroup (non-managed role)
+     *
+     * Resolved from UserAthenaNonManagedRolePolicy stack resource
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * @example "quilt-prod-UserAthenaNonManagedRolePolicy-ABC123"
+     */
+    athenaUserPolicy?: string;
+
+    /**
+     * Athena workgroup for Iceberg queries
+     *
+     * Resolved from IcebergWorkGroup stack resource
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * @example "quilt-iceberg-workgroup-prod"
+     */
+    icebergWorkgroup?: string;
+
+    /**
+     * User Athena results bucket (S3 bucket for query results)
+     *
+     * Resolved from UserAthenaResultsBucket stack resource
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * @example "my-stack-userathenar-abc123"
+     */
+    athenaResultsBucket?: string;
+
+    /**
+     * User Athena results bucket policy ARN
+     *
+     * Resolved from UserAthenaResultsBucketPolicy stack resource
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * @example "arn:aws:s3:::my-stack-userathenar-abc123"
+     */
+    athenaResultsBucketPolicy?: string;
+
+    /**
+     * IAM role ARN for read-write S3 access (from T4BucketWriteRole)
+     *
+     * Container assumes this role for all S3 operations to access the Quilt S3 bucket.
+     * This single role is used for both read and write operations, simplifying credential management.
+     * Discovered from CloudFormation stack resources during setup.
+     *
+     * Resolved from T4BucketWriteRole stack resource (AWS::IAM::Role)
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * Passed to container as `QUILT_WRITE_ROLE_ARN` environment variable.
+     *
+     * @example "arn:aws:iam::123456789012:role/quilt-stack-T4BucketWriteRole-XYZ789"
+     */
+    writeRoleArn?: string;
 }
 
 /**
@@ -551,13 +656,17 @@ export const ProfileConfigSchema = {
     properties: {
         quilt: {
             type: "object",
-            required: ["stackArn", "catalog", "database", "queueUrl", "region"],
+            required: ["catalog", "database", "queueUrl", "region"],
             properties: {
                 stackArn: { type: "string", pattern: "^arn:aws:cloudformation:" },
                 catalog: { type: "string", minLength: 1 },
                 database: { type: "string", minLength: 1 },
                 queueUrl: { type: "string", pattern: "^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/\\d{12}/.+" },
                 region: { type: "string", pattern: "^[a-z]{2}-[a-z]+-[0-9]$" },
+                icebergDatabase: { type: "string", minLength: 1 },
+                athenaUserWorkgroup: { type: "string", minLength: 1 },
+                icebergWorkgroup: { type: "string", minLength: 1 },
+                writeRoleArn: { type: "string", pattern: "^arn:aws:iam::\\d{12}:role/.+" },
             },
         },
         benchling: {

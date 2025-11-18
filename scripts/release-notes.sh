@@ -19,8 +19,8 @@ fi
 CHANGELOG_NOTES=""
 if [ -f CHANGELOG.md ]; then
   CHANGELOG_NOTES=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$d' | sed '1d' | \
-    grep -v "^- fix" | \
-    grep -v "^- chore")
+    grep -v "^- fix" || true | \
+    grep -v "^- chore" || true)
 fi
 
 # Generate release notes - insert README content

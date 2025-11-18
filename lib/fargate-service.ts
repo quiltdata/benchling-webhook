@@ -10,11 +10,14 @@ import { Construct } from "constructs";
 import { ProfileConfig } from "./types/config";
 
 /**
- * Properties for FargateService construct (v0.7.0+)
+ * Properties for FargateService construct (v1.0.0+)
  *
  * Uses ProfileConfig for structured configuration access.
- * Runtime-configurable parameters (quiltStackArn, benchlingSecret, logLevel, packageBucket)
- * can be overridden via CloudFormation parameters.
+ * Runtime-configurable parameters can be overridden via CloudFormation parameters.
+ *
+ * **Breaking Change (v1.0.0)**: Removed stackArn in favor of explicit service environment variables.
+ * The explicit service parameters (packagerQueueUrl, athenaUserDatabase, quiltWebHost, icebergDatabase)
+ * are resolved at deployment time and passed directly to the container, eliminating runtime CloudFormation calls.
  */
 export interface FargateServiceProps {
     readonly vpc: ec2.IVpc;
@@ -24,8 +27,22 @@ export interface FargateServiceProps {
     readonly imageTag?: string;
     readonly stackVersion?: string;
 
+    // Explicit service parameters (v1.0.0+)
+    // These replace runtime resolution from stackArn
+    readonly packagerQueueUrl: string;
+    readonly athenaUserDatabase: string;
+    readonly quiltWebHost: string;
+    readonly icebergDatabase: string;
+
+    // NEW: Optional Athena resources (from Quilt stack discovery)
+    readonly icebergWorkgroup?: string;
+    readonly athenaUserWorkgroup?: string;
+    readonly athenaResultsBucket?: string;
+
+    // NEW: Optional IAM role ARN for cross-account S3 access (from Quilt stack discovery)
+    readonly writeRoleArn?: string;
+
     // Runtime-configurable parameters (from CloudFormation)
-    readonly stackArn: string;
     readonly benchlingSecret: string;
     readonly packageBucket: string;
     readonly quiltDatabase: string;
@@ -37,6 +54,36 @@ export class FargateService extends Construct {
     public readonly loadBalancer: elbv2.ApplicationLoadBalancer;
     public readonly cluster: ecs.Cluster;
     public readonly logGroup: logs.ILogGroup;
+
+    /**
+     * Extract secret name from Secrets Manager ARN
+     *
+     * AWS Secrets Manager automatically appends a 6-character random suffix to secret names
+     * in ARNs (e.g., "my-secret-Ab12Cd"). This function extracts the base secret name by
+     * removing the suffix.
+     *
+     * @param arn - Secrets Manager ARN
+     * @returns Secret name without the random suffix
+     */
+    private extractSecretName(arn: string): string {
+        if (!arn) {
+            return "";
+        }
+        // ARN format: arn:aws:secretsmanager:region:account:secret:name-XXXXXX
+        // where XXXXXX is a 6-character random suffix added by AWS
+        const match = arn.match(/secret:([^:]+)/);
+        if (!match) {
+            return arn;
+        }
+
+        const fullName = match[1];
+
+        // Remove the AWS-generated 6-character suffix (format: -XXXXXX)
+        // The suffix is always a hyphen followed by 6 alphanumeric characters
+        const withoutSuffix = fullName.replace(/-[A-Za-z0-9]{6}$/, "");
+
+        return withoutSuffix;
+    }
 
     constructor(scope: Construct, id: string, props: FargateServiceProps) {
         super(scope, id);
@@ -83,17 +130,6 @@ export class FargateService extends Construct {
             assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
         });
 
-        // Grant CloudFormation read access (to query stack outputs)
-        taskRole.addToPolicy(
-            new iam.PolicyStatement({
-                actions: [
-                    "cloudformation:DescribeStacks",
-                    "cloudformation:DescribeStackResources",
-                ],
-                resources: [props. stackArn],
-            }),
-        );
-
         // Grant Secrets Manager read access (to fetch Benchling credentials)
         // Use both config.benchling.secretArn and runtime parameter
         const secretArn = config.benchling.secretArn || props.benchlingSecret;
@@ -138,6 +174,21 @@ export class FargateService extends Construct {
             }),
         );
 
+        // Grant permission to assume Quilt stack IAM role for cross-account S3 access
+        // This role is discovered from the Quilt stack resources during setup
+        if (props.writeRoleArn) {
+            taskRole.addToPolicy(
+                new iam.PolicyStatement({
+                    actions: ["sts:AssumeRole"],
+                    resources: [
+                        // Use wildcard pattern to match any account/stack name
+                        // This supports cross-account deployments and different stack names
+                        "arn:aws:iam::*:role/*-T4BucketWriteRole-*",
+                    ],
+                }),
+            );
+        }
+
         // Grant wildcard SQS access (queue ARN will be resolved at runtime)
         taskRole.addToPolicy(
             new iam.PolicyStatement({
@@ -171,6 +222,19 @@ export class FargateService extends Construct {
         );
 
         // Grant Athena access to task role for package querying
+        // Support both discovered workgroup (from Quilt stack) and fallback to primary
+        const athenaWorkgroups = props.athenaUserWorkgroup
+            ? [
+                // Discovered workgroup from Quilt stack
+                `arn:aws:athena:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:workgroup/${props.athenaUserWorkgroup}`,
+                // Fallback to primary workgroup
+                `arn:aws:athena:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:workgroup/primary`,
+            ]
+            : [
+                // Only primary workgroup if no discovered workgroup
+                `arn:aws:athena:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:workgroup/primary`,
+            ];
+
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
@@ -180,26 +244,39 @@ export class FargateService extends Construct {
                     "athena:StopQueryExecution",
                     "athena:GetWorkGroup",
                 ],
-                resources: [
-                    `arn:aws:athena:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:workgroup/primary`,
-                ],
+                resources: athenaWorkgroups,
             }),
         );
 
         // Grant S3 access for Athena query results
-        const athenaResultsBucketArn = `arn:aws:s3:::aws-athena-query-results-${account}-${region}`;
+        // Support both discovered results bucket (from Quilt stack) and fallback to default
+        const athenaResultsBuckets = props.athenaResultsBucket
+            ? [
+                // Discovered results bucket from Quilt stack
+                `arn:aws:s3:::${props.athenaResultsBucket}`,
+                `arn:aws:s3:::${props.athenaResultsBucket}/*`,
+                // Fallback to default bucket
+                `arn:aws:s3:::aws-athena-query-results-${account}-${region}`,
+                `arn:aws:s3:::aws-athena-query-results-${account}-${region}/*`,
+            ]
+            : [
+                // Only default bucket if no discovered bucket
+                `arn:aws:s3:::aws-athena-query-results-${account}-${region}`,
+                `arn:aws:s3:::aws-athena-query-results-${account}-${region}/*`,
+            ];
+
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
                     "s3:GetBucketLocation",
                     "s3:GetObject",
                     "s3:ListBucket",
+                    "s3:ListBucketVersions",
                     "s3:PutObject",
+                    "s3:PutBucketPublicAccessBlock",
+                    "s3:CreateBucket",
                 ],
-                resources: [
-                    athenaResultsBucketArn,
-                    `${athenaResultsBucketArn}/*`,
-                ],
+                resources: athenaResultsBuckets,
             }),
         );
 
@@ -213,22 +290,36 @@ export class FargateService extends Construct {
         });
 
         // Build environment variables using new config structure
-        // Container will query CloudFormation and Secrets Manager for runtime config
+        // v1.0.0+: Explicit service parameters eliminate runtime CloudFormation calls
+        // CRITICAL: These must match bin/xdg-launch.ts:buildEnvVars() exactly (lines 182-229)
+        // Package configuration comes from AWS Secrets Manager, NOT environment variables
         const environmentVars: { [key: string]: string } = {
+            // AWS Configuration
             AWS_REGION: region,
             AWS_DEFAULT_REGION: region,
+
+            // Quilt Services (v0.8.0+ service-specific - NO MORE STACK ARN!)
+            QUILT_WEB_HOST: props.quiltWebHost,
+            ATHENA_USER_DATABASE: props.athenaUserDatabase,
+            ATHENA_USER_WORKGROUP: props.athenaUserWorkgroup || "primary",
+            // Only set optional variables if they have values (don't pass empty strings)
+            ...(props.athenaResultsBucket ? { ATHENA_RESULTS_BUCKET: props.athenaResultsBucket } : {}),
+            ...(props.icebergDatabase ? { ICEBERG_DATABASE: props.icebergDatabase } : {}),
+            ...(props.icebergWorkgroup ? { ICEBERG_WORKGROUP: props.icebergWorkgroup } : {}),
+            PACKAGER_SQS_URL: props.packagerQueueUrl,
+
+            // IAM Role ARN for cross-account S3 access (optional)
+            ...(props.writeRoleArn ? { QUILT_WRITE_ROLE_ARN: props.writeRoleArn } : {}),
+
+            // Benchling Configuration (credentials from Secrets Manager, NOT environment)
+            BenchlingSecret: this.extractSecretName(props.benchlingSecret),
+
+            // Security Configuration (verification can be disabled for dev/test)
+            ENABLE_WEBHOOK_VERIFICATION: String(config.security?.enableVerification !== false),
+
+            // Application Configuration
             FLASK_ENV: "production",
             LOG_LEVEL: props.logLevel || config.logging?.level || "INFO",
-            ENABLE_WEBHOOK_VERIFICATION: config.security?.enableVerification !== false ? "true" : "false",
-            BENCHLING_WEBHOOK_VERSION: props.stackVersion || props.imageTag || "latest",
-            // Runtime-configurable parameters (from CloudFormation)
-            QuiltStackARN: props. stackArn,
-            BenchlingSecret: props.benchlingSecret,
-            // Static config values (for reference)
-            BENCHLING_TENANT: config.benchling.tenant,
-            BENCHLING_PKG_BUCKET: config.packages.bucket,
-            BENCHLING_PKG_PREFIX: config.packages.prefix,
-            BENCHLING_PKG_KEY: config.packages.metadataKey,
         };
 
         // Add container with configured environment
