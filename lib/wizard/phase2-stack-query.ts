@@ -76,23 +76,59 @@ export async function runStackQuery(
         const account = inferenceResult.account || "";
         const benchlingSecretArn = inferenceResult.benchlingSecretArn;
         const benchlingIntegrationEnabled = inferenceResult.benchlingIntegrationEnabled;
+        const athenaUserWorkgroup = inferenceResult.athenaUserWorkgroup;
+        const athenaUserPolicy = inferenceResult.athenaUserPolicy;
+        const icebergWorkgroup = inferenceResult.icebergWorkgroup;
+        const icebergDatabase = inferenceResult.icebergDatabase;
+        const athenaResultsBucket = inferenceResult.athenaResultsBucket;
+        const athenaResultsBucketPolicy = inferenceResult.athenaResultsBucketPolicy;
+        const readRoleArn = inferenceResult.readRoleArn;
+        const writeRoleArn = inferenceResult.writeRoleArn;
 
         // Log what we found
         console.log(chalk.green("✓ Stack query succeeded\n"));
-        console.log(chalk.dim(`Stack ARN: ${stackArn}`));
-        console.log(chalk.dim(`Database: ${database}`));
-        console.log(chalk.dim(`Queue URL: ${queueUrl}`));
-        console.log(chalk.dim(`Region: ${region}`));
-        console.log(chalk.dim(`Account: ${account}`));
+        console.log(chalk.dim(`✓ Stack ARN: ${stackArn}`));
+        console.log(chalk.dim(`✓ Account: ${account}`));
+        console.log(chalk.dim(`✓ Region: ${region}`));
+        console.log(chalk.dim(`✓ Queue URL: ${queueUrl}`));
+        console.log(chalk.dim(`✓ Database: ${database}`));
+        console.log(chalk.dim(`✓ Workgroup: ${athenaUserWorkgroup}`));
+        console.log(athenaUserPolicy
+            ? chalk.dim(`✓ Athena User Policy: ${athenaUserPolicy}`)
+            : chalk.yellow("⚠ Athena User Policy: NOT FOUND"));
+        console.log(athenaResultsBucket
+            ? chalk.dim(`✓ Athena Results Bucket: ${athenaResultsBucket}`)
+            : chalk.yellow("⚠ Athena Results Bucket: NOT FOUND"));
+        console.log(athenaResultsBucketPolicy
+            ? chalk.dim(`✓ Athena Results Bucket Policy: ${athenaResultsBucketPolicy}`)
+            : chalk.yellow("⚠ Athena Results Bucket Policy: NOT FOUND"));
+
+        // Iceberg resources are optional (recent addition to Quilt stacks)
+        if (icebergDatabase) {
+            console.log(chalk.green(`✓ Iceberg Database: ${icebergDatabase}`));
+        } else {
+            console.log(chalk.dim("  Iceberg Database: Not available (optional)"));
+        }
+        if (icebergWorkgroup) {
+            console.log(chalk.green(`✓ Iceberg Workgroup: ${icebergWorkgroup}`));
+        } else {
+            console.log(chalk.dim("  Iceberg Workgroup: Not available (optional)"));
+        }
+
+        // IAM role ARNs are logged by inferQuiltConfig, so no need to log again here
 
         if (benchlingSecretArn) {
-            console.log(chalk.dim(`BenchlingSecret: ${benchlingSecretArn}`));
+            console.log(chalk.green(`✓ BenchlingSecret: ${benchlingSecretArn}`));
         } else {
-            console.log(chalk.dim("BenchlingSecret: Not found in stack"));
+            console.log(chalk.dim("⚠ BenchlingSecret: Not found in stack"));
         }
 
         if (benchlingIntegrationEnabled !== undefined) {
-            console.log(chalk.dim(`BenchlingIntegration: ${benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`));
+            console.log(
+                benchlingIntegrationEnabled
+                    ? chalk.green("✓ Benchling Integration: Enabled")
+                    : chalk.yellow("⚠ Benchling Integration: Disabled"),
+            );
         }
 
         console.log("");
@@ -106,6 +142,14 @@ export async function runStackQuery(
             account,
             benchlingSecretArn,
             benchlingIntegrationEnabled,
+            athenaUserWorkgroup,
+            athenaUserPolicy,
+            icebergWorkgroup,
+            icebergDatabase,
+            athenaResultsBucket,
+            athenaResultsBucketPolicy,
+            readRoleArn,
+            writeRoleArn,
             stackQuerySucceeded: true,
         };
     } catch (error) {

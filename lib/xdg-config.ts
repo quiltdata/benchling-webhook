@@ -147,8 +147,9 @@ export class XDGConfig extends XDGBase {
             // Atomic rename (with fallback for cross-device on Windows)
             try {
                 renameSync(tempPath, configPath);
-            } catch {
+            } catch (error) {
                 // Fall back to copy+delete for cross-device scenarios (Windows)
+                console.warn(`Warning: Atomic rename failed, using copy fallback: ${(error as Error).message}`);
                 // Ensure target directory exists before copying
                 const targetDir = dirname(configPath);
                 if (!existsSync(targetDir)) {
@@ -279,8 +280,9 @@ export class XDGConfig extends XDGBase {
             // Atomic rename (with fallback for cross-device on Windows)
             try {
                 renameSync(tempPath, deploymentsPath);
-            } catch {
+            } catch (error) {
                 // Fall back to copy+delete for cross-device scenarios (Windows)
+                console.warn(`Warning: Atomic rename failed, using copy fallback: ${(error as Error).message}`);
                 // Ensure target directory exists before copying
                 const targetDir = dirname(deploymentsPath);
                 if (!existsSync(targetDir)) {

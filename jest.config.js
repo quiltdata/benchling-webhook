@@ -5,7 +5,7 @@ module.exports = {
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: {
-        module: 'node20',
+        module: 'commonjs',
         resolveJsonModule: true
       }
     }]
@@ -13,6 +13,9 @@ module.exports = {
   transformIgnorePatterns: [
     'node_modules/(?!(.*)\\.ts$)'
   ],
+  moduleNameMapper: {
+    '^chalk$': '<rootDir>/test/__mocks__/chalk.ts'
+  },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   cacheDirectory: '<rootDir>/.jest-cache',
   collectCoverage: true,

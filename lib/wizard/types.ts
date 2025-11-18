@@ -44,6 +44,22 @@ export interface StackQueryResult {
     benchlingIntegrationEnabled?: boolean;
     /** Whether stack query succeeded */
     stackQuerySucceeded: boolean;
+    /** Athena workgroup for user queries (optional) */
+    athenaUserWorkgroup?: string;
+    /** Athena user policy ARN (optional) */
+    athenaUserPolicy?: string;
+    /** Athena workgroup for Iceberg queries (optional) */
+    icebergWorkgroup?: string;
+    /** Iceberg database name - now from both outputs and resources */
+    icebergDatabase?: string;
+    /** User Athena results bucket (S3 bucket for query results) */
+    athenaResultsBucket?: string;
+    /** User Athena results bucket policy ARN */
+    athenaResultsBucketPolicy?: string;
+    /** IAM role ARN for read-only S3 access (from T4BucketReadRole) */
+    readRoleArn?: string;
+    /** IAM role ARN for read-write S3 access (from T4BucketWriteRole) */
+    writeRoleArn?: string;
 }
 
 /**
@@ -188,4 +204,6 @@ export interface StandaloneModeResult {
     secretArn: string;
     /** Whether deployment was executed */
     deployed: boolean;
+    /** Whether Phase 7 already handled deployment decision (asked user or deployed) */
+    deploymentHandled: boolean;
 }

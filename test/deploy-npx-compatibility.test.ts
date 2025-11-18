@@ -14,7 +14,7 @@
  * with npm scripts.
  */
 
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 
 describe("Deploy Command NPX Compatibility", () => {
@@ -123,7 +123,7 @@ describe("Sync Secrets Module Exports", () => {
 describe("Documentation", () => {
     it("should have specification document for the fix", () => {
         const specPath = join(__dirname, "../spec/221-next-steps/14-npx-missing-script-fix.md");
-        const specExists = require("fs").existsSync(specPath);
+        const specExists = existsSync(specPath);
 
         expect(specExists).toBe(true);
 

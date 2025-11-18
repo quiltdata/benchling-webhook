@@ -104,12 +104,11 @@ describe("BenchlingWebhookStack", () => {
     test("throws error when missing required parameters", () => {
         const app = new cdk.App();
         const config = createMockConfig({
-            quilt: {
-                stackArn: "",
-                catalog: "https://quilt.example.com",
-                database: "test_db",
-                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-                region: "us-east-1",
+            benchling: {
+                secretArn: "",
+                tenant: "test-tenant",
+                clientId: "client_test123",
+                appDefinitionId: "test-app-id",
             },
         });
 
@@ -209,9 +208,9 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
-    test("container receives v0.7.0 environment variables", () => {
-        // v0.7.0 uses structured config with static values as env vars
-        // and runtime parameters (QuiltStackARN, BenchlingSecret) from CloudFormation
+    test("container receives v1.0.0 environment variables", () => {
+        // v1.0.0 uses explicit service parameters resolved at deployment time
+        // Eliminates runtime CloudFormation API calls
         const taskDefs = template.findResources("AWS::ECS::TaskDefinition");
         const taskDefKeys = Object.keys(taskDefs);
         const taskDef = taskDefs[taskDefKeys[0]];
@@ -228,18 +227,25 @@ describe("BenchlingWebhookStack", () => {
             actualEnvVars.add(secret.Name);
         });
 
-        // v0.7.0 static config values (from ProfileConfig)
-        const expectedStaticVars = [
-            "BENCHLING_TENANT",
-            "BENCHLING_PKG_BUCKET",
-            "BENCHLING_PKG_PREFIX",
-            "BENCHLING_PKG_KEY",
+        // v1.0.0 explicit service parameters (resolved at deployment time)
+        const expectedServiceVars = [
+            "PACKAGER_SQS_URL",
+            "ATHENA_USER_DATABASE",
+            "QUILT_WEB_HOST",
         ];
 
-        // Runtime parameters (from CloudFormation)
-        const expectedRuntimeVars = [
-            "QuiltStackARN",
-            "BenchlingSecret",
+        // Optional service parameters (may be empty string)
+        const optionalServiceVars = [
+            "ATHENA_USER_WORKGROUP",
+            "ATHENA_RESULTS_BUCKET",
+            "ICEBERG_DATABASE",
+            "ICEBERG_WORKGROUP",
+        ];
+
+        // Benchling configuration - only BenchlingSecret name is passed
+        // All other Benchling config comes from Secrets Manager at runtime
+        const expectedBenchlingVars = [
+            "BenchlingSecret",  // Secret name (NOT ARN) - used to fetch credentials at runtime
         ];
 
         // Common/system variables
@@ -249,16 +255,18 @@ describe("BenchlingWebhookStack", () => {
             "AWS_DEFAULT_REGION",
             "ENABLE_WEBHOOK_VERIFICATION",
             "FLASK_ENV",
-            "BENCHLING_WEBHOOK_VERSION",
         ];
 
-        // Verify static config values are present
-        expectedStaticVars.forEach((varName) => {
+        // Verify explicit service variables are present
+        expectedServiceVars.forEach((varName) => {
             expect(actualEnvVars.has(varName)).toBe(true);
         });
 
-        // Verify runtime parameters are present
-        expectedRuntimeVars.forEach((varName) => {
+        // Optional service variables (may or may not be present, no assertion needed)
+        // optionalServiceVars - just acknowledged, not asserted
+
+        // Verify Benchling config values are present
+        expectedBenchlingVars.forEach((varName) => {
             expect(actualEnvVars.has(varName)).toBe(true);
         });
 
@@ -272,18 +280,27 @@ describe("BenchlingWebhookStack", () => {
             "BENCHLING_CLIENT_ID",
             "BENCHLING_CLIENT_SECRET",
             "BENCHLING_APP_DEFINITION_ID",
+            "BENCHLING_SECRET_ARN",  // We pass BenchlingSecret (name), not ARN
+            "BENCHLING_TENANT",  // Comes from Secrets Manager
+            "BENCHLING_PKG_BUCKET",  // Comes from Secrets Manager
+            "BENCHLING_PKG_PREFIX",  // Comes from Secrets Manager
+            "BENCHLING_PKG_KEY",  // Comes from Secrets Manager
         ];
 
         prohibitedVars.forEach((varName) => {
             expect(actualEnvVars.has(varName)).toBe(false);
         });
 
-        // Verify old queue/catalog variables are NOT present (now resolved at runtime via CloudFormation)
+        // Verify old variable names are NOT present (replaced by explicit parameters)
         const removedVars = [
             "QUEUE_URL",
             "QUILT_USER_BUCKET",
             "QUILT_CATALOG",
             "QUILT_DATABASE",
+            "PACKAGE_BUCKET",  // Package config comes from Secrets Manager
+            "PACKAGE_PREFIX",  // Package config comes from Secrets Manager
+            "PACKAGE_METADATA_KEY",  // Package config comes from Secrets Manager
+            "WEBHOOK_ALLOW_LIST",  // Security config comes from Secrets Manager
         ];
 
         removedVars.forEach((varName) => {
@@ -294,15 +311,6 @@ describe("BenchlingWebhookStack", () => {
     // ===================================================================
     // Secrets-Only Mode: CloudFormation Parameter Tests
     // ===================================================================
-
-    test("creates QuiltStackARN CloudFormation parameter", () => {
-        const parameters = template.toJSON().Parameters;
-        expect(parameters).toHaveProperty("QuiltStackARN");
-
-        const param = parameters.QuiltStackARN;
-        expect(param.Type).toBe("String");
-        expect(param.Description).toContain("Quilt CloudFormation stack");
-    });
 
     test("creates BenchlingSecret CloudFormation parameter", () => {
         const parameters = template.toJSON().Parameters;
@@ -321,6 +329,43 @@ describe("BenchlingWebhookStack", () => {
         expect(param.Type).toBe("String");
         expect(param.AllowedValues).toContain("INFO");
         expect(param.AllowedValues).toContain("DEBUG");
+    });
+
+    test("creates PackagerQueueUrl CloudFormation parameter", () => {
+        const parameters = template.toJSON().Parameters;
+        expect(parameters).toHaveProperty("PackagerQueueUrl");
+
+        const param = parameters.PackagerQueueUrl;
+        expect(param.Type).toBe("String");
+        expect(param.Description).toContain("SQS queue URL");
+    });
+
+    test("creates AthenaUserDatabase CloudFormation parameter", () => {
+        const parameters = template.toJSON().Parameters;
+        expect(parameters).toHaveProperty("AthenaUserDatabase");
+
+        const param = parameters.AthenaUserDatabase;
+        expect(param.Type).toBe("String");
+        expect(param.Description).toContain("Athena");
+    });
+
+    test("creates QuiltWebHost CloudFormation parameter", () => {
+        const parameters = template.toJSON().Parameters;
+        expect(parameters).toHaveProperty("QuiltWebHost");
+
+        const param = parameters.QuiltWebHost;
+        expect(param.Type).toBe("String");
+        expect(param.Description).toContain("catalog domain");
+    });
+
+    test("creates IcebergDatabase CloudFormation parameter", () => {
+        const parameters = template.toJSON().Parameters;
+        expect(parameters).toHaveProperty("IcebergDatabase");
+
+        const param = parameters.IcebergDatabase;
+        expect(param.Type).toBe("String");
+        expect(param.Description).toContain("Iceberg");
+        expect(param.Default).toBe("");
     });
 
     // ===================================================================
@@ -345,7 +390,7 @@ describe("BenchlingWebhookStack", () => {
         expect(foundSecretPermission).toBe(true);
     });
 
-    test("task role has CloudFormation read permissions", () => {
+    test("task role does not have CloudFormation permissions (removed in v1.0.0)", () => {
         const policies = template.findResources("AWS::IAM::Policy");
         let foundCfnPermission = false;
 
@@ -360,18 +405,7 @@ describe("BenchlingWebhookStack", () => {
             });
         });
 
-        expect(foundCfnPermission).toBe(true);
-    });
-
-    test("container receives QuiltStackARN environment variable", () => {
-        const taskDefs = template.findResources("AWS::ECS::TaskDefinition");
-        const taskDefKeys = Object.keys(taskDefs);
-        const taskDef = taskDefs[taskDefKeys[0]];
-        const containerDef = taskDef.Properties.ContainerDefinitions[0];
-        const environment = containerDef.Environment || [];
-
-        const stackArnEnv = environment.find((e: any) => e.Name === "QuiltStackARN");
-        expect(stackArnEnv).toBeDefined();
+        expect(foundCfnPermission).toBe(false);
     });
 
     test("container receives BenchlingSecret environment variable", () => {

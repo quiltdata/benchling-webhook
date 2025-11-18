@@ -4,6 +4,9 @@
  */
 
 import { execSync } from "child_process";
+import * as https from "https";
+import * as http from "http";
+import { CloudFormationClient, ListStackResourcesCommand } from "@aws-sdk/client-cloudformation";
 import { isQueueUrl } from "./sqs";
 import { IAwsProvider, IHttpClient, StackDetails } from "../interfaces/aws-provider";
 import { ExecSyncAwsProvider } from "../providers/exec-sync-aws-provider";
@@ -42,12 +45,184 @@ export interface StackSummary {
 }
 
 /**
+ * Stack resource metadata
+ *
+ * Maps logical resource ID to physical resource information
+ */
+export interface StackResourceMap {
+    [logicalId: string]: {
+        physicalResourceId: string;
+        resourceType: string;
+        resourceStatus: string;
+    };
+}
+
+/**
+ * Discovered Quilt resources from stack
+ *
+ * Target resources:
+ * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
+ * - UserAthenaNonManagedRolePolicy (AWS::IAM::Policy)
+ * - IcebergWorkGroup (AWS::Athena::WorkGroup)
+ * - IcebergDatabase (AWS::Glue::Database)
+ * - UserAthenaResultsBucket (AWS::S3::Bucket)
+ * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
+ * - T4BucketReadRole (AWS::IAM::Role)
+ * - T4BucketWriteRole (AWS::IAM::Role)
+ */
+export interface DiscoveredQuiltResources {
+    athenaUserWorkgroup?: string;
+    athenaUserPolicy?: string;
+    icebergWorkgroup?: string;
+    icebergDatabase?: string;
+    athenaResultsBucket?: string;
+    athenaResultsBucketPolicy?: string;
+    readRoleArn?: string;
+    writeRoleArn?: string;
+}
+
+/**
+ * Get stack resources (physical resource IDs)
+ *
+ * Unlike outputs (which are user-defined exports), resources are the actual
+ * AWS resources created by the stack.
+ *
+ * @param region AWS region
+ * @param stackName CloudFormation stack name or ARN
+ * @param awsProvider Optional AWS provider for testing
+ * @returns Stack resources with logical and physical IDs
+ */
+export async function getStackResources(
+    region: string,
+    stackName: string,
+    _awsProvider?: IAwsProvider,
+): Promise<StackResourceMap> {
+    // FAIL LOUDLY - don't swallow errors silently
+    const client = new CloudFormationClient({ region });
+    const resourceMap: StackResourceMap = {};
+
+    // Handle pagination to fetch all resources (not just first 100)
+    // Use ListStackResourcesCommand instead of DescribeStackResourcesCommand
+    // because DescribeStackResources only returns first 100 resources
+    let nextToken: string | undefined;
+
+    do {
+        const command = new ListStackResourcesCommand({
+            StackName: stackName,
+            ...(nextToken && { NextToken: nextToken }),
+        });
+        const response = await client.send(command);
+
+        for (const resource of response.StackResourceSummaries || []) {
+            if (resource.LogicalResourceId && resource.PhysicalResourceId) {
+                resourceMap[resource.LogicalResourceId] = {
+                    physicalResourceId: resource.PhysicalResourceId,
+                    resourceType: resource.ResourceType || "Unknown",
+                    resourceStatus: resource.ResourceStatus || "Unknown",
+                };
+            }
+        }
+
+        nextToken = response.NextToken;
+    } while (nextToken);
+
+    return resourceMap;
+}
+
+/**
+ * Validate IAM role ARN format
+ *
+ * @param arn - ARN to validate
+ * @returns true if valid IAM role ARN, false otherwise
+ */
+export function validateRoleArn(arn: string): boolean {
+    const arnPattern = /^arn:aws:iam::\d{12}:role\/.+$/;
+    return arnPattern.test(arn);
+}
+
+/**
+ * Convert a role name to a full IAM role ARN
+ *
+ * @param roleNameOrArn - Role name (e.g., "ReadQuiltV2-tf-rc") or existing ARN
+ * @param account - AWS account ID
+ * @returns Full IAM role ARN
+ */
+export function toRoleArn(roleNameOrArn: string, account: string): string {
+    // If already an ARN, return as-is
+    if (validateRoleArn(roleNameOrArn)) {
+        return roleNameOrArn;
+    }
+    // Convert role name to ARN
+    return `arn:aws:iam::${account}:role/${roleNameOrArn}`;
+}
+
+/**
+ * Extract Athena workgroups, IAM policies, Glue databases, S3 buckets, and IAM roles from stack resources
+ *
+ * Target resources:
+ * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
+ * - UserAthenaNonManagedRolePolicy (AWS::IAM::Policy)
+ * - IcebergWorkGroup (AWS::Athena::WorkGroup)
+ * - IcebergDatabase (AWS::Glue::Database)
+ * - UserAthenaResultsBucket (AWS::S3::Bucket)
+ * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
+ * - T4BucketReadRole (AWS::IAM::Role)
+ * - T4BucketWriteRole (AWS::IAM::Role)
+ *
+ * @param resources Stack resource map from getStackResources
+ * @param account Optional AWS account ID for converting role names to ARNs
+ * @param region Optional AWS region (currently unused but reserved for future use)
+ * @returns Discovered Quilt resources
+ */
+export function extractQuiltResources(
+    resources: StackResourceMap,
+    account?: string,
+    _region?: string,
+): DiscoveredQuiltResources {
+    // Map logical resource IDs to discovered resource properties
+    const resourceMapping: Record<string, keyof DiscoveredQuiltResources> = {
+        UserAthenaNonManagedRoleWorkgroup: "athenaUserWorkgroup",
+        UserAthenaNonManagedRolePolicy: "athenaUserPolicy",
+        IcebergWorkGroup: "icebergWorkgroup",
+        IcebergDatabase: "icebergDatabase",
+        UserAthenaResultsBucket: "athenaResultsBucket",
+        UserAthenaResultsBucketPolicy: "athenaResultsBucketPolicy",
+        T4BucketReadRole: "readRoleArn",
+        T4BucketWriteRole: "writeRoleArn",
+    };
+
+    const discovered: DiscoveredQuiltResources = {};
+
+    // Extract physical resource IDs for each target resource
+    for (const [logicalId, propertyName] of Object.entries(resourceMapping)) {
+        if (resources[logicalId]) {
+            const physicalId = resources[logicalId].physicalResourceId;
+
+            // For IAM roles, convert role names to ARNs if account ID is available
+            if (propertyName === "readRoleArn" || propertyName === "writeRoleArn") {
+                if (validateRoleArn(physicalId)) {
+                    // Already a valid ARN
+                    discovered[propertyName] = physicalId;
+                } else if (account) {
+                    // Convert role name to ARN using account ID
+                    discovered[propertyName] = toRoleArn(physicalId, account);
+                } else {
+                    // Log warning if we can't convert - need account ID
+                    console.warn(`Warning: Cannot convert role name to ARN for ${logicalId}: ${physicalId} (missing account ID)`);
+                }
+            } else {
+                discovered[propertyName] = physicalId;
+            }
+        }
+    }
+
+    return discovered;
+}
+
+/**
  * Fetch JSON from a URL using native Node.js modules
  */
 export async function fetchJson(url: string): Promise<unknown> {
-    const https = await import("https");
-    const http = await import("http");
-
     return new Promise((resolve, reject) => {
         const parsedUrl = new URL(url);
         const client = parsedUrl.protocol === "https:" ? https : http;

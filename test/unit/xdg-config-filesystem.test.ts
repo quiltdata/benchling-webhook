@@ -47,8 +47,8 @@ describe("XDGConfig Filesystem Storage Primitives", () => {
         },
         deployment: {
             region: "us-east-1",
-        },
-        _metadata: {
+                },
+                _metadata: {
             version: "0.7.0",
             createdAt: "2025-11-04T10:00:00Z",
             updatedAt: "2025-11-04T10:00:00Z",

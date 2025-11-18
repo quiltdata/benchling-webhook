@@ -28,8 +28,9 @@ class TestPackageQueryImports:
 class TestPackageQuery:
     """Tests for PackageQuery class."""
 
+    @patch("src.package_query.RoleManager")
     @patch("src.package_query.boto3")
-    def test_init(self, mock_boto3):
+    def test_init(self, mock_boto3, mock_role_manager_class):
         """Test PackageQuery initialization."""
         # Mock AWS clients
         mock_athena = Mock()
@@ -37,6 +38,16 @@ class TestPackageQuery:
         mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
 
         mock_boto3.client.side_effect = lambda service, **kwargs: (mock_athena if service == "athena" else mock_sts)
+
+        # Mock RoleManager to return a session that creates the mock Athena client
+        mock_role_manager = Mock()
+        mock_session = Mock()
+        mock_session.client.return_value = mock_athena
+        mock_role_manager._get_or_create_session.return_value = (mock_session, None)
+        mock_role_manager.role_arn = None
+        mock_role_manager._session = None
+        mock_role_manager._expires_at = None
+        mock_role_manager_class.return_value = mock_role_manager
 
         query = PackageQuery(
             bucket="test-bucket",
@@ -65,8 +76,9 @@ class TestPackageQuery:
                 catalog_url="catalog.example.com",
             )
 
+    @patch("src.package_query.RoleManager")
     @patch("src.package_query.boto3")
-    def test_find_unique_packages_returns_package_instances(self, mock_boto3):
+    def test_find_unique_packages_returns_package_instances(self, mock_boto3, mock_role_manager_class):
         """Test that find_unique_packages returns Package instances."""
         # Mock AWS clients
         mock_athena = Mock()
@@ -102,6 +114,16 @@ class TestPackageQuery:
         }
 
         mock_boto3.client.side_effect = lambda service, **kwargs: (mock_athena if service == "athena" else mock_sts)
+
+        # Mock RoleManager to return a session that creates the mock Athena client
+        mock_role_manager = Mock()
+        mock_session = Mock()
+        mock_session.client.return_value = mock_athena
+        mock_role_manager._get_or_create_session.return_value = (mock_session, None)
+        mock_role_manager.role_arn = None
+        mock_role_manager._session = None
+        mock_role_manager._expires_at = None
+        mock_role_manager_class.return_value = mock_role_manager
 
         query = PackageQuery(
             bucket="test-bucket",

@@ -13,10 +13,7 @@ import { configShowCommand } from "./commands/config-show";
 import { installCommand } from "./commands/install";
 import { statusCommand } from "./commands/status";
 import { logsCommand } from "./commands/logs";
-
-// Load package.json for version
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pkg = require("../package.json");
+import pkg from "../package.json";
 
 const program = new Command();
 
@@ -135,6 +132,10 @@ program
         "Auto-refresh interval in seconds (default: 10, use 0 or non-numeric to disable)",
         "10",
     )
+    .option(
+        "--no-exit",
+        "Continue monitoring even after stack reaches terminal status",
+    )
     .addHelpText(
         "after",
         `
@@ -152,8 +153,12 @@ Examples:
   Custom refresh interval (30 seconds):
     $ npx @quiltdata/benchling-webhook status --timer 30
 
+  Continue monitoring even after completion:
+    $ npx @quiltdata/benchling-webhook status --no-exit
+
 Note: This command only works for integrated stack mode profiles.
-Auto-refresh stops when stack reaches a terminal state (*_COMPLETE or *_FAILED).
+By default, auto-refresh stops when stack reaches a terminal state (*_COMPLETE or *_FAILED).
+Use --no-exit to keep monitoring indefinitely.
 `,
     )
     .action(async (options) => {

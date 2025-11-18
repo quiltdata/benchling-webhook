@@ -29,6 +29,8 @@ export interface StatusCommandOptions {
     detailed?: boolean;
     /** Auto-refresh interval in seconds (0 or non-numeric to disable) */
     timer?: string | number;
+    /** Exit after reaching terminal status (default: true, use --no-exit to keep monitoring) */
+    exit?: boolean;
 }
 
 export interface StatusResult {
@@ -584,7 +586,7 @@ async function fetchCompleteStatus(
  * Displays status result to console
  */
 /* istanbul ignore next */
-function displayStatusResult(result: StatusResult, profile: string): void {
+function displayStatusResult(result: StatusResult, profile: string, quiltConfig?: import("../../lib/types/config").QuiltConfig): void {
     const stackName = result.stackArn?.match(/stack\/([^/]+)\//)?.[1] || result.stackArn || "Unknown";
     const region = result.region || "Unknown";
 
@@ -662,6 +664,24 @@ function displayStatusResult(result: StatusResult, profile: string): void {
         }
         if (result.stackOutputs.apiGatewayLogGroup) {
             console.log(`  ${chalk.cyan("API Gateway:")} ${chalk.dim(result.stackOutputs.apiGatewayLogGroup)}`);
+        }
+    }
+
+    // Display Quilt stack resources (discovered from stack, not outputs)
+    if (quiltConfig) {
+        const resources = [];
+        if (quiltConfig.athenaUserWorkgroup) resources.push({ label: "User Workgroup", value: quiltConfig.athenaUserWorkgroup });
+        if (quiltConfig.athenaUserPolicy) resources.push({ label: "User Policy", value: quiltConfig.athenaUserPolicy });
+        if (quiltConfig.icebergWorkgroup) resources.push({ label: "Iceberg Workgroup", value: quiltConfig.icebergWorkgroup });
+        if (quiltConfig.icebergDatabase) resources.push({ label: "Iceberg Database", value: quiltConfig.icebergDatabase });
+        if (quiltConfig.athenaResultsBucket) resources.push({ label: "Athena Results Bucket", value: quiltConfig.athenaResultsBucket });
+        if (quiltConfig.athenaResultsBucketPolicy) resources.push({ label: "Results Bucket Policy", value: quiltConfig.athenaResultsBucketPolicy });
+
+        if (resources.length > 0) {
+            console.log(`${chalk.bold("Quilt Stack Resources:")}`);
+            for (const res of resources) {
+                console.log(`  ${chalk.cyan(res.label + ":")} ${chalk.dim(res.value)}`);
+            }
         }
     }
 
@@ -839,6 +859,7 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
         awsProfile,
         configStorage,
         timer,
+        exit = true,
     } = options;
 
     const xdg = configStorage || new XDGConfig();
@@ -870,6 +891,12 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
 
     // Extract stack info
     const stackArn = config.quilt.stackArn;
+    if (!stackArn) {
+        return {
+            success: false,
+            error: "Quilt stack ARN not found in configuration. This command requires a Quilt stack ARN to check integration status.",
+        };
+    }
     const region = config.deployment.region;
     const stackName = stackArn.match(/stack\/([^/]+)\//)?.[1] || stackArn;
 
@@ -904,23 +931,26 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
                 return result;
             }
 
-            displayStatusResult(result, profile);
+            displayStatusResult(result, profile, config.quilt);
 
             // Check if we should exit (no timer or user disabled it)
             if (!refreshInterval) {
                 break;
             }
 
-            // If terminal status, announce completion and exit
+            // If terminal status, announce completion and exit (unless --no-exit is set)
             if (isTerminalStatus(result.stackStatus)) {
-                if (result.stackStatus?.includes("COMPLETE") && !result.stackStatus.includes("ROLLBACK")) {
-                    console.log(chalk.green("✓ Stack reached stable state. Monitoring complete.\n"));
-                } else if (result.stackStatus?.includes("FAILED") || result.stackStatus?.includes("ROLLBACK")) {
-                    console.log(chalk.red("✗ Stack operation failed. Monitoring stopped.\n"));
-                } else {
-                    console.log(chalk.dim("⟳ Stack reached terminal state. Auto-refresh stopped.\n"));
+                if (exit) {
+                    if (result.stackStatus?.includes("COMPLETE") && !result.stackStatus.includes("ROLLBACK")) {
+                        console.log(chalk.green("✓ Stack reached stable state. Monitoring complete.\n"));
+                    } else if (result.stackStatus?.includes("FAILED") || result.stackStatus?.includes("ROLLBACK")) {
+                        console.log(chalk.red("✗ Stack operation failed. Monitoring stopped.\n"));
+                    } else {
+                        console.log(chalk.dim("⟳ Stack reached terminal state. Auto-refresh stopped.\n"));
+                    }
+                    break;
                 }
-                break;
+                // If --no-exit is set, continue monitoring even after terminal status
             }
 
             // Show countdown with live updates

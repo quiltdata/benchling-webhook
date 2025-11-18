@@ -79,7 +79,7 @@ export async function validateCommand(options: ValidateOptions): Promise<void> {
     const validationResult = await runValidation({
         stackQuery: {
             catalog: config.quilt.catalog,
-            stackArn: config.quilt.stackArn,
+            stackArn: config.quilt.stackArn || "",
             database: config.quilt.database,
             queueUrl: config.quilt.queueUrl,
             region: config.quilt.region,

@@ -1,20 +1,26 @@
 import os
 from dataclasses import dataclass
 
-from .config_resolver import ConfigResolver, ConfigResolverError
+import boto3
+
+from .config_resolver import resolve_and_fetch_secret
 
 
 @dataclass
 class Config:
-    """Application configuration - production uses secrets-only mode.
+    """Application configuration - hybrid approach.
 
-    In production (ECS/Fargate):
-        - Only requires QuiltStackARN and BenchlingSecret environment variables
-        - All other configuration derived from AWS CloudFormation and Secrets Manager
+    v0.8.0+: Service-specific environment variables + Secrets Manager for Benchling
 
-    In tests:
-        - ConfigResolver is mocked to return test data
-        - No environment variables needed
+    Quilt/AWS configuration comes from environment variables (set by XDG Launch or CDK):
+        - QUILT_WEB_HOST, ATHENA_USER_DATABASE, PACKAGER_SQS_URL, etc.
+        - QUILT_WRITE_ROLE_ARN (optional, for cross-account access)
+
+    Benchling credentials come from AWS Secrets Manager:
+        - BenchlingSecret environment variable points to the secret name
+        - Secret contains: tenant, client_id, client_secret, app_definition_id, etc.
+
+    No CloudFormation queries! Only Secrets Manager for Benchling credentials.
     """
 
     flask_env: str = ""
@@ -26,6 +32,10 @@ class Config:
     quilt_catalog: str = ""
     quilt_database: str = ""
     queue_url: str = ""
+    athena_user_workgroup: str = ""
+    athena_results_bucket: str = ""
+    iceberg_database: str = ""
+    iceberg_workgroup: str = ""
     benchling_tenant: str = ""
     benchling_client_id: str = ""
     benchling_client_secret: str = ""
@@ -33,63 +43,155 @@ class Config:
     enable_webhook_verification: bool = True
     webhook_allow_list: str = ""
     pkg_prefix: str = ""
+    quilt_write_role_arn: str = ""
 
     def __post_init__(self):
-        """Initialize configuration from AWS CloudFormation and Secrets Manager.
+        """Initialize configuration from environment variables and Secrets Manager.
 
-        Requires environment variables:
-            - QuiltStackARN: CloudFormation stack ARN for Quilt infrastructure
+        Required environment variables (Quilt/AWS services):
+            - QUILT_WEB_HOST: Quilt catalog URL
+            - ATHENA_USER_DATABASE: Athena database name
+            - PACKAGER_SQS_URL: SQS queue URL for package creation
+            - AWS_REGION: AWS region
             - BenchlingSecret: Secrets Manager secret name for Benchling credentials
 
-        All other configuration is automatically resolved from AWS.
-        """
-        quilt_stack_arn = os.getenv("QuiltStackARN")
-        benchling_secret = os.getenv("BenchlingSecret")
+        Optional environment variables:
+            - FLASK_ENV: Flask environment (default: production)
+            - LOG_LEVEL: Logging level (default: INFO)
+            - ENABLE_WEBHOOK_VERIFICATION: Enable verification (default: true)
+            - BENCHLING_TEST_MODE: Disable verification for testing (default: false)
+            - ATHENA_USER_WORKGROUP: Athena workgroup (default: primary, v0.8.0+)
+            - ATHENA_RESULTS_BUCKET: Athena results S3 bucket (default: "", v0.8.0+)
+            - ICEBERG_DATABASE: Iceberg database name (default: "", v0.8.0+)
+            - ICEBERG_WORKGROUP: Iceberg Athena workgroup (default: "", v0.8.0+)
+            - QUILT_WRITE_ROLE_ARN: IAM role ARN for S3 access (default: "", v1.1.0+)
 
-        if not quilt_stack_arn or not benchling_secret:
+        Package configuration (bucket, prefix, metadata_key) comes from Secrets Manager.
+        Security configuration (webhook_allow_list) comes from Secrets Manager.
+        """
+        # Read Quilt service environment variables (NO CLOUDFORMATION!)
+        self.quilt_catalog = os.getenv("QUILT_WEB_HOST", "")
+        self.quilt_database = os.getenv("ATHENA_USER_DATABASE", "")
+        self.queue_url = os.getenv("PACKAGER_SQS_URL", "")
+        self.aws_region = os.getenv("AWS_REGION", "")
+
+        # Optional IAM role ARN for cross-account S3 access (v1.1.0+)
+        self.quilt_write_role_arn = os.getenv("QUILT_WRITE_ROLE_ARN", "")
+
+        # Optional Quilt service configuration (v0.8.0+)
+        # These are used by PackageQuery for Athena/Iceberg queries
+        self.athena_user_workgroup = os.getenv("ATHENA_USER_WORKGROUP", "primary")
+        self.athena_results_bucket = os.getenv("ATHENA_RESULTS_BUCKET", "")
+        self.iceberg_database = os.getenv("ICEBERG_DATABASE", "")
+        self.iceberg_workgroup = os.getenv("ICEBERG_WORKGROUP", "")
+
+        # Package configuration - initialized to defaults, will be set from Secrets Manager
+        self.s3_bucket_name = ""
+        self.s3_prefix = "benchling"
+        self.package_key = "experiment_id"
+        self.pkg_prefix = "benchling"
+
+        # Flask configuration
+        self.flask_env = os.getenv("FLASK_ENV", "production")
+        self.log_level = os.getenv("LOG_LEVEL", "INFO")
+
+        # Security configuration - ENABLE_WEBHOOK_VERIFICATION can be overridden for testing
+        enable_verification = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "true").lower()
+        self.enable_webhook_verification = enable_verification in ("true", "1", "yes")
+        self.webhook_allow_list = ""  # Will be set from Secrets Manager
+
+        # Test mode override: disable webhook verification for local integration tests
+        test_mode = os.getenv("BENCHLING_TEST_MODE", "").lower() in ("true", "1", "yes")
+        if test_mode:
+            self.enable_webhook_verification = False
+            self.webhook_allow_list = ""
+
+        # Fetch Benchling credentials from Secrets Manager
+        benchling_secret = os.getenv("BenchlingSecret")
+        if not benchling_secret:
             raise ValueError(
-                "Missing required environment variables: QuiltStackARN and BenchlingSecret\n"
+                "Missing required environment variable: BenchlingSecret\n"
                 "\n"
-                "Secrets-only mode requires exactly 2 environment variables:\n"
-                "  - QuiltStackARN: CloudFormation stack ARN (e.g., arn:aws:cloudformation:...)\n"
-                "  - BenchlingSecret: Secrets Manager secret name (e.g., benchling-webhook-prod)\n"
+                "BenchlingSecret must be set to the name of your AWS Secrets Manager secret.\n"
+                "Example: BenchlingSecret=benchling-webhook-prod\n"
                 "\n"
-                "All other configuration is automatically resolved from AWS.\n"
+                "The secret should contain Benchling credentials in JSON format:\n"
+                "{\n"
+                '  "tenant": "your-tenant",\n'
+                '  "client_id": "...",\n'
+                '  "client_secret": "...",\n'
+                '  "app_definition_id": "...",\n'
+                '  "pkg_prefix": "benchling",\n'
+                '  "pkg_key": "experiment_id",\n'
+                '  "user_bucket": "s3-bucket-name",\n'
+                '  "log_level": "INFO",\n'
+                '  "enable_webhook_verification": "true",\n'
+                '  "webhook_allow_list": ""\n'
+                "}\n"
             )
 
-        # Resolve all configuration from AWS
-        try:
-            resolver = ConfigResolver()
-            resolved = resolver.resolve(quilt_stack_arn, benchling_secret)
+        # Fetch secret from Secrets Manager
+        sm_client = boto3.client("secretsmanager", region_name=self.aws_region)
+        secret_data = resolve_and_fetch_secret(sm_client, self.aws_region, benchling_secret)
 
-            # Map resolved config to Config fields
-            self.aws_region = resolved.aws_region
-            self.s3_bucket_name = resolved.user_bucket  # Changed from quilt_user_bucket
-            self.s3_prefix = resolved.pkg_prefix
-            self.package_key = resolved.pkg_key
-            self.quilt_catalog = resolved.quilt_catalog
-            self.quilt_database = resolved.quilt_database
-            self.queue_url = resolved.queue_url
-            self.benchling_tenant = resolved.benchling_tenant
-            self.benchling_client_id = resolved.benchling_client_id
-            self.benchling_client_secret = resolved.benchling_client_secret
-            self.benchling_app_definition_id = resolved.benchling_app_definition_id
-            self.pkg_prefix = resolved.pkg_prefix
-            self.log_level = resolved.log_level
-            self.flask_env = "production"
+        # Set Benchling configuration from secret
+        self.benchling_tenant = secret_data.tenant
+        self.benchling_client_id = secret_data.client_id
+        self.benchling_client_secret = secret_data.client_secret
+        self.benchling_app_definition_id = secret_data.app_definition_id
 
-            # Test mode override: disable webhook verification for local integration tests
-            # This enables testing without Benchling webhook signatures
-            test_mode = os.getenv("BENCHLING_TEST_MODE", "").lower() in ("true", "1", "yes")
-            if test_mode:
-                self.enable_webhook_verification = False
-                self.webhook_allow_list = ""  # Disable IP filtering in test mode
-            else:
-                self.enable_webhook_verification = resolved.enable_webhook_verification
-                self.webhook_allow_list = resolved.webhook_allow_list
+        # Set package/security config from secret (NOT environment variables!)
+        if not test_mode:
+            # Package configuration ALWAYS comes from secret
+            self.s3_bucket_name = secret_data.user_bucket
+            self.s3_prefix = secret_data.pkg_prefix or "benchling"
+            self.pkg_prefix = self.s3_prefix
+            self.package_key = secret_data.pkg_key or "experiment_id"
 
-        except (ConfigResolverError, ValueError) as e:
-            raise ValueError(f"Failed to resolve configuration from AWS: {str(e)}")
+            # Security configuration ALWAYS comes from secret
+            self.enable_webhook_verification = secret_data.enable_webhook_verification
+            self.webhook_allow_list = secret_data.webhook_allow_list
+
+            # Log level from secret
+            if secret_data.log_level:
+                self.log_level = secret_data.log_level
+
+        # Validate required fields
+        self._validate()
+
+    def _validate(self):
+        """Validate required configuration fields."""
+        required = {
+            "QUILT_WEB_HOST": self.quilt_catalog,
+            "ATHENA_USER_DATABASE": self.quilt_database,
+            "PACKAGER_SQS_URL": self.queue_url,
+            "AWS_REGION": self.aws_region,
+            "benchling_tenant": self.benchling_tenant,
+            "benchling_client_id": self.benchling_client_id,
+            "benchling_client_secret": self.benchling_client_secret,
+            "benchling_app_definition_id": self.benchling_app_definition_id,
+        }
+
+        missing = [key for key, value in required.items() if not value]
+
+        if missing:
+            raise ValueError(
+                f"Missing required configuration: {', '.join(missing)}\n"
+                "\n"
+                "Required environment variables:\n"
+                "  - QUILT_WEB_HOST: Quilt catalog URL (e.g., https://example.quiltdata.com)\n"
+                "  - ATHENA_USER_DATABASE: Athena database name\n"
+                "  - PACKAGER_SQS_URL: SQS queue URL\n"
+                "  - AWS_REGION: AWS region (e.g., us-east-1)\n"
+                "  - BenchlingSecret: Secrets Manager secret name\n"
+                "\n"
+                "Package configuration comes from AWS Secrets Manager.\n"
+                "\n"
+                "For local development, use:\n"
+                "  npm run test:local\n"
+                "\n"
+                "For production deployment, these are set automatically by CDK.\n"
+            )
 
 
 def get_config() -> Config:

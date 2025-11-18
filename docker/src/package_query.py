@@ -7,22 +7,28 @@ Responsibilities:
 - Query Athena's {bucket}_packages-view
 - Search for packages by metadata key-value pairs using json_extract_scalar
 - Return Package instances matching the search criteria
+- Use RoleManager for cross-account Athena access
 
 Requires:
 - QUILT_DATABASE environment variable with Athena database name
 - QUILT_USER_BUCKET environment variable for the registry (bucket)
+- QUILT_WRITE_ROLE_ARN environment variable for cross-account access (optional)
 - AWS credentials configured for Athena access
 """
 
 import json
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import boto3
 import structlog
 
+from src.auth.role_manager import RoleManager
 from src.packages import Package
+
+if TYPE_CHECKING:
+    from src.config import Config
 
 logger = structlog.get_logger(__name__)
 
@@ -45,6 +51,8 @@ class PackageQuery:
         database: Optional[str] = None,
         region: Optional[str] = None,
         athena_output_bucket: Optional[str] = None,
+        workgroup: Optional[str] = None,
+        config: Optional["Config"] = None,
     ):
         """Initialize Athena query client.
 
@@ -54,25 +62,55 @@ class PackageQuery:
             database: Athena database name (defaults to QUILT_DATABASE env var)
             region: AWS region (defaults to AWS_REGION env var or us-east-1)
             athena_output_bucket: S3 bucket for Athena query results
-                (defaults to aws-athena-query-results-{account_id}-{region})
+                (defaults to ATHENA_RESULTS_BUCKET env var, then aws-athena-query-results-{account_id}-{region})
+            workgroup: Athena workgroup name (defaults to ATHENA_USER_WORKGROUP env var, then 'primary')
+            config: Optional Config instance for reading configuration (v0.8.0+)
+                If provided, will use config.athena_user_workgroup and config.athena_results_bucket
+                as fallbacks before reading from environment variables.
         """
         self.bucket = bucket
         self.catalog_url = catalog_url
         self.database = database or os.getenv("QUILT_DATABASE")
         self.region = region or os.getenv("AWS_REGION", "us-east-1")
         self.logger = structlog.get_logger(__name__)
+        self.config = config
 
         if not self.database:
             raise ValueError("database parameter or QUILT_DATABASE environment variable required")
 
-        # Initialize Athena client
-        self.athena = boto3.client("athena", region_name=self.region)
+        # Initialize RoleManager for cross-account access
+        role_arn = None
+        if config and config.quilt_write_role_arn:
+            role_arn = config.quilt_write_role_arn
+        self.role_manager = RoleManager(role_arn=role_arn, region=self.region)
+
+        # Initialize Athena client with role assumption
+        athena_session = self.role_manager._get_or_create_session(
+            self.role_manager.role_arn,
+            self.role_manager._session,
+            self.role_manager._expires_at,
+        )[0]
+        self.athena = athena_session.client("athena")
+
+        # Determine Athena workgroup
+        # Priority: parameter > config.athena_user_workgroup > ATHENA_USER_WORKGROUP env var > 'primary'
+        if workgroup:
+            self.workgroup = workgroup
+        elif config and config.athena_user_workgroup:
+            self.workgroup = config.athena_user_workgroup
+        else:
+            self.workgroup = os.getenv("ATHENA_USER_WORKGROUP", "primary")
 
         # Determine Athena output location
+        # Priority: parameter > config.athena_results_bucket > ATHENA_RESULTS_BUCKET env var > default pattern
         if athena_output_bucket:
             self.output_location = f"s3://{athena_output_bucket}/"
+        elif config and config.athena_results_bucket:
+            self.output_location = f"s3://{config.athena_results_bucket}/"
+        elif os.getenv("ATHENA_RESULTS_BUCKET"):
+            self.output_location = f"s3://{os.getenv('ATHENA_RESULTS_BUCKET')}/"
         else:
-            # Get AWS account ID
+            # Get AWS account ID for default bucket
             sts = boto3.client("sts", region_name=self.region)
             account_id = sts.get_caller_identity()["Account"]
             self.output_location = f"s3://aws-athena-query-results-{account_id}-{self.region}/"
@@ -83,6 +121,7 @@ class PackageQuery:
             bucket=bucket,
             catalog=catalog_url,
             region=self.region,
+            workgroup=self.workgroup,
             output_location=self.output_location,
         )
 
@@ -100,17 +139,18 @@ class PackageQuery:
             TimeoutError: If query doesn't complete within timeout
             RuntimeError: If query fails
         """
-        self.logger.debug("Executing Athena query", query=query)
+        self.logger.debug("Executing Athena query", query=query, workgroup=self.workgroup)
 
-        # Start query execution
+        # Start query execution with workgroup
         response = self.athena.start_query_execution(
             QueryString=query,
             QueryExecutionContext={"Database": self.database},
             ResultConfiguration={"OutputLocation": self.output_location},
+            WorkGroup=self.workgroup,
         )
 
         query_execution_id = response["QueryExecutionId"]
-        self.logger.debug("Query started", execution_id=query_execution_id)
+        self.logger.debug("Query started", execution_id=query_execution_id, workgroup=self.workgroup)
 
         # Wait for query to complete
         start_time = time.time()

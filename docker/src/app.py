@@ -13,6 +13,7 @@ from .canvas import CanvasManager
 from .config import get_config
 from .entry_packager import EntryPackager
 from .payload import Payload
+from .version import __version__
 from .webhook_verification import require_webhook_verification
 
 # Load environment variables
@@ -56,6 +57,19 @@ def create_app():
 
         logger.info("Python orchestration enabled")
 
+        # Log IAM role configuration for cross-account S3 access
+        if config.quilt_write_role_arn:
+            logger.info(
+                "IAM role ARN configured for cross-account S3 access",
+                has_role=bool(config.quilt_write_role_arn),
+                role_arn=config.quilt_write_role_arn,
+            )
+        else:
+            logger.info(
+                "No IAM role ARN configured - using direct ECS task role credentials",
+                role_arn="not-configured",
+            )
+
         # Initialize Benchling SDK with OAuth
         auth_method = ClientCredentialsOAuth2(
             client_id=config.benchling_client_id,
@@ -67,6 +81,42 @@ def create_app():
             benchling=benchling,
             config=config,
         )
+
+        # Validate role assumption at startup (blocking - fail fast)
+        # Only validate if role_arn is a non-empty string (not Mock object in tests)
+        role_arn = getattr(config, "quilt_write_role_arn", None)
+        if role_arn and isinstance(role_arn, str):
+            logger.info("Validating IAM role assumption at startup")
+            try:
+                validation_results = entry_packager.role_manager.validate_roles()
+
+                # Log validation results
+                if validation_results["role"]["configured"]:
+                    if validation_results["role"]["valid"]:
+                        logger.info(
+                            "Role validated successfully",
+                            role_arn=role_arn,
+                        )
+                    else:
+                        # Role is configured but validation failed - this is critical
+                        logger.error(
+                            "Role validation failed at startup - container cannot function correctly",
+                            role_arn=role_arn,
+                            error=validation_results["role"]["error"],
+                        )
+                        # Fail container startup to prevent writing to wrong account
+                        raise RuntimeError(
+                            f"IAM role validation failed: {validation_results['role']['error']}"
+                        )
+
+            except Exception as e:
+                # Role validation failure is critical - crash container
+                logger.error(
+                    "Role validation failed at startup - failing container to prevent data misrouting",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
+                raise
 
     except Exception as e:
         logger.error("Failed to initialize application", error=str(e))
@@ -80,13 +130,10 @@ def create_app():
         configured with secrets-only mode. The app cannot start without QuiltStackARN
         and BenchlingSecret environment variables.
         """
-        # Get version from environment (set by CDK) or package default
-        app_version = os.getenv("BENCHLING_WEBHOOK_VERSION", "0.7.3")
-
         response = {
             "status": "healthy",
             "service": "benchling-webhook",
-            "version": app_version,
+            "version": __version__,
         }
 
         return jsonify(response)
@@ -112,54 +159,6 @@ def create_app():
     def liveness():
         """Liveness probe for orchestration."""
         return jsonify({"status": "alive"})
-
-    @app.route("/health/secrets", methods=["GET"])
-    def secrets_health():
-        """Report secret resolution status (secrets-only mode).
-
-        Note: This endpoint only works in secrets-only mode. If the app is running,
-        it means QuiltStackARN and BenchlingSecret were successfully resolved.
-        """
-        try:
-            # Verify required environment variables are present
-            quilt_stack_arn = os.getenv("QuiltStackARN")
-            benchling_secret = os.getenv("BenchlingSecret")
-
-            if not quilt_stack_arn or not benchling_secret:
-                # This should never happen - app initialization would have failed
-                return (
-                    jsonify(
-                        {
-                            "status": "unhealthy",
-                            "error": "Missing required environment variables - app should not be running",
-                        }
-                    ),
-                    503,
-                )
-
-            # Determine secret source
-            if benchling_secret.startswith("arn:aws:secretsmanager:"):
-                source = "secrets_manager_arn"
-            else:
-                source = "secrets_manager_name"
-
-            # Check if secrets are valid
-            secrets_valid = bool(
-                config.benchling_tenant and config.benchling_client_id and config.benchling_client_secret
-            )
-
-            return jsonify(
-                {
-                    "status": "healthy" if secrets_valid else "unhealthy",
-                    "source": source,
-                    "secrets_valid": secrets_valid,
-                    "tenant_configured": bool(config.benchling_tenant),
-                    "quilt_stack_configured": bool(quilt_stack_arn),
-                }
-            )
-        except Exception as e:
-            logger.error("Secrets health check failed", error=str(e))
-            return jsonify({"status": "unhealthy", "error": str(e)}), 503
 
     @app.route("/config", methods=["GET"])
     def config_status():
