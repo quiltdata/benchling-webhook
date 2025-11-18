@@ -21,14 +21,6 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
 
     const now = new Date().toISOString();
 
-    // CRITICAL: Validate that resolvedServices is present
-    if (!stackQuery.resolvedServices) {
-        throw new Error(
-            "Setup failed: Quilt services were not resolved during stack query. " +
-            "This is a critical error - please report it as a bug.",
-        );
-    }
-
     const config: ProfileConfig = {
         quilt: {
             stackArn: stackQuery.stackArn,
@@ -53,8 +45,6 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
             region: parameters.deployment.region,
             account: parameters.deployment.account,
         },
-        // NEW: Store resolved services (cached at setup time, read at deploy time)
-        resolvedServices: stackQuery.resolvedServices,
         integratedStack: true, // CRITICAL: Mark as integrated mode
         logging: {
             level: parameters.logging.level,
