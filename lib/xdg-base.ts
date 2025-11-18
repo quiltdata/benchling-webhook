@@ -338,8 +338,10 @@ export abstract class XDGBase implements IConfigStorage {
         let deployments: DeploymentHistory;
         try {
             deployments = this.getDeployments(profile);
-        } catch {
+        } catch (error) {
             // If getDeployments fails, start with empty history
+            console.warn(`Warning: Could not read deployment history: ${(error as Error).message}`);
+            console.warn("Starting with empty deployment history (previous deployments not preserved).\n");
             deployments = {
                 active: {},
                 history: [],
