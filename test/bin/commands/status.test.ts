@@ -75,46 +75,47 @@ const mockFromIni = fromIni as jest.MockedFunction<typeof fromIni>;
     send: mockSend,
 } as any));
 
+// Shared test fixtures - used across all test suites
+const validIntegratedConfig: ProfileConfig = {
+    quilt: {
+        stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
+        catalog: "quilt.example.com",
+        database: "test_db",
+        queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+        region: "us-east-1",
+    },
+    benchling: {
+        tenant: "test-tenant",
+        clientId: "test-client",
+        appDefinitionId: "test-app",
+    },
+    packages: {
+        bucket: "test-packages",
+        prefix: "benchling",
+        metadataKey: "experiment_id",
+    },
+    deployment: {
+        region: "us-east-1",
+        account: "123456789012",
+    },
+    integratedStack: true,
+    _metadata: {
+        version: "0.7.0",
+        createdAt: "2025-11-13T00:00:00Z",
+        updatedAt: "2025-11-13T00:00:00Z",
+        source: "wizard",
+    },
+};
+
+const validStandaloneConfig: ProfileConfig = {
+    ...validIntegratedConfig,
+    integratedStack: false,
+};
+
 describe("statusCommand", () => {
     let mockStorage: XDGTest;
     let mockConsoleLog: jest.SpyInstance;
     let mockConsoleError: jest.SpyInstance;
-
-    const validIntegratedConfig: ProfileConfig = {
-        quilt: {
-            stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
-            catalog: "quilt.example.com",
-            database: "test_db",
-            queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            region: "us-east-1",
-        },
-        benchling: {
-            tenant: "test-tenant",
-            clientId: "test-client",
-            appDefinitionId: "test-app",
-        },
-        packages: {
-            bucket: "test-packages",
-            prefix: "benchling",
-            metadataKey: "experiment_id",
-        },
-        deployment: {
-            region: "us-east-1",
-            account: "123456789012",
-        },
-        integratedStack: true,
-        _metadata: {
-            version: "0.7.0",
-            createdAt: "2025-11-13T00:00:00Z",
-            updatedAt: "2025-11-13T00:00:00Z",
-            source: "wizard",
-        },
-    };
-
-    const validStandaloneConfig: ProfileConfig = {
-        ...validIntegratedConfig,
-        integratedStack: false,
-    };
 
     beforeEach(() => {
         mockStorage = new XDGTest();
@@ -854,37 +855,6 @@ describe("Auto-refresh Timer Functionality", () => {
     let mockProcessOn: jest.SpyInstance;
     let mockProcessOff: jest.SpyInstance;
 
-    const validIntegratedConfig: ProfileConfig = {
-        quilt: {
-            stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
-            catalog: "quilt.example.com",
-            database: "test_db",
-            queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            region: "us-east-1",
-        },
-        benchling: {
-            tenant: "test-tenant",
-            clientId: "test-client",
-            appDefinitionId: "test-app",
-        },
-        packages: {
-            bucket: "test-packages",
-            prefix: "benchling",
-            metadataKey: "experiment_id",
-        },
-        deployment: {
-            region: "us-east-1",
-            account: "123456789012",
-        },
-        integratedStack: true,
-        _metadata: {
-            version: "0.7.0",
-            createdAt: "2025-11-13T00:00:00Z",
-            updatedAt: "2025-11-13T00:00:00Z",
-            source: "wizard",
-        },
-    };
-
     beforeEach(() => {
         mockStorage = new XDGTest();
         jest.clearAllMocks();
@@ -1054,37 +1024,6 @@ describe("Health Check Functions", () => {
     let mockStorage: XDGTest;
     let mockConsoleLog: jest.SpyInstance;
     let mockConsoleError: jest.SpyInstance;
-
-    const validIntegratedConfig: ProfileConfig = {
-        quilt: {
-            stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
-            catalog: "quilt.example.com",
-            database: "test_db",
-            queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-            region: "us-east-1",
-        },
-        benchling: {
-            tenant: "test-tenant",
-            clientId: "test-client",
-            appDefinitionId: "test-app",
-        },
-        packages: {
-            bucket: "test-packages",
-            prefix: "benchling",
-            metadataKey: "experiment_id",
-        },
-        deployment: {
-            region: "us-east-1",
-            account: "123456789012",
-        },
-        integratedStack: true,
-        _metadata: {
-            version: "0.7.0",
-            createdAt: "2025-11-13T00:00:00Z",
-            updatedAt: "2025-11-13T00:00:00Z",
-            source: "wizard",
-        },
-    };
 
     beforeEach(() => {
         mockStorage = new XDGTest();
