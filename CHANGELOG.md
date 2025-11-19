@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.3] - 2025-11-18
+
+### Fixed
+
+- Production workflow OIDC role now uses correct AWS account (730278974607) for authentication
+
 ## [0.8.2] - 2025-11-18
 
 ### Added
