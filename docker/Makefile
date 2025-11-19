@@ -3,6 +3,10 @@
 # Configuration is now managed via XDG (~/.config/benchling-webhook/{profile}/)
 # with unified config.json and deployments.json per profile (v0.7.0)
 
+# Load .env file from project root if it exists (for NGROK_DOMAIN and other env vars)
+-include ../.env
+export
+
 # Include deployment targets
 include make.deploy
 
@@ -36,10 +40,10 @@ help:
 	@echo "Development Servers (all use xdg-launch):"
 	@echo "  run / run-dev         - Docker dev with hot-reload (port $(PORT_DOCKER_DEV))"
 	@echo "  run-prod              - Docker production mode (port $(PORT_DOCKER_PROD))"
-	@echo "  run-ngrok             - Docker dev + ngrok tunnel (port $(PORT_DOCKER_DEV))"
+	@echo "  run-ngrok             - Docker dev + ngrok tunnel (requires NGROK_DOMAIN env var)"
 	@echo "  run-native            - Native Flask with dev profile (port $(PORT_NATIVE))"
 	@echo "  run-native-verbose    - Alias for run-native (always verbose)"
-	@echo "  run-native-ngrok      - Native server + ngrok tunnel (port $(PORT_NATIVE))"
+	@echo "  run-native-ngrok      - Native server + ngrok tunnel (requires NGROK_DOMAIN env var)"
 	@echo "  run-ecr               - Pull and run image from ECR (port $(PORT_DOCKER_PROD))"
 	@echo ""
 	@echo "Testing (xdg-launch-based tests marked with *):"
@@ -135,6 +139,19 @@ run: check-xdg
 run-dev: run
 
 run-ngrok:
+	@if [ -z "$(NGROK_DOMAIN)" ]; then \
+		echo "❌ Error: NGROK_DOMAIN environment variable is required"; \
+		echo ""; \
+		echo "Get your static domain from: https://dashboard.ngrok.com/domains"; \
+		echo ""; \
+		echo "Usage:"; \
+		echo "  export NGROK_DOMAIN=uniformly-alive-halibut.ngrok-free.app"; \
+		echo "  make run-ngrok"; \
+		exit 1; \
+	fi
+	@echo "🚀 Starting dev server and ngrok tunnel..."
+	@echo "📡 Public URL: https://$(NGROK_DOMAIN)/"
+	@echo ""
 	@make run &
 	@make ngrok PORT=$(PORT_DOCKER_DEV) SLEEP=10
 
@@ -152,10 +169,22 @@ run-native-verbose: run-native
 
 # Native server + ngrok tunnel
 run-native-ngrok: check-xdg
-	@echo "Starting native server and ngrok tunnel..."
+	@if [ -z "$(NGROK_DOMAIN)" ]; then \
+		echo "❌ Error: NGROK_DOMAIN environment variable is required"; \
+		echo ""; \
+		echo "Get your static domain from: https://dashboard.ngrok.com/domains"; \
+		echo ""; \
+		echo "Usage:"; \
+		echo "  export NGROK_DOMAIN=uniformly-alive-halibut.ngrok-free.app"; \
+		echo "  make run-native-ngrok"; \
+		exit 1; \
+	fi
+	@echo "🚀 Starting native server and ngrok tunnel..."
+	@echo "📡 Public URL: https://$(NGROK_DOMAIN)/"
+	@echo ""
 	@echo "Press Ctrl+C to stop both ngrok and server"
 	@make run-native-verbose &
-	@make ngrok
+	@make ngrok PORT=$(PORT_NATIVE)
 
 # Run ECR image locally (assumes image exists in ECR)
 run-ecr: check-xdg docker-ecr-login
