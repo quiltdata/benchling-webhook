@@ -14,7 +14,7 @@ Module: config_schema
 """
 
 from enum import Enum
-from typing import Any, Dict, Literal, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -136,7 +136,7 @@ class DerivedConfig(UserConfig):
 
     catalog_url: Optional[str] = Field(None, alias="catalogUrl", description="Catalog URL inferred from quilt3 CLI")
 
-    class Config:
+    class Config:  # type: ignore[misc]
         populate_by_name = True
         extra = "allow"  # Allow additional inferred fields
 
@@ -157,7 +157,7 @@ class DeploymentConfig(DerivedConfig):
     deployment_timestamp: Optional[str] = Field(None, alias="deploymentTimestamp", description="Deployment timestamp")
     deployed_at: Optional[str] = Field(None, alias="deployedAt", description="ISO timestamp of deployment")
 
-    class Config:
+    class Config:  # type: ignore[misc]
         populate_by_name = True
         extra = "allow"
 

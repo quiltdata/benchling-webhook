@@ -11,7 +11,6 @@ User Intent: Package a Benchling entry with complete metadata for Quilt
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -135,6 +134,9 @@ class BehaviorTest:
         """THEN: The display_id should be human-readable, not an internal ID."""
         print(f"THEN:  display_id should be human-readable (not internal ID)\n")
 
+        if not self.entry_data:
+            return self
+
         display_id = self.entry_data.get("display_id")
         entry_id = self.entry_data.get("id")
 
@@ -160,20 +162,23 @@ class BehaviorTest:
         """THEN: Should have properly parsed creator and authors information."""
         print(f"THEN:  Should have creator and authors information\n")
 
+        if not self.entry_data:
+            return self
+
         creator = self.entry_data.get("creator")
         authors = self.entry_data.get("authors")
 
         has_creator = creator and isinstance(creator, dict)
         has_authors = authors and isinstance(authors, list) and len(authors) > 0
 
-        if has_creator:
+        if has_creator and isinstance(creator, dict):
             creator_name = creator.get("name", "N/A")
             print(f"  ✅ creator: {creator_name}")
             self._record_success()
         else:
             print(f"  ⚠️  creator: Not available or invalid format")
 
-        if has_authors:
+        if has_authors and isinstance(authors, list):
             print(f"  ✅ authors: {len(authors)} author(s)")
             for author in authors[:3]:  # Show first 3
                 if isinstance(author, dict):
@@ -211,7 +216,7 @@ class BehaviorTest:
             return True
 
 
-def test_oauth_credentials(tenant: str, client_id: str, client_secret: str, entry_id: str = None) -> dict:
+def test_oauth_credentials(tenant: str, client_id: str, client_secret: str, entry_id: str | None = None) -> dict:
     """
     Test Benchling OAuth credentials and entry packaging behavior.
 
@@ -258,7 +263,7 @@ def test_oauth_credentials(tenant: str, client_id: str, client_secret: str, entr
             if entries:
                 # Get the first (most recent) entry directly
                 first_entry = entries[0]
-                test_entry_id = first_entry.id
+                test_entry_id = first_entry.id  # type: ignore[attr-defined]
                 if test_entry_id:
                     print(f"Using most recent entry: {test_entry_id}\n")
                 else:
@@ -377,6 +382,11 @@ Configuration Priority:
     if missing:
         print(f"❌ Error: Missing required credentials: {', '.join(missing)}")
         sys.exit(1)
+
+    # Type assertion: these are guaranteed to be strings after validation
+    assert tenant is not None
+    assert client_id is not None
+    assert client_secret is not None
 
     # Run tests
     result = test_oauth_credentials(tenant, client_id, client_secret, entry_id)

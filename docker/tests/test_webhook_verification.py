@@ -70,7 +70,7 @@ class TestVerifyWebhook:
 
         # Should raise exception for None
         with pytest.raises(WebhookVerificationError, match="Webhook verification requires app_definition_id"):
-            verify_webhook(None, mock_request)
+            verify_webhook(None, mock_request)  # type: ignore[arg-type]
 
 
 class TestRequireWebhookVerification:
@@ -121,7 +121,7 @@ class TestRequireWebhookVerification:
                 mock_verify.side_effect = Exception("Signature verification failed")
                 result, status_code = test_route()
                 assert status_code == 401
-                assert "error" in result.json
+                assert "error" in result.json  # type: ignore[attr-defined]
 
     def test_decorator_disabled(self, mock_config_disabled):
         """Test decorator with verification disabled."""
