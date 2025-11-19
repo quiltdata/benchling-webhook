@@ -66,7 +66,7 @@ REST_API_RETRY = retry(
     wait=wait_exponential(multiplier=1, min=5, max=60),
     retry=(
         retry_if_exception_type((requests.exceptions.ConnectionError, requests.exceptions.Timeout))
-        | retry_if_exception(should_retry_http_error)
+        | retry_if_exception(should_retry_http_error)  # type: ignore[arg-type]
     ),
     reraise=True,
 )

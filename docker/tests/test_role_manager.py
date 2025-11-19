@@ -3,7 +3,6 @@
 Tests credential caching, role assumption, fallback behavior, and error handling.
 """
 
-import os
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 

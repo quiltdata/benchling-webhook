@@ -99,7 +99,7 @@ def read(profile: str, config_type: str, pretty: bool, validate: bool, verbose: 
     """
     try:
         xdg = XDGConfig(profile=profile)
-        config_data = xdg.read_config(config_type, raise_if_missing=True)
+        config_data = xdg.read_config(config_type, raise_if_missing=True)  # type: ignore[arg-type]
 
         if config_data is None:
             click.echo(f"Configuration not found: {config_type}/{profile}", err=True)
@@ -181,7 +181,7 @@ def write(json_data: str, profile: str, config_type: str, validate: bool, backup
 
         # Create backup if requested
         xdg = XDGConfig(profile=profile)
-        config_path = xdg.get_config_path(config_type, profile)
+        config_path = xdg.get_config_path(config_type, profile)  # type: ignore[arg-type]
 
         if backup and config_path.exists():
             backup_path = config_path.with_suffix(f".json.backup")
@@ -241,7 +241,7 @@ def merge(json_data: str, profile: str, config_type: str, validate: bool, backup
         merge_data = json.loads(json_data)
 
         xdg = XDGConfig(profile=profile)
-        existing_data = xdg.read_config(config_type, raise_if_missing=False) or {}
+        existing_data = xdg.read_config(config_type, raise_if_missing=False) or {}  # type: ignore[arg-type]
 
         # Deep merge
         merged_data = xdg._deep_merge(existing_data, merge_data)
@@ -258,7 +258,7 @@ def merge(json_data: str, profile: str, config_type: str, validate: bool, backup
                 sys.exit(1)
 
         # Create backup if requested
-        config_path = xdg.get_config_path(config_type, profile)
+        config_path = xdg.get_config_path(config_type, profile)  # type: ignore[arg-type]
         if backup and config_path.exists():
             backup_path = config_path.with_suffix(f".json.backup")
             import shutil
@@ -305,7 +305,7 @@ def validate(profile: str, config_type: str, verbose: bool):
         all_valid = True
         for ct in types_to_validate:
             try:
-                config_data = xdg.read_config(ct, raise_if_missing=False)
+                config_data = xdg.read_config(ct, raise_if_missing=False)  # type: ignore[arg-type]
                 if config_data is None:
                     click.echo(f"⊘ {ct:8s} - Not found (skipping)", err=True)
                     continue
@@ -349,7 +349,7 @@ def list_profiles(verbose: bool):
                 xdg_profile = XDGConfig(profile=profile)
                 files = []
                 for ct in ["user", "derived", "deploy"]:
-                    path = xdg_profile.get_config_path(ct)
+                    path = xdg_profile.get_config_path(ct)  # type: ignore[arg-type]
                     if path.exists():
                         files.append(ct[0].upper())  # U, D, P
                     else:
@@ -393,7 +393,7 @@ def export(profile: str, config_type: str, pretty: bool, verbose: bool):
         if config_type == "complete":
             config_data = xdg.load_complete_config()
         else:
-            config_data = xdg.read_config(config_type, raise_if_missing=True)
+            config_data = xdg.read_config(config_type, raise_if_missing=True)  # type: ignore[arg-type]
 
         if config_data is None:
             click.echo(f"Configuration not found: {config_type}/{profile}", err=True)
@@ -436,7 +436,7 @@ def get(key: str, profile: str, config_type: str, default: Optional[str], verbos
         if config_type == "complete":
             config_data = xdg.load_complete_config()
         else:
-            config_data = xdg.read_config(config_type, raise_if_missing=True)
+            config_data = xdg.read_config(config_type, raise_if_missing=True)  # type: ignore[arg-type]
 
         if config_data is None:
             if default is not None:
@@ -497,10 +497,10 @@ def set(key: str, value: str, profile: str, config_type: str, json: bool, backup
     """
     try:
         xdg = XDGConfig(profile=profile)
-        config_data = xdg.read_config(config_type, raise_if_missing=False) or {}
+        config_data = xdg.read_config(config_type, raise_if_missing=False) or {}  # type: ignore[arg-type]
 
         # Parse value if JSON flag is set
-        parsed_value = json.loads(value) if json else value
+        parsed_value = json.loads(value) if json else value  # type: ignore[attr-defined]
 
         # Support nested keys
         key_parts = key.split(".")
@@ -513,7 +513,7 @@ def set(key: str, value: str, profile: str, config_type: str, json: bool, backup
         current[key_parts[-1]] = parsed_value
 
         # Create backup if requested
-        config_path = xdg.get_config_path(config_type, profile)
+        config_path = xdg.get_config_path(config_type, profile)  # type: ignore[arg-type]
         if backup and config_path.exists():
             backup_path = config_path.with_suffix(f".json.backup")
             import shutil
@@ -523,7 +523,7 @@ def set(key: str, value: str, profile: str, config_type: str, json: bool, backup
         # Write updated configuration
         config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(config_data, f, indent=2, ensure_ascii=False)
+            json.dump(config_data, f, indent=2, ensure_ascii=False)  # type: ignore[attr-defined]
 
         click.echo(f"✓ {key} = {parsed_value}", err=True)
         click.echo(f"✓ Configuration updated: {config_path}", err=True)

@@ -121,7 +121,7 @@ def create_app():
         raise
 
     @app.route("/health", methods=["GET"])
-    def health():
+    def health():  # type: ignore[misc]
         """Application health status.
 
         Note: If this endpoint returns successfully, the application is properly
@@ -137,7 +137,7 @@ def create_app():
         return jsonify(response)
 
     @app.route("/health/ready", methods=["GET"])
-    def readiness():
+    def readiness():  # type: ignore[misc]
         """Readiness probe for orchestration."""
         try:
             # Check Python orchestration components
@@ -154,12 +154,12 @@ def create_app():
             return jsonify({"status": "not ready", "error": str(e)}), 503
 
     @app.route("/health/live", methods=["GET"])
-    def liveness():
+    def liveness():  # type: ignore[misc]
         """Liveness probe for orchestration."""
         return jsonify({"status": "alive"})
 
     @app.route("/config", methods=["GET"])
-    def config_status():
+    def config_status():  # type: ignore[misc]
         """Display resolved configuration (secrets masked).
 
         Note: All deployments use secrets-only mode. Configuration is resolved from
@@ -223,7 +223,7 @@ def create_app():
                 },
                 "parameters": {
                     "pkg_prefix": config.pkg_prefix,
-                    "pkg_key": config.pkg_key,
+                    "pkg_key": config.pkg_key,  # type: ignore[attr-defined]
                     "user_bucket": config.s3_bucket_name,
                     "log_level": config.log_level,
                     "webhook_allow_list": config.webhook_allow_list if config.webhook_allow_list else "",
@@ -239,7 +239,7 @@ def create_app():
 
     @app.route("/event", methods=["POST"])
     @require_webhook_verification(config)
-    def handle_event():
+    def handle_event():  # type: ignore[misc]
         """Handle Benchling webhook events."""
         try:
             logger.info("Received /event", headers=dict(request.headers))
@@ -319,7 +319,7 @@ def create_app():
 
     @app.route("/lifecycle", methods=["POST"])
     @require_webhook_verification(config)
-    def lifecycle():
+    def lifecycle():  # type: ignore[misc]
         """Handle Benchling app lifecycle events."""
         try:
             logger.info("Received /lifecycle", headers=dict(request.headers))
@@ -395,7 +395,7 @@ def create_app():
 
     @app.route("/canvas", methods=["POST"])
     @require_webhook_verification(config)
-    def canvas_initialize():
+    def canvas_initialize():  # type: ignore[misc]
         """Handle /canvas webhook from Benchling."""
         try:
             logger.info("Received /canvas", headers=dict(request.headers))
@@ -474,7 +474,7 @@ def create_app():
 
         try:
             # Parse button ID to get page info
-            action, entry_id, page_state = parse_button_id(button_id)
+            _, entry_id, page_state = parse_button_id(button_id)
 
             page_number = page_state.page_number if page_state else 0
             page_size = page_state.page_size if page_state else 15
@@ -562,7 +562,7 @@ def create_app():
         # Update canvas asynchronously in background thread
         def update_canvas_async():
             try:
-                canvas_manager.update_canvas_with_blocks(blocks)
+                canvas_manager.update_canvas_with_blocks(blocks)  # type: ignore[attr-defined]
                 logger.info(
                     "Canvas updated with linked package browser",
                     entry_id=entry_id,
@@ -630,7 +630,7 @@ def create_app():
         from .pagination import parse_button_id
 
         try:
-            action, entry_id, page_state = parse_button_id(button_id)
+            _, entry_id, page_state = parse_button_id(button_id)
 
             page_number = page_state.page_number if page_state else 0
             page_size = page_state.page_size if page_state else 15
@@ -679,11 +679,11 @@ def create_app():
         )
 
     @app.errorhandler(404)
-    def not_found(error):
+    def not_found(error):  # type: ignore[misc]
         return jsonify({"error": "Endpoint not found"}), 404
 
     @app.errorhandler(500)
-    def internal_error(error):
+    def internal_error(error):  # type: ignore[misc]
         return jsonify({"error": "Internal server error"}), 500
 
     return app
