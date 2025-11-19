@@ -877,24 +877,12 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
         };
     }
 
-    // Check if integrated stack
-    if (!config.integratedStack) {
-        const errorMsg = "Status command is only available for integrated stack mode";
-        console.log(chalk.yellow(`\n⚠️  ${errorMsg}\n`));
-        console.log(chalk.dim("This profile is configured for standalone deployment."));
-        console.log(chalk.dim("Use CloudFormation console to check webhook stack status.\n"));
-        return {
-            success: false,
-            error: errorMsg,
-        };
-    }
-
-    // Extract stack info
+    // Extract stack info - if stackArn is present, status should work regardless of integratedStack flag
     const stackArn = config.quilt.stackArn;
     if (!stackArn) {
         return {
             success: false,
-            error: "Quilt stack ARN not found in configuration. This command requires a Quilt stack ARN to check integration status.",
+            error: "Quilt stack ARN not found in configuration. This command requires a Quilt stack ARN to check stack status.",
         };
     }
     const region = config.deployment.region;
