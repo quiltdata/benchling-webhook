@@ -316,6 +316,43 @@ class CanvasManager:
             )
             return {"success": False, "error": str(e)}
 
+    def update_canvas_with_blocks(self, blocks: List) -> dict[str, Any]:
+        """Update existing Canvas with provided blocks using Benchling SDK.
+
+        Args:
+            blocks: List of block objects to display on the canvas
+
+        Returns:
+            Dict with success status and canvas_id or error
+        """
+        try:
+            canvas_update = AppCanvasUpdate(
+                blocks=blocks,  # type: ignore
+                enabled=True,  # type: ignore
+            )
+
+            logger.info(
+                "Updating Canvas with provided blocks",
+                canvas_id=self.canvas_id,
+                blocks_count=len(blocks),
+            )
+
+            result = self.benchling.apps.update_canvas(canvas_id=self.canvas_id, canvas=canvas_update)
+
+            logger.info("Canvas updated successfully", canvas_id=result.id)
+
+            return {"success": True, "canvas_id": result.id}
+
+        except Exception as e:
+            logger.error(
+                "Canvas update failed",
+                canvas_id=self.canvas_id,
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
+            return {"success": False, "error": str(e)}
+
     def _make_file_table_markdown(
         self,
         files: List[PackageFile],
