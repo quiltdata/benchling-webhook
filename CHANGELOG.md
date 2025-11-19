@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.2] - 2025-11-18
+
+### Added
+
+- Production Docker build workflow with SHA-tagged immutable images
+- `--config` as alias for `--profile` option across all CLI commands
+- Enhanced logs command with auto-refresh, sectioned display, and smart time window expansion
+- ECS service discovery for integrated Quilt stacks (shows logs from all services)
+- Utility modules for ECS discovery and time formatting
+
+### Changed
+
+- Logs command now auto-refreshes every 10s by default (disable with `--timer 0`)
+- Logs command shows last 5 entries per group instead of 100 (configure with `--limit`)
+- Logs command discovers all ECS services in integrated stacks, not just Benchling
+- Default limit changed from `--tail` to `--limit` for clarity
+- Removed obsolete `scripts/check-logs.ts` in favor of enhanced `logs` command
+
+### Breaking Changes
+
+- Logs command: `--follow` flag removed (replaced with `--timer` for auto-refresh)
+- Logs command: `--tail` renamed to `--limit`
+- Logs command: `--stage` flag removed (not used in integrated mode)
+
 ## [0.8.0] - 2025-11-17
 
 ### Breaking Changes

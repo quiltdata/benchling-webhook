@@ -1,146 +1,136 @@
 # Benchling Webhook Integration for Quilt
 
-Connects Benchling lab notebook entries to Quilt data packages via webhooks.
+The Benchling Webhook creates a seamless connection between [Benchling](https://www.benchling.com)'s Electronic Lab Notebook (ELN) and [Quilt](https://www.quilt.bio)'s Scientific Data Managements System (SDMS) for Amazon S3.
+It not only allows you to view Benchling metadata and attachments inside Quilt packages, but also enables users to browse Quilt package descriptions from inside Benchling notebookes.
 
-> **⚠️ Breaking Change in v1.0.0**: Runtime CloudFormation dependencies removed. Service configuration now resolved at deployment time. See [MIGRATION.md](./spec/206-service-envars/MIGRATION.md) for upgrade instructions.
-## Prerequisites
+The webhook works through a [Benchling App](https://docs.benchling.com/docs/getting-started-benchling-apps) that must be installed in your Organization by a Benchling Administrator and configured to call your stack's unique webhook (see Installation, below).
 
-- Node.js 18+ with `npx` ([download](https://nodejs.org))
-- [AWS credentials](https://docs.aws.amazon.com/cli/v1/userguide/cli-configure-files.html) configured
-- Existing [Quilt deployment](https://www.quilt.bio/install)
-- Benchling tenant (need Admin permissions to install a Benchling app)
+## Availability
 
-## Quick Start
+It is available in the Quilt Platform (1.65 or later) or as a standalone CDK stack via the `@quiltdata/benchling-webhook` [npm package](https://www.npmjs.com/package/@quiltdata/benchling-webhook).
 
-### 1. Install the Benchling app
+## Functionality
 
-First create a manifest:
+### Auto-Packaging
+
+![Packaged Notebook](imgs/benchling-package.png)
+
+When scientists create notebook entries in Benchling, this webhook automatically:
+
+- **Creates a dedicated Quilt package** for each notebook entry
+- **Synchronizes metadata** from Benchling (experiment IDs, authors, etc.) into that package
+- **Copies attachments** from that notebook into Amazon S3 as part of the package.
+- **Enables orgnizational data discovery** by making contents available in ElasticSearch, and metadata available in Amazon Athena.
+
+### Package Linking
+
+![experiment_id](imgs/benchling-link.png)
+
+In addition, Quilt users can 'tag' additional packages by setting the `experiment_id` (or a custom metadta key) to the display ID of a Benchling notebook, e.g., `EXP00001234`.
+
+From inside the Quilt Catalog:
+
+1. Navigate to the package of interest
+2. Click 'Revise Package'
+3. Go the metadata editor in the bottom left
+4. In the bottom row, enter `experiment_id` as key and the display ID as the value.
+5. Set the commit message and click 'Save'
+
+### Benchling App Canvas
+
+![App Canvas - Home](imgs/benchling-canvas.png)
+
+The webhook includes a Benchling App Canvas, which allows Benchling users to view, browse, and sync the associated Quilt packages.
+
+- Clicking the package name opens it in the Quilt Catalog
+- The `sync` button will open the package or file in [QuiltSync](https://www.quilt.bio/quiltsync), if you have it installed.
+- The `Update` button refreshes the package, as Benchling only notifies Quilt of changes when the metadata fields are modified.
+
+The canvas also allows you to browse package contents:
+
+![App Canvas - Browse](imgs/benchling-browse.png)
+
+and view package metadata:
+
+![App Canvas - Metadata](imgs/benchling-browse.png)
+
+#### Inserting a Canvas
+
+If the App Canvas is not already part of your standard notebook template, Benchling users can add it themselves:
+
+1. Create a notebook entry
+2. Select "Insert" → "Canvas"
+3. Choose "Quilt Package"
+4. After it is inserted, click the "Create" button
+
+![App Canvas - Insert](imgs/benchling-insert.png)
+
+## Installation
+
+### 1. Installing the Benchling App
+
+This requires a Benchling admin to use `npx` from [NodeJS](https://nodejs.org) version 18 or later.
+
+#### 1.1 Generate a manifest
 
 ```bash
 npx @quiltdata/benchling-webhook@latest manifest
 ```
 
-Then follow the instructions to [create](https://docs.benchling.com/docs/getting-started-benchling-apps#creating-an-app-from-a-manifest) and [install](https://docs.benchling.com/docs/getting-started-benchling-apps#installing-your-app) the app.
+This will generate an `app-manifest.yaml` file in your local folder
 
-This will give you an App Definition ID and Client ID,
-which --- along with the Client Secret must generate -- you will need later.
+#### 1.2 Upload the manifest to Benchling
 
-### 2. Run the setup wizard
+- Follow Benchling's [create](https://docs.benchling.com/docs/getting-started-benchling-apps#creating-an-app-from-a-manifest) and [install](https://docs.benchling.com/docs/getting-started-benchling-apps#installing-your-app) instructions.
+- Save the **App Definition ID**, **Client ID**, and **Client Secret** for the next step.
+
+### 2. Configuring the Benchling App
+
+Your command-line environment must have AWS credentials for the account containing your Quilt stack.
+All you need to do is use `npx` to run the package:
 
 ```bash
 npx @quiltdata/benchling-webhook@latest
 ```
 
-The wizard will:
+The wizard will guide you through:
 
-1. **Catalog Discovery** - Detect and confirm your Quilt catalog DNS
-2. **Stack Query** - Extract configuration from your CloudFormation stack
-3. **Parameter Collection** - Collect Benchling credentials and package settings
-4. **Validation** - Validate all parameters before proceeding
-5. **Deployment Mode** - Choose between integrated or standalone deployment:
-   - **Integrated Mode**: Updates the existing BenchlingSecret in your Quilt stack (recommended if you have one)
-   - **Standalone Mode**: Creates a dedicated secret and optionally deploys a separate webhook stack
+1. **Catalog discovery** - Detect your Quilt catalog configuration
+2. **Stack validation** - Extract settings from your CloudFormation stack
+3. **Credential collection** - Enter Benchling app credentials
+4. **Deployment mode selection**:
+   - **Integrated**: Uses your Quilt stack's built-in webhook, if any
+   - **Standalone**: Deploys a separate webhook stack for testing
 
-#### Deployment Modes
-
-**Integrated Mode** (recommended if your Quilt stack has a BenchlingSecret):
-- Uses the existing BenchlingSecret from your Quilt CloudFormation stack
-- No separate deployment needed - the webhook URL is available from your Quilt stack outputs
-- Cleaner architecture with fewer AWS resources
-
-**Standalone Mode** (for separate deployments):
-- Creates a dedicated secret: `quiltdata/benchling-webhook/<profile>/<tenant>`
-- Prompts you to deploy a separate webhook stack to AWS
-- Useful for testing or isolated deployments
-
-It will list the webhook URL in the completion message or next steps.
-
-NOTE: This version no longer reads your `.env` file.
-Instead, it stores your results in the [XDG_CONFIG_HOME](https://wiki.archlinux.org/title/XDG_Base_Directory),
-where you can have more than one profile.
-
-#### Integrated Mode: BenchlingIntegration Parameter
-
-When using integrated mode (built-in Quilt stack webhook), the setup wizard will:
-
-1. Check if `BenchlingIntegration` is enabled in your Quilt stack
-2. Offer to enable it automatically if disabled
-3. Provide a status command to monitor the stack update
-
-**Checking Integration Status:**
-
-```bash
-npx @quiltdata/benchling-webhook@latest status --profile myprofile
-```
-
-This shows:
-
-- CloudFormation stack status
-- BenchlingIntegration parameter state
-- Last update timestamp
-- Direct link to CloudFormation console
-
-**Enabling BenchlingIntegration:**
-
-If your Quilt stack has `BenchlingIntegration` set to `false`, the setup wizard will detect this and offer to enable it automatically. You can:
-
-- Let the wizard update the parameter (recommended)
-- Enable it manually through the AWS CloudFormation console
-- Use the `status` command to monitor the update progress
+**Note**: Configuration is stored in `~/.config/benchling-webhook/` using the [XDG Base Directory](https://wiki.archlinux.org/title/XDG_Base_Directory) standard, supporting multiple profiles.
 
 ### 3. Configure Webhook URL
 
-After deployment, add the webhook URL to your [Benchling app settings](https://docs.benchling.com/docs/getting-started-benchling-apps#installing-your-app).
+Add the webhook URL (displayed after setup) to your [Benchling app settings](https://docs.benchling.com/docs/getting-started-benchling-apps#installing-your-app).
 
-### 4. Usage
+### 4. Test Integration
 
 In Benchling:
 
-1. Create entry →
-2. Insert Canvas →
-3. Select "Quilt Package" →
-4. Click "Create"
+1. Create a notebook entry
+2. Insert Canvas → Select "Quilt Package"
+3. Click "Create"
 
-This will generate an App Canvas with a dedicated Quilt package for this notebook, as well as additional links and buttons.
+A Quilt package will be automatically created and linked to your notebook entry.
+If you run into problems, contact [Quilt Support](support@quilt.bio)
 
-## Other Commands
-
-### Deploy
-
-If necessary, you can manually deploy (without redoing setup) via:
+## Additional Commands
 
 ```bash
-npx @quiltdata/benchling-webhook@latest deploy
-```
+# Deploy without re-running setup
+npx @quiltdata/benchling-webhook@latest deploy [--profile <name>]
 
-### Status
-
-Check the status of your Quilt stack and BenchlingIntegration parameter:
-
-```bash
+# Check CloudFormation stack status
 npx @quiltdata/benchling-webhook@latest status [--profile <name>]
+
+# Show all available commands
+npx @quiltdata/benchling-webhook@latest --help
 ```
-
-This command displays:
-- CloudFormation stack status (CREATE_COMPLETE, UPDATE_IN_PROGRESS, etc.)
-- BenchlingIntegration parameter value (true/false)
-- Last update timestamp
-- Direct console link for manual updates
-
-Useful for monitoring stack updates after enabling BenchlingIntegration.
-
-### Help
-
-For more information, use:
-
-```bash
-npx @quiltdata/benchling-webhook@latest --help    # Show all commands
-```
-
-## Resources
-
-- [Changelog](./CHANGELOG.md) - Version history
-- [Report Issues](https://github.com/quiltdata/benchling-webhook/issues)
 
 ## License
 
