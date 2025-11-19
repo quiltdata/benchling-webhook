@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import boto3
 
-from .config_resolver import resolve_and_fetch_secret
+from .secrets_manager import fetch_benchling_secret
 
 
 @dataclass
@@ -132,7 +132,7 @@ class Config:
 
         # Fetch secret from Secrets Manager
         sm_client = boto3.client("secretsmanager", region_name=self.aws_region)
-        secret_data = resolve_and_fetch_secret(sm_client, self.aws_region, benchling_secret)
+        secret_data = fetch_benchling_secret(sm_client, self.aws_region, benchling_secret)
 
         # Set Benchling configuration from secret
         self.benchling_tenant = secret_data.tenant
