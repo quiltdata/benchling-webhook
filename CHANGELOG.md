@@ -10,6 +10,10 @@ All notable changes to this project will be documented in this file.
 - Browse buttons for linked packages in Benchling Canvas
 - Docker image tag and deployment timestamp reporting in test output
 
+### Changed
+
+- **BREAKING**: Removed `--config` alias, use only `--profile` for all commands (simpler, less confusing)
+
 ### Fixed
 
 - **CRITICAL**: Fixed Commander.js option ordering - `--profile` flag now works correctly for all commands
