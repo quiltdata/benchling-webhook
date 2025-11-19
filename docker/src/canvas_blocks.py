@@ -14,7 +14,8 @@ from benchling_api_client.v2.stable.models.markdown_ui_block_update import Markd
 from benchling_api_client.v2.stable.models.section_ui_block_type import SectionUiBlockType
 from benchling_api_client.v2.stable.models.section_ui_block_update import SectionUiBlockUpdate
 
-from .pagination import PageState
+from .packages import Package
+from .pagination import PageState, encode_package_name
 
 
 def create_markdown_block(content: str, block_id: str = "md1") -> MarkdownUiBlockUpdate:
@@ -177,6 +178,42 @@ def create_metadata_navigation_buttons(entry_id: str, page_state: PageState) -> 
     ]
 
     return [create_section("button-section-metadata", buttons)]
+
+
+def create_linked_package_browse_buttons(entry_id: str, packages: List[Package]) -> List:
+    """Create Browse buttons for linked packages.
+
+    Creates a horizontal row of Browse buttons below the Linked Packages section.
+    Each button opens the Package Entry Browser for that linked package.
+
+    Args:
+        entry_id: The current entry ID (for context/logging)
+        packages: List of linked Package objects to create buttons for
+
+    Returns:
+        List of block dictionaries (empty if no packages)
+
+    Example button ID: browse-linked-etr_abc123-pkg-benchling--exp-001-p0-s15
+    """
+    if not packages:
+        return []
+
+    buttons = []
+    for pkg in packages:
+        # Encode package name for button ID (replace / with --)
+        encoded_pkg_name = encode_package_name(pkg.package_name)
+
+        # Create button ID with default pagination (page 0, size 15)
+        button_id = f"browse-linked-{entry_id}-pkg-{encoded_pkg_name}-p0-s15"
+
+        # Create Browse button
+        button = create_button(button_id, "Browse")
+        buttons.append(button)
+
+    # Create a section with all browse buttons in horizontal layout
+    section = create_section("button-section-linked-packages", buttons)
+
+    return [section]
 
 
 def blocks_to_dict(blocks: List) -> List[Dict[str, Any]]:
