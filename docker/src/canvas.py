@@ -63,6 +63,7 @@ class CanvasManager:
         self._entry = None
         self._package = None
         self._errors: List[str] = []  # Track errors to display in notification section
+        self._linked_packages: List[Package] = []  # Track linked packages for use in blocks
 
         # Dependency injection with fallback to default instances
         self._package_query = package_query or PackageQuery(
@@ -209,6 +210,9 @@ class CanvasManager:
             # Filter out the primary package
             linked_packages = [pkg for pkg in linked_packages if pkg.package_name != self.package_name]
 
+            # Store linked packages as instance variable
+            self._linked_packages = linked_packages
+
             content += fmt.format_linked_packages(linked_packages)
 
         except Exception as e:
@@ -241,10 +245,16 @@ class CanvasManager:
         markdown_content = self._make_markdown_content()
         markdown_block = blocks.create_markdown_block(markdown_content, "md1")
 
-        return [
+        result = [
             *blocks.create_main_navigation_buttons(self.entry_id),  # Buttons at the top
             markdown_block,
         ]
+
+        # Add linked package browse buttons if any exist
+        if self._linked_packages:
+            result.extend(blocks.create_linked_package_browse_buttons(self.entry_id, self._linked_packages))
+
+        return result
 
     def get_canvas_response(self) -> dict[str, Any]:
         """Generate canvas response for synchronous webhook reply."""

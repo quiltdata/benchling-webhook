@@ -418,6 +418,8 @@ def create_app():
                 # Route to appropriate button handler
                 if button_id.startswith("browse-files-"):
                     return handle_browse_files(payload, button_id, benchling, config)
+                elif button_id.startswith("browse-linked-"):
+                    return handle_browse_linked(payload, button_id, benchling, config)
                 elif button_id.startswith("next-page-") or button_id.startswith("prev-page-"):
                     return handle_page_navigation(payload, button_id, benchling, config)
                 elif button_id.startswith("back-to-package-"):
@@ -499,6 +501,89 @@ def create_app():
         except Exception as e:
             logger.error("Browse files failed", error=str(e))
             return jsonify({"error": str(e)}), 500
+
+    def handle_browse_linked(payload, button_id, benchling, config):
+        """Handle Browse Linked Package button click.
+
+        Creates a Package Entry Browser for the linked package specified in the button ID.
+        Uses the linked package name instead of deriving from entry_id.
+
+        Args:
+            payload: Webhook payload from Benchling
+            button_id: Button ID in format: browse-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+            benchling: Benchling service instance
+            config: Application configuration
+
+        Returns:
+            Tuple of (response dict, status code)
+        """
+        from .packages import Package
+        from .pagination import parse_browse_linked_button_id
+
+        # Parse button ID to extract package name and pagination
+        try:
+            entry_id, package_name, page_number, page_size = parse_browse_linked_button_id(button_id)
+        except ValueError as e:
+            logger.error("Invalid browse-linked button ID", button_id=button_id, error=str(e))
+            return jsonify({"error": "Invalid button ID"}), 400
+
+        logger.info(
+            "Browse linked package requested",
+            entry_id=entry_id,
+            package_name=package_name,
+            page=page_number,
+            size=page_size,
+        )
+
+        # Create canvas manager for the entry
+        canvas_manager = CanvasManager(benchling, config, payload)
+
+        # Override the package to use the linked package name
+        # This bypasses the normal package name derivation from entry_id
+        canvas_manager._package = Package(
+            catalog_base_url=config.quilt_catalog,
+            bucket=config.s3_bucket_name,
+            package_name=package_name,
+        )
+
+        # Generate browser blocks for the linked package
+        try:
+            blocks = canvas_manager.get_package_browser_blocks(page_number, page_size)
+        except Exception as e:
+            logger.error(
+                "Failed to get package browser blocks",
+                entry_id=entry_id,
+                package_name=package_name,
+                error=str(e),
+            )
+            # Return error blocks if something goes wrong
+            blocks = canvas_manager._make_blocks()
+
+        # Update canvas asynchronously in background thread
+        def update_canvas_async():
+            try:
+                canvas_manager.update_canvas_with_blocks(blocks)
+                logger.info(
+                    "Canvas updated with linked package browser",
+                    entry_id=entry_id,
+                    package_name=package_name,
+                    page=page_number,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to update canvas with linked package browser",
+                    entry_id=entry_id,
+                    package_name=package_name,
+                    error=str(e),
+                    exc_info=True,
+                )
+
+        thread = threading.Thread(target=update_canvas_async)
+        thread.daemon = True
+        thread.start()
+
+        # Return 202 Accepted immediately
+        return jsonify({"status": "processing"}), 202
 
     def handle_page_navigation(payload, button_id, benchling, config):
         """Handle Next/Previous page button clicks."""
