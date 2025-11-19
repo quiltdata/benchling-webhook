@@ -99,6 +99,21 @@ class TestCanvasFooterBlocks:
         assert footer_block_dict["id"] == "md-footer"
         assert "Package will be created/updated asynchronously" in footer_block_dict["value"]
 
+    def test_blocks_to_dict_rejects_invalid_blocks(self):
+        """Verify blocks_to_dict raises TypeError for invalid block types."""
+        from src.canvas_blocks import blocks_to_dict
+        import pytest
+
+        # Create a list with an invalid block (string instead of block object)
+        invalid_blocks = ["this is a string, not a block"]
+
+        # Should raise TypeError with helpful message
+        with pytest.raises(TypeError) as exc_info:
+            blocks_to_dict(invalid_blocks)
+
+        assert "does not have a to_dict() method" in str(exc_info.value)
+        assert "type: str" in str(exc_info.value)
+
 
 @pytest.fixture
 def mock_config():

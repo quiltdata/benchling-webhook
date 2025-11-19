@@ -219,49 +219,24 @@ def create_linked_package_browse_buttons(entry_id: str, packages: List[Package])
 def blocks_to_dict(blocks: List) -> List[Dict[str, Any]]:
     """Convert block objects to dict format for JSON response.
 
+    Uses the Benchling SDK's built-in .to_dict() method for reliable serialization
+    that stays in sync with SDK changes.
+
     Args:
         blocks: List of block instances (MarkdownUiBlockUpdate, ButtonUiBlockUpdate, SectionUiBlockUpdate)
 
     Returns:
         List of dictionaries representing the blocks
+
+    Raises:
+        TypeError: If a block doesn't have a to_dict() method
     """
     blocks_dict = []
-    for block in blocks:
-        if isinstance(block, MarkdownUiBlockUpdate):
-            blocks_dict.append(
-                {
-                    "type": "MARKDOWN",
-                    "id": block.id,
-                    "value": block.value,
-                }
+    for i, block in enumerate(blocks):
+        if not hasattr(block, "to_dict"):
+            raise TypeError(
+                f"Block at index {i} (type: {type(block).__name__}) does not have a to_dict() method. "
+                f"Expected MarkdownUiBlockUpdate, ButtonUiBlockUpdate, or SectionUiBlockUpdate."
             )
-        elif isinstance(block, ButtonUiBlockUpdate):
-            blocks_dict.append(
-                {
-                    "type": "BUTTON",
-                    "id": block.id,
-                    "text": block.text,
-                    "enabled": block.enabled,
-                }
-            )
-        elif isinstance(block, SectionUiBlockUpdate):
-            # Convert section with button children
-            children_dict = []
-            for child in block.children:
-                if isinstance(child, ButtonUiBlock):
-                    children_dict.append(
-                        {
-                            "type": "BUTTON",
-                            "id": child.id,
-                            "text": child.text,
-                            "enabled": child.enabled,
-                        }
-                    )
-            blocks_dict.append(
-                {
-                    "type": "SECTION",
-                    "id": block.id,
-                    "children": children_dict,
-                }
-            )
+        blocks_dict.append(block.to_dict())
     return blocks_dict
