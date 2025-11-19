@@ -28,7 +28,7 @@ from src.auth.role_manager import RoleManager
 from src.packages import Package
 
 if TYPE_CHECKING:
-    from src.config import Config
+    from .config import Config
 
 logger = structlog.get_logger(__name__)
 
