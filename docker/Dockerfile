@@ -23,7 +23,7 @@
 # ============================================================================
 # BASE STAGE: Shared base image for both builder and runtime stages
 # ============================================================================
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023.9.20251110.1@sha256:c929105619fbc4cb4cb2d0667a02b549a3408be98e89d9c61437ca702d04d829 AS base
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023.9.20251117.1@sha256:f5ca6cafc706233c641ad838e738047389943afd3585cb1df7eedfc4d9b1799d AS base
 
 # ============================================================================
 # BUILDER STAGE: Compile dependencies and create virtual environment
