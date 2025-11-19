@@ -50,7 +50,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: arn:aws:iam::712023778557:role/github/GitHub-benchling-webhook
+          role-to-assume: arn:aws:iam::730278974607:role/github/GitHub-benchling-webhook
           aws-region: us-east-1
 
       - name: Set up Docker Buildx
@@ -106,7 +106,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: arn:aws:iam::712023778557:role/github/GitHub-benchling-webhook
+          role-to-assume: arn:aws:iam::730278974607:role/github/GitHub-benchling-webhook
           aws-region: us-east-1
 
       - name: Validate image architecture
