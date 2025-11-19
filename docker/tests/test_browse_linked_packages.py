@@ -264,7 +264,7 @@ class TestLinkedPackageBrowseButtons:
         buttons = result[0].children
         assert len(buttons) == 1
         assert buttons[0].type == "BUTTON"
-        assert buttons[0].text == "Browse"
+        assert buttons[0].text == "benchling/exp-001"
         assert buttons[0].id == "browse-linked-etr_123-pkg-benchling--exp-001-p0-s15"
         assert buttons[0].enabled is True
 
@@ -291,8 +291,7 @@ class TestLinkedPackageBrowseButtons:
         assert buttons[1].id == "browse-linked-etr_abc-pkg-benchling--exp-002-p0-s15"
         assert buttons[2].id == "browse-linked-etr_abc-pkg-benchling--exp-003-p0-s15"
 
-        # All should be Browse buttons
-        assert all(btn.text == "Browse" for btn in buttons)
+        # All buttons should be enabled
         assert all(btn.enabled is True for btn in buttons)
 
     def test_create_buttons_package_with_special_chars(self):

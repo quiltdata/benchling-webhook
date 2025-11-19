@@ -231,13 +231,6 @@ class CanvasManager:
         # Error notifications (at the bottom)
         content += fmt.format_error_notification(self._errors)
 
-        # Footer with version and deployment info
-        content += fmt.format_canvas_footer(
-            version=__version__,
-            quilt_host=self.config.quilt_catalog,
-            bucket=self.config.s3_bucket_name,
-        )
-
         return content
 
     def _make_blocks(self) -> list:
@@ -254,6 +247,13 @@ class CanvasManager:
         if self._linked_packages:
             result.extend(blocks.create_linked_package_browse_buttons(self.entry_id, self._linked_packages))
 
+        result.extend(
+            fmt.format_canvas_footer(
+                version=__version__,
+                quilt_host=self.config.quilt_catalog,
+                bucket=self.config.s3_bucket_name,
+            )
+        )
         return result
 
     def get_canvas_response(self) -> dict[str, Any]:
