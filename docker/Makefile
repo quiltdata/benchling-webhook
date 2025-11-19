@@ -55,7 +55,7 @@ help:
 	@echo "  test-benchling        - Test Benchling OAuth credentials"
 	@echo "  test-query            - Test Quilt package query (defaults to BENCHLING_TEST_ENTRY)"
 	@echo "  test-integration      - Full integration tests (requires real Benchling creds)"
-	@echo "  lint                  - Auto-fix code formatting"
+	@echo "  lint                  - Auto-fix code formatting (black + isort) and type check (pyright)"
 	@echo ""
 	@echo "Health & Monitoring:"
 	@echo "  health                - Check docker prod health (port $(PORT_DOCKER_PROD))"
@@ -340,10 +340,11 @@ test-deployed-prod: check-xdg
 	fi; \
 	uv run python scripts/test_webhook.py "$$PROD_ENDPOINT" --health-only
 
-# Auto-fix code formatting (black + isort)
+# Auto-fix code formatting (black + isort) and type check (pyright)
 lint:
 	uv run black src/ tests/ scripts/
 	uv run isort src/ tests/ scripts/
+	uv run pyright src/ tests/ scripts/
 
 # Deployment
 
