@@ -1,6 +1,7 @@
 # Benchling Webhook Integration for Quilt
 
-The Benchling Webhook creates a seamless connection between Benchling's Electronic Lab Notebook (ELN) and Quilt's data catalog. It not only allows you to view Benchling metadata and attachments inside Quilt packages, it also enables users to browse Quilt package descriptions from inside Benchling notebookes.
+The Benchling Webhook creates a seamless connection between [Benchling](https://www.benchling.com)'s Electronic Lab Notebook (ELN) and [Quilt](https://www.quilt.bio)'s Scientific Data Managements System (SDMS) for Amazon S3.
+It not only allows you to view Benchling metadata and attachments inside Quilt packages, but also enables users to browse Quilt package descriptions from inside Benchling notebookes.
 
 The webhook works through a [Benchling App](https://docs.benchling.com/docs/getting-started-benchling-apps) that must be installed in your Organization by a Benchling Administrator and configured to call your stack's unique webhook (see Installation, below).
 
@@ -12,7 +13,7 @@ It is available in the Quilt Platform (1.65 or later) or as a standalone CDK sta
 
 ### Auto-Packaging
 
-![Quilt Package](imgs/benchling-package.png)
+![Packaged Notebook](imgs/benchling-package.png)
 
 When scientists create notebook entries in Benchling, this webhook automatically:
 
@@ -23,7 +24,7 @@ When scientists create notebook entries in Benchling, this webhook automatically
 
 ### Package Linking
 
-![experiment_id](imgs/benchling-metadata-link.png)
+![experiment_id](imgs/benchling-link.png)
 
 In addition, Quilt users can 'tag' additional packages by setting the `experiment_id` (or a custom metadta key) to the display ID of a Benchling notebook, e.g., `EXP00001234`.
 
