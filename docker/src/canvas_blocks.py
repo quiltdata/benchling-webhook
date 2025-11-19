@@ -4,7 +4,7 @@ This module provides reusable functions for creating Benchling Canvas UI blocks
 (buttons, markdown, sections) and converting them to dictionary format.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from benchling_api_client.v2.stable.models.button_ui_block import ButtonUiBlock
 from benchling_api_client.v2.stable.models.button_ui_block_type import ButtonUiBlockType
@@ -115,12 +115,18 @@ def create_main_navigation_buttons(entry_id: str) -> List:
     return [create_section("button-section-main", buttons)]
 
 
-def create_browser_navigation_buttons(entry_id: str, page_state: PageState) -> List:
+def create_browser_navigation_buttons(
+    entry_id: str,
+    page_state: PageState,
+    package_name: Optional[str] = None,
+) -> List:
     """Create browser view navigation buttons (Prev, Next, Back, Metadata).
 
     Args:
         entry_id: Entry identifier for button IDs
         page_state: Current pagination state
+        package_name: Optional package name for linked package browsing.
+                      If provided, creates buttons with package context for linked packages.
 
     Returns:
         List containing section with navigation buttons
@@ -128,14 +134,28 @@ def create_browser_navigation_buttons(entry_id: str, page_state: PageState) -> L
     prev_page = page_state.page_number - 1 if page_state.has_previous else 0
     next_page = page_state.page_number + 1 if page_state.has_next else page_state.page_number
 
+    # If browsing a linked package, include package name in button IDs
+    if package_name:
+        encoded_pkg_name = encode_package_name(package_name)
+        prev_button_id = f"prev-page-linked-{entry_id}-pkg-{encoded_pkg_name}-p{prev_page}-s{page_state.page_size}"
+        next_button_id = f"next-page-linked-{entry_id}-pkg-{encoded_pkg_name}-p{next_page}-s{page_state.page_size}"
+        metadata_button_id = (
+            f"view-metadata-linked-{entry_id}-pkg-{encoded_pkg_name}-p{page_state.page_number}-s{page_state.page_size}"
+        )
+    else:
+        # Default browsing (primary package)
+        prev_button_id = f"prev-page-{entry_id}-p{prev_page}-s{page_state.page_size}"
+        next_button_id = f"next-page-{entry_id}-p{next_page}-s{page_state.page_size}"
+        metadata_button_id = f"view-metadata-{entry_id}-p{page_state.page_number}-s{page_state.page_size}"
+
     buttons = [
         create_button(
-            button_id=f"prev-page-{entry_id}-p{prev_page}-s{page_state.page_size}",
+            button_id=prev_button_id,
             text="← Previous",
             enabled=page_state.has_previous,
         ),
         create_button(
-            button_id=f"next-page-{entry_id}-p{next_page}-s{page_state.page_size}",
+            button_id=next_button_id,
             text="Next →",
             enabled=page_state.has_next,
         ),
@@ -145,7 +165,7 @@ def create_browser_navigation_buttons(entry_id: str, page_state: PageState) -> L
             enabled=True,
         ),
         create_button(
-            button_id=f"view-metadata-{entry_id}-p{page_state.page_number}-s{page_state.page_size}",
+            button_id=metadata_button_id,
             text="View Metadata",
             enabled=True,
         ),
@@ -154,19 +174,35 @@ def create_browser_navigation_buttons(entry_id: str, page_state: PageState) -> L
     return [create_section("button-section-browser", buttons)]
 
 
-def create_metadata_navigation_buttons(entry_id: str, page_state: PageState) -> List:
+def create_metadata_navigation_buttons(
+    entry_id: str,
+    page_state: PageState,
+    package_name: Optional[str] = None,
+) -> List:
     """Create metadata view navigation buttons (Back to Browser, Back to Package).
 
     Args:
         entry_id: Entry identifier for button IDs
         page_state: Current pagination state (for preserving context)
+        package_name: Optional package name for linked package browsing.
+                      If provided, creates buttons with package context for linked packages.
 
     Returns:
         List containing section with navigation buttons
     """
+    # If browsing a linked package, include package name in "Back to Browser" button
+    if package_name:
+        encoded_pkg_name = encode_package_name(package_name)
+        back_to_browser_button_id = (
+            f"browse-linked-{entry_id}-pkg-{encoded_pkg_name}-p{page_state.page_number}-s{page_state.page_size}"
+        )
+    else:
+        # Default browsing (primary package)
+        back_to_browser_button_id = f"browse-files-{entry_id}-p{page_state.page_number}-s{page_state.page_size}"
+
     buttons = [
         create_button(
-            button_id=f"browse-files-{entry_id}-p{page_state.page_number}-s{page_state.page_size}",
+            button_id=back_to_browser_button_id,
             text="Back to Browser",
             enabled=True,
         ),

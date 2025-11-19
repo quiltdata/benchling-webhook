@@ -420,10 +420,14 @@ def create_app():
                     return handle_browse_files(payload, button_id, benchling, config)
                 elif button_id.startswith("browse-linked-"):
                     return handle_browse_linked(payload, button_id, benchling, config)
+                elif button_id.startswith("next-page-linked-") or button_id.startswith("prev-page-linked-"):
+                    return handle_page_navigation_linked(payload, button_id, benchling, config)
                 elif button_id.startswith("next-page-") or button_id.startswith("prev-page-"):
                     return handle_page_navigation(payload, button_id, benchling, config)
                 elif button_id.startswith("back-to-package-"):
                     return handle_back_to_main(payload, button_id, benchling, config)
+                elif button_id.startswith("view-metadata-linked-"):
+                    return handle_view_metadata_linked(payload, button_id, benchling, config)
                 elif button_id.startswith("view-metadata-"):
                     return handle_view_metadata(payload, button_id, benchling, config)
                 elif button_id.startswith("update-package-"):
@@ -517,7 +521,6 @@ def create_app():
         Returns:
             Tuple of (response dict, status code)
         """
-        from .packages import Package
         from .pagination import parse_browse_linked_button_id
 
         # Parse button ID to extract package name and pagination
@@ -538,17 +541,10 @@ def create_app():
         # Create canvas manager for the entry
         canvas_manager = CanvasManager(benchling, config, payload)
 
-        # Override the package to use the linked package name
-        # This bypasses the normal package name derivation from entry_id
-        canvas_manager._package = Package(
-            catalog_base_url=config.quilt_catalog,
-            bucket=config.s3_bucket_name,
-            package_name=package_name,
-        )
-
         # Generate browser blocks for the linked package
+        # Pass package_name to use the linked package instead of the default package
         try:
-            blocks = canvas_manager.get_package_browser_blocks(page_number, page_size)
+            blocks = canvas_manager.get_package_browser_blocks(page_number, page_size, package_name)
         except Exception as e:
             logger.error(
                 "Failed to get package browser blocks",
@@ -586,7 +582,7 @@ def create_app():
         return jsonify({"status": "processing"}), 202
 
     def handle_page_navigation(payload, button_id, benchling, config):
-        """Handle Next/Previous page button clicks."""
+        """Handle Next/Previous page button clicks for primary package."""
         from .pagination import parse_button_id
 
         try:
@@ -616,17 +612,76 @@ def create_app():
             logger.error("Page navigation failed", error=str(e))
             return jsonify({"error": str(e)}), 500
 
+    def handle_page_navigation_linked(payload, button_id, benchling, config):
+        """Handle Next/Previous page button clicks for linked packages.
+
+        Button ID format: {next|prev}-page-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+        """
+        from .pagination import parse_browse_linked_button_id
+
+        try:
+            # Parse button to extract package name and pagination
+            entry_id, package_name, page_number, page_size = parse_browse_linked_button_id(button_id)
+
+            logger.info(
+                "Linked package page navigation",
+                entry_id=entry_id,
+                package_name=package_name,
+                page=page_number,
+            )
+
+            canvas_manager = CanvasManager(benchling, config, payload)
+
+            def async_update():
+                try:
+                    # Pass package_name to browse the linked package
+                    blocks = canvas_manager.get_package_browser_blocks(page_number, page_size, package_name)
+                    canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
+                    benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
+                    logger.info(
+                        "Canvas updated with linked package page",
+                        canvas_id=payload.canvas_id,
+                        package_name=package_name,
+                        page=page_number,
+                    )
+                except Exception as e:
+                    logger.error("Failed to update canvas for linked package navigation", error=str(e))
+
+            threading.Thread(target=async_update, daemon=True).start()
+
+            return jsonify({"status": "ACCEPTED", "message": f"Loading page {page_number + 1}..."}), 202
+
+        except Exception as e:
+            logger.error("Linked package page navigation failed", error=str(e))
+            return jsonify({"error": str(e)}), 500
+
     def handle_back_to_main(payload, button_id, benchling, config):
-        """Handle Back to Package button click."""
+        """Handle Back to Package button click.
+
+        Returns to the main package view without triggering background export workflow.
+        This is more efficient than handle_async() which would re-trigger the full
+        canvas initialization including export workflow.
+        """
         logger.info("Back to package requested", entry_id=payload.entry_id)
 
         canvas_manager = CanvasManager(benchling, config, payload)
-        canvas_manager.handle_async()  # Use existing async update
+
+        def async_update():
+            try:
+                # Generate main canvas blocks (package summary)
+                blocks = canvas_manager._make_blocks()
+                canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
+                benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
+                logger.info("Canvas updated with main package view", canvas_id=payload.canvas_id)
+            except Exception as e:
+                logger.error("Failed to return to main package view", error=str(e))
+
+        threading.Thread(target=async_update, daemon=True).start()
 
         return jsonify({"status": "ACCEPTED", "message": "Returning to package view..."}), 202
 
     def handle_view_metadata(payload, button_id, benchling, config):
-        """Handle View Metadata button click."""
+        """Handle View Metadata button click for primary package."""
         from .pagination import parse_button_id
 
         try:
@@ -654,6 +709,43 @@ def create_app():
 
         except Exception as e:
             logger.error("Metadata view failed", error=str(e))
+            return jsonify({"error": str(e)}), 500
+
+    def handle_view_metadata_linked(payload, button_id, benchling, config):
+        """Handle View Metadata button click for linked packages.
+
+        Button ID format: view-metadata-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+        """
+        from .pagination import parse_browse_linked_button_id
+
+        try:
+            # Parse button to extract package name
+            entry_id, package_name, page_number, page_size = parse_browse_linked_button_id(button_id)
+
+            logger.info("Metadata view requested for linked package", entry_id=entry_id, package_name=package_name)
+
+            canvas_manager = CanvasManager(benchling, config, payload)
+
+            def async_update():
+                try:
+                    # Pass package_name to view metadata for the linked package
+                    blocks = canvas_manager.get_metadata_blocks(page_number, page_size, package_name)
+                    canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
+                    benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
+                    logger.info(
+                        "Canvas updated with linked package metadata view",
+                        canvas_id=payload.canvas_id,
+                        package_name=package_name,
+                    )
+                except Exception as e:
+                    logger.error("Failed to update canvas with linked package metadata", error=str(e))
+
+            threading.Thread(target=async_update, daemon=True).start()
+
+            return jsonify({"status": "ACCEPTED", "message": "Loading metadata..."}), 202
+
+        except Exception as e:
+            logger.error("Metadata view for linked package failed", error=str(e))
             return jsonify({"error": str(e)}), 500
 
     def handle_update_package(payload, entry_packager, benchling, config):
