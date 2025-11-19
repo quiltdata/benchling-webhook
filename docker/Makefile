@@ -303,12 +303,20 @@ test-deployed-dev: check-xdg
 test-deployed-dev-direct: check-xdg
 	@echo "🧪 Testing deployed dev stack (profile: $(PROFILE))..."
 	@DEV_ENDPOINT=$$(jq -r '.active.dev.endpoint // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	IMAGE_TAG=$$(jq -r '.active.dev.imageTag // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	DEPLOYED_AT=$$(jq -r '.active.dev.timestamp // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
 	if [ -z "$$DEV_ENDPOINT" ]; then \
 		echo "❌ No dev endpoint found in $(PROFILE_DIR)/deployments.json"; \
 		echo "💡 Run 'npm run deploy:dev -- --profile $(PROFILE)' first to deploy the dev stack"; \
 		exit 1; \
 	fi; \
 	echo "📡 Testing endpoint: $$DEV_ENDPOINT"; \
+	if [ -n "$$IMAGE_TAG" ]; then \
+		echo "🐳 Image tag: $$IMAGE_TAG"; \
+	fi; \
+	if [ -n "$$DEPLOYED_AT" ]; then \
+		echo "📅 Deployed at: $$DEPLOYED_AT"; \
+	fi; \
 	uv run python scripts/test_webhook.py "$$DEV_ENDPOINT" --health-only
 
 # Test deployed prod stack via API Gateway endpoint
@@ -316,12 +324,20 @@ test-deployed-dev-direct: check-xdg
 test-deployed-prod: check-xdg
 	@echo "🧪 Testing deployed prod stack (profile: $(PROFILE))..."
 	@PROD_ENDPOINT=$$(jq -r '.active.prod.endpoint // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	IMAGE_TAG=$$(jq -r '.active.prod.imageTag // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	DEPLOYED_AT=$$(jq -r '.active.prod.timestamp // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
 	if [ -z "$$PROD_ENDPOINT" ]; then \
 		echo "❌ No prod endpoint found in $(PROFILE_DIR)/deployments.json"; \
 		echo "💡 Run 'npm run deploy:prod -- --profile $(PROFILE)' first to deploy the prod stack"; \
 		exit 1; \
 	fi; \
 	echo "📡 Testing endpoint: $$PROD_ENDPOINT"; \
+	if [ -n "$$IMAGE_TAG" ]; then \
+		echo "🐳 Image tag: $$IMAGE_TAG"; \
+	fi; \
+	if [ -n "$$DEPLOYED_AT" ]; then \
+		echo "📅 Deployed at: $$DEPLOYED_AT"; \
+	fi; \
 	uv run python scripts/test_webhook.py "$$PROD_ENDPOINT" --health-only
 
 # Auto-fix code formatting (black + isort)
