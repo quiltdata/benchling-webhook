@@ -54,7 +54,9 @@ class TestCanvasFooterBlocks:
 
         # Verify last block is the footer markdown block
         last_block = blocks[-1]
-        assert isinstance(last_block, MarkdownUiBlockUpdate), f"Last block should be MarkdownUiBlockUpdate, got {type(last_block).__name__}"
+        assert isinstance(
+            last_block, MarkdownUiBlockUpdate
+        ), f"Last block should be MarkdownUiBlockUpdate, got {type(last_block).__name__}"
         assert last_block.id == "md-footer"
 
         # Verify footer content
@@ -101,8 +103,9 @@ class TestCanvasFooterBlocks:
 
     def test_blocks_to_dict_rejects_invalid_blocks(self):
         """Verify blocks_to_dict raises TypeError for invalid block types."""
-        from src.canvas_blocks import blocks_to_dict
         import pytest
+
+        from src.canvas_blocks import blocks_to_dict
 
         # Create a list with an invalid block (string instead of block object)
         invalid_blocks = ["this is a string, not a block"]

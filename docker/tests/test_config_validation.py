@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.secrets_manager import SecretsManagerError, parse_bool, fetch_benchling_secret
+from src.secrets_manager import SecretsManagerError, fetch_benchling_secret, parse_bool
 
 
 class TestBooleanParsing:

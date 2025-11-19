@@ -10,7 +10,6 @@ Usage:
     print(f"Tenant: {secret.tenant}")
 """
 
-import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -263,4 +262,6 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
         # Re-raise SecretsManagerError
         raise
     except Exception as e:
-        raise SecretsManagerError(f"Unexpected error fetching secret: {str(e)}", "Check AWS credentials and permissions")
+        raise SecretsManagerError(
+            f"Unexpected error fetching secret: {str(e)}", "Check AWS credentials and permissions"
+        )

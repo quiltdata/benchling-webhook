@@ -1,7 +1,5 @@
 """Pytest configuration and fixtures for test isolation."""
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 
@@ -37,4 +35,3 @@ def isolate_environment(monkeypatch):
 
     # Yield to run the test
     yield
-
