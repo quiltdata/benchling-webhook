@@ -173,7 +173,7 @@ class TestBrowseLinkedButtonIdParsing:
 
     def test_parse_invalid_button_id_no_pkg_separator(self):
         """Test parsing invalid button ID without -pkg- separator."""
-        with pytest.raises(ValueError, match="Missing '-pkg-' separator"):
+        with pytest.raises(ValueError, match="(Invalid browse-linked button ID|Missing '-pkg-' separator)"):
             parse_browse_linked_button_id("browse-linked-etr_123-benchling--exp-p0-s15")
 
     def test_parse_invalid_button_id_no_page(self):
@@ -235,6 +235,36 @@ class TestBrowseLinkedButtonIdParsing:
         assert package_name == ""  # Empty string, not "/"
         assert page == 0
         assert size == 15
+
+    def test_parse_next_page_linked_button_id(self):
+        """Test parsing next-page-linked button ID."""
+        button_id = "next-page-linked-etr_abc123-pkg-benchling--exp-001-p1-s15"
+        entry_id, package_name, page, size = parse_browse_linked_button_id(button_id)
+
+        assert entry_id == "etr_abc123"
+        assert package_name == "benchling/exp-001"
+        assert page == 1
+        assert size == 15
+
+    def test_parse_prev_page_linked_button_id(self):
+        """Test parsing prev-page-linked button ID."""
+        button_id = "prev-page-linked-etr_xyz-pkg-foo--bar--baz-p0-s20"
+        entry_id, package_name, page, size = parse_browse_linked_button_id(button_id)
+
+        assert entry_id == "etr_xyz"
+        assert package_name == "foo/bar/baz"
+        assert page == 0
+        assert size == 20
+
+    def test_parse_view_metadata_linked_button_id(self):
+        """Test parsing view-metadata-linked button ID."""
+        button_id = "view-metadata-linked-plt_123-pkg-test--package-p2-s10"
+        entry_id, package_name, page, size = parse_browse_linked_button_id(button_id)
+
+        assert entry_id == "plt_123"
+        assert package_name == "test/package"
+        assert page == 2
+        assert size == 10
 
 
 class TestLinkedPackageBrowseButtons:

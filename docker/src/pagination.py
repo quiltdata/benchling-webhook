@@ -51,10 +51,13 @@ def decode_package_name(encoded_name: str) -> str:
 
 
 def parse_browse_linked_button_id(button_id: str) -> tuple[str, str, int, int]:
-    """Parse browse-linked button ID.
+    """Parse linked package button ID.
 
-    Format: browse-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
-    Example: browse-linked-etr_abc123-pkg-benchling--exp-001-p0-s15
+    Supports multiple button formats:
+    - browse-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+    - next-page-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+    - prev-page-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+    - view-metadata-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
 
     Args:
         button_id: Button ID string to parse
@@ -68,14 +71,20 @@ def parse_browse_linked_button_id(button_id: str) -> tuple[str, str, int, int]:
     Examples:
         >>> parse_browse_linked_button_id('browse-linked-etr_123-pkg-benchling--exp-001-p0-s15')
         ('etr_123', 'benchling/exp-001', 0, 15)
-        >>> parse_browse_linked_button_id('browse-linked-etr_abc-pkg-foo--bar--baz-p2-s20')
+        >>> parse_browse_linked_button_id('next-page-linked-etr_abc-pkg-foo--bar--baz-p2-s20')
         ('etr_abc', 'foo/bar/baz', 2, 20)
     """
-    if not button_id.startswith("browse-linked-"):
+    # Check if this is a linked package button (contains "-linked-" and "-pkg-")
+    if "-linked-" not in button_id or "-pkg-" not in button_id:
         raise ValueError(f"Invalid browse-linked button ID: {button_id}")
 
-    # Remove prefix
-    rest = button_id.replace("browse-linked-", "", 1)
+    # Find the position after "-linked-" to extract the rest
+    linked_pos = button_id.find("-linked-")
+    if linked_pos == -1:
+        raise ValueError(f"Invalid browse-linked button ID: {button_id}")
+
+    # Remove everything before and including "-linked-"
+    rest = button_id[linked_pos + len("-linked-") :]
 
     # Extract entry_id (everything before "-pkg-")
     if "-pkg-" not in rest:

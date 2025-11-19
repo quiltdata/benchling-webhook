@@ -280,5 +280,6 @@ def format_canvas_footer(version: str, quilt_host: str, bucket: str) -> str:
 
 ---
 **NOTE**: *Package will be created/updated asynchronously*
+
 {bucket}@{quilt_host} Rev {version}
 """
