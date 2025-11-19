@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "benchling-quilt-integration"
 version = "0.8.4"
 description = "Benchling-Quilt Integration Webhook Service"
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 authors = [
     {name = "Ernest Prabhakar", email = "ernest@quilt.bio"},
 ]
@@ -15,7 +15,7 @@ classifiers = [
     "Environment :: Web Environment",
     "Framework :: Flask",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
