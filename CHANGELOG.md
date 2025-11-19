@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Browse buttons for linked packages in Benchling Canvas
+- Docker image tag and deployment timestamp reporting in test output
+
+### Fixed
+
+- Configuration validation now allows additional properties for backward compatibility
+
 ## [0.8.3] - 2025-11-18
 
 ### Fixed
