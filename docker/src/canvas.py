@@ -66,6 +66,7 @@ class CanvasManager:
         self._linked_packages: List[Package] = []  # Track linked packages for use in blocks
 
         # Dependency injection with fallback to default instances
+
         self._package_query = package_query or PackageQuery(
             bucket=config.s3_bucket_name,
             catalog_url=config.quilt_catalog,
