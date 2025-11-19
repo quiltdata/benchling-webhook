@@ -60,7 +60,7 @@ program
     )
     .option("--env-file <path>", "Path to .env file", ".env")
 // Multi-environment options (v0.7.0)
-    .option("--profile <name>", "Configuration profile to use (default: default)")
+    .option("--profile, --config <name>", "Configuration profile to use (default: default)")
     .option("--stage <name>", "API Gateway stage: dev or prod (default: prod)")
 // Common options
     .option("--no-bootstrap-check", "Skip CDK bootstrap verification")
@@ -101,7 +101,7 @@ For more information: https://github.com/quiltdata/benchling-webhook#deployment
 program
     .command("setup")
     .description("Run setup wizard only (without deployment)")
-    .option("--profile <name>", "Configuration profile to use (default: default)")
+    .option("--profile, --config <name>", "Configuration profile to use (default: default)")
     .option("--inherit-from <name>", "Base profile to inherit from")
     .option("--region <region>", "AWS region")
     .option("--aws-profile <name>", "AWS credentials profile")
@@ -122,7 +122,7 @@ program
         "Check CloudFormation stack status and BenchlingIntegration parameter",
     )
     .option(
-        "--profile <name>",
+        "--profile, --config <name>",
         "Configuration profile to check (default: default)",
     )
     .option("--aws-profile <name>", "AWS credentials profile")
@@ -174,8 +174,7 @@ Use --no-exit to keep monitoring indefinitely.
 program
     .command("logs")
     .description("View CloudWatch logs from deployed webhook integration")
-    .option("--profile <name>", "Configuration profile to use (default: default)")
-    .option("--stage <name>", "Deployment stage: dev or prod (default: prod)")
+    .option("--profile, --config <name>", "Configuration profile to use (default: default)")
     .option("--aws-profile <name>", "AWS credentials profile")
     .option(
         "--type <type>",
@@ -188,8 +187,8 @@ program
         "5m",
     )
     .option("--filter <pattern>", "Filter logs by pattern (example: ERROR)")
-    .option("--follow, -f", "Follow log output in real-time (not available with --type=all)")
-    .option("--tail <n>", "Number of lines to show (default: 100, only without --follow)", "100")
+    .option("--limit <n>", "Number of log entries to show per log group (default: 5)", "5")
+    .option("--timer <seconds>", "Auto-refresh interval in seconds (default: 10, use 0 to disable)", "10")
     .addHelpText(
         "after",
         `
@@ -201,26 +200,36 @@ Log Types:
   api-exec  API Gateway execution logs (detailed debugging)
 
 Examples:
-  View all logs from prod deployment:
+  View all logs (auto-refreshes every 10 seconds):
     $ npx @quiltdata/benchling-webhook logs --profile sales
 
-  View ECS logs from dev stage:
-    $ npx @quiltdata/benchling-webhook logs --profile sales --stage dev --type ecs
+  View only ECS logs:
+    $ npx @quiltdata/benchling-webhook logs --profile sales --type ecs
 
-  Follow ECS logs in real-time:
-    $ npx @quiltdata/benchling-webhook logs --profile sales --type ecs --follow
+  Show last 10 entries per log group:
+    $ npx @quiltdata/benchling-webhook logs --profile sales --limit 10
+
+  Disable auto-refresh (single snapshot):
+    $ npx @quiltdata/benchling-webhook logs --profile sales --timer 0
+
+  Auto-refresh every 5 seconds:
+    $ npx @quiltdata/benchling-webhook logs --profile sales --timer 5
 
   Filter for errors in last hour:
     $ npx @quiltdata/benchling-webhook logs --profile sales --since 1h --filter ERROR
 
-  View API Gateway execution logs:
-    $ npx @quiltdata/benchling-webhook logs --profile sales --type api-exec --tail 50
+  View last 2 days of API Gateway logs:
+    $ npx @quiltdata/benchling-webhook logs --profile sales --type api --since 2d
 
 For more information: https://github.com/quiltdata/benchling-webhook#viewing-logs
 `,
     )
     .action(async (options) => {
         try {
+            // Parse limit as integer
+            if (options.limit) {
+                options.limit = parseInt(options.limit, 10);
+            }
             await logsCommand(options);
         } catch (error) {
             console.error(chalk.red((error as Error).message));
@@ -245,7 +254,7 @@ program
 program
     .command("validate")
     .description("Validate configuration without deploying")
-    .option("--profile <name>", "Configuration profile to validate", "default")
+    .option("--profile, --config <name>", "Configuration profile to validate", "default")
     .option("--verbose", "Show detailed validation information")
     .action(async (options) => {
         try {
@@ -291,7 +300,7 @@ program
     .command("manifest")
     .description("Generate Benchling app manifest file")
     .option("--output <path>", "Output file path", "app-manifest.yaml")
-    .option("--profile <name>", "Configuration profile to use (optional)")
+    .option("--profile, --config <name>", "Configuration profile to use (optional)")
     .option("--catalog <url>", "Catalog URL to use (optional, overrides profile)")
     .action(async (options) => {
         try {
@@ -353,7 +362,7 @@ For more information: https://github.com/quiltdata/benchling-webhook#multi-envir
 program
     .command("health-check")
     .description("Check configuration health and secrets sync status")
-    .option("--profile <name>", "Configuration profile to check", "default")
+    .option("--profile, --config <name>", "Configuration profile to check", "default")
     .option("--json", "Output in JSON format")
     .action(async (options) => {
         try {
@@ -368,7 +377,7 @@ program
 program
     .command("config")
     .description("Show configuration for a profile as JSON")
-    .option("--profile <name>", "Configuration profile to show", "default")
+    .option("--profile, --config-name <name>", "Configuration profile to show", "default")
     .action(async (options) => {
         try {
             await configShowCommand(options);
@@ -405,7 +414,7 @@ if (
             options.yes = true;
         } else if (args[i] === "--setup-only") {
             options.setupOnly = true;
-        } else if (args[i] === "--profile" && i + 1 < args.length) {
+        } else if ((args[i] === "--profile" || args[i] === "--config") && i + 1 < args.length) {
             options.profile = args[i + 1];
             i++;
         } else if (args[i] === "--inherit-from" && i + 1 < args.length) {

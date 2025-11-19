@@ -1,6 +1,6 @@
 {
   "name": "@quiltdata/benchling-webhook",
-  "version": "0.8.0",
+  "version": "0.8.2",
   "description": "AWS CDK deployment for Benchling webhook processing using Fargate - Deploy directly with npx",
   "main": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
@@ -93,7 +93,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-cloudformation": "^3.920.0",
-    "@aws-sdk/client-ecs": "^3.932.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.933.0",
+    "@aws-sdk/client-ecs": "^3.933.0",
     "@aws-sdk/client-elastic-load-balancing-v2": "^3.932.0",
     "@aws-sdk/client-s3": "^3.758.0",
     "@aws-sdk/client-secrets-manager": "^3.932.0",
