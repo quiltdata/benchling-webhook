@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **CRITICAL**: Fixed Commander.js option ordering - `--profile` flag now works correctly for all commands
 - Configuration validation now allows additional properties for backward compatibility
 - Status command now works for any profile with stackArn (removed arbitrary integratedStack requirement)
 - CI Docker builds now use buildx for proper cross-platform support
