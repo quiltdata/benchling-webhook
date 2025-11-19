@@ -8,18 +8,17 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - Browse buttons for linked packages in Benchling Canvas
-- Docker image tag and deployment timestamp reporting in test output
 
 ### Changed
 
-- **BREAKING**: Removed `--config` alias, use only `--profile` for all commands (simpler, less confusing)
+- **BREAKING**: Removed `--config` alias, use only `--profile` for all commands
 
 ### Fixed
 
-- **CRITICAL**: Fixed Commander.js option ordering - `--profile` flag now works correctly for all commands
-- Configuration validation now allows additional properties for backward compatibility
-- Status command now works for any profile with stackArn (removed arbitrary integratedStack requirement)
-- CI Docker builds now use buildx for proper cross-platform support
+- **CRITICAL**: `--profile` flag now works correctly for all commands
+- Configuration validation allows additional properties for backward compatibility
+- Status command works with any profile containing stackArn (not just integrated stacks)
+- Python package license corrected to Apache-2.0
 
 ## [0.8.3] - 2025-11-18
 
