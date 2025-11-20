@@ -493,7 +493,7 @@ class DockerManager:
         """
         full_uri = f"{self.registry}/{self.image_name}:{expected_version}"
 
-        # Use docker buildx imagetools to get architecture from image
+        # First, try to get the raw manifest
         result = subprocess.run(
             ["docker", "buildx", "imagetools", "inspect", "--raw", full_uri],
             capture_output=True,
@@ -507,28 +507,88 @@ class DockerManager:
 
         try:
             manifest_data = json.loads(result.stdout)
-            arch = manifest_data.get("architecture", "")
-            os_name = manifest_data.get("os", "")
 
-            if not arch or not os_name:
-                print(f"❌ Architecture metadata not found in image", file=sys.stderr)
+            # Check if this is a manifest list (multi-platform) or single manifest
+            media_type = manifest_data.get("mediaType", "")
+            schema_version = manifest_data.get("schemaVersion", 0)
+
+            # Handle manifest list (multi-platform images)
+            if media_type in [
+                "application/vnd.docker.distribution.manifest.list.v2+json",
+                "application/vnd.oci.image.index.v1+json",
+            ]:
+                manifests = manifest_data.get("manifests", [])
+                if not manifests:
+                    print(f"❌ No manifests found in manifest list", file=sys.stderr)
+                    return False
+
+                # Look for linux/amd64 platform
+                for manifest in manifests:
+                    platform = manifest.get("platform", {})
+                    arch = platform.get("architecture", "")
+                    os_name = platform.get("os", "")
+
+                    if arch == "amd64" and os_name == "linux":
+                        print(f"   Architecture: {os_name}/{arch} (from manifest list)", file=sys.stderr)
+                        print(f"✅ Valid production architecture: {os_name}/{arch}", file=sys.stderr)
+                        return True
+
+                print(f"❌ linux/amd64 platform not found in manifest list", file=sys.stderr)
                 return False
 
-            arch_info = f"{os_name}/{arch}"
-            print(f"   Architecture: {arch_info}", file=sys.stderr)
+            # Handle single manifest (single-platform images)
+            # For single manifests, architecture is in the config blob, not the manifest
+            # We need to inspect without --raw to get platform info
+            result_formatted = subprocess.run(
+                ["docker", "buildx", "imagetools", "inspect", full_uri],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
 
-            # Calculate image size
-            layers = manifest_data.get("layers", [])
-            if layers:
-                size_bytes = sum(layer.get("size", 0) for layer in layers)
-                print(f"   Size: {self._format_size(size_bytes)}", file=sys.stderr)
+            if result_formatted.returncode != 0:
+                print(f"❌ Failed to inspect image (formatted): {result_formatted.stderr}", file=sys.stderr)
+                return False
 
-            # Validate it's linux/amd64
-            if arch == "amd64" and os_name == "linux":
-                print(f"✅ Valid production architecture: {arch_info}", file=sys.stderr)
+            # Parse the human-readable output for platform info
+            # Output format: "Name:      <image>\nMediaType: ...\nDigest:    ...\nPlatform:  linux/amd64"
+            output = result_formatted.stdout
+            platform_line = None
+            for line in output.split("\n"):
+                if line.strip().startswith("Platform:"):
+                    platform_line = line.strip()
+                    break
+
+            if not platform_line:
+                # Fallback: try to get architecture from manifest's config
+                arch = manifest_data.get("architecture", "")
+                os_name = manifest_data.get("os", "")
+
+                if arch and os_name:
+                    arch_info = f"{os_name}/{arch}"
+                    print(f"   Architecture: {arch_info} (from manifest)", file=sys.stderr)
+
+                    if arch == "amd64" and os_name == "linux":
+                        print(f"✅ Valid production architecture: {arch_info}", file=sys.stderr)
+                        return True
+
+                    print(f"❌ Invalid architecture: {arch_info}", file=sys.stderr)
+                    print(f"   Production images MUST be linux/amd64", file=sys.stderr)
+                    return False
+
+                print(f"❌ Architecture metadata not found in image", file=sys.stderr)
+                print(f"   Debug: manifest mediaType={media_type}, schemaVersion={schema_version}", file=sys.stderr)
+                return False
+
+            # Parse platform from the formatted output (e.g., "Platform:  linux/amd64")
+            platform_str = platform_line.split(":", 1)[1].strip()
+            print(f"   Architecture: {platform_str}", file=sys.stderr)
+
+            if platform_str == "linux/amd64":
+                print(f"✅ Valid production architecture: {platform_str}", file=sys.stderr)
                 return True
 
-            print(f"❌ Invalid architecture: {arch_info}", file=sys.stderr)
+            print(f"❌ Invalid architecture: {platform_str}", file=sys.stderr)
             print(f"   Production images MUST be linux/amd64", file=sys.stderr)
             return False
 
