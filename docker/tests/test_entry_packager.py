@@ -4,12 +4,9 @@ Tests for EntryPackager.
 Following TDD methodology for Phase 2 implementation.
 """
 
-import io
-import zipfile
 from unittest.mock import Mock, patch
 
 import pytest
-from tenacity import retry, stop_after_attempt, wait_fixed
 
 from src.entry_packager import (
     BenchlingAPIError,
@@ -102,9 +99,9 @@ class TestValidationHelpers:
 
     def test_format_user_info_not_dict(self):
         """Test formatting non-dict user info returns empty string."""
-        assert format_user_info(None) == ""
-        assert format_user_info("string") == ""
-        assert format_user_info(123) == ""
+        assert format_user_info(None) == ""  # type: ignore[arg-type]
+        assert format_user_info("string") == ""  # type: ignore[arg-type]
+        assert format_user_info(123) == ""  # type: ignore[arg-type]
 
     def test_parse_creator_success(self):
         """Test parsing creator from entry data."""

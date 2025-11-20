@@ -4,7 +4,7 @@ This module provides reusable functions for creating Benchling Canvas UI blocks
 (buttons, markdown, sections) and converting them to dictionary format.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from benchling_api_client.v2.stable.models.button_ui_block import ButtonUiBlock
 from benchling_api_client.v2.stable.models.button_ui_block_type import ButtonUiBlockType
@@ -14,7 +14,8 @@ from benchling_api_client.v2.stable.models.markdown_ui_block_update import Markd
 from benchling_api_client.v2.stable.models.section_ui_block_type import SectionUiBlockType
 from benchling_api_client.v2.stable.models.section_ui_block_update import SectionUiBlockUpdate
 
-from .pagination import PageState
+from .packages import Package
+from .pagination import PageState, encode_package_name
 
 
 def create_markdown_block(content: str, block_id: str = "md1") -> MarkdownUiBlockUpdate:
@@ -114,12 +115,18 @@ def create_main_navigation_buttons(entry_id: str) -> List:
     return [create_section("button-section-main", buttons)]
 
 
-def create_browser_navigation_buttons(entry_id: str, page_state: PageState) -> List:
+def create_browser_navigation_buttons(
+    entry_id: str,
+    page_state: PageState,
+    package_name: Optional[str] = None,
+) -> List:
     """Create browser view navigation buttons (Prev, Next, Back, Metadata).
 
     Args:
         entry_id: Entry identifier for button IDs
         page_state: Current pagination state
+        package_name: Optional package name for linked package browsing.
+                      If provided, creates buttons with package context for linked packages.
 
     Returns:
         List containing section with navigation buttons
@@ -127,14 +134,28 @@ def create_browser_navigation_buttons(entry_id: str, page_state: PageState) -> L
     prev_page = page_state.page_number - 1 if page_state.has_previous else 0
     next_page = page_state.page_number + 1 if page_state.has_next else page_state.page_number
 
+    # If browsing a linked package, include package name in button IDs
+    if package_name:
+        encoded_pkg_name = encode_package_name(package_name)
+        prev_button_id = f"prev-page-linked-{entry_id}-pkg-{encoded_pkg_name}-p{prev_page}-s{page_state.page_size}"
+        next_button_id = f"next-page-linked-{entry_id}-pkg-{encoded_pkg_name}-p{next_page}-s{page_state.page_size}"
+        metadata_button_id = (
+            f"view-metadata-linked-{entry_id}-pkg-{encoded_pkg_name}-p{page_state.page_number}-s{page_state.page_size}"
+        )
+    else:
+        # Default browsing (primary package)
+        prev_button_id = f"prev-page-{entry_id}-p{prev_page}-s{page_state.page_size}"
+        next_button_id = f"next-page-{entry_id}-p{next_page}-s{page_state.page_size}"
+        metadata_button_id = f"view-metadata-{entry_id}-p{page_state.page_number}-s{page_state.page_size}"
+
     buttons = [
         create_button(
-            button_id=f"prev-page-{entry_id}-p{prev_page}-s{page_state.page_size}",
+            button_id=prev_button_id,
             text="← Previous",
             enabled=page_state.has_previous,
         ),
         create_button(
-            button_id=f"next-page-{entry_id}-p{next_page}-s{page_state.page_size}",
+            button_id=next_button_id,
             text="Next →",
             enabled=page_state.has_next,
         ),
@@ -144,7 +165,7 @@ def create_browser_navigation_buttons(entry_id: str, page_state: PageState) -> L
             enabled=True,
         ),
         create_button(
-            button_id=f"view-metadata-{entry_id}-p{page_state.page_number}-s{page_state.page_size}",
+            button_id=metadata_button_id,
             text="View Metadata",
             enabled=True,
         ),
@@ -153,19 +174,35 @@ def create_browser_navigation_buttons(entry_id: str, page_state: PageState) -> L
     return [create_section("button-section-browser", buttons)]
 
 
-def create_metadata_navigation_buttons(entry_id: str, page_state: PageState) -> List:
+def create_metadata_navigation_buttons(
+    entry_id: str,
+    page_state: PageState,
+    package_name: Optional[str] = None,
+) -> List:
     """Create metadata view navigation buttons (Back to Browser, Back to Package).
 
     Args:
         entry_id: Entry identifier for button IDs
         page_state: Current pagination state (for preserving context)
+        package_name: Optional package name for linked package browsing.
+                      If provided, creates buttons with package context for linked packages.
 
     Returns:
         List containing section with navigation buttons
     """
+    # If browsing a linked package, include package name in "Back to Browser" button
+    if package_name:
+        encoded_pkg_name = encode_package_name(package_name)
+        back_to_browser_button_id = (
+            f"browse-linked-{entry_id}-pkg-{encoded_pkg_name}-p{page_state.page_number}-s{page_state.page_size}"
+        )
+    else:
+        # Default browsing (primary package)
+        back_to_browser_button_id = f"browse-files-{entry_id}-p{page_state.page_number}-s{page_state.page_size}"
+
     buttons = [
         create_button(
-            button_id=f"browse-files-{entry_id}-p{page_state.page_number}-s{page_state.page_size}",
+            button_id=back_to_browser_button_id,
             text="Back to Browser",
             enabled=True,
         ),
@@ -179,52 +216,63 @@ def create_metadata_navigation_buttons(entry_id: str, page_state: PageState) -> 
     return [create_section("button-section-metadata", buttons)]
 
 
+def create_linked_package_browse_buttons(entry_id: str, packages: List[Package]) -> List:
+    """Create Browse buttons for linked packages.
+
+    Creates a horizontal row of Browse buttons below the Linked Packages section.
+    Each button opens the Package Entry Browser for that linked package.
+
+    Args:
+        entry_id: The current entry ID (for context/logging)
+        packages: List of linked Package objects to create buttons for
+
+    Returns:
+        List of block dictionaries (empty if no packages)
+
+    Example button ID: browse-linked-etr_abc123-pkg-benchling--exp-001-p0-s15
+    """
+    if not packages:
+        return []
+
+    buttons = []
+    for pkg in packages:
+        # Encode package name for button ID (replace / with --)
+        encoded_pkg_name = encode_package_name(pkg.package_name)
+
+        # Create button ID with default pagination (page 0, size 15)
+        button_id = f"browse-linked-{entry_id}-pkg-{encoded_pkg_name}-p0-s15"
+
+        # Create Browse button
+        button = create_button(button_id, pkg.package_name)
+        buttons.append(button)
+
+    # Create a section with all browse buttons in horizontal layout
+    section = create_section("button-section-linked-packages", buttons)
+
+    return [section]
+
+
 def blocks_to_dict(blocks: List) -> List[Dict[str, Any]]:
     """Convert block objects to dict format for JSON response.
+
+    Uses the Benchling SDK's built-in .to_dict() method for reliable serialization
+    that stays in sync with SDK changes.
 
     Args:
         blocks: List of block instances (MarkdownUiBlockUpdate, ButtonUiBlockUpdate, SectionUiBlockUpdate)
 
     Returns:
         List of dictionaries representing the blocks
+
+    Raises:
+        TypeError: If a block doesn't have a to_dict() method
     """
     blocks_dict = []
-    for block in blocks:
-        if isinstance(block, MarkdownUiBlockUpdate):
-            blocks_dict.append(
-                {
-                    "type": "MARKDOWN",
-                    "id": block.id,
-                    "value": block.value,
-                }
+    for i, block in enumerate(blocks):
+        if not hasattr(block, "to_dict"):
+            raise TypeError(
+                f"Block at index {i} (type: {type(block).__name__}) does not have a to_dict() method. "
+                f"Expected MarkdownUiBlockUpdate, ButtonUiBlockUpdate, or SectionUiBlockUpdate."
             )
-        elif isinstance(block, ButtonUiBlockUpdate):
-            blocks_dict.append(
-                {
-                    "type": "BUTTON",
-                    "id": block.id,
-                    "text": block.text,
-                    "enabled": block.enabled,
-                }
-            )
-        elif isinstance(block, SectionUiBlockUpdate):
-            # Convert section with button children
-            children_dict = []
-            for child in block.children:
-                if isinstance(child, ButtonUiBlock):
-                    children_dict.append(
-                        {
-                            "type": "BUTTON",
-                            "id": child.id,
-                            "text": child.text,
-                            "enabled": child.enabled,
-                        }
-                    )
-            blocks_dict.append(
-                {
-                    "type": "SECTION",
-                    "id": block.id,
-                    "children": children_dict,
-                }
-            )
+        blocks_dict.append(block.to_dict())
     return blocks_dict

@@ -726,7 +726,7 @@ export const ProfileConfigSchema = {
         },
         _inherits: { type: "string" },
     },
-    additionalProperties: false,
+    additionalProperties: true, // Allow extra fields for backward compatibility and migrations
 } as const;
 
 /**

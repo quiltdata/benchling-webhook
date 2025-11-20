@@ -35,7 +35,7 @@ def load_test_entry_id(profile="dev"):
     """Load test entry ID from XDG config."""
     # Use XDGConfig to load the profile
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-    from xdg_config import XDGConfig
+    from xdg_config import XDGConfig  # type: ignore
 
     try:
         xdg = XDGConfig(profile=profile)

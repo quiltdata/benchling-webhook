@@ -4,9 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "benchling-quilt-integration"
-version = "0.8.3"
+version = "0.8.4"
 description = "Benchling-Quilt Integration Webhook Service"
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 authors = [
     {name = "Ernest Prabhakar", email = "ernest@quilt.bio"},
 ]
@@ -15,7 +15,7 @@ classifiers = [
     "Environment :: Web Environment",
     "Framework :: Flask",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
@@ -45,6 +45,7 @@ dev = [
     "black==25.11.0",
     "flake8==7.3.0",
     "isort==7.0.0",
+    "pyright==1.1.407",
 ]
 docs = [
     "sphinx==8.2.3",

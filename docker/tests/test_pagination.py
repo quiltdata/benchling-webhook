@@ -226,21 +226,22 @@ class TestParseButtonId:
 
         assert action == "next-page"
         assert entry_id == "etr_xyz789"
+        assert page_state is not None
         assert page_state.page_number == 5
         assert page_state.page_size == 20
 
     def test_parse_button_id_different_entry_types(self):
         """Test parsing button IDs with different entry type prefixes."""
         # Plate entry
-        action, entry_id, page_state = parse_button_id("browse-files-plt_123-p0-s15")
+        _, entry_id, _ = parse_button_id("browse-files-plt_123-p0-s15")
         assert entry_id == "plt_123"
 
         # Sequence entry
-        action, entry_id, page_state = parse_button_id("browse-files-seq_456-p0-s15")
+        _, entry_id, _ = parse_button_id("browse-files-seq_456-p0-s15")
         assert entry_id == "seq_456"
 
         # DNA sequence
-        action, entry_id, page_state = parse_button_id("browse-files-dna_789-p0-s15")
+        _, entry_id, _ = parse_button_id("browse-files-dna_789-p0-s15")
         assert entry_id == "dna_789"
 
     def test_parse_button_id_invalid_format(self):
@@ -271,5 +272,6 @@ class TestParseButtonId:
 
         assert action == "view-metadata"
         assert entry_id == "etr_abc123"
+        assert page_state is not None
         assert page_state.page_number == 3
         assert page_state.page_size == 15

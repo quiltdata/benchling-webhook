@@ -121,7 +121,7 @@ def create_app():
         raise
 
     @app.route("/health", methods=["GET"])
-    def health():
+    def health():  # type: ignore[misc]
         """Application health status.
 
         Note: If this endpoint returns successfully, the application is properly
@@ -137,7 +137,7 @@ def create_app():
         return jsonify(response)
 
     @app.route("/health/ready", methods=["GET"])
-    def readiness():
+    def readiness():  # type: ignore[misc]
         """Readiness probe for orchestration."""
         try:
             # Check Python orchestration components
@@ -154,12 +154,12 @@ def create_app():
             return jsonify({"status": "not ready", "error": str(e)}), 503
 
     @app.route("/health/live", methods=["GET"])
-    def liveness():
+    def liveness():  # type: ignore[misc]
         """Liveness probe for orchestration."""
         return jsonify({"status": "alive"})
 
     @app.route("/config", methods=["GET"])
-    def config_status():
+    def config_status():  # type: ignore[misc]
         """Display resolved configuration (secrets masked).
 
         Note: All deployments use secrets-only mode. Configuration is resolved from
@@ -223,7 +223,7 @@ def create_app():
                 },
                 "parameters": {
                     "pkg_prefix": config.pkg_prefix,
-                    "pkg_key": config.pkg_key,
+                    "pkg_key": config.pkg_key,  # type: ignore[attr-defined]
                     "user_bucket": config.s3_bucket_name,
                     "log_level": config.log_level,
                     "webhook_allow_list": config.webhook_allow_list if config.webhook_allow_list else "",
@@ -239,7 +239,7 @@ def create_app():
 
     @app.route("/event", methods=["POST"])
     @require_webhook_verification(config)
-    def handle_event():
+    def handle_event():  # type: ignore[misc]
         """Handle Benchling webhook events."""
         try:
             logger.info("Received /event", headers=dict(request.headers))
@@ -319,7 +319,7 @@ def create_app():
 
     @app.route("/lifecycle", methods=["POST"])
     @require_webhook_verification(config)
-    def lifecycle():
+    def lifecycle():  # type: ignore[misc]
         """Handle Benchling app lifecycle events."""
         try:
             logger.info("Received /lifecycle", headers=dict(request.headers))
@@ -395,7 +395,7 @@ def create_app():
 
     @app.route("/canvas", methods=["POST"])
     @require_webhook_verification(config)
-    def canvas_initialize():
+    def canvas_initialize():  # type: ignore[misc]
         """Handle /canvas webhook from Benchling."""
         try:
             logger.info("Received /canvas", headers=dict(request.headers))
@@ -418,10 +418,16 @@ def create_app():
                 # Route to appropriate button handler
                 if button_id.startswith("browse-files-"):
                     return handle_browse_files(payload, button_id, benchling, config)
+                elif button_id.startswith("browse-linked-"):
+                    return handle_browse_linked(payload, button_id, benchling, config)
+                elif button_id.startswith("next-page-linked-") or button_id.startswith("prev-page-linked-"):
+                    return handle_page_navigation_linked(payload, button_id, benchling, config)
                 elif button_id.startswith("next-page-") or button_id.startswith("prev-page-"):
                     return handle_page_navigation(payload, button_id, benchling, config)
                 elif button_id.startswith("back-to-package-"):
                     return handle_back_to_main(payload, button_id, benchling, config)
+                elif button_id.startswith("view-metadata-linked-"):
+                    return handle_view_metadata_linked(payload, button_id, benchling, config)
                 elif button_id.startswith("view-metadata-"):
                     return handle_view_metadata(payload, button_id, benchling, config)
                 elif button_id.startswith("update-package-"):
@@ -472,7 +478,7 @@ def create_app():
 
         try:
             # Parse button ID to get page info
-            action, entry_id, page_state = parse_button_id(button_id)
+            _, entry_id, page_state = parse_button_id(button_id)
 
             page_number = page_state.page_number if page_state else 0
             page_size = page_state.page_size if page_state else 15
@@ -500,8 +506,83 @@ def create_app():
             logger.error("Browse files failed", error=str(e))
             return jsonify({"error": str(e)}), 500
 
+    def handle_browse_linked(payload, button_id, benchling, config):
+        """Handle Browse Linked Package button click.
+
+        Creates a Package Entry Browser for the linked package specified in the button ID.
+        Uses the linked package name instead of deriving from entry_id.
+
+        Args:
+            payload: Webhook payload from Benchling
+            button_id: Button ID in format: browse-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+            benchling: Benchling service instance
+            config: Application configuration
+
+        Returns:
+            Tuple of (response dict, status code)
+        """
+        from .pagination import parse_browse_linked_button_id
+
+        # Parse button ID to extract package name and pagination
+        try:
+            entry_id, package_name, page_number, page_size = parse_browse_linked_button_id(button_id)
+        except ValueError as e:
+            logger.error("Invalid browse-linked button ID", button_id=button_id, error=str(e))
+            return jsonify({"error": "Invalid button ID"}), 400
+
+        logger.info(
+            "Browse linked package requested",
+            entry_id=entry_id,
+            package_name=package_name,
+            page=page_number,
+            size=page_size,
+        )
+
+        # Create canvas manager for the entry
+        canvas_manager = CanvasManager(benchling, config, payload)
+
+        # Generate browser blocks for the linked package
+        # Pass package_name to use the linked package instead of the default package
+        try:
+            blocks = canvas_manager.get_package_browser_blocks(page_number, page_size, package_name)
+        except Exception as e:
+            logger.error(
+                "Failed to get package browser blocks",
+                entry_id=entry_id,
+                package_name=package_name,
+                error=str(e),
+            )
+            # Return error blocks if something goes wrong
+            blocks = canvas_manager._make_blocks()
+
+        # Update canvas asynchronously in background thread
+        def update_canvas_async():
+            try:
+                canvas_manager.update_canvas_with_blocks(blocks)  # type: ignore[attr-defined]
+                logger.info(
+                    "Canvas updated with linked package browser",
+                    entry_id=entry_id,
+                    package_name=package_name,
+                    page=page_number,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to update canvas with linked package browser",
+                    entry_id=entry_id,
+                    package_name=package_name,
+                    error=str(e),
+                    exc_info=True,
+                )
+
+        thread = threading.Thread(target=update_canvas_async)
+        thread.daemon = True
+        thread.start()
+
+        # Return 202 Accepted immediately
+        return jsonify({"status": "processing"}), 202
+
     def handle_page_navigation(payload, button_id, benchling, config):
-        """Handle Next/Previous page button clicks."""
+        """Handle Next/Previous page button clicks for primary package."""
         from .pagination import parse_button_id
 
         try:
@@ -531,21 +612,80 @@ def create_app():
             logger.error("Page navigation failed", error=str(e))
             return jsonify({"error": str(e)}), 500
 
+    def handle_page_navigation_linked(payload, button_id, benchling, config):
+        """Handle Next/Previous page button clicks for linked packages.
+
+        Button ID format: {next|prev}-page-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+        """
+        from .pagination import parse_browse_linked_button_id
+
+        try:
+            # Parse button to extract package name and pagination
+            entry_id, package_name, page_number, page_size = parse_browse_linked_button_id(button_id)
+
+            logger.info(
+                "Linked package page navigation",
+                entry_id=entry_id,
+                package_name=package_name,
+                page=page_number,
+            )
+
+            canvas_manager = CanvasManager(benchling, config, payload)
+
+            def async_update():
+                try:
+                    # Pass package_name to browse the linked package
+                    blocks = canvas_manager.get_package_browser_blocks(page_number, page_size, package_name)
+                    canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
+                    benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
+                    logger.info(
+                        "Canvas updated with linked package page",
+                        canvas_id=payload.canvas_id,
+                        package_name=package_name,
+                        page=page_number,
+                    )
+                except Exception as e:
+                    logger.error("Failed to update canvas for linked package navigation", error=str(e))
+
+            threading.Thread(target=async_update, daemon=True).start()
+
+            return jsonify({"status": "ACCEPTED", "message": f"Loading page {page_number + 1}..."}), 202
+
+        except Exception as e:
+            logger.error("Linked package page navigation failed", error=str(e))
+            return jsonify({"error": str(e)}), 500
+
     def handle_back_to_main(payload, button_id, benchling, config):
-        """Handle Back to Package button click."""
+        """Handle Back to Package button click.
+
+        Returns to the main package view without triggering background export workflow.
+        This is more efficient than handle_async() which would re-trigger the full
+        canvas initialization including export workflow.
+        """
         logger.info("Back to package requested", entry_id=payload.entry_id)
 
         canvas_manager = CanvasManager(benchling, config, payload)
-        canvas_manager.handle_async()  # Use existing async update
+
+        def async_update():
+            try:
+                # Generate main canvas blocks (package summary)
+                blocks = canvas_manager._make_blocks()
+                canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
+                benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
+                logger.info("Canvas updated with main package view", canvas_id=payload.canvas_id)
+            except Exception as e:
+                logger.error("Failed to return to main package view", error=str(e))
+
+        threading.Thread(target=async_update, daemon=True).start()
 
         return jsonify({"status": "ACCEPTED", "message": "Returning to package view..."}), 202
 
     def handle_view_metadata(payload, button_id, benchling, config):
-        """Handle View Metadata button click."""
+        """Handle View Metadata button click for primary package."""
         from .pagination import parse_button_id
 
         try:
-            action, entry_id, page_state = parse_button_id(button_id)
+            _, entry_id, page_state = parse_button_id(button_id)
 
             page_number = page_state.page_number if page_state else 0
             page_size = page_state.page_size if page_state else 15
@@ -571,6 +711,43 @@ def create_app():
             logger.error("Metadata view failed", error=str(e))
             return jsonify({"error": str(e)}), 500
 
+    def handle_view_metadata_linked(payload, button_id, benchling, config):
+        """Handle View Metadata button click for linked packages.
+
+        Button ID format: view-metadata-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+        """
+        from .pagination import parse_browse_linked_button_id
+
+        try:
+            # Parse button to extract package name
+            entry_id, package_name, page_number, page_size = parse_browse_linked_button_id(button_id)
+
+            logger.info("Metadata view requested for linked package", entry_id=entry_id, package_name=package_name)
+
+            canvas_manager = CanvasManager(benchling, config, payload)
+
+            def async_update():
+                try:
+                    # Pass package_name to view metadata for the linked package
+                    blocks = canvas_manager.get_metadata_blocks(page_number, page_size, package_name)
+                    canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
+                    benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
+                    logger.info(
+                        "Canvas updated with linked package metadata view",
+                        canvas_id=payload.canvas_id,
+                        package_name=package_name,
+                    )
+                except Exception as e:
+                    logger.error("Failed to update canvas with linked package metadata", error=str(e))
+
+            threading.Thread(target=async_update, daemon=True).start()
+
+            return jsonify({"status": "ACCEPTED", "message": "Loading metadata..."}), 202
+
+        except Exception as e:
+            logger.error("Metadata view for linked package failed", error=str(e))
+            return jsonify({"error": str(e)}), 500
+
     def handle_update_package(payload, entry_packager, benchling, config):
         """Handle Update Package button click (existing functionality)."""
         logger.info("Update package requested", entry_id=payload.entry_id)
@@ -594,11 +771,11 @@ def create_app():
         )
 
     @app.errorhandler(404)
-    def not_found(error):
+    def not_found(error):  # type: ignore[misc]
         return jsonify({"error": "Endpoint not found"}), 404
 
     @app.errorhandler(500)
-    def internal_error(error):
+    def internal_error(error):  # type: ignore[misc]
         return jsonify({"error": "Internal server error"}), 500
 
     return app

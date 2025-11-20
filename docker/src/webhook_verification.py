@@ -63,7 +63,7 @@ def verify_webhook(app_definition_id: str, request: Request) -> None:
         )
 
         # Verify using Benchling SDK helper
-        verify(app_definition_id, data, headers)
+        verify(app_definition_id, data, headers)  # type: ignore[arg-type]
 
         logger.debug("Webhook signature verified successfully")
 

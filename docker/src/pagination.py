@@ -10,6 +10,113 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 
+def encode_package_name(package_name: str) -> str:
+    """Encode package name for button ID.
+
+    Replaces '/' with '--' to avoid parsing issues in button IDs.
+
+    Args:
+        package_name: Package name like 'benchling/experiment-001'
+
+    Returns:
+        Encoded name like 'benchling--experiment-001'
+
+    Examples:
+        >>> encode_package_name('benchling/exp-001')
+        'benchling--exp-001'
+        >>> encode_package_name('benchling/exp--001')
+        'benchling--exp----001'
+    """
+    return package_name.replace("/", "--")
+
+
+def decode_package_name(encoded_name: str) -> str:
+    """Decode package name from button ID.
+
+    Replaces '--' with '/' to restore original package name.
+
+    Args:
+        encoded_name: Encoded name like 'benchling--experiment-001'
+
+    Returns:
+        Decoded name like 'benchling/experiment-001'
+
+    Examples:
+        >>> decode_package_name('benchling--exp-001')
+        'benchling/exp-001'
+        >>> decode_package_name('benchling--exp----001')
+        'benchling/exp--001'
+    """
+    return encoded_name.replace("--", "/")
+
+
+def parse_browse_linked_button_id(button_id: str) -> tuple[str, str, int, int]:
+    """Parse linked package button ID.
+
+    Supports multiple button formats:
+    - browse-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+    - next-page-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+    - prev-page-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+    - view-metadata-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+
+    Args:
+        button_id: Button ID string to parse
+
+    Returns:
+        Tuple of (entry_id, package_name, page_number, page_size)
+
+    Raises:
+        ValueError: If button ID format is invalid
+
+    Examples:
+        >>> parse_browse_linked_button_id('browse-linked-etr_123-pkg-benchling--exp-001-p0-s15')
+        ('etr_123', 'benchling/exp-001', 0, 15)
+        >>> parse_browse_linked_button_id('next-page-linked-etr_abc-pkg-foo--bar--baz-p2-s20')
+        ('etr_abc', 'foo/bar/baz', 2, 20)
+    """
+    # Check if this is a linked package button (contains "-linked-" and "-pkg-")
+    if "-linked-" not in button_id or "-pkg-" not in button_id:
+        raise ValueError(f"Invalid browse-linked button ID: {button_id}")
+
+    # Find the position after "-linked-" to extract the rest
+    linked_pos = button_id.find("-linked-")
+    if linked_pos == -1:
+        raise ValueError(f"Invalid browse-linked button ID: {button_id}")
+
+    # Remove everything before and including "-linked-"
+    rest = button_id[linked_pos + len("-linked-") :]
+
+    # Extract entry_id (everything before "-pkg-")
+    if "-pkg-" not in rest:
+        raise ValueError(f"Missing '-pkg-' separator in button ID: {button_id}")
+
+    entry_id, rest = rest.split("-pkg-", 1)
+
+    # Extract encoded package name (everything before last "-p")
+    # Use rsplit to handle package names with "-p" in them
+    if "-p" not in rest:
+        raise ValueError(f"Missing '-p' separator in button ID: {button_id}")
+
+    encoded_pkg, rest = rest.rsplit("-p", 1)
+
+    # Decode package name: replace "--" back to "/"
+    package_name = decode_package_name(encoded_pkg)
+
+    # Extract page and size
+    if "-s" not in rest:
+        raise ValueError(f"Missing '-s' separator in button ID: {button_id}")
+
+    page_str, size_str = rest.split("-s", 1)
+
+    try:
+        page_number = int(page_str)
+        page_size = int(size_str)
+    except ValueError as e:
+        raise ValueError(f"Invalid page/size in button ID: {button_id}") from e
+
+    return (entry_id, package_name, page_number, page_size)
+
+
 @dataclass
 class PageState:
     """Encapsulates pagination state."""

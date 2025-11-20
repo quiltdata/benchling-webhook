@@ -208,14 +208,15 @@ class DockerManager:
 
         os.chdir(self.project_root)
 
-        # Build docker build command
-        build_cmd = ["docker", "build", "--platform", build_platform, "--file", "Dockerfile"]
+        # Build docker buildx command (required for multi-platform builds and validation)
+        build_cmd = ["docker", "buildx", "build", "--platform", build_platform, "--file", "Dockerfile"]
 
         # Add VERSION build arg if provided
         if version:
             build_cmd.extend(["--build-arg", f"VERSION={version}"])
 
-        build_cmd.extend(["--tag", tag, "."])
+        # Use --load to load the image into Docker (instead of just building to cache)
+        build_cmd.extend(["--load", "--tag", tag, "."])
 
         result = self._run_command(build_cmd, check=False)
 

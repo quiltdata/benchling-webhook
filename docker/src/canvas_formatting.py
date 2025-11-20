@@ -57,18 +57,6 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
 """
 
 
-def format_notice() -> str:
-    """Format async processing notice.
-
-    Returns:
-        Formatted markdown string with horizontal rule and notice
-    """
-    return """
----
-> **NOTE**: *Package will be created/updated asynchronously*
-"""
-
-
 def format_linked_packages(packages: List[Package]) -> str:
     """Format linked packages section.
 
@@ -289,8 +277,9 @@ def format_canvas_footer(version: str, quilt_host: str, bucket: str) -> str:
         Formatted markdown string with footer information including async notice
     """
     return f"""
----
-> **NOTE**: *Package will be created/updated asynchronously*
 
-*Version: {version} | Quilt Host: {quilt_host} | Bucket: {bucket}*
+---
+**NOTE**: *Package will be created/updated asynchronously*
+
+{bucket}@{quilt_host} Rev {version}
 """
