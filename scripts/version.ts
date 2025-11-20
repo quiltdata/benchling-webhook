@@ -97,6 +97,18 @@ function updatePyprojectVersion(newVersion: string): void {
     content = content.replace(/^version\s*=\s*"[^"]+"/m, `version = "${newVersion}"`);
     fs.writeFileSync(pyprojectPath, content);
     console.log(`✅ Updated docker/pyproject.toml to version ${newVersion}`);
+
+    // Run uv sync to update uv.lock
+    try {
+        const dockerDir = path.join(__dirname, "..", "docker");
+        console.log("🔄 Running uv sync to update uv.lock...");
+        execSync("uv sync", { cwd: dockerDir, stdio: "inherit" });
+        console.log("✅ Updated docker/uv.lock");
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error("⚠️  Warning: Failed to run uv sync:", message);
+        console.error("   You may need to run 'cd docker && uv sync' manually");
+    }
 }
 
 function updateAppManifestVersion(newVersion: string): void {
@@ -210,6 +222,7 @@ function main(): void {
         console.log("  - package.json");
         console.log("  - docker/pyproject.toml");
         console.log("  - docker/app-manifest.yaml");
+        console.log("  - docker/uv.lock (via uv sync)");
         console.log("");
         console.log("Examples:");
         console.log("  npm run version              # Show versions");
@@ -240,13 +253,13 @@ function main(): void {
             // Check if version files have changes
             let hasChanges = false;
             try {
-                execSync("git diff --quiet docker/pyproject.toml docker/app-manifest.yaml", { stdio: "ignore" });
+                execSync("git diff --quiet docker/pyproject.toml docker/app-manifest.yaml docker/uv.lock", { stdio: "ignore" });
             } catch {
                 hasChanges = true;
             }
 
             if (hasChanges) {
-                execSync("git add docker/pyproject.toml docker/app-manifest.yaml", { stdio: "inherit" });
+                execSync("git add docker/pyproject.toml docker/app-manifest.yaml docker/uv.lock", { stdio: "inherit" });
                 execSync(`git commit -m "chore: sync versions to ${jsonVersion}"`, { stdio: "inherit" });
                 console.log("✅ Committed version sync");
             } else {
@@ -304,7 +317,7 @@ function main(): void {
         updateAppManifestVersion(newVersion);
 
         // Commit the changes
-        execSync("git add package.json docker/pyproject.toml docker/app-manifest.yaml", { stdio: "inherit" });
+        execSync("git add package.json docker/pyproject.toml docker/app-manifest.yaml docker/uv.lock", { stdio: "inherit" });
         execSync(`git commit -m "chore: bump version to ${newVersion}"`, { stdio: "inherit" });
         console.log("✅ Committed version change");
         console.log("");
