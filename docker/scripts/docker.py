@@ -177,13 +177,22 @@ class DockerManager:
 
         return tags
 
-    def build(self, tag: str, platform: Optional[str] = None, version: Optional[str] = None) -> bool:
+    def build(
+        self,
+        tag: str,
+        platform: Optional[str] = None,
+        version: Optional[str] = None,
+        push: bool = False,
+        additional_tags: Optional[list[str]] = None,
+    ) -> bool:
         """Build Docker image with the specified tag.
 
         Args:
             tag: Image tag to build
             platform: Target platform (defaults to detected platform)
             version: Version to pass as build arg (will be set as BUILD_VERSION env var in container)
+            push: If True, push directly to registry (preserves manifest metadata)
+            additional_tags: Additional tags to apply during build (only used with push=True)
         """
         # Use detected platform if not specified
         build_platform = platform or self.platform
@@ -205,6 +214,8 @@ class DockerManager:
         print(f"INFO: Target platform: {build_platform}", file=sys.stderr)
         if version:
             print(f"INFO: Build version: {version}", file=sys.stderr)
+        if push:
+            print(f"INFO: Build mode: push directly to registry (preserves manifest)", file=sys.stderr)
 
         os.chdir(self.project_root)
 
@@ -215,13 +226,28 @@ class DockerManager:
         if version:
             build_cmd.extend(["--build-arg", f"VERSION={version}"])
 
-        # Use --load to load the image into Docker (instead of just building to cache)
-        build_cmd.extend(["--load", "--tag", tag, "."])
+        # Add primary tag
+        build_cmd.extend(["--tag", tag])
+
+        # Add additional tags if provided (only relevant for push mode)
+        if additional_tags:
+            for additional_tag in additional_tags:
+                build_cmd.extend(["--tag", additional_tag])
+
+        # Use --push for registry builds (preserves manifest metadata)
+        # Use --load for local builds (loads into local Docker daemon)
+        if push:
+            build_cmd.extend(["--push", "."])
+        else:
+            build_cmd.extend(["--load", "."])
 
         result = self._run_command(build_cmd, check=False)
 
         if result.returncode == 0:
             print(f"INFO: Successfully built: {tag}", file=sys.stderr)
+            if additional_tags:
+                for additional_tag in additional_tags:
+                    print(f"INFO: Successfully tagged: {additional_tag}", file=sys.stderr)
             return True
         else:
             print(f"ERROR: Failed to build image", file=sys.stderr)
@@ -269,6 +295,10 @@ class DockerManager:
 
         Supports architecture-specific builds. Builds for the current platform by default.
         Use arch_specific=True to include architecture suffix in tags (e.g., v1.0.0-arm64).
+
+        Uses docker buildx build --push to build and push in a single step, which preserves
+        the proper manifest with architecture metadata. This is required for the validation
+        step to detect the image architecture.
         """
         if not self._check_docker():
             return False
@@ -289,23 +319,18 @@ class DockerManager:
         print(f"INFO: Generated {len(tags)} image tags:", file=sys.stderr)
         for ref in tags:
             print(f"INFO:   - {ref.uri}", file=sys.stderr)
+        print("", file=sys.stderr)
 
-        # Build with first tag, passing version as build arg
+        # Build and push with all tags in a single buildx command
+        # This preserves the proper manifest with architecture metadata
         primary_tag = tags[0].uri
-        if not self.build(primary_tag, version=version):
+        additional_tags = [ref.uri for ref in tags[1:]]
+
+        if not self.build(primary_tag, version=version, push=True, additional_tags=additional_tags):
             return False
 
-        # Tag with additional tags
-        for ref in tags[1:]:
-            if not self.tag(primary_tag, ref.uri):
-                return False
-
-        # Push all tags
-        for ref in tags:
-            if not self.push(ref.uri):
-                return False
-
-        print(f"INFO: Docker push completed successfully", file=sys.stderr)
+        print("", file=sys.stderr)
+        print(f"INFO: Docker build and push completed successfully", file=sys.stderr)
         print(f"INFO: Pushed {len(tags)} tags to registry: {self.registry}", file=sys.stderr)
 
         # Output the primary image URI for capture by CI
