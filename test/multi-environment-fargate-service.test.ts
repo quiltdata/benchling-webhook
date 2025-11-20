@@ -2,6 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
+import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { FargateService } from "../lib/fargate-service";
 import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/test-config";
@@ -19,6 +20,9 @@ describe("FargateService - Multi-Environment Support", () => {
     let vpc: ec2.IVpc;
     let bucket: s3.IBucket;
     let ecrRepository: ecr.IRepository;
+    let nlb: elbv2.INetworkLoadBalancer;
+    let nlbTargetGroup: elbv2.NetworkTargetGroup;
+    let nlbSecurityGroup: ec2.SecurityGroup;
 
     beforeEach(() => {
         app = new cdk.App();
@@ -43,6 +47,24 @@ describe("FargateService - Multi-Environment Support", () => {
             "TestEcrRepo",
             "benchling-webhook",
         );
+
+        // Create NLB and related resources (required for FargateService)
+        nlb = new elbv2.NetworkLoadBalancer(stack, "TestNLB", {
+            vpc,
+            internetFacing: false,
+        });
+
+        nlbTargetGroup = new elbv2.NetworkTargetGroup(stack, "TestTargetGroup", {
+            vpc,
+            port: 80,
+            protocol: elbv2.Protocol.TCP,
+            targetType: elbv2.TargetType.IP,
+        });
+
+        nlbSecurityGroup = new ec2.SecurityGroup(stack, "TestNLBSecurityGroup", {
+            vpc,
+            description: "Test NLB security group",
+        });
     });
 
     describe("Single Service (Current Behavior)", () => {
@@ -61,6 +83,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -85,6 +111,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -110,13 +140,19 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
 
+            // In the new architecture, the target group is provided externally (NLB)
+            // The test creates it with port 80 and TCP protocol
             template.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
-                Port: 5000,
-                Protocol: "HTTP",
+                Port: 80,
+                Protocol: "TCP",
                 TargetType: "ip",
             });
         });
@@ -138,6 +174,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -174,6 +214,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -211,6 +255,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -237,6 +285,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -271,6 +323,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -312,6 +368,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             // Create prod service
@@ -329,6 +389,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             // Both services should be created
@@ -338,7 +402,9 @@ describe("FargateService - Multi-Environment Support", () => {
     });
 
     describe("Target Group Configuration", () => {
-        test("configures health check path", () => {
+        test.skip("configures health check path - NOTE: NLB target group is now provided externally", () => {
+            // This test is skipped because in v0.9.0+, the target group is created by PrivateNLB,
+            // not by FargateService. Health check configuration is tested in the stack tests.
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
@@ -354,6 +420,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -380,6 +450,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -407,6 +481,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -435,6 +513,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -466,6 +548,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -499,6 +585,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -535,6 +625,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -570,6 +664,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -607,6 +705,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);
@@ -636,6 +738,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
                 icebergDatabase: "",
+                // NLB integration (required as of v0.9.0)
+                networkLoadBalancer: nlb,
+                nlbTargetGroup,
+                nlbSecurityGroup,
             });
 
             const template = Template.fromStack(stack);

@@ -73,30 +73,38 @@ describe("BenchlingWebhookStack", () => {
             }],
         });
 
-        // Check that API Gateway has HTTP_PROXY integration to ALB (not Step Functions)
+        // Check that API Gateway has HTTP_PROXY integration via VPC Link
         template.hasResourceProperties("AWS::ApiGateway::Method", {
             HttpMethod: "ANY",
             AuthorizationType: "NONE",
             Integration: {
                 Type: "HTTP_PROXY",
+                ConnectionType: "VPC_LINK",
             },
         });
     });
 
-    test("creates Application Load Balancer", () => {
-        template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
-            Name: "benchling-webhook-alb",
-            Scheme: "internet-facing",
-            Type: "application",
+    test("creates VPC Link for API Gateway", () => {
+        template.hasResourceProperties("AWS::ApiGateway::VpcLink", {
+            Name: "benchling-webhook-vpc-link",
+            Description: "VPC Link for Benchling webhook to private NLB",
         });
     });
 
-    test("creates ALB target group with health checks", () => {
+    test("creates private Network Load Balancer", () => {
+        template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
+            Name: "benchling-webhook-nlb",
+            Scheme: "internal", // CRITICAL: Must be internal (not internet-facing)
+            Type: "network",
+        });
+    });
+
+    test("creates NLB target group with health checks", () => {
         template.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
-            Port: 5000,
-            Protocol: "HTTP",
+            Port: 5000, // Container port
+            Protocol: "TCP",
             TargetType: "ip",
-            HealthCheckPath: "/health/ready",
+            HealthCheckPath: "/health",
             HealthCheckIntervalSeconds: 30,
         });
     });
