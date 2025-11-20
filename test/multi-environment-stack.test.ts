@@ -228,8 +228,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             const template = Template.fromStack(stack);
 
             template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
-                Name: "benchling-webhook-alb",
-                Scheme: "internet-facing",
+                Name: "benchling-webhook-nlb",
+                Scheme: "internal", // Private NLB, not internet-facing
             });
         });
 
@@ -446,9 +446,12 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasOutput("ApiGatewayId", {
-                Description: "API Gateway REST API ID",
-            });
+            // Check that an output matching ApiGatewayApiGatewayId exists
+            const outputs = template.toJSON().Outputs;
+            const hasApiGatewayId = Object.keys(outputs || {}).some(key =>
+                key.startsWith("ApiGatewayApiGatewayId")
+            );
+            expect(hasApiGatewayId).toBe(true);
         });
 
         test("exports Load Balancer DNS", () => {
@@ -463,9 +466,12 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasOutput("LoadBalancerDNS", {
-                Description: "Application Load Balancer DNS name for direct testing",
-            });
+            // Check that an output matching PrivateNLBNLBDnsName exists
+            const outputs = template.toJSON().Outputs;
+            const hasNLBDns = Object.keys(outputs || {}).some(key =>
+                key.startsWith("PrivateNLBNLBDnsName")
+            );
+            expect(hasNLBDns).toBe(true);
         });
     });
 
