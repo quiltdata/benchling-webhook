@@ -18,6 +18,9 @@ import { ProfileConfig } from "./types/config";
  * **Breaking Change (v1.0.0)**: Removed stackArn in favor of explicit service environment variables.
  * The explicit service parameters (packagerQueueUrl, athenaUserDatabase, quiltWebHost, icebergDatabase)
  * are resolved at deployment time and passed directly to the container, eliminating runtime CloudFormation calls.
+ *
+ * **Breaking Change (v0.9.0)**: Removed ALB creation in favor of external NLB integration.
+ * The service now attaches to an external NLB target group instead of creating its own ALB.
  */
 export interface FargateServiceProps {
     readonly vpc: ec2.IVpc;
@@ -47,11 +50,15 @@ export interface FargateServiceProps {
     readonly packageBucket: string;
     readonly quiltDatabase: string;
     readonly logLevel?: string;
+
+    // NEW (v0.9.0): External NLB integration
+    readonly networkLoadBalancer: elbv2.INetworkLoadBalancer;
+    readonly nlbTargetGroup: elbv2.INetworkTargetGroup;
+    readonly nlbSecurityGroup: ec2.ISecurityGroup;
 }
 
 export class FargateService extends Construct {
     public readonly service: ecs.FargateService;
-    public readonly loadBalancer: elbv2.ApplicationLoadBalancer;
     public readonly cluster: ecs.Cluster;
     public readonly logGroup: logs.ILogGroup;
 
@@ -348,74 +355,14 @@ export class FargateService extends Construct {
             protocol: ecs.Protocol.TCP,
         });
 
-        // Create S3 bucket for ALB access logs
-        const albLogsBucket = new s3.Bucket(this, "AlbLogsBucket", {
-            bucketName: `benchling-webhook-alb-logs-${account}`,
-            removalPolicy: cdk.RemovalPolicy.DESTROY,
-            autoDeleteObjects: true,
-            lifecycleRules: [
-                {
-                    expiration: cdk.Duration.days(7),
-                },
-            ],
-        });
-
-        // Create Application Load Balancer
-        this.loadBalancer = new elbv2.ApplicationLoadBalancer(this, "ALB", {
-            vpc: props.vpc,
-            internetFacing: true,
-            loadBalancerName: "benchling-webhook-alb",
-        });
-
-        // Enable ALB access logs
-        this.loadBalancer.logAccessLogs(albLogsBucket, "alb-access-logs");
-
-        // Create ALB Target Group
-        const targetGroup = new elbv2.ApplicationTargetGroup(this, "TargetGroup", {
-            vpc: props.vpc,
-            port: 5000,
-            protocol: elbv2.ApplicationProtocol.HTTP,
-            targetType: elbv2.TargetType.IP,
-            healthCheck: {
-                path: "/health/ready",
-                interval: cdk.Duration.seconds(30),
-                timeout: cdk.Duration.seconds(10),
-                healthyThresholdCount: 2,
-                unhealthyThresholdCount: 3,
-                healthyHttpCodes: "200",
-            },
-            deregistrationDelay: cdk.Duration.seconds(30),
-        });
-
-        // Add HTTP listener
-        this.loadBalancer.addListener("HttpListener", {
-            port: 80,
-            protocol: elbv2.ApplicationProtocol.HTTP,
-            defaultAction: elbv2.ListenerAction.forward([targetGroup]),
-        });
-
-        // Create Security Group for Fargate tasks
-        const fargateSecurityGroup = new ec2.SecurityGroup(this, "FargateSecurityGroup", {
-            vpc: props.vpc,
-            description: "Security group for Benchling webhook Fargate tasks",
-            allowAllOutbound: true,
-        });
-
-        // Allow ALB to communicate with Fargate tasks
-        fargateSecurityGroup.addIngressRule(
-            ec2.Peer.securityGroupId(this.loadBalancer.connections.securityGroups[0].securityGroupId),
-            ec2.Port.tcp(5000),
-            "Allow traffic from ALB",
-        );
-
-        // Create Fargate Service
+        // Create Fargate Service with NLB integration
         this.service = new ecs.FargateService(this, "Service", {
             cluster: this.cluster,
             taskDefinition: taskDefinition,
             desiredCount: 2,
             serviceName: "benchling-webhook-service",
             assignPublicIp: true,
-            securityGroups: [fargateSecurityGroup],
+            securityGroups: [props.nlbSecurityGroup],
             healthCheckGracePeriod: cdk.Duration.seconds(60),
             minHealthyPercent: 50,
             maxHealthyPercent: 200,
@@ -424,8 +371,8 @@ export class FargateService extends Construct {
             },
         });
 
-        // Attach the service to the target group
-        this.service.attachToApplicationTargetGroup(targetGroup);
+        // Attach the service to the NLB target group
+        this.service.attachToNetworkTargetGroup(props.nlbTargetGroup);
 
         // Configure auto-scaling
         const scaling = this.service.autoScaleTaskCount({
@@ -448,12 +395,6 @@ export class FargateService extends Construct {
         });
 
         // Outputs
-        new cdk.CfnOutput(this, "LoadBalancerDNS", {
-            value: this.loadBalancer.loadBalancerDnsName,
-            description: "Load Balancer DNS Name",
-            exportName: "BenchlingWebhookALBDNS",
-        });
-
         new cdk.CfnOutput(this, "ServiceName", {
             value: this.service.serviceName,
             description: "ECS Service Name",

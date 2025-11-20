@@ -382,6 +382,36 @@ export interface DeploymentConfig {
      * @default "latest"
      */
     imageTag?: string;
+
+    /**
+     * VPC Link name for API Gateway integration (optional)
+     *
+     * If provided, uses this name for VPC Link creation.
+     * Can be used for sharing VPC Link across multiple stacks.
+     *
+     * @example "benchling-webhook-vpc-link"
+     */
+    vpcLinkName?: string;
+
+    /**
+     * Existing VPC Link ID for sharing (optional)
+     *
+     * If provided, imports existing VPC Link instead of creating new one.
+     * Useful for sharing VPC Link across multiple deployments.
+     *
+     * @example "abc123"
+     */
+    existingVpcLinkId?: string;
+
+    /**
+     * Existing NLB ARN for sharing (optional)
+     *
+     * If provided, imports existing NLB instead of creating new one.
+     * Useful for sharing NLB across multiple deployments.
+     *
+     * @example "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/net/..."
+     */
+    existingNlbArn?: string;
 }
 
 /**
@@ -405,14 +435,31 @@ export interface LoggingConfig {
  */
 export interface SecurityConfig {
     /**
-     * Comma-separated list of allowed IP addresses/CIDR blocks
+     * Comma-separated list of allowed IP addresses/CIDR blocks (DEPRECATED in v0.9.0)
      *
+     * This field is deprecated in favor of `benchlingIpAllowList`.
      * Empty string means no IP filtering.
      *
+     * @deprecated Use `benchlingIpAllowList` instead
      * @example "192.168.1.0/24,10.0.0.0/8"
      * @default ""
      */
     webhookAllowList?: string;
+
+    /**
+     * Array of Benchling IP addresses/CIDR blocks for API Gateway Resource Policy
+     *
+     * This is the primary IP filtering mechanism at the API Gateway edge.
+     * If empty, no IP filtering is applied (allows all traffic).
+     *
+     * Security layers:
+     * 1. Primary: API Gateway Resource Policy (this field)
+     * 2. Secondary: NLB Security Group (defense in depth)
+     *
+     * @example ["52.203.123.45/32", "54.210.98.76/32"]
+     * @default []
+     */
+    benchlingIpAllowList?: string[];
 
     /**
      * Enable webhook signature verification
@@ -698,6 +745,9 @@ export const ProfileConfigSchema = {
                 account: { type: "string", pattern: "^[0-9]{12}$" },
                 ecrRepository: { type: "string" },
                 imageTag: { type: "string" },
+                vpcLinkName: { type: "string" },
+                existingVpcLinkId: { type: "string" },
+                existingNlbArn: { type: "string", pattern: "^arn:aws:elasticloadbalancing:" },
             },
         },
         integratedStack: { type: "boolean" },
@@ -711,6 +761,10 @@ export const ProfileConfigSchema = {
             type: "object",
             properties: {
                 webhookAllowList: { type: "string" },
+                benchlingIpAllowList: {
+                    type: "array",
+                    items: { type: "string" },
+                },
                 enableVerification: { type: "boolean" },
             },
         },

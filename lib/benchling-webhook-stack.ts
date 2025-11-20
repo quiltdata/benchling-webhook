@@ -4,7 +4,8 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
-import { AlbApiGateway } from "./alb-api-gateway";
+import { PrivateNLB } from "./private-nlb";
+import { VPCLinkGateway } from "./vpc-link-gateway";
 import { ProfileConfig } from "./types/config";
 import packageJson from "../package.json";
 
@@ -25,7 +26,8 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
 export class BenchlingWebhookStack extends cdk.Stack {
     private readonly bucket: s3.IBucket;
     private readonly fargateService: FargateService;
-    private readonly api: AlbApiGateway;
+    private readonly nlb: PrivateNLB;
+    private readonly api: VPCLinkGateway;
     public readonly webhookEndpoint: string;
 
     constructor(
@@ -169,6 +171,16 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const isDevVersion = imageTagValue.match(/^\d+\.\d+\.\d+-\d{8}T\d{6}Z$/);
         const stackVersion = isDevVersion ? imageTagValue : packageJson.version;
 
+        // Create private NLB for VPC Link integration
+        // Get Benchling IP allowlist for security group filtering (defense in depth)
+        const benchlingIpAllowList = config.security?.benchlingIpAllowList || [];
+
+        this.nlb = new PrivateNLB(this, "PrivateNLB", {
+            vpc,
+            allowedIpRanges: benchlingIpAllowList,
+            existingNlbArn: config.deployment.existingNlbArn,
+        });
+
         // Build Fargate Service props using new config structure
         this.fargateService = new FargateService(this, "FargateService", {
             vpc,
@@ -194,12 +206,18 @@ export class BenchlingWebhookStack extends cdk.Stack {
             packageBucket: packageBucketValue,
             quiltDatabase: quiltDatabaseValue,
             logLevel: logLevelValue,
+            // NEW: NLB integration instead of ALB
+            networkLoadBalancer: this.nlb.loadBalancer,
+            nlbTargetGroup: this.nlb.targetGroup,
+            nlbSecurityGroup: this.nlb.securityGroup,
         });
 
-        // Create API Gateway that routes to the ALB
-        this.api = new AlbApiGateway(this, "ApiGateway", {
-            loadBalancer: this.fargateService.loadBalancer,
+        // Create API Gateway with VPC Link to private NLB
+        this.api = new VPCLinkGateway(this, "ApiGateway", {
+            networkLoadBalancer: this.nlb.loadBalancer,
             config: config,
+            vpcLinkName: config.deployment.vpcLinkName,
+            existingVpcLinkId: config.deployment.existingVpcLinkId,
         });
 
         // Store webhook endpoint for easy access

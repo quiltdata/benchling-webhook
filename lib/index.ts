@@ -27,5 +27,7 @@
 
 export { BenchlingWebhookStack, type BenchlingWebhookStackProps } from "./benchling-webhook-stack";
 export { FargateService } from "./fargate-service";
-export { AlbApiGateway } from "./alb-api-gateway";
+export { PrivateNLB } from "./private-nlb";
+export { VPCLinkGateway } from "./vpc-link-gateway";
+export { AlbApiGateway } from "./alb-api-gateway"; // DEPRECATED: Will be removed in v0.10.0
 export { EcrRepository } from "./ecr-repository";
