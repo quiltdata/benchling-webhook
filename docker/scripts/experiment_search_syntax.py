@@ -15,7 +15,7 @@ import quilt3
 
 # Add src to path for local imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from config import get_config
+from config import get_config  # type: ignore
 
 # Known values to search for
 ENTRY_ID = "etr_EK1AQMQiQn"

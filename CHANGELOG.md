@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Browse buttons for linked packages in Benchling Canvas
+
+### Changed
+
+- **BREAKING**: Removed `--config` alias, use only `--profile` for all commands
+
+### Fixed
+
+- **CRITICAL**: `--profile` flag now works correctly for all commands
+- Configuration validation allows additional properties for backward compatibility
+- Status command works with any profile containing stackArn (not just integrated stacks)
+- Python package license corrected to Apache-2.0
+
 ## [0.8.3] - 2025-11-18
 
 ### Fixed

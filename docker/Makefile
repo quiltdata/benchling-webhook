@@ -3,6 +3,10 @@
 # Configuration is now managed via XDG (~/.config/benchling-webhook/{profile}/)
 # with unified config.json and deployments.json per profile (v0.7.0)
 
+# Load .env file from project root if it exists (for NGROK_DOMAIN and other env vars)
+-include ../.env
+export
+
 # Include deployment targets
 include make.deploy
 
@@ -36,10 +40,10 @@ help:
 	@echo "Development Servers (all use xdg-launch):"
 	@echo "  run / run-dev         - Docker dev with hot-reload (port $(PORT_DOCKER_DEV))"
 	@echo "  run-prod              - Docker production mode (port $(PORT_DOCKER_PROD))"
-	@echo "  run-ngrok             - Docker dev + ngrok tunnel (port $(PORT_DOCKER_DEV))"
+	@echo "  run-ngrok             - Docker dev + ngrok tunnel (requires NGROK_DOMAIN env var)"
 	@echo "  run-native            - Native Flask with dev profile (port $(PORT_NATIVE))"
 	@echo "  run-native-verbose    - Alias for run-native (always verbose)"
-	@echo "  run-native-ngrok      - Native server + ngrok tunnel (port $(PORT_NATIVE))"
+	@echo "  run-native-ngrok      - Native server + ngrok tunnel (requires NGROK_DOMAIN env var)"
 	@echo "  run-ecr               - Pull and run image from ECR (port $(PORT_DOCKER_PROD))"
 	@echo ""
 	@echo "Testing (xdg-launch-based tests marked with *):"
@@ -55,7 +59,7 @@ help:
 	@echo "  test-benchling        - Test Benchling OAuth credentials"
 	@echo "  test-query            - Test Quilt package query (defaults to BENCHLING_TEST_ENTRY)"
 	@echo "  test-integration      - Full integration tests (requires real Benchling creds)"
-	@echo "  lint                  - Auto-fix code formatting"
+	@echo "  lint                  - Auto-fix code formatting (black + isort) and type check (pyright)"
 	@echo ""
 	@echo "Health & Monitoring:"
 	@echo "  health                - Check docker prod health (port $(PORT_DOCKER_PROD))"
@@ -135,6 +139,19 @@ run: check-xdg
 run-dev: run
 
 run-ngrok:
+	@if [ -z "$(NGROK_DOMAIN)" ]; then \
+		echo "❌ Error: NGROK_DOMAIN environment variable is required"; \
+		echo ""; \
+		echo "Get your static domain from: https://dashboard.ngrok.com/domains"; \
+		echo ""; \
+		echo "Usage:"; \
+		echo "  export NGROK_DOMAIN=uniformly-alive-halibut.ngrok-free.app"; \
+		echo "  make run-ngrok"; \
+		exit 1; \
+	fi
+	@echo "🚀 Starting dev server and ngrok tunnel..."
+	@echo "📡 Public URL: https://$(NGROK_DOMAIN)/"
+	@echo ""
 	@make run &
 	@make ngrok PORT=$(PORT_DOCKER_DEV) SLEEP=10
 
@@ -152,10 +169,22 @@ run-native-verbose: run-native
 
 # Native server + ngrok tunnel
 run-native-ngrok: check-xdg
-	@echo "Starting native server and ngrok tunnel..."
+	@if [ -z "$(NGROK_DOMAIN)" ]; then \
+		echo "❌ Error: NGROK_DOMAIN environment variable is required"; \
+		echo ""; \
+		echo "Get your static domain from: https://dashboard.ngrok.com/domains"; \
+		echo ""; \
+		echo "Usage:"; \
+		echo "  export NGROK_DOMAIN=uniformly-alive-halibut.ngrok-free.app"; \
+		echo "  make run-native-ngrok"; \
+		exit 1; \
+	fi
+	@echo "🚀 Starting native server and ngrok tunnel..."
+	@echo "📡 Public URL: https://$(NGROK_DOMAIN)/"
+	@echo ""
 	@echo "Press Ctrl+C to stop both ngrok and server"
 	@make run-native-verbose &
-	@make ngrok
+	@make ngrok PORT=$(PORT_NATIVE)
 
 # Run ECR image locally (assumes image exists in ECR)
 run-ecr: check-xdg docker-ecr-login
@@ -303,12 +332,20 @@ test-deployed-dev: check-xdg
 test-deployed-dev-direct: check-xdg
 	@echo "🧪 Testing deployed dev stack (profile: $(PROFILE))..."
 	@DEV_ENDPOINT=$$(jq -r '.active.dev.endpoint // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	IMAGE_TAG=$$(jq -r '.active.dev.imageTag // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	DEPLOYED_AT=$$(jq -r '.active.dev.timestamp // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
 	if [ -z "$$DEV_ENDPOINT" ]; then \
 		echo "❌ No dev endpoint found in $(PROFILE_DIR)/deployments.json"; \
 		echo "💡 Run 'npm run deploy:dev -- --profile $(PROFILE)' first to deploy the dev stack"; \
 		exit 1; \
 	fi; \
 	echo "📡 Testing endpoint: $$DEV_ENDPOINT"; \
+	if [ -n "$$IMAGE_TAG" ]; then \
+		echo "🐳 Image tag: $$IMAGE_TAG"; \
+	fi; \
+	if [ -n "$$DEPLOYED_AT" ]; then \
+		echo "📅 Deployed at: $$DEPLOYED_AT"; \
+	fi; \
 	uv run python scripts/test_webhook.py "$$DEV_ENDPOINT" --health-only
 
 # Test deployed prod stack via API Gateway endpoint
@@ -316,18 +353,27 @@ test-deployed-dev-direct: check-xdg
 test-deployed-prod: check-xdg
 	@echo "🧪 Testing deployed prod stack (profile: $(PROFILE))..."
 	@PROD_ENDPOINT=$$(jq -r '.active.prod.endpoint // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	IMAGE_TAG=$$(jq -r '.active.prod.imageTag // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	DEPLOYED_AT=$$(jq -r '.active.prod.timestamp // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
 	if [ -z "$$PROD_ENDPOINT" ]; then \
 		echo "❌ No prod endpoint found in $(PROFILE_DIR)/deployments.json"; \
 		echo "💡 Run 'npm run deploy:prod -- --profile $(PROFILE)' first to deploy the prod stack"; \
 		exit 1; \
 	fi; \
 	echo "📡 Testing endpoint: $$PROD_ENDPOINT"; \
+	if [ -n "$$IMAGE_TAG" ]; then \
+		echo "🐳 Image tag: $$IMAGE_TAG"; \
+	fi; \
+	if [ -n "$$DEPLOYED_AT" ]; then \
+		echo "📅 Deployed at: $$DEPLOYED_AT"; \
+	fi; \
 	uv run python scripts/test_webhook.py "$$PROD_ENDPOINT" --health-only
 
-# Auto-fix code formatting (black + isort)
+# Auto-fix code formatting (black + isort) and type check (pyright)
 lint:
 	uv run black src/ tests/ scripts/
 	uv run isort src/ tests/ scripts/
+	uv run pyright src/ tests/ scripts/
 
 # Deployment
 

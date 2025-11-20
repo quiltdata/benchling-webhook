@@ -60,7 +60,7 @@ program
     )
     .option("--env-file <path>", "Path to .env file", ".env")
 // Multi-environment options (v0.7.0)
-    .option("--profile, --config <name>", "Configuration profile to use (default: default)")
+    .option("--profile <name>", "Configuration profile to use (default: default)")
     .option("--stage <name>", "API Gateway stage: dev or prod (default: prod)")
 // Common options
     .option("--no-bootstrap-check", "Skip CDK bootstrap verification")
@@ -101,7 +101,7 @@ For more information: https://github.com/quiltdata/benchling-webhook#deployment
 program
     .command("setup")
     .description("Run setup wizard only (without deployment)")
-    .option("--profile, --config <name>", "Configuration profile to use (default: default)")
+    .option("--profile <name>", "Configuration profile to use (default: default)")
     .option("--inherit-from <name>", "Base profile to inherit from")
     .option("--region <region>", "AWS region")
     .option("--aws-profile <name>", "AWS credentials profile")
@@ -122,7 +122,7 @@ program
         "Check CloudFormation stack status and BenchlingIntegration parameter",
     )
     .option(
-        "--profile, --config <name>",
+        "--profile <name>",
         "Configuration profile to check (default: default)",
     )
     .option("--aws-profile <name>", "AWS credentials profile")
@@ -174,7 +174,7 @@ Use --no-exit to keep monitoring indefinitely.
 program
     .command("logs")
     .description("View CloudWatch logs from deployed webhook integration")
-    .option("--profile, --config <name>", "Configuration profile to use (default: default)")
+    .option("--profile <name>", "Configuration profile to use (default: default)")
     .option("--aws-profile <name>", "AWS credentials profile")
     .option(
         "--type <type>",
@@ -254,7 +254,7 @@ program
 program
     .command("validate")
     .description("Validate configuration without deploying")
-    .option("--profile, --config <name>", "Configuration profile to validate", "default")
+    .option("--profile <name>", "Configuration profile to validate", "default")
     .option("--verbose", "Show detailed validation information")
     .action(async (options) => {
         try {
@@ -300,7 +300,7 @@ program
     .command("manifest")
     .description("Generate Benchling app manifest file")
     .option("--output <path>", "Output file path", "app-manifest.yaml")
-    .option("--profile, --config <name>", "Configuration profile to use (optional)")
+    .option("--profile <name>", "Configuration profile to use (optional)")
     .option("--catalog <url>", "Catalog URL to use (optional, overrides profile)")
     .action(async (options) => {
         try {
@@ -362,7 +362,7 @@ For more information: https://github.com/quiltdata/benchling-webhook#multi-envir
 program
     .command("health-check")
     .description("Check configuration health and secrets sync status")
-    .option("--profile, --config <name>", "Configuration profile to check", "default")
+    .option("--profile <name>", "Configuration profile to check", "default")
     .option("--json", "Output in JSON format")
     .action(async (options) => {
         try {
@@ -377,7 +377,7 @@ program
 program
     .command("config")
     .description("Show configuration for a profile as JSON")
-    .option("--profile, --config-name <name>", "Configuration profile to show", "default")
+    .option("--profile <name>", "Configuration profile to show", "default")
     .action(async (options) => {
         try {
             await configShowCommand(options);
@@ -414,7 +414,7 @@ if (
             options.yes = true;
         } else if (args[i] === "--setup-only") {
             options.setupOnly = true;
-        } else if ((args[i] === "--profile" || args[i] === "--config") && i + 1 < args.length) {
+        } else if (args[i] === "--profile" && i + 1 < args.length) {
             options.profile = args[i + 1];
             i++;
         } else if (args[i] === "--inherit-from" && i + 1 < args.length) {

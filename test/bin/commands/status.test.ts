@@ -165,7 +165,7 @@ describe("statusCommand", () => {
             expect(mockSend).toHaveBeenCalled();
         });
 
-        it("should reject non-integrated profiles with clear error message", async () => {
+        it("should work for standalone profiles if stackArn is present", async () => {
             mockStorage.writeProfile("standalone", validStandaloneConfig);
 
             const result = await statusCommand({
@@ -173,14 +173,12 @@ describe("statusCommand", () => {
                 configStorage: mockStorage,
             });
 
-            expect(result.success).toBe(false);
-            expect(result.error).toBe("Status command is only available for integrated stack mode");
-            expect(mockConsoleLog).toHaveBeenCalledWith(
-                expect.stringContaining("Status command is only available for integrated stack mode")
-            );
-            expect(mockConsoleLog).toHaveBeenCalledWith(
-                expect.stringContaining("This profile is configured for standalone deployment")
-            );
+            // Status command now works regardless of integratedStack flag
+            // as long as stackArn is present
+            expect(result.success).toBe(true);
+            expect(result.stackStatus).toBe("UPDATE_COMPLETE");
+            expect(result.benchlingIntegrationEnabled).toBe(true);
+            expect(mockSend).toHaveBeenCalled();
         });
 
         it("should handle missing profiles with clear error message", async () => {
@@ -207,6 +205,25 @@ describe("statusCommand", () => {
             expect(mockConsoleLog).toHaveBeenCalledWith(
                 expect.stringContaining("Stack Status for Profile: default")
             );
+        });
+
+        it("should reject profiles without stackArn", async () => {
+            const configWithoutArn: ProfileConfig = {
+                ...validIntegratedConfig,
+                quilt: {
+                    ...validIntegratedConfig.quilt,
+                    stackArn: undefined,
+                },
+            };
+            mockStorage.writeProfile("no-arn", configWithoutArn);
+
+            const result = await statusCommand({
+                profile: "no-arn",
+                configStorage: mockStorage,
+            });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toContain("Quilt stack ARN not found");
         });
     });
 

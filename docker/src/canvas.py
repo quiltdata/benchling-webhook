@@ -63,8 +63,10 @@ class CanvasManager:
         self._entry = None
         self._package = None
         self._errors: List[str] = []  # Track errors to display in notification section
+        self._linked_packages: List[Package] = []  # Track linked packages for use in blocks
 
         # Dependency injection with fallback to default instances
+
         self._package_query = package_query or PackageQuery(
             bucket=config.s3_bucket_name,
             catalog_url=config.quilt_catalog,
@@ -209,6 +211,9 @@ class CanvasManager:
             # Filter out the primary package
             linked_packages = [pkg for pkg in linked_packages if pkg.package_name != self.package_name]
 
+            # Store linked packages as instance variable
+            self._linked_packages = linked_packages
+
             content += fmt.format_linked_packages(linked_packages)
 
         except Exception as e:
@@ -227,13 +232,6 @@ class CanvasManager:
         # Error notifications (at the bottom)
         content += fmt.format_error_notification(self._errors)
 
-        # Footer with version and deployment info
-        content += fmt.format_canvas_footer(
-            version=__version__,
-            quilt_host=self.config.quilt_catalog,
-            bucket=self.config.s3_bucket_name,
-        )
-
         return content
 
     def _make_blocks(self) -> list:
@@ -241,10 +239,24 @@ class CanvasManager:
         markdown_content = self._make_markdown_content()
         markdown_block = blocks.create_markdown_block(markdown_content, "md1")
 
-        return [
+        result = [
             *blocks.create_main_navigation_buttons(self.entry_id),  # Buttons at the top
             markdown_block,
         ]
+
+        # Add linked package browse buttons if any exist
+        if self._linked_packages:
+            result.extend(blocks.create_linked_package_browse_buttons(self.entry_id, self._linked_packages))
+
+        # Add footer as markdown block
+        footer_markdown = fmt.format_canvas_footer(
+            version=__version__,
+            quilt_host=self.config.quilt_catalog,
+            bucket=self.config.s3_bucket_name,
+        )
+        result.append(blocks.create_markdown_block(footer_markdown, "md-footer"))
+
+        return result
 
     def get_canvas_response(self) -> dict[str, Any]:
         """Generate canvas response for synchronous webhook reply."""
@@ -304,10 +316,48 @@ class CanvasManager:
             )
             return {"success": False, "error": str(e)}
 
+    def update_canvas_with_blocks(self, blocks: List) -> dict[str, Any]:
+        """Update existing Canvas with provided blocks using Benchling SDK.
+
+        Args:
+            blocks: List of block objects to display on the canvas
+
+        Returns:
+            Dict with success status and canvas_id or error
+        """
+        try:
+            canvas_update = AppCanvasUpdate(
+                blocks=blocks,  # type: ignore
+                enabled=True,  # type: ignore
+            )
+
+            logger.info(
+                "Updating Canvas with provided blocks",
+                canvas_id=self.canvas_id,
+                blocks_count=len(blocks),
+            )
+
+            result = self.benchling.apps.update_canvas(canvas_id=self.canvas_id, canvas=canvas_update)
+
+            logger.info("Canvas updated successfully", canvas_id=result.id)
+
+            return {"success": True, "canvas_id": result.id}
+
+        except Exception as e:
+            logger.error(
+                "Canvas update failed",
+                canvas_id=self.canvas_id,
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
+            return {"success": False, "error": str(e)}
+
     def _make_file_table_markdown(
         self,
         files: List[PackageFile],
         page_state: PageState,
+        package_name: Optional[str] = None,
     ) -> str:
         """
         Generate markdown list for file list.
@@ -315,13 +365,17 @@ class CanvasManager:
         Args:
             files: List of files for current page
             page_state: Current pagination state
+            package_name: Optional override for package name (for linked packages)
 
         Returns:
             Markdown string with file list
         """
+        # Use explicit package name if provided
+        browsing_package_name = package_name or self.package_name
+
         # Header
         md = fmt.format_file_list_header(
-            package_name=self.package_name,
+            package_name=browsing_package_name,
             page_num=page_state.page_number + 1,
             total_pages=page_state.total_pages,
         )
@@ -349,17 +403,19 @@ class CanvasManager:
 
         return md
 
-    def _make_metadata_markdown(self, metadata: dict) -> str:
+    def _make_metadata_markdown(self, metadata: dict, package_name: Optional[str] = None) -> str:
         """
         Generate markdown for metadata view.
 
         Args:
             metadata: Package metadata dict
+            package_name: Optional override for package name (for linked packages)
 
         Returns:
             Markdown string with bulleted list metadata
         """
-        md = fmt.format_metadata_header(self.package_name)
+        browsing_package_name = package_name or self.package_name
+        md = fmt.format_metadata_header(browsing_package_name)
         md += fmt.dict_to_markdown_list(metadata)
         return md
 
@@ -367,6 +423,7 @@ class CanvasManager:
         self,
         context: str,
         page_state: Optional[PageState] = None,
+        package_name: Optional[str] = None,
     ) -> List:
         """
         Create navigation buttons based on context, grouped in a section for horizontal layout.
@@ -374,6 +431,7 @@ class CanvasManager:
         Args:
             context: "main", "browser", or "metadata"
             page_state: Current pagination state (required for "browser" and "metadata")
+            package_name: Optional package name for linked package browsing (used with "browser" context)
 
         Returns:
             List containing a SectionUiBlockUpdate with button children
@@ -383,17 +441,18 @@ class CanvasManager:
         if context == "browser":
             if page_state is None:
                 raise ValueError("page_state required for browser context")
-            return blocks.create_browser_navigation_buttons(self.entry_id, page_state)
+            return blocks.create_browser_navigation_buttons(self.entry_id, page_state, package_name)
         if context == "metadata":
             if page_state is None:
                 raise ValueError("page_state required for metadata context")
-            return blocks.create_metadata_navigation_buttons(self.entry_id, page_state)
+            return blocks.create_metadata_navigation_buttons(self.entry_id, page_state, package_name)
         raise ValueError(f"Unknown context: {context}")
 
     def get_package_browser_blocks(
         self,
         page_number: int = 0,
         page_size: int = 15,
+        package_name: Optional[str] = None,
     ) -> List:
         """Generate Package Entry Browser blocks for SDK use.
 
@@ -402,24 +461,30 @@ class CanvasManager:
         Args:
             page_number: Page to display (0-indexed)
             page_size: Files per page
+            package_name: Optional package name to browse (if different from the primary package).
+                          Used when browsing linked packages.
 
         Returns:
             List of block objects (MarkdownUiBlockUpdate, ButtonUiBlockUpdate)
         """
+        # Use explicit package name if provided, otherwise use the default package name
+        browsing_package_name = package_name or self.package_name
+
         logger.info(
             "Generating Package Entry Browser blocks",
-            package_name=self.package_name,
+            package_name=browsing_package_name,
+            is_linked=package_name is not None,
             page_number=page_number,
             page_size=page_size,
         )
 
         try:
             # Fetch all files - will raise exception if package doesn't exist
-            all_files = self._package_file_fetcher.get_package_files(self.package_name)
+            all_files = self._package_file_fetcher.get_package_files(browsing_package_name)
 
             if len(all_files) == 0:
                 # Package exists but empty
-                markdown = fmt.format_empty_package(self.package_name)
+                markdown = fmt.format_empty_package(browsing_package_name)
 
                 return [
                     blocks.create_markdown_block(markdown, "md-empty"),
@@ -429,18 +494,19 @@ class CanvasManager:
             # Paginate files
             page_files, page_state = paginate_items(all_files, page_number, page_size)
 
-            # Generate markdown
-            markdown = self._make_file_table_markdown(page_files, page_state)
+            # Generate markdown with package context
+            markdown = self._make_file_table_markdown(page_files, page_state, browsing_package_name)
 
-            # Create blocks
+            # Create blocks with package context for linked packages
             canvas_blocks = [
                 blocks.create_markdown_block(markdown, "md-browser"),
-                *self._make_navigation_buttons("browser", page_state),
+                *self._make_navigation_buttons("browser", page_state, package_name),
             ]
 
             logger.info(
                 "Package Entry Browser blocks generated",
-                package_name=self.package_name,
+                package_name=browsing_package_name,
+                is_linked=package_name is not None,
                 page=f"{page_state.page_number + 1}/{page_state.total_pages}",
                 files_on_page=len(page_files),
             )
@@ -454,7 +520,7 @@ class CanvasManager:
             error_msg = str(e).lower()
             if "does not exist" in error_msg or "not found" in error_msg or "no such package" in error_msg:
                 # Package doesn't exist yet
-                markdown = fmt.format_package_not_found(self.package_name)
+                markdown = fmt.format_package_not_found(browsing_package_name)
 
                 return [
                     blocks.create_markdown_block(markdown, "md-no-package"),
@@ -463,7 +529,7 @@ class CanvasManager:
                 ]
 
             # Other error (API failure, network error, etc.)
-            markdown = fmt.format_error_loading_files(self.package_name, str(e))
+            markdown = fmt.format_error_loading_files(browsing_package_name, str(e))
 
             return [
                 blocks.create_markdown_block(markdown, "md-error"),
@@ -493,6 +559,7 @@ class CanvasManager:
         self,
         page_number: int = 0,
         page_size: int = 15,
+        package_name: Optional[str] = None,
     ) -> List:
         """Generate metadata view blocks for SDK use.
 
@@ -501,35 +568,48 @@ class CanvasManager:
         Args:
             page_number: Current page (to preserve state)
             page_size: Page size (to preserve state)
+            package_name: Optional package name to view metadata for (if different from the primary package).
+                          Used when viewing metadata for linked packages.
 
         Returns:
             List of block objects (MarkdownUiBlockUpdate, ButtonUiBlockUpdate)
         """
-        logger.info("Generating metadata blocks", package_name=self.package_name)
+        # Use explicit package name if provided, otherwise use the default package name
+        browsing_package_name = package_name or self.package_name
+
+        logger.info(
+            "Generating metadata blocks",
+            package_name=browsing_package_name,
+            is_linked=package_name is not None,
+        )
 
         try:
-            metadata = self._package_file_fetcher.get_package_metadata(self.package_name)
+            metadata = self._package_file_fetcher.get_package_metadata(browsing_package_name)
 
             # Generate markdown
-            markdown = self._make_metadata_markdown(metadata)
+            markdown = self._make_metadata_markdown(metadata, browsing_package_name)
 
             # Fake page state for navigation buttons (preserve page context)
             page_state = PageState(page_number=page_number, page_size=page_size, total_items=0)
 
-            # Create blocks
+            # Create blocks with package context for linked packages
             canvas_blocks = [
                 blocks.create_markdown_block(markdown, "md-metadata"),
-                *self._make_navigation_buttons("metadata", page_state),
+                *self._make_navigation_buttons("metadata", page_state, package_name),
             ]
 
-            logger.info("Metadata blocks generated", package_name=self.package_name)
+            logger.info(
+                "Metadata blocks generated",
+                package_name=browsing_package_name,
+                is_linked=package_name is not None,
+            )
 
             return canvas_blocks
 
         except Exception as e:
             logger.error("Failed to generate metadata view", error=str(e))
 
-            markdown = fmt.format_error_loading_metadata(self.package_name, str(e))
+            markdown = fmt.format_error_loading_metadata(browsing_package_name, str(e))
 
             return [
                 blocks.create_markdown_block(markdown, "md-error"),
