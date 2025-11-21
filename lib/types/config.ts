@@ -348,6 +348,46 @@ export interface PackageConfig {
 }
 
 /**
+ * Log Group Information
+ *
+ * CloudWatch log group details discovered during deployment.
+ */
+export interface LogGroupInfo {
+    /**
+     * CloudWatch log group name
+     *
+     * @example "/ecs/benchling-webhook"
+     * @example "/aws/apigateway/benchling-webhook"
+     */
+    name: string;
+
+    /**
+     * Log type identifier
+     *
+     * @example "ecs"
+     * @example "api"
+     * @example "api-exec"
+     */
+    type: string;
+
+    /**
+     * Human-friendly display name
+     *
+     * @example "ECS Container Logs"
+     * @example "Benchling Webhook (ECS)"
+     */
+    displayName: string;
+
+    /**
+     * Log stream prefix (optional, for ECS task streams)
+     *
+     * @example "ecs"
+     * @example "benchling-webhook"
+     */
+    streamPrefix?: string;
+}
+
+/**
  * Deployment Configuration
  *
  * AWS infrastructure settings for CDK deployment.
@@ -382,6 +422,18 @@ export interface DeploymentConfig {
      * @default "latest"
      */
     imageTag?: string;
+
+    /**
+     * Discovered CloudWatch log groups (populated during first deployment)
+     *
+     * Cached log group metadata for efficient log retrieval without AWS API calls.
+     * - Standalone mode: Captured from stack outputs after CDK deploy
+     * - Integrated mode: Discovered from existing Quilt stack ECS services
+     *
+     * Eliminates need for runtime CloudFormation/ECS discovery on every logs command.
+     * Updated automatically on each deployment to stay in sync with infrastructure.
+     */
+    logGroups?: LogGroupInfo[];
 }
 
 /**

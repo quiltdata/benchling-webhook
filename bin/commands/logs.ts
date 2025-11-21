@@ -15,15 +15,12 @@ import {
     FilterLogEventsCommand,
     type FilteredLogEvent,
 } from "@aws-sdk/client-cloudwatch-logs";
-import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 import { fromIni } from "@aws-sdk/credential-providers";
 import { XDGConfig } from "../../lib/xdg-config";
 import type { XDGBase } from "../../lib/xdg-base";
-import { discoverECSServiceLogGroups } from "../../lib/utils/ecs-service-discovery";
+import type { LogGroupInfo as ConfigLogGroupInfo } from "../../lib/types/config";
 import { parseTimeRange, formatTimeRange, formatLocalDateTime, formatLocalTime, getLocalTimezone } from "../../lib/utils/time-format";
 import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers";
-
-const STACK_NAME = "BenchlingWebhookStack";
 
 export interface LogsCommandOptions {
     profile?: string;
@@ -51,111 +48,73 @@ export interface LogGroupInfo {
     entries: FilteredLogEvent[];
 }
 
+export interface GroupedLogEntry {
+    pattern: string;
+    count: number;
+    firstSeen: number;
+    lastSeen: number;
+    entries: FilteredLogEvent[];
+    sample?: string;
+}
+
+export interface LogStreamGroup {
+    streamName: string;
+    displayName: string;
+    entries: FilteredLogEvent[];
+    patterns: GroupedLogEntry[];
+}
+
+export interface HealthCheckSummary {
+    endpoint: string;
+    status: "success" | "failure" | "unknown";
+    lastSeen: number;
+    count: number;
+    statusCode?: number;
+}
+
 /**
- * Get AWS region and deployment info from profile configuration
+ * Get log groups from profile configuration
  */
-function getDeploymentInfo(
+function getLogGroupsFromConfig(
     profile: string,
     configStorage: XDGBase,
-): { region: string; stackName: string; integratedMode: boolean; quiltStackName?: string } | null {
+): { region: string; logGroups: ConfigLogGroupInfo[] } | null {
     try {
         const config = configStorage.readProfile(profile);
-        if (config.deployment?.region) {
-            const region = config.deployment.region;
-            const integratedMode = config.integratedStack || false;
-
-            // For integrated mode, extract Quilt stack name from ARN
-            if (integratedMode && config.quilt?.stackArn) {
-                const match = config.quilt.stackArn.match(/stack\/([^/]+)\//);
-                if (match) {
-                    return {
-                        region,
-                        stackName: STACK_NAME,
-                        integratedMode: true,
-                        quiltStackName: match[1],
-                    };
-                }
-            }
-
-            // For standalone mode, use BenchlingWebhookStack
-            return {
-                region,
-                stackName: STACK_NAME,
-                integratedMode: false,
-            };
+        if (!config.deployment?.region) {
+            return null;
         }
+
+        const region = config.deployment.region;
+        const logGroups = config.deployment.logGroups || [];
+
+        if (logGroups.length === 0) {
+            console.warn(chalk.yellow(`⚠️  No log groups found in profile '${profile}' configuration.`));
+            console.warn(chalk.dim("   This means the stack hasn't been deployed yet."));
+            console.warn(chalk.dim(`   Run: npm run deploy -- --profile ${profile} --stage dev`));
+            return null;
+        }
+
+        return { region, logGroups };
     } catch (error) {
-        // Profile not found or invalid
         console.warn(chalk.yellow(`⚠️  Could not read profile '${profile}': ${(error as Error).message}`));
     }
     return null;
 }
 
 /**
- * Double the time range, capping at 7 days
+ * Octuple (8x) the time range
  */
 function expandTimeRange(currentSince: string): string {
     const currentMs = parseTimeRange(currentSince);
-    const doubledMs = currentMs * 2;
-    const maxMs = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-    if (doubledMs >= maxMs) {
-        return "7d";
-    }
-
-    return formatTimeRange(doubledMs);
+    const octupledMs = currentMs * 8;
+    return formatTimeRange(octupledMs);
 }
 
-/**
- * Get log group names from CloudFormation stack outputs or ECS services
- */
-async function getLogGroupsFromStack(
-    stackName: string,
-    region: string,
-    integratedMode: boolean,
-    awsProfile?: string,
-): Promise<Record<string, string>> {
-    try {
-        // For integrated mode, use shared ECS service discovery
-        if (integratedMode) {
-            return await discoverECSServiceLogGroups(stackName, region, awsProfile);
-        }
-
-        // For standalone mode, use stack outputs
-        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
-        if (awsProfile) {
-            clientConfig.credentials = fromIni({ profile: awsProfile });
-        }
-
-        const cfClient = new CloudFormationClient(clientConfig);
-        const command = new DescribeStacksCommand({ StackName: stackName });
-        const response = await cfClient.send(command);
-        const stack = response.Stacks?.[0];
-
-        if (!stack) {
-            return {};
-        }
-
-        const outputs = stack.Outputs || [];
-        const logGroups: Record<string, string> = {};
-
-        const ecsLogGroup = outputs.find((o) => o.OutputKey === "EcsLogGroup")?.OutputValue;
-        const apiLogGroup = outputs.find((o) => o.OutputKey === "ApiGatewayLogGroup")?.OutputValue;
-        const apiExecLogGroup = outputs.find((o) => o.OutputKey === "ApiGatewayExecutionLogGroup")?.OutputValue;
-
-        if (ecsLogGroup) logGroups["ecs"] = ecsLogGroup;
-        if (apiLogGroup) logGroups["api"] = apiLogGroup;
-        if (apiExecLogGroup) logGroups["api-exec"] = apiExecLogGroup;
-
-        return logGroups;
-    } catch (error) {
-        console.warn(chalk.dim(`Could not retrieve log groups from stack: ${(error as Error).message}`));
-        return {};
-    }
-}
 
 /**
- * Fetch logs from a single log group
+ * Fetch logs from a single log group using pagination
+ * Pages through logs from newest to oldest until finding enough non-health logs
  */
 async function fetchLogsFromGroup(
     logGroupName: string,
@@ -164,6 +123,7 @@ async function fetchLogsFromGroup(
     limit: number,
     filterPattern?: string,
     awsProfile?: string,
+    logStreamNamePrefix?: string,
 ): Promise<FilteredLogEvent[]> {
     try {
         const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
@@ -173,16 +133,48 @@ async function fetchLogsFromGroup(
         const logsClient = new CloudWatchLogsClient(clientConfig);
 
         const startTime = Date.now() - parseTimeRange(since);
+        const allEvents: FilteredLogEvent[] = [];
+        let nextToken: string | undefined;
+        let pageCount = 0;
+        const maxPages = 100; // Maximum pages to fetch
+        const pageSize = 1000; // CloudWatch max per request
 
-        const command = new FilterLogEventsCommand({
-            logGroupName,
-            startTime,
-            filterPattern,
-            limit,
-        });
+        // Page through logs until we have enough events or hit limits
+        while (pageCount < maxPages) {
+            const command = new FilterLogEventsCommand({
+                logGroupName,
+                startTime,
+                filterPattern,
+                limit: pageSize,
+                logStreamNamePrefix,
+                nextToken,
+            });
 
-        const response = await logsClient.send(command);
-        return response.events || [];
+            const response = await logsClient.send(command);
+            const events = response.events || [];
+
+            if (events.length > 0) {
+                allEvents.push(...events);
+            }
+
+            pageCount++;
+            nextToken = response.nextToken;
+
+            // Stop if no more pages
+            if (!nextToken) {
+                break;
+            }
+
+            // Keep paging until we find non-health logs or hit max pages
+            // Don't stop early just because we have a lot of events -
+            // health checks can overwhelm the first pages
+            const nonHealthCount = allEvents.filter(e => e.message && !isHealthCheck(e.message)).length;
+            if (nonHealthCount >= limit) {
+                break;
+            }
+        }
+
+        return allEvents;
     } catch (error) {
         console.warn(chalk.dim(`Could not fetch logs from ${logGroupName}: ${(error as Error).message}`));
         return [];
@@ -190,7 +182,189 @@ async function fetchLogsFromGroup(
 }
 
 /**
- * Display logs in organized sections
+ * Extract a pattern from a log message for grouping
+ */
+function extractLogPattern(message: string): string {
+    // Normalize the message for pattern matching
+    let pattern = message.trim();
+
+    // Replace IP addresses with [IP]
+    pattern = pattern.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, "[IP]");
+
+    // Replace timestamps like [20/Nov/2025 20:08:08] with [TIMESTAMP]
+    pattern = pattern.replace(/\[\d{2}\/\w{3}\/\d{4}\s+\d{2}:\d{2}:\d{2}\]/g, "[TIMESTAMP]");
+
+    // Replace UUIDs with [UUID]
+    pattern = pattern.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "[UUID]");
+
+    // Replace entry IDs like etr_xxx with [ENTRY_ID]
+    pattern = pattern.replace(/etr_[A-Za-z0-9]+/g, "[ENTRY_ID]");
+
+    // Replace numeric IDs with [ID]
+    pattern = pattern.replace(/\b\d{6,}\b/g, "[ID]");
+
+    return pattern;
+}
+
+/**
+ * Group log entries by pattern
+ */
+function groupLogEntries(entries: FilteredLogEvent[]): GroupedLogEntry[] {
+    const groups = new Map<string, GroupedLogEntry>();
+
+    for (const entry of entries) {
+        if (!entry.message || !entry.timestamp) continue;
+
+        const pattern = extractLogPattern(entry.message);
+
+        if (!groups.has(pattern)) {
+            groups.set(pattern, {
+                pattern,
+                count: 0,
+                firstSeen: entry.timestamp,
+                lastSeen: entry.timestamp,
+                entries: [],
+                sample: entry.message.trim(),
+            });
+        }
+
+        const group = groups.get(pattern)!;
+        group.count++;
+        group.entries.push(entry);
+        group.firstSeen = Math.min(group.firstSeen, entry.timestamp);
+        group.lastSeen = Math.max(group.lastSeen, entry.timestamp);
+    }
+
+    // Sort groups by last seen (most recent first)
+    return Array.from(groups.values()).sort((a, b) => b.lastSeen - a.lastSeen);
+}
+
+/**
+ * Check if a log message is a health check
+ */
+function isHealthCheck(message: string): boolean {
+    return message.includes("/health") ||
+           message.includes("/health/ready") ||
+           message.includes("ELB-HealthChecker");
+}
+
+/**
+ * Count non-health log entries
+ */
+function countNonHealthEntries(entries: FilteredLogEvent[]): number {
+    return entries.filter(e => e.message && !isHealthCheck(e.message)).length;
+}
+
+/**
+ * Extract health check summaries from log entries
+ */
+function extractHealthCheckSummary(entries: FilteredLogEvent[]): HealthCheckSummary[] {
+    const healthChecks = new Map<string, HealthCheckSummary>();
+
+    for (const entry of entries) {
+        if (!entry.message || !entry.timestamp || !isHealthCheck(entry.message)) continue;
+
+        // Parse endpoint and status code
+        // Example: INFO:werkzeug:127.0.0.1 - - [20/Nov/2025 20:08:08] "GET /health HTTP/1.1" 200 -
+        const endpointMatch = entry.message.match(/"GET\s+(\/health[^\s]*)\s+HTTP/);
+        const statusMatch = entry.message.match(/HTTP\/[\d.]+"\s+(\d{3})\s/);
+
+        if (!endpointMatch) continue;
+
+        const endpoint = endpointMatch[1];
+        const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : undefined;
+        const status = statusCode && statusCode >= 200 && statusCode < 300 ? "success" :
+            statusCode ? "failure" : "unknown";
+
+        if (!healthChecks.has(endpoint)) {
+            healthChecks.set(endpoint, {
+                endpoint,
+                status,
+                lastSeen: entry.timestamp,
+                count: 0,
+                statusCode,
+            });
+        }
+
+        const summary = healthChecks.get(endpoint)!;
+        summary.count++;
+        summary.lastSeen = Math.max(summary.lastSeen, entry.timestamp);
+
+        // Update status to worst case (failure > unknown > success)
+        if (status === "failure" || (status === "unknown" && summary.status === "success")) {
+            summary.status = status;
+            summary.statusCode = statusCode;
+        }
+    }
+
+    return Array.from(healthChecks.values()).sort((a, b) => b.lastSeen - a.lastSeen);
+}
+
+/**
+ * Group log entries by log stream first, then by pattern (excluding health checks)
+ */
+function groupLogEntriesByStream(entries: FilteredLogEvent[]): LogStreamGroup[] {
+    const streamGroups = new Map<string, FilteredLogEvent[]>();
+
+    // First, group by log stream (excluding health checks)
+    for (const entry of entries) {
+        if (!entry.logStreamName) continue;
+        if (entry.message && isHealthCheck(entry.message)) continue; // Skip health checks
+
+        if (!streamGroups.has(entry.logStreamName)) {
+            streamGroups.set(entry.logStreamName, []);
+        }
+        streamGroups.get(entry.logStreamName)!.push(entry);
+    }
+
+    // Then group each stream's entries by pattern
+    const result: LogStreamGroup[] = [];
+    for (const [streamName, streamEntries] of streamGroups.entries()) {
+        const patterns = groupLogEntries(streamEntries);
+
+        // Extract a friendly display name from stream name
+        // ECS stream names typically look like: ecs/benchling-webhook/abc123def456
+        let displayName = streamName;
+        const ecsMatch = streamName.match(/ecs\/[^/]+\/([a-f0-9]+)/);
+        if (ecsMatch) {
+            displayName = `Task ${ecsMatch[1].substring(0, 8)}`;
+        }
+
+        result.push({
+            streamName,
+            displayName,
+            entries: streamEntries,
+            patterns,
+        });
+    }
+
+    // Sort by most recent activity
+    return result.sort((a, b) => {
+        const aLatest = Math.max(...a.entries.map(e => e.timestamp || 0));
+        const bLatest = Math.max(...b.entries.map(e => e.timestamp || 0));
+        return bLatest - aLatest;
+    });
+}
+
+/**
+ * Format time ago string
+ */
+function formatTimeAgo(timestamp: number): string {
+    const now = Date.now();
+    const diffMs = now - timestamp;
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSecs < 60) return `${diffSecs}s ago`;
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
+}
+
+/**
+ * Display logs in organized sections with stream and pattern grouping
  */
 function displayLogs(
     logGroups: LogGroupInfo[],
@@ -198,54 +372,104 @@ function displayLogs(
     region: string,
     since: string,
     limit: number,
-    expanded?: boolean,
+    oldestTimestamp: number,
 ): void {
     const timeStr = formatLocalDateTime(new Date());
     const timezone = getLocalTimezone();
 
     console.log(chalk.bold(`\nLogs for Profile: ${profile} @ ${timeStr} (${timezone})\n`));
     console.log(chalk.dim("─".repeat(80)));
-    console.log(`${chalk.bold("Region:")} ${chalk.cyan(region)}  ${chalk.bold("Time Range:")} ${chalk.cyan(`Last ${since}`)}${expanded ? chalk.yellow(" (auto-expanded)") : ""}`);
+    console.log(`${chalk.bold("Region:")} ${chalk.cyan(region)}  ${chalk.bold("Initial Time Range:")} ${chalk.cyan(`Last ${since}`)}`);
+    console.log(`${chalk.bold("Searched back to:")} ${chalk.cyan(formatLocalDateTime(new Date(oldestTimestamp)))}`);
     console.log(`${chalk.bold("Showing:")} ${chalk.cyan(`Last ~${limit} entries per log group`)}`);
     console.log(chalk.dim("─".repeat(80)));
     console.log("");
 
     // Display each log group in its own section
     for (const logGroup of logGroups) {
-        console.log(chalk.bold(`${logGroup.displayName}:`));
-        console.log(chalk.dim(`  Log Group: ${logGroup.name}`));
+        console.log(chalk.bold(`${logGroup.displayName}`) + chalk.dim(` (${logGroup.name})`));
 
         if (logGroup.entries.length === 0) {
             console.log(chalk.dim("  No log entries found\n"));
             continue;
         }
 
-        console.log(chalk.dim(`  Showing ${logGroup.entries.length} entries:\n`));
+        // Extract health check summary
+        const healthSummaries = extractHealthCheckSummary(logGroup.entries);
 
-        // Display log entries
-        for (const entry of logGroup.entries) {
-            if (!entry.timestamp || !entry.message) continue;
+        // Display health check summary as subheading
+        if (healthSummaries.length > 0) {
+            console.log(chalk.bold.dim("\n  Health Checks:"));
+            for (const health of healthSummaries) {
+                const statusIcon = health.status === "success" ? chalk.green("✓") :
+                    health.status === "failure" ? chalk.red("✗") :
+                        chalk.yellow("?");
+                const statusText = health.status === "success" ? chalk.green("HEALTHY") :
+                    health.status === "failure" ? chalk.red("FAILED") :
+                        chalk.yellow("UNKNOWN");
+                const timeAgo = formatTimeAgo(health.lastSeen);
+                const statusCode = health.statusCode ? ` (${health.statusCode})` : "";
 
-            const timeDisplay = formatLocalTime(entry.timestamp);
-
-            // Color code by log level if detectable
-            let message = entry.message.trim();
-            let messageColor = chalk.white;
-
-            if (message.includes("ERROR") || message.includes("CRITICAL")) {
-                messageColor = chalk.red;
-            } else if (message.includes("WARNING") || message.includes("WARN")) {
-                messageColor = chalk.yellow;
-            } else if (message.includes("INFO")) {
-                messageColor = chalk.cyan;
-            } else if (message.includes("DEBUG")) {
-                messageColor = chalk.dim;
+                console.log(`    ${statusIcon} ${chalk.cyan(health.endpoint)}: ${statusText}${statusCode} @ ${chalk.dim(timeAgo)} ${chalk.dim.magenta(`×${health.count}`)}`);
             }
-
-            console.log(`  ${chalk.dim(timeDisplay)} ${messageColor(message)}`);
+            console.log("");
         }
 
-        console.log("");
+        // Group entries by log stream (excluding health checks)
+        const streamGroups = groupLogEntriesByStream(logGroup.entries);
+        const nonHealthCount = streamGroups.reduce((sum, s) => sum + s.entries.length, 0);
+
+        if (nonHealthCount === 0) {
+            console.log(chalk.dim("  No non-health log entries found\n"));
+            continue;
+        }
+
+        console.log(chalk.bold.dim(`  Application Logs (${nonHealthCount} entries, ${streamGroups.length} streams):\n`));
+
+        // Display each stream's grouped entries
+        for (const stream of streamGroups) {
+            // Compact stream header: only show display name and pattern count
+            console.log(chalk.bold.blue(`    ${stream.displayName}`) + chalk.dim(` · ${stream.patterns.length} patterns:`));
+
+            // Display grouped patterns for this stream
+            for (const group of stream.patterns) {
+                const firstTime = formatLocalTime(group.firstSeen);
+                const lastTime = formatLocalTime(group.lastSeen);
+                const timeRange = group.count > 1 ? `${firstTime} → ${lastTime}` : firstTime;
+
+                // Color code by log level if detectable
+                const sample = group.sample || "";
+                let messageColor = chalk.white;
+                let badge = "";
+
+                if (sample.includes("ERROR") || sample.includes("CRITICAL")) {
+                    messageColor = chalk.red;
+                    badge = chalk.red.bold("[ERROR]");
+                } else if (sample.includes("WARNING") || sample.includes("WARN")) {
+                    messageColor = chalk.yellow;
+                    badge = chalk.yellow.bold("[WARN]");
+                } else if (sample.includes("INFO")) {
+                    messageColor = chalk.cyan;
+                    badge = chalk.cyan("[INFO]");
+                } else if (sample.includes("DEBUG")) {
+                    messageColor = chalk.dim;
+                    badge = chalk.dim("[DEBUG]");
+                }
+
+                // Display count badge if more than 1
+                const countBadge = group.count > 1 ? chalk.bold.magenta(`×${group.count}`) : "";
+
+                console.log(`      ${chalk.dim(timeRange)} ${badge} ${countBadge}`);
+                console.log(`        ${messageColor(sample)}`);
+
+                // Show additional context for important messages (errors/warnings)
+                if (group.count > 1 && (sample.includes("ERROR") || sample.includes("WARNING"))) {
+                    console.log(chalk.dim(`        (${group.count} occurrences between ${firstTime} and ${lastTime})`));
+                }
+
+                console.log("");
+            }
+        }
     }
 
     console.log(chalk.dim("─".repeat(80)));
@@ -253,103 +477,34 @@ function displayLogs(
 
 
 /**
- * Fetch logs from all relevant log groups
+ * Fetch logs from all relevant log groups (unified implementation)
  */
 async function fetchAllLogs(
-    stackName: string,
+    logGroupsFromConfig: ConfigLogGroupInfo[],
     region: string,
     since: string,
     limit: number,
     type: string,
-    integratedMode: boolean,
     filterPattern?: string,
     awsProfile?: string,
 ): Promise<LogGroupInfo[]> {
-    // Get log groups from stack
-    const discoveredLogGroups = await getLogGroupsFromStack(stackName, region, integratedMode, awsProfile);
-
     const result: LogGroupInfo[] = [];
 
-    // For integrated mode, query all discovered log groups
-    if (integratedMode) {
-        // If type is specified and not "all", filter to only matching services
-        const logGroupEntries = Object.entries(discoveredLogGroups);
+    // Filter log groups by type if specified
+    const filteredLogGroups = type === "all"
+        ? logGroupsFromConfig
+        : logGroupsFromConfig.filter((lg) => lg.type === type);
 
-        for (const [serviceName, logGroupName] of logGroupEntries) {
-            // If type filter is specified, only show matching services
-            if (type !== "all") {
-                // For integrated mode, "ecs" type shows all ECS services
-                // Other types (api, api-exec) are not available in integrated mode
-                if (type !== "ecs") {
-                    continue;
-                }
-            }
-
-            // Fetch logs from this group
-            const entries = await fetchLogsFromGroup(
-                logGroupName,
-                region,
-                since,
-                limit,
-                filterPattern,
-                awsProfile,
-            );
-
-            // Sort by timestamp descending (most recent first) and limit
-            const sortedEntries = entries
-                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-                .slice(0, limit);
-
-            // Create friendly display name from service name
-            const displayName = serviceName
-                .split("-")
-                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(" ");
-
-            result.push({
-                name: logGroupName,
-                displayName: `${displayName} (ECS)`,
-                entries: sortedEntries,
-            });
-        }
-
-        return result;
-    }
-
-    // For standalone mode, use the traditional type-based approach
-    const typesToQuery = type === "all" ? ["ecs", "api", "api-exec"] : [type];
-
-    for (const logType of typesToQuery) {
-        const logGroupName = discoveredLogGroups[logType];
-
-        if (!logGroupName) {
-            // Don't warn on first attempt, we'll handle it at the result level
-            continue;
-        }
-
-        let displayName: string;
-        switch (logType) {
-        case "ecs":
-            displayName = "ECS Container Logs";
-            break;
-        case "api":
-            displayName = "API Gateway Access Logs";
-            break;
-        case "api-exec":
-            displayName = "API Gateway Execution Logs";
-            break;
-        default:
-            displayName = logType;
-        }
-
-        // Fetch logs from this group
+    // Fetch logs from each group
+    for (const logGroupInfo of filteredLogGroups) {
         const entries = await fetchLogsFromGroup(
-            logGroupName,
+            logGroupInfo.name,
             region,
             since,
             limit,
             filterPattern,
             awsProfile,
+            logGroupInfo.streamPrefix, // Filter by container's stream prefix
         );
 
         // Sort by timestamp descending (most recent first) and limit
@@ -358,8 +513,8 @@ async function fetchAllLogs(
             .slice(0, limit);
 
         result.push({
-            name: logGroupName,
-            displayName,
+            name: logGroupInfo.name,
+            displayName: logGroupInfo.displayName,
             entries: sortedEntries,
         });
     }
@@ -379,7 +534,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
         filter,
         follow = false,
         timer,
-        limit = 5,
+        limit = 50,
         configStorage,
     } = options;
 
@@ -408,18 +563,15 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
     }
 
     try {
-        // Get AWS region and deployment info from profile
-        const deploymentInfo = getDeploymentInfo(profile, xdg);
-        if (!deploymentInfo) {
-            const errorMsg = `Could not determine AWS region for profile '${profile}'. Make sure the profile is configured correctly.`;
+        // Get log groups from profile configuration
+        const configInfo = getLogGroupsFromConfig(profile, xdg);
+        if (!configInfo) {
+            const errorMsg = `Could not load log groups for profile '${profile}'.`;
             console.error(chalk.red(`\n❌ ${errorMsg}\n`));
             return { success: false, error: errorMsg };
         }
 
-        const { region, integratedMode, quiltStackName } = deploymentInfo;
-
-        // For integrated mode, use Quilt stack name; for standalone use BenchlingWebhookStack
-        const stackName = integratedMode && quiltStackName ? quiltStackName : STACK_NAME;
+        const { region, logGroups } = configInfo;
 
         // Parse timer value
         const refreshInterval = parseTimerValue(timer);
@@ -435,8 +587,6 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
 
         let result: LogsResult = { success: true };
         let isFirstRun = true;
-        let currentSince = since;
-        let wasExpanded = false;
 
         // Watch loop
         while (true) {
@@ -445,30 +595,27 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
                 clearScreen();
             }
 
-            // Fetch logs from all relevant log groups
-            const logGroups = await fetchAllLogs(
-                stackName,
+            // Fetch logs from all relevant log groups (pagination handles finding logs)
+            const fetchedLogGroups = await fetchAllLogs(
+                logGroups,
                 region,
-                currentSince,
+                since,
                 limit,
                 type,
-                integratedMode,
                 filter,
                 awsProfile,
             );
 
             // Check if any log group has entries
-            const totalEntries = logGroups.reduce((sum, lg) => sum + lg.entries.length, 0);
-            const hasLogs = totalEntries > 0;
-            const hasLogGroups = logGroups.length > 0;
+            const totalEntries = fetchedLogGroups.reduce((sum, lg) => sum + lg.entries.length, 0);
+            const nonHealthEntries = fetchedLogGroups.reduce((sum, lg) => sum + countNonHealthEntries(lg.entries), 0);
+            const hasLogGroups = fetchedLogGroups.length > 0;
 
             // If no log groups found at all, show error and exit
             if (!hasLogGroups) {
-                console.error(chalk.red("\n❌ No log groups found in stack outputs."));
-                console.log(chalk.dim("   This could mean:"));
-                console.log(chalk.dim("   - The stack hasn't been deployed yet"));
-                console.log(chalk.dim("   - Log groups haven't been created"));
-                console.log(chalk.dim(`   - Stack name might be incorrect: ${stackName}\n`));
+                console.error(chalk.red("\n❌ No log groups available for fetching."));
+                console.log(chalk.dim("   This means the CloudWatch log groups don't exist in AWS yet."));
+                console.log(chalk.dim(`   Run: npm run deploy -- --profile ${profile} --stage dev\n`));
 
                 // Don't loop if there are no log groups
                 if (!refreshInterval) {
@@ -498,35 +645,23 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
                 continue;
             }
 
-            // Smart expansion: if no logs found and not at max, expand time window
-            if (!hasLogs && currentSince !== "7d") {
-                const nextSince = expandTimeRange(currentSince);
-                console.log(chalk.yellow(`⚠️  No logs found in last ${currentSince}. Expanding to ${nextSince}...\n`));
-                currentSince = nextSince;
-                wasExpanded = true;
-
-                // Small delay before retry
-                await sleep(500);
-                continue;
-            }
+            // Calculate oldest timestamp we searched back to
+            const oldestTimestamp = totalEntries > 0
+                ? Math.min(...fetchedLogGroups.flatMap(lg => lg.entries.map(e => e.timestamp || Date.now())))
+                : Date.now() - parseTimeRange(since);
 
             // Display logs
-            displayLogs(logGroups, profile, region, currentSince, limit, wasExpanded);
+            displayLogs(fetchedLogGroups, profile, region, since, limit, oldestTimestamp);
 
-            result.logGroups = logGroups;
+            result.logGroups = fetchedLogGroups;
 
-            // If no logs found at max range, show helpful message
-            if (!hasLogs && currentSince === "7d") {
-                console.log(chalk.yellow("\n💡 No logs found in the last 7 days."));
+            // Show helpful message if no non-health logs found
+            if (totalEntries > 0 && nonHealthEntries === 0) {
+                console.log(chalk.yellow(`\n💡 No application logs found (only health checks).`));
+                console.log(chalk.dim(`   Searched ${totalEntries} log entries back to ${new Date(oldestTimestamp).toISOString()}`));
                 console.log(chalk.dim("   This could mean:"));
-                console.log(chalk.dim("   - The service hasn't received any requests"));
-                console.log(chalk.dim("   - Logging is not configured correctly"));
-                console.log(chalk.dim("   - No activity has occurred in this time period\n"));
-            }
-
-            // Reset expansion flag if we found logs
-            if (hasLogs) {
-                wasExpanded = false;
+                console.log(chalk.dim("   - The service hasn't received any webhook requests recently"));
+                console.log(chalk.dim("   - Only health checks have been running\n"));
             }
 
             // Check if we should exit (no timer)

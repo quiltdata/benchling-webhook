@@ -44,6 +44,7 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
         deployment: {
             region: parameters.deployment.region,
             account: parameters.deployment.account,
+            logGroups: stackQuery.logGroups, // Include discovered log groups
         },
         integratedStack: true, // CRITICAL: Mark as integrated mode
         logging: {
@@ -215,6 +216,15 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
 
     console.log(chalk.dim("✓ No separate webhook deployment needed"));
     console.log(chalk.dim("✓ Quilt stack will handle webhook events\n"));
+
+    // Show discovered log groups
+    if (stackQuery.logGroups && stackQuery.logGroups.length > 0) {
+        console.log(chalk.bold("Discovered Log Groups:"));
+        for (const logGroup of stackQuery.logGroups) {
+            console.log(chalk.cyan(`  • ${logGroup.displayName}: ${logGroup.name}`));
+        }
+        console.log("");
+    }
 
     console.log(chalk.bold("Next steps:"));
     console.log("  1. Monitor stack update:");

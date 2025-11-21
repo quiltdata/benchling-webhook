@@ -10,6 +10,8 @@
 import chalk from "chalk";
 import { inferQuiltConfig } from "../../bin/commands/infer-quilt-config";
 import { StackQueryResult } from "./types";
+import { discoverECSServices } from "../utils/ecs-service-discovery";
+import { LogGroupInfo } from "../types/config";
 
 /**
  * Phase 2 options
@@ -133,6 +135,44 @@ export async function runStackQuery(
 
         console.log("");
 
+        // Discover log groups from the Quilt stack's ECS services
+        let logGroups: LogGroupInfo[] = [];
+        try {
+            // Extract stack name from ARN (format: arn:aws:cloudformation:region:account:stack/name/id)
+            const stackNameMatch = stackArn.match(/stack\/([^/]+)\//);
+            const stackName = stackNameMatch ? stackNameMatch[1] : "";
+
+            if (stackName) {
+                console.log(chalk.dim("Discovering CloudWatch log groups..."));
+                const services = await discoverECSServices(stackName, region, awsProfile);
+
+                if (services.length > 0) {
+                    for (const svc of services) {
+                        if (svc.logGroup && svc.logStreamPrefix) {
+                            // Create a descriptive name using service + container
+                            const displayName = svc.containerName
+                                ? `${svc.serviceName}/${svc.containerName}`
+                                : svc.serviceName;
+
+                            logGroups.push({
+                                name: svc.logGroup,
+                                type: "ecs",
+                                displayName: `${displayName} (ECS)`,
+                                streamPrefix: svc.logStreamPrefix,
+                            });
+                            console.log(chalk.green(`✓ Log Stream: ${svc.logStreamPrefix} → ${svc.logGroup}`));
+                        }
+                    }
+                } else {
+                    console.log(chalk.dim("  No ECS services found in stack"));
+                }
+            }
+        } catch (error) {
+            console.log(chalk.dim(`  Could not discover log groups: ${(error as Error).message}`));
+        }
+
+        console.log("");
+
         return {
             stackArn,
             catalog: normalizedConfirmed,
@@ -150,6 +190,7 @@ export async function runStackQuery(
             athenaResultsBucketPolicy,
             readRoleArn,
             writeRoleArn,
+            logGroups: logGroups.length > 0 ? logGroups : undefined,
             stackQuerySucceeded: true,
         };
     } catch (error) {
