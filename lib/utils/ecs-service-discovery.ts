@@ -11,6 +11,7 @@ import type { fromIni } from "@aws-sdk/credential-providers";
 
 export interface ECSServiceInfo {
     serviceName: string;
+    containerName?: string;
     logGroup?: string;
     logStreamPrefix?: string;
 }
@@ -176,35 +177,50 @@ export async function discoverECSServices(
         const servicesResponse = await ecsClient.send(servicesCommand);
 
         // Get log groups from task definitions
+        // IMPORTANT: Return one entry per CONTAINER, not per service
+        // Multi-container services (like benchling with nginx + app) need separate entries
         const services: ECSServiceInfo[] = [];
 
         for (const svc of servicesResponse.services || []) {
-            let logGroup: string | undefined;
-            let logStreamPrefix: string | undefined;
-
             const taskDefArn = svc.deployments?.[0]?.taskDefinition;
-            if (taskDefArn) {
-                try {
-                    const taskDefCommand = new DescribeTaskDefinitionCommand({
-                        taskDefinition: taskDefArn,
-                    });
-                    const taskDefResponse = await ecsClient.send(taskDefCommand);
-
-                    const logConfig = taskDefResponse.taskDefinition?.containerDefinitions?.[0]?.logConfiguration;
-                    if (logConfig?.logDriver === "awslogs") {
-                        logGroup = logConfig.options?.["awslogs-group"];
-                        logStreamPrefix = logConfig.options?.["awslogs-stream-prefix"];
-                    }
-                } catch {
-                    // Skip log group if we can't get task definition
-                }
+            if (!taskDefArn) {
+                continue;
             }
 
-            services.push({
-                serviceName: svc.serviceName || "unknown",
-                logGroup,
-                logStreamPrefix,
-            });
+            try {
+                const taskDefCommand = new DescribeTaskDefinitionCommand({
+                    taskDefinition: taskDefArn,
+                });
+                const taskDefResponse = await ecsClient.send(taskDefCommand);
+
+                // Iterate through ALL containers in the task definition
+                const containers = taskDefResponse.taskDefinition?.containerDefinitions || [];
+                for (const container of containers) {
+                    const logConfig = container.logConfiguration;
+                    if (logConfig?.logDriver === "awslogs") {
+                        const logGroup = logConfig.options?.["awslogs-group"];
+                        const awslogsStreamPrefix = logConfig.options?.["awslogs-stream-prefix"];
+
+                        // ECS log streams follow the pattern: {awslogs-stream-prefix}/{container-name}/{task-id}
+                        // So we need to construct the full prefix including the container name
+                        const fullStreamPrefix = awslogsStreamPrefix && container.name
+                            ? `${awslogsStreamPrefix}/${container.name}`
+                            : awslogsStreamPrefix;
+
+                        if (logGroup && fullStreamPrefix) {
+                            services.push({
+                                serviceName: svc.serviceName || "unknown",
+                                containerName: container.name,
+                                logGroup,
+                                logStreamPrefix: fullStreamPrefix,
+                            });
+                        }
+                    }
+                }
+            } catch {
+                // Skip this service if we can't get task definition
+                continue;
+            }
         }
 
         return services;

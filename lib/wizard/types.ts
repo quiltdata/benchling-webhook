@@ -7,7 +7,7 @@
  * @module wizard/types
  */
 
-import { ProfileConfig } from "../types/config";
+import { ProfileConfig, LogGroupInfo } from "../types/config";
 import { XDGBase } from "../xdg-base";
 
 /**
@@ -60,6 +60,8 @@ export interface StackQueryResult {
     readRoleArn?: string;
     /** IAM role ARN for read-write S3 access (from T4BucketWriteRole) */
     writeRoleArn?: string;
+    /** Discovered CloudWatch log groups from the Quilt stack */
+    logGroups?: LogGroupInfo[];
 }
 
 /**
