@@ -28,6 +28,7 @@ function buildProfileConfig(input: StandaloneModeInput): ProfileConfig {
             database: stackQuery.database,
             queueUrl: stackQuery.queueUrl,
             region: stackQuery.region,
+            ...(stackQuery.stackVersion && { stackVersion: stackQuery.stackVersion }),
         },
         benchling: {
             tenant: parameters.benchling.tenant,

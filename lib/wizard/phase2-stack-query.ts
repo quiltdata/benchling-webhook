@@ -76,6 +76,7 @@ export async function runStackQuery(
         const queueUrl = inferenceResult.queueUrl || "";
         const region = inferenceResult.region || awsRegion || "us-east-1";
         const account = inferenceResult.account || "";
+        const stackVersion = inferenceResult.stackVersion;
         const benchlingSecretArn = inferenceResult.benchlingSecretArn;
         const benchlingIntegrationEnabled = inferenceResult.benchlingIntegrationEnabled;
         const athenaUserWorkgroup = inferenceResult.athenaUserWorkgroup;
@@ -92,6 +93,9 @@ export async function runStackQuery(
         console.log(chalk.dim(`✓ Stack ARN: ${stackArn}`));
         console.log(chalk.dim(`✓ Account: ${account}`));
         console.log(chalk.dim(`✓ Region: ${region}`));
+        if (stackVersion) {
+            console.log(chalk.dim(`✓ Stack Version: ${stackVersion}`));
+        }
         console.log(chalk.dim(`✓ Queue URL: ${queueUrl}`));
         console.log(chalk.dim(`✓ Database: ${database}`));
         console.log(chalk.dim(`✓ Workgroup: ${athenaUserWorkgroup}`));
@@ -180,6 +184,7 @@ export async function runStackQuery(
             queueUrl,
             region,
             account,
+            stackVersion,
             benchlingSecretArn,
             benchlingIntegrationEnabled,
             athenaUserWorkgroup,

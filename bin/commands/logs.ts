@@ -19,7 +19,7 @@ import { fromIni } from "@aws-sdk/credential-providers";
 import { XDGConfig } from "../../lib/xdg-config";
 import type { XDGBase } from "../../lib/xdg-base";
 import type { LogGroupInfo as ConfigLogGroupInfo } from "../../lib/types/config";
-import { parseTimeRange, formatTimeRange, formatLocalDateTime, formatLocalTime, getLocalTimezone } from "../../lib/utils/time-format";
+import { parseTimeRange, formatLocalDateTime, formatLocalTime, getLocalTimezone } from "../../lib/utils/time-format";
 import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers";
 
 export interface LogsCommandOptions {
@@ -101,16 +101,6 @@ function getLogGroupsFromConfig(
     }
     return null;
 }
-
-/**
- * Octuple (8x) the time range
- */
-function expandTimeRange(currentSince: string): string {
-    const currentMs = parseTimeRange(currentSince);
-    const octupledMs = currentMs * 8;
-    return formatTimeRange(octupledMs);
-}
-
 
 /**
  * Fetch logs from a single log group using pagination
@@ -657,7 +647,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
 
             // Show helpful message if no non-health logs found
             if (totalEntries > 0 && nonHealthEntries === 0) {
-                console.log(chalk.yellow(`\n💡 No application logs found (only health checks).`));
+                console.log(chalk.yellow("\n💡 No application logs found (only health checks)."));
                 console.log(chalk.dim(`   Searched ${totalEntries} log entries back to ${new Date(oldestTimestamp).toISOString()}`));
                 console.log(chalk.dim("   This could mean:"));
                 console.log(chalk.dim("   - The service hasn't received any webhook requests recently"));

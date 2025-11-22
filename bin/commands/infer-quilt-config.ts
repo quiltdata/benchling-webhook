@@ -37,6 +37,7 @@ interface QuiltStackInfo {
     database?: string;
     queueUrl?: string;
     catalogUrl?: string;
+    stackVersion?: string;
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
     athenaUserWorkgroup?: string;
@@ -59,6 +60,7 @@ interface InferenceResult {
     region?: string;
     account?: string;
     queueUrl?: string;
+    stackVersion?: string;
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
     athenaUserWorkgroup?: string;
@@ -354,7 +356,7 @@ export async function inferQuiltConfig(options: {
         try {
             console.log(`\nFetching catalog configuration from ${quilt3Config.catalogUrl}...`);
             const configUrl = quilt3Config.catalogUrl.replace(/\/$/, "") + "/config.json";
-            const catalogConfig = (await fetchJson(configUrl)) as { region?: string; stackName?: string; [key: string]: unknown };
+            const catalogConfig = (await fetchJson(configUrl)) as { region?: string; stackVersion?: string; stackName?: string; [key: string]: unknown };
 
             if (catalogConfig.region) {
                 searchRegion = catalogConfig.region;
@@ -367,6 +369,12 @@ export async function inferQuiltConfig(options: {
                     "Cannot determine which AWS region to search for the CloudFormation stack. " +
                     "This catalog may be using an older version of Quilt that doesn't support automatic region detection.",
                 );
+            }
+
+            // Capture stackVersion if available
+            if (catalogConfig.stackVersion) {
+                result.stackVersion = catalogConfig.stackVersion;
+                console.log(`✓ Found stack version: ${catalogConfig.stackVersion}`);
             }
         } catch (error) {
             const err = error as Error;
@@ -511,6 +519,9 @@ export async function inferQuiltConfig(options: {
     if (selectedStack.region) {
         result.region = selectedStack.region;
     }
+    if (selectedStack.stackVersion && !result.stackVersion) {
+        result.stackVersion = selectedStack.stackVersion;
+    }
     if (selectedStack.benchlingSecretArn) {
         result.benchlingSecretArn = selectedStack.benchlingSecretArn;
         console.log(`✓ Found BenchlingSecret from Quilt stack: ${selectedStack.benchlingSecretArn}`);
@@ -595,6 +606,7 @@ async function main(): Promise<void> {
     console.log("\n=== Inference Results ===");
     console.log(`Source: ${result.source}`);
     if (result.catalog) console.log(`Catalog URL: ${result.catalog}`);
+    if (result.stackVersion) console.log(`Stack Version: ${result.stackVersion}`);
     if (result.database) console.log(`Database: ${result.database}`);
     if (result.stackArn) console.log(`Stack ARN: ${result.stackArn}`);
     if (result.region) console.log(`Region: ${result.region}`);

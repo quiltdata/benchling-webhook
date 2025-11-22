@@ -38,6 +38,8 @@ export interface StackQueryResult {
     region: string;
     /** AWS account ID */
     account: string;
+    /** Quilt stack version from catalog config.json */
+    stackVersion?: string;
     /** BenchlingSecret ARN from stack outputs (if exists) */
     benchlingSecretArn?: string;
     /** Whether BenchlingIntegration parameter is enabled in the stack */
