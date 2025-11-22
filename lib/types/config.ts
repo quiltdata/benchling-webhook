@@ -161,6 +161,18 @@ export interface QuiltConfig {
     catalog: string;
 
     /**
+     * Quilt stack version (optional)
+     *
+     * Version string from the Quilt catalog's config.json.
+     * Used for informational purposes and diagnostics.
+     *
+     * **Informational only** - not passed to container runtime.
+     *
+     * @example "1.64.2-86-g1bd27a9c"
+     */
+    stackVersion?: string;
+
+    /**
      * Athena/Glue database name for catalog metadata
      *
      * Resolved from stack output `UserAthenaDatabaseName` at deployment time.
