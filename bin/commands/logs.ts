@@ -13,7 +13,9 @@ import ora from "ora";
 import {
     CloudWatchLogsClient,
     FilterLogEventsCommand,
+    DescribeLogStreamsCommand,
     type FilteredLogEvent,
+    type LogStream,
 } from "@aws-sdk/client-cloudwatch-logs";
 import { fromIni } from "@aws-sdk/credential-providers";
 import { XDGConfig } from "../../lib/xdg-config";
@@ -21,6 +23,17 @@ import type { XDGBase } from "../../lib/xdg-base";
 import type { LogGroupInfo as ConfigLogGroupInfo } from "../../lib/types/config";
 import { parseTimeRange, formatLocalDateTime, formatLocalTime, getLocalTimezone } from "../../lib/utils/time-format";
 import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers";
+
+/**
+ * Configuration constants for log fetching
+ */
+const LOGS_CONFIG = {
+    MAX_PAGES_PER_STREAM: 10,      // Max pagination rounds per stream
+    CLOUDWATCH_MAX_EVENTS: 1000,   // CloudWatch API limit per request
+    MAX_STREAMS_TO_DISCOVER: 100,  // Safety limit for stream discovery
+    MAX_TOTAL_EVENTS: 50000,       // Memory safety limit
+    EARLY_STOP_TIME_BUFFER: 60000, // 1 minute buffer for time range coverage
+} as const;
 
 export interface LogsCommandOptions {
     profile?: string;
@@ -103,8 +116,115 @@ function getLogGroupsFromConfig(
 }
 
 /**
- * Fetch logs from a single log group using pagination
- * Pages through logs from newest to oldest until finding enough non-health logs
+ * Discover all log streams matching a prefix, sorted by recency
+ */
+async function discoverLogStreams(
+    logsClient: CloudWatchLogsClient,
+    logGroupName: string,
+    logStreamNamePrefix: string | undefined,
+    _startTime: number,
+): Promise<LogStream[]> {
+    const streams: LogStream[] = [];
+    let nextToken: string | undefined;
+
+    try {
+        // Paginate through all matching streams
+        while (true) {
+            const command = new DescribeLogStreamsCommand({
+                logGroupName,
+                logStreamNamePrefix,
+                orderBy: "LastEventTime", // Newest first
+                descending: true,
+                nextToken,
+            });
+
+            const response = await logsClient.send(command);
+
+            if (response.logStreams) {
+                // Include all streams - CloudWatch's startTime filter will handle time range
+                // Don't filter by lastEventTime as it might exclude streams that ended before
+                // "now" but had events during the requested time window
+                streams.push(...response.logStreams);
+            }
+
+            nextToken = response.nextToken;
+            if (!nextToken) break;
+
+            // Safety limit: stop after discovering maximum streams
+            if (streams.length >= LOGS_CONFIG.MAX_STREAMS_TO_DISCOVER) {
+                console.warn(chalk.yellow(
+                    `Reached max stream limit (${LOGS_CONFIG.MAX_STREAMS_TO_DISCOVER}). ` +
+                    "Some older streams may not be searched.",
+                ));
+                break;
+            }
+        }
+    } catch (error) {
+        if ((error as Error).name === "ResourceNotFoundException") {
+            console.error(chalk.red(
+                `Log group not found: ${logGroupName}\n` +
+                "Please check your configuration.",
+            ));
+            return [];
+        }
+        // Re-throw unexpected errors
+        throw error;
+    }
+
+    return streams;
+}
+
+/**
+ * Fetch all logs from a single specific stream
+ */
+async function fetchLogsFromStream(
+    logsClient: CloudWatchLogsClient,
+    logGroupName: string,
+    logStreamName: string,
+    startTime: number,
+    filterPattern?: string,
+): Promise<FilteredLogEvent[]> {
+    const events: FilteredLogEvent[] = [];
+    let nextToken: string | undefined;
+    let pageCount = 0;
+
+    try {
+        while (pageCount < LOGS_CONFIG.MAX_PAGES_PER_STREAM) {
+            const command = new FilterLogEventsCommand({
+                logGroupName,
+                logStreamNames: [logStreamName], // Query specific stream
+                startTime,
+                filterPattern,
+                limit: LOGS_CONFIG.CLOUDWATCH_MAX_EVENTS, // CloudWatch max per request
+                nextToken,
+            });
+
+            const response = await logsClient.send(command);
+
+            if (response.events && response.events.length > 0) {
+                events.push(...response.events);
+            }
+
+            nextToken = response.nextToken;
+            pageCount++;
+
+            if (!nextToken) break;
+        }
+    } catch (error) {
+        // Log warning but don't fail entire operation for single stream
+        console.warn(chalk.yellow(
+            `Warning: Failed to fetch from stream ${logStreamName}: ${(error as Error).message}`,
+        ));
+        // Return whatever events we collected before the error
+    }
+
+    return events;
+}
+
+/**
+ * Fetch logs from a single log group using two-phase approach:
+ * Phase 1: Discover all streams matching prefix
+ * Phase 2: Query each stream until finding enough non-health logs
  */
 async function fetchLogsFromGroup(
     logGroupName: string,
@@ -116,7 +236,16 @@ async function fetchLogsFromGroup(
     logStreamNamePrefix?: string,
 ): Promise<FilteredLogEvent[]> {
     try {
-        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
+        const clientConfig: {
+            region: string;
+            credentials?: ReturnType<typeof fromIni>;
+            maxAttempts?: number;
+            retryMode?: string;
+        } = {
+            region,
+            maxAttempts: 3,           // Built-in retry for transient errors
+            retryMode: "adaptive",    // Adaptive retry mode handles rate limiting
+        };
         if (awsProfile) {
             clientConfig.credentials = fromIni({ profile: awsProfile });
         }
@@ -124,45 +253,87 @@ async function fetchLogsFromGroup(
 
         const startTime = Date.now() - parseTimeRange(since);
         const allEvents: FilteredLogEvent[] = [];
-        let nextToken: string | undefined;
-        let pageCount = 0;
-        const maxPages = 100; // Maximum pages to fetch
-        const pageSize = 1000; // CloudWatch max per request
 
-        // Page through logs until we have enough events or hit limits
-        while (pageCount < maxPages) {
-            const command = new FilterLogEventsCommand({
+        // Phase 1: Discover all streams matching prefix
+        const streams = await discoverLogStreams(
+            logsClient,
+            logGroupName,
+            logStreamNamePrefix,
+            startTime,
+        );
+
+        if (streams.length === 0) {
+            console.warn(chalk.yellow(
+                `No log streams found matching prefix: ${logStreamNamePrefix || "(all)"}\n` +
+                "This could mean:\n" +
+                "  - No tasks have run yet\n" +
+                "  - The streamPrefix in config is incorrect\n" +
+                "  - Tasks haven't logged anything yet",
+            ));
+            return [];
+        }
+
+        // Debug logging for observability
+        console.debug(chalk.dim(
+            `Found ${streams.length} log stream(s) matching prefix "${logStreamNamePrefix || "(all)"}"`,
+        ));
+
+        // Phase 2: Query each stream until we have enough logs AND covered time range
+        for (let i = 0; i < streams.length; i++) {
+            const stream = streams[i];
+
+            if (!stream.logStreamName) {
+                continue;
+            }
+
+            const streamEvents = await fetchLogsFromStream(
+                logsClient,
                 logGroupName,
+                stream.logStreamName,
                 startTime,
                 filterPattern,
-                limit: pageSize,
-                logStreamNamePrefix,
-                nextToken,
-            });
+            );
 
-            const response = await logsClient.send(command);
-            const events = response.events || [];
+            allEvents.push(...streamEvents);
 
-            if (events.length > 0) {
-                allEvents.push(...events);
-            }
+            // Debug logging for observability
+            const nonHealthCount = allEvents.filter(e =>
+                e.message && !isHealthCheck(e.message),
+            ).length;
 
-            pageCount++;
-            nextToken = response.nextToken;
+            console.debug(chalk.dim(
+                `Searched ${i + 1}/${streams.length} streams, ` +
+                `found ${nonHealthCount}/${limit} non-health logs, ` +
+                `${allEvents.length} total events`,
+            ));
 
-            // Stop if no more pages
-            if (!nextToken) {
+            // Memory safety: cap total events to prevent OOM
+            if (allEvents.length >= LOGS_CONFIG.MAX_TOTAL_EVENTS) {
+                console.warn(chalk.yellow(
+                    `Reached max event limit (${LOGS_CONFIG.MAX_TOTAL_EVENTS}). Stopping search.`,
+                ));
                 break;
             }
 
-            // Keep paging until we find non-health logs or hit max pages
-            // Don't stop early just because we have a lot of events -
-            // health checks can overwhelm the first pages
-            const nonHealthCount = allEvents.filter(e => e.message && !isHealthCheck(e.message)).length;
+            // Early stopping: have enough logs AND searched back to requested time
             if (nonHealthCount >= limit) {
-                break;
+                const oldestLogTime = Math.min(
+                    ...allEvents.map(e => e.timestamp || Date.now()),
+                );
+
+                // Stop if we've searched back to within buffer time of target
+                if (oldestLogTime <= startTime + LOGS_CONFIG.EARLY_STOP_TIME_BUFFER) {
+                    console.debug(chalk.dim(
+                        `Early stop: ${nonHealthCount} logs found, ` +
+                        `covered time range back to ${new Date(oldestLogTime).toISOString()}`,
+                    ));
+                    break;
+                }
             }
         }
+
+        // Sort all events by timestamp (newest first) after aggregation
+        allEvents.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
         return allEvents;
     } catch (error) {
