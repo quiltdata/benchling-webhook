@@ -30,7 +30,7 @@ import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers
 const LOGS_CONFIG = {
     MAX_PAGES_PER_STREAM: 10,      // Max pagination rounds per stream
     CLOUDWATCH_MAX_EVENTS: 1000,   // CloudWatch API limit per request
-    MAX_STREAMS_TO_DISCOVER: 100,  // Safety limit for stream discovery
+    MAX_STREAMS_TO_DISCOVER: 500,  // Safety limit for stream discovery (increased to handle services with many restarts)
     MAX_TOTAL_EVENTS: 50000,       // Memory safety limit
     EARLY_STOP_TIME_BUFFER: 60000, // 1 minute buffer for time range coverage
 } as const;
@@ -843,14 +843,20 @@ async function fetchAllLogs(
                 useCache,
             );
 
-            // Sort by timestamp descending (most recent first) and limit
+            // Sort by timestamp descending (most recent first)
             const sortedEntries = entries
-                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-                .slice(0, limit);
+                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-            const nonHealthCount = sortedEntries.filter(e =>
+            // Count non-health events BEFORE slicing
+            const allNonHealthEvents = sortedEntries.filter(e =>
                 e.message && !isHealthCheck(e.message),
-            ).length;
+            );
+
+            const nonHealthCount = allNonHealthEvents.length;
+
+            // Keep enough entries to ensure we show non-health logs even if most recent are health checks
+            // Since health checks can dominate (every 10 seconds), we need a generous buffer
+            const limitedEntries = sortedEntries.slice(0, Math.max(limit * 50, 500));
 
             spinner.succeed(chalk.green(
                 `${logGroupInfo.displayName} - ${nonHealthCount} logs retrieved`,
@@ -859,7 +865,7 @@ async function fetchAllLogs(
             return {
                 name: logGroupInfo.name,
                 displayName: logGroupInfo.displayName,
-                entries: sortedEntries,
+                entries: limitedEntries,
             };
         } catch (error) {
             spinner.fail(chalk.red(
