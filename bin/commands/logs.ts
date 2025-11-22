@@ -9,7 +9,7 @@
  */
 
 import chalk from "chalk";
-import ora from "ora";
+import ora, { type Ora } from "ora";
 import {
     CloudWatchLogsClient,
     FilterLogEventsCommand,
@@ -34,6 +34,20 @@ const LOGS_CONFIG = {
     MAX_TOTAL_EVENTS: 50000,       // Memory safety limit
     EARLY_STOP_TIME_BUFFER: 60000, // 1 minute buffer for time range coverage
 } as const;
+
+/**
+ * Cache for tracking last seen timestamps per log group
+ */
+interface LogGroupCache {
+    lastSeenTimestamp: number;
+    lastFetchTime: number;
+    oldestRetrieved: number;
+}
+
+/**
+ * Global cache map (session-scoped)
+ */
+const LOG_CACHE = new Map<string, LogGroupCache>();
 
 export interface LogsCommandOptions {
     profile?: string;
@@ -86,6 +100,86 @@ export interface HealthCheckSummary {
 }
 
 /**
+ * Get cache key for a log group
+ */
+function getCacheKey(logGroupName: string, streamPrefix?: string): string {
+    return streamPrefix ? `${logGroupName}:${streamPrefix}` : logGroupName;
+}
+
+/**
+ * Get start time considering cache
+ */
+function getStartTime(
+    logGroupName: string,
+    since: string,
+    streamPrefix?: string,
+    useCache = true,
+): number {
+    if (!useCache) {
+        return Date.now() - parseTimeRange(since);
+    }
+
+    const cacheKey = getCacheKey(logGroupName, streamPrefix);
+    const cached = LOG_CACHE.get(cacheKey);
+
+    if (cached) {
+        // For incremental fetch: start from last seen timestamp
+        return cached.lastSeenTimestamp;
+    }
+
+    // Initial fetch: use full time range
+    return Date.now() - parseTimeRange(since);
+}
+
+/**
+ * Update cache after fetching logs
+ */
+function updateCache(
+    logGroupName: string,
+    events: FilteredLogEvent[],
+    streamPrefix?: string,
+): void {
+    if (events.length === 0) return;
+
+    const cacheKey = getCacheKey(logGroupName, streamPrefix);
+    const timestamps = events.map(e => e.timestamp || 0).filter(t => t > 0);
+
+    if (timestamps.length === 0) return;
+
+    const newestTimestamp = Math.max(...timestamps);
+    const oldestTimestamp = Math.min(...timestamps);
+
+    const existing = LOG_CACHE.get(cacheKey);
+
+    LOG_CACHE.set(cacheKey, {
+        lastSeenTimestamp: newestTimestamp,
+        lastFetchTime: Date.now(),
+        oldestRetrieved: existing ? Math.min(existing.oldestRetrieved, oldestTimestamp) : oldestTimestamp,
+    });
+}
+
+/**
+ * Get cache statistics for display
+ */
+function getCacheStats(
+    logGroupName: string,
+    streamPrefix?: string,
+): { isCached: boolean; lastFetchTime?: number; oldestRetrieved?: number } {
+    const cacheKey = getCacheKey(logGroupName, streamPrefix);
+    const cached = LOG_CACHE.get(cacheKey);
+
+    if (!cached) {
+        return { isCached: false };
+    }
+
+    return {
+        isCached: true,
+        lastFetchTime: cached.lastFetchTime,
+        oldestRetrieved: cached.oldestRetrieved,
+    };
+}
+
+/**
  * Get log groups from profile configuration
  */
 function getLogGroupsFromConfig(
@@ -123,6 +217,7 @@ async function discoverLogStreams(
     logGroupName: string,
     logStreamNamePrefix: string | undefined,
     _startTime: number,
+    spinner?: Ora,
 ): Promise<LogStream[]> {
     const streams: LogStream[] = [];
     let nextToken: string | undefined;
@@ -145,6 +240,11 @@ async function discoverLogStreams(
                 // Don't filter by lastEventTime as it might exclude streams that ended before
                 // "now" but had events during the requested time window
                 streams.push(...response.logStreams);
+
+                // Update spinner with progress
+                if (spinner) {
+                    spinner.text = `Discovering streams... found ${streams.length}`;
+                }
             }
 
             nextToken = response.nextToken;
@@ -152,22 +252,27 @@ async function discoverLogStreams(
 
             // Safety limit: stop after discovering maximum streams
             if (streams.length >= LOGS_CONFIG.MAX_STREAMS_TO_DISCOVER) {
-                console.warn(chalk.yellow(
-                    `Reached max stream limit (${LOGS_CONFIG.MAX_STREAMS_TO_DISCOVER}). ` +
-                    "Some older streams may not be searched.",
-                ));
+                if (spinner) {
+                    spinner.warn(chalk.yellow(
+                        `Reached max stream limit (${LOGS_CONFIG.MAX_STREAMS_TO_DISCOVER}). ` +
+                        "Some older streams may not be searched.",
+                    ));
+                }
                 break;
             }
         }
 
         // Sort streams by lastEventTimestamp (newest first) since we couldn't use orderBy with prefix
         streams.sort((a, b) => (b.lastEventTimestamp || 0) - (a.lastEventTimestamp || 0));
+
+        if (spinner) {
+            spinner.text = `Found ${streams.length} stream${streams.length !== 1 ? "s" : ""}`;
+        }
     } catch (error) {
         if ((error as Error).name === "ResourceNotFoundException") {
-            console.error(chalk.red(
-                `Log group not found: ${logGroupName}\n` +
-                "Please check your configuration.",
-            ));
+            if (spinner) {
+                spinner.fail(chalk.red(`Log group not found: ${logGroupName}`));
+            }
             return [];
         }
         // Re-throw unexpected errors
@@ -237,6 +342,8 @@ async function fetchLogsFromGroup(
     filterPattern?: string,
     awsProfile?: string,
     logStreamNamePrefix?: string,
+    spinner?: Ora,
+    useCache = true,
 ): Promise<FilteredLogEvent[]> {
     try {
         const clientConfig: {
@@ -254,32 +361,42 @@ async function fetchLogsFromGroup(
         }
         const logsClient = new CloudWatchLogsClient(clientConfig);
 
-        const startTime = Date.now() - parseTimeRange(since);
+        // Get start time considering cache
+        const cacheStats = getCacheStats(logGroupName, logStreamNamePrefix);
+        const startTime = getStartTime(logGroupName, since, logStreamNamePrefix, useCache);
+        const isIncrementalFetch = cacheStats.isCached && useCache;
+
+        if (spinner) {
+            const fetchType = isIncrementalFetch ? "incremental" : "initial";
+            const timeAgo = isIncrementalFetch
+                ? formatTimeAgo(cacheStats.lastFetchTime || Date.now())
+                : `last ${since}`;
+            spinner.text = `${logGroupName} - ${fetchType} fetch (${timeAgo})`;
+        }
+
         const allEvents: FilteredLogEvent[] = [];
 
         // Phase 1: Discover all streams matching prefix
+        if (spinner) {
+            spinner.text = `${logGroupName} - discovering streams...`;
+        }
+
         const streams = await discoverLogStreams(
             logsClient,
             logGroupName,
             logStreamNamePrefix,
             startTime,
+            spinner,
         );
 
         if (streams.length === 0) {
-            console.warn(chalk.yellow(
-                `No log streams found matching prefix: ${logStreamNamePrefix || "(all)"}\n` +
-                "This could mean:\n" +
-                "  - No tasks have run yet\n" +
-                "  - The streamPrefix in config is incorrect\n" +
-                "  - Tasks haven't logged anything yet",
-            ));
+            if (spinner) {
+                spinner.warn(chalk.yellow(
+                    `${logGroupName} - No log streams found matching prefix: ${logStreamNamePrefix || "(all)"}`,
+                ));
+            }
             return [];
         }
-
-        // Debug logging for observability
-        console.debug(chalk.dim(
-            `Found ${streams.length} log stream(s) matching prefix "${logStreamNamePrefix || "(all)"}"`,
-        ));
 
         // Phase 2: Query each stream until we have enough logs AND covered time range
         for (let i = 0; i < streams.length; i++) {
@@ -287,6 +404,17 @@ async function fetchLogsFromGroup(
 
             if (!stream.logStreamName) {
                 continue;
+            }
+
+            const nonHealthCount = allEvents.filter(e =>
+                e.message && !isHealthCheck(e.message),
+            ).length;
+
+            if (spinner) {
+                const oldestSoFar = allEvents.length > 0
+                    ? Math.min(...allEvents.map(e => e.timestamp || Date.now()))
+                    : Date.now();
+                spinner.text = `${logGroupName} - stream ${i + 1}/${streams.length} | ${nonHealthCount}/${limit} logs | oldest: ${formatLocalTime(oldestSoFar)}`;
             }
 
             const streamEvents = await fetchLogsFromStream(
@@ -299,37 +427,31 @@ async function fetchLogsFromGroup(
 
             allEvents.push(...streamEvents);
 
-            // Debug logging for observability
-            const nonHealthCount = allEvents.filter(e =>
-                e.message && !isHealthCheck(e.message),
-            ).length;
-
-            console.debug(chalk.dim(
-                `Searched ${i + 1}/${streams.length} streams, ` +
-                `found ${nonHealthCount}/${limit} non-health logs, ` +
-                `${allEvents.length} total events`,
-            ));
-
             // Memory safety: cap total events to prevent OOM
             if (allEvents.length >= LOGS_CONFIG.MAX_TOTAL_EVENTS) {
-                console.warn(chalk.yellow(
-                    `Reached max event limit (${LOGS_CONFIG.MAX_TOTAL_EVENTS}). Stopping search.`,
-                ));
+                if (spinner) {
+                    spinner.warn(chalk.yellow(
+                        `${logGroupName} - Reached max event limit (${LOGS_CONFIG.MAX_TOTAL_EVENTS})`,
+                    ));
+                }
                 break;
             }
 
             // Early stopping: have enough logs AND searched back to requested time
-            if (nonHealthCount >= limit) {
+            const updatedNonHealthCount = allEvents.filter(e =>
+                e.message && !isHealthCheck(e.message),
+            ).length;
+
+            if (updatedNonHealthCount >= limit) {
                 const oldestLogTime = Math.min(
                     ...allEvents.map(e => e.timestamp || Date.now()),
                 );
 
                 // Stop if we've searched back to within buffer time of target
                 if (oldestLogTime <= startTime + LOGS_CONFIG.EARLY_STOP_TIME_BUFFER) {
-                    console.debug(chalk.dim(
-                        `Early stop: ${nonHealthCount} logs found, ` +
-                        `covered time range back to ${new Date(oldestLogTime).toISOString()}`,
-                    ));
+                    if (spinner) {
+                        spinner.text = `${logGroupName} - found ${updatedNonHealthCount} logs (early stop)`;
+                    }
                     break;
                 }
             }
@@ -338,9 +460,26 @@ async function fetchLogsFromGroup(
         // Sort all events by timestamp (newest first) after aggregation
         allEvents.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
+        // Update cache with new events
+        if (useCache && allEvents.length > 0) {
+            updateCache(logGroupName, allEvents, logStreamNamePrefix);
+        }
+
+        if (spinner) {
+            const nonHealthCount = allEvents.filter(e =>
+                e.message && !isHealthCheck(e.message),
+            ).length;
+            const oldestTimestamp = allEvents.length > 0
+                ? Math.min(...allEvents.map(e => e.timestamp || Date.now()))
+                : Date.now();
+            spinner.text = `${logGroupName} - ✓ ${nonHealthCount} logs (back to ${formatLocalTime(oldestTimestamp)})`;
+        }
+
         return allEvents;
     } catch (error) {
-        console.warn(chalk.dim(`Could not fetch logs from ${logGroupName}: ${(error as Error).message}`));
+        if (spinner) {
+            spinner.fail(chalk.red(`${logGroupName} - ${(error as Error).message}`));
+        }
         return [];
     }
 }
@@ -537,6 +676,7 @@ function displayLogs(
     since: string,
     limit: number,
     oldestTimestamp: number,
+    logGroupsConfig: ConfigLogGroupInfo[],
 ): void {
     const timeStr = formatLocalDateTime(new Date());
     const timezone = getLocalTimezone();
@@ -546,6 +686,18 @@ function displayLogs(
     console.log(`${chalk.bold("Region:")} ${chalk.cyan(region)}  ${chalk.bold("Initial Time Range:")} ${chalk.cyan(`Last ${since}`)}`);
     console.log(`${chalk.bold("Searched back to:")} ${chalk.cyan(formatLocalDateTime(new Date(oldestTimestamp)))}`);
     console.log(`${chalk.bold("Showing:")} ${chalk.cyan(`Last ~${limit} entries per log group`)}`);
+
+    // Show cache statistics
+    const cachedGroups = logGroupsConfig.filter(lg =>
+        getCacheStats(lg.name, lg.streamPrefix).isCached,
+    );
+    if (cachedGroups.length > 0) {
+        const oldestCached = Math.min(
+            ...cachedGroups.map(lg => getCacheStats(lg.name, lg.streamPrefix).oldestRetrieved || Date.now()),
+        );
+        console.log(`${chalk.bold("Cache:")} ${chalk.cyan(`${cachedGroups.length} group${cachedGroups.length !== 1 ? "s" : ""} cached`)} ${chalk.dim(`(oldest: ${formatLocalDateTime(new Date(oldestCached))})`)}`);
+    }
+
     console.log(chalk.dim("─".repeat(80)));
     console.log("");
 
@@ -641,7 +793,7 @@ function displayLogs(
 
 
 /**
- * Fetch logs from all relevant log groups (unified implementation)
+ * Fetch logs from all relevant log groups (parallel implementation with spinners)
  */
 async function fetchAllLogs(
     logGroupsFromConfig: ConfigLogGroupInfo[],
@@ -651,37 +803,80 @@ async function fetchAllLogs(
     type: string,
     filterPattern?: string,
     awsProfile?: string,
+    useCache = true,
 ): Promise<LogGroupInfo[]> {
-    const result: LogGroupInfo[] = [];
-
     // Filter log groups by type if specified
     const filteredLogGroups = type === "all"
         ? logGroupsFromConfig
         : logGroupsFromConfig.filter((lg) => lg.type === type);
 
-    // Fetch logs from each group
-    for (const logGroupInfo of filteredLogGroups) {
-        const entries = await fetchLogsFromGroup(
-            logGroupInfo.name,
-            region,
-            since,
-            limit,
-            filterPattern,
-            awsProfile,
-            logGroupInfo.streamPrefix, // Filter by container's stream prefix
-        );
+    // Show summary before starting
+    const cacheStatus = filteredLogGroups.map(lg => ({
+        name: lg.displayName,
+        cached: getCacheStats(lg.name, lg.streamPrefix).isCached,
+    }));
 
-        // Sort by timestamp descending (most recent first) and limit
-        const sortedEntries = entries
-            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-            .slice(0, limit);
+    const cachedCount = cacheStatus.filter(s => s.cached).length;
+    const fetchMode = useCache && cachedCount > 0
+        ? `${cachedCount}/${filteredLogGroups.length} cached`
+        : "initial fetch";
 
-        result.push({
-            name: logGroupInfo.name,
-            displayName: logGroupInfo.displayName,
-            entries: sortedEntries,
-        });
-    }
+    console.log(chalk.dim(`\nFetching logs from ${filteredLogGroups.length} log group${filteredLogGroups.length !== 1 ? "s" : ""} (${fetchMode})...\n`));
+
+    // Create a spinner for each log group and fetch in parallel
+    const fetchPromises = filteredLogGroups.map(async (logGroupInfo) => {
+        const spinner = ora({
+            text: `${logGroupInfo.displayName} - starting...`,
+            color: "cyan",
+        }).start();
+
+        try {
+            const entries = await fetchLogsFromGroup(
+                logGroupInfo.name,
+                region,
+                since,
+                limit,
+                filterPattern,
+                awsProfile,
+                logGroupInfo.streamPrefix,
+                spinner,
+                useCache,
+            );
+
+            // Sort by timestamp descending (most recent first) and limit
+            const sortedEntries = entries
+                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                .slice(0, limit);
+
+            const nonHealthCount = sortedEntries.filter(e =>
+                e.message && !isHealthCheck(e.message),
+            ).length;
+
+            spinner.succeed(chalk.green(
+                `${logGroupInfo.displayName} - ${nonHealthCount} logs retrieved`,
+            ));
+
+            return {
+                name: logGroupInfo.name,
+                displayName: logGroupInfo.displayName,
+                entries: sortedEntries,
+            };
+        } catch (error) {
+            spinner.fail(chalk.red(
+                `${logGroupInfo.displayName} - ${(error as Error).message}`,
+            ));
+            return {
+                name: logGroupInfo.name,
+                displayName: logGroupInfo.displayName,
+                entries: [],
+            };
+        }
+    });
+
+    // Wait for all log groups to finish fetching in parallel
+    const result = await Promise.all(fetchPromises);
+
+    console.log(""); // Add blank line after spinners
 
     return result;
 }
@@ -815,7 +1010,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
                 : Date.now() - parseTimeRange(since);
 
             // Display logs
-            displayLogs(fetchedLogGroups, profile, region, since, limit, oldestTimestamp);
+            displayLogs(fetchedLogGroups, profile, region, since, limit, oldestTimestamp, logGroups);
 
             result.logGroups = fetchedLogGroups;
 
