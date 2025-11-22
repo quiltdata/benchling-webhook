@@ -1011,11 +1011,25 @@ allEvents.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
 ---
 
-**Document Status**: ✅ Implemented
+**Document Status**: ✅ Implemented + Bug Fix
 **Last Updated**: 2025-11-21
-**Implementation Commit**: ba4df3c
+**Implementation Commits**:
+
+- ba4df3c (initial implementation)
+- c47a6ff (fix AWS API constraint: orderBy incompatible with logStreamNamePrefix)
+
 **Author**: Claude (Sonnet 4.5)
 **Reviewed By**: Solution Architect (Claude)
 **Related Issue**: Follow-up to Spec 18 (Logs Command)
 **Dependencies**: Spec 18 (Logs Command)
 **Version**: 2.0 (Post-Architecture Review)
+
+## Post-Implementation Note
+
+During real-world testing, discovered an AWS CloudWatch Logs API constraint not documented in the spec:
+
+- **Issue**: `DescribeLogStreamsCommand` cannot use both `orderBy: "LastEventTime"` and `logStreamNamePrefix` parameters together
+- **Error**: `"Cannot order by LastEventTime with a logStreamNamePrefix"`
+- **Fix**: Removed `orderBy` and `descending` parameters, implemented client-side sorting by `lastEventTimestamp` after fetching all streams
+- **Impact**: Same behavior (newest streams first), but compliant with AWS API constraints
+- **Commit**: c47a6ff
