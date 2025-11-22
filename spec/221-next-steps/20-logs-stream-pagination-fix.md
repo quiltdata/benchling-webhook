@@ -1011,8 +1011,9 @@ allEvents.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
 ---
 
-**Document Status**: ✅ Ready for Implementation (Post-Review)
+**Document Status**: ✅ Implemented
 **Last Updated**: 2025-11-21
+**Implementation Commit**: ba4df3c
 **Author**: Claude (Sonnet 4.5)
 **Reviewed By**: Solution Architect (Claude)
 **Related Issue**: Follow-up to Spec 18 (Logs Command)
