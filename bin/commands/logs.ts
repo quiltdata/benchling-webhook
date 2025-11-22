@@ -130,11 +130,11 @@ async function discoverLogStreams(
     try {
         // Paginate through all matching streams
         while (true) {
+            // Note: AWS doesn't allow orderBy when using logStreamNamePrefix
+            // We'll sort results after fetching all streams
             const command = new DescribeLogStreamsCommand({
                 logGroupName,
                 logStreamNamePrefix,
-                orderBy: "LastEventTime", // Newest first
-                descending: true,
                 nextToken,
             });
 
@@ -159,6 +159,9 @@ async function discoverLogStreams(
                 break;
             }
         }
+
+        // Sort streams by lastEventTimestamp (newest first) since we couldn't use orderBy with prefix
+        streams.sort((a, b) => (b.lastEventTimestamp || 0) - (a.lastEventTimestamp || 0));
     } catch (error) {
         if ((error as Error).name === "ResourceNotFoundException") {
             console.error(chalk.red(
