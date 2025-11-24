@@ -74,6 +74,7 @@ export interface LogsCommandOptions {
     timer?: string | number;
     limit?: number;
     dashboard?: boolean;
+    allContainers?: boolean;
 }
 
 export interface LogsResult {
@@ -421,10 +422,12 @@ async function fetchLogsFromGroup(
             credentials?: ReturnType<typeof fromIni>;
             maxAttempts?: number;
             retryMode?: string;
+            requestTimeout?: number;
         } = {
             region,
-            maxAttempts: 3,           // Built-in retry for transient errors
+            maxAttempts: 5,           // Increased from 3 to handle CloudWatch throttling gracefully
             retryMode: "adaptive",    // Adaptive retry mode handles rate limiting
+            requestTimeout: 60000,    // Increased from 30s to 60s to allow throttled requests to complete
         };
         if (awsProfile) {
             clientConfig.credentials = fromIni({ profile: awsProfile });
@@ -1090,6 +1093,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
         limit = 50,
         configStorage,
         dashboard = true, // Default to dashboard mode
+        allContainers = false,
     } = options;
 
     // Validate log type
@@ -1128,7 +1132,29 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
             return { success: false, error: errorMsg };
         }
 
-        const { region, logGroups } = configInfo;
+        let { region, logGroups } = configInfo;
+
+        // Filter out non-Benchling containers unless --all-containers is specified
+        // This prevents noise from services like bucket_scanner, registry, etc.
+        if (!allContainers) {
+            const beforeCount = logGroups.length;
+            const BENCHLING_PATTERNS = ["benchling/", "benchling-nginx/", "Benchling Webhook"];
+
+            logGroups = logGroups.filter((lg) => {
+                // Check if streamPrefix or displayName matches Benchling patterns
+                const matchesPrefix = lg.streamPrefix && BENCHLING_PATTERNS.some((p) => lg.streamPrefix?.startsWith(p));
+                const matchesName = lg.displayName && BENCHLING_PATTERNS.some((p) => lg.displayName?.includes(p));
+                // Also include API Gateway logs
+                const isApiGateway = lg.type && (lg.type === "api" || lg.type === "api-exec");
+
+                return matchesPrefix || matchesName || isApiGateway;
+            });
+
+            const filtered = beforeCount - logGroups.length;
+            if (filtered > 0) {
+                console.log(chalk.dim(`  Filtered ${filtered} non-Benchling container(s). Use --all-containers to see all.`));
+            }
+        }
 
         // Check if terminal supports dashboard mode (TTY + not CI)
         const supportsDashboard = process.stdout.isTTY && !process.env.CI;

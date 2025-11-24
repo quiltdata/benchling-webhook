@@ -16,6 +16,16 @@ export interface ECSServiceInfo {
     logStreamPrefix?: string;
 }
 
+export interface ECSServiceDiscoveryOptions {
+    /**
+     * Optional patterns to filter containers by their log stream prefix.
+     * Only containers whose logStreamPrefix starts with one of these patterns will be included.
+     * If not specified, all containers are included.
+     * Example: ['benchling/', 'benchling-nginx/']
+     */
+    containerFilterPatterns?: string[];
+}
+
 /**
  * Discover all ECS services in a CloudFormation stack and their log groups
  *
@@ -119,12 +129,14 @@ export async function discoverECSServiceLogGroups(
  * @param stackName - CloudFormation stack name
  * @param region - AWS region
  * @param awsProfile - Optional AWS profile name
+ * @param options - Optional discovery options (e.g., container filtering)
  * @returns Array of ECS service information
  */
 export async function discoverECSServices(
     stackName: string,
     region: string,
     awsProfile?: string,
+    options?: ECSServiceDiscoveryOptions,
 ): Promise<ECSServiceInfo[]> {
     try {
         const { CloudFormationClient, DescribeStackResourcesCommand } = await import("@aws-sdk/client-cloudformation");
@@ -208,6 +220,16 @@ export async function discoverECSServices(
                             : awslogsStreamPrefix;
 
                         if (logGroup && fullStreamPrefix) {
+                            // Apply container filter if specified
+                            if (options?.containerFilterPatterns && options.containerFilterPatterns.length > 0) {
+                                const matchesFilter = options.containerFilterPatterns.some(
+                                    (pattern) => fullStreamPrefix.startsWith(pattern),
+                                );
+                                if (!matchesFilter) {
+                                    continue; // Skip this container
+                                }
+                            }
+
                             services.push({
                                 serviceName: svc.serviceName || "unknown",
                                 containerName: container.name,

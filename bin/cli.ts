@@ -190,6 +190,7 @@ program
     .option("--limit <n>", "Number of log entries to show per log group (default: 20)", "20")
     .option("--timer <seconds>", "Auto-refresh interval in seconds (default: 10, use 0 to disable)", "10")
     .option("--no-dashboard", "Disable interactive dashboard UI (use text mode)")
+    .option("--all-containers", "Show all containers (including bucket_scanner, registry, etc.)")
     .addHelpText(
         "after",
         `

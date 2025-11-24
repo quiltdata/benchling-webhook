@@ -155,15 +155,32 @@ export async function runStackQuery(
 
             if (stackName) {
                 console.log(chalk.dim("Discovering CloudWatch log groups..."));
-                const services = await discoverECSServices(stackName, region, awsProfile);
+
+                // For integrated architecture stacks, filter to Benchling-related containers only
+                // This prevents noise from unrelated services like bucket_scanner, registry, etc.
+                const filterPatterns = benchlingIntegrationEnabled
+                    ? ["benchling/", "benchling-nginx/"]
+                    : undefined;
+
+                const services = await discoverECSServices(stackName, region, awsProfile, {
+                    containerFilterPatterns: filterPatterns,
+                });
 
                 if (services.length > 0) {
                     for (const svc of services) {
                         if (svc.logGroup && svc.logStreamPrefix) {
-                            // Create a descriptive name using service + container
-                            const displayName = svc.containerName
-                                ? `${svc.serviceName}/${svc.containerName}`
-                                : svc.serviceName;
+                            // Create better display names for known Benchling containers
+                            let displayName: string;
+                            if (svc.logStreamPrefix?.startsWith("benchling/benchling")) {
+                                displayName = "Benchling Webhook (Application)";
+                            } else if (svc.logStreamPrefix?.startsWith("benchling-nginx/nginx")) {
+                                displayName = "Benchling Webhook (Proxy)";
+                            } else {
+                                // Fallback for other containers
+                                displayName = svc.containerName
+                                    ? `${svc.serviceName}/${svc.containerName}`
+                                    : svc.serviceName;
+                            }
 
                             logGroups.push({
                                 name: svc.logGroup,
@@ -173,6 +190,10 @@ export async function runStackQuery(
                             });
                             console.log(chalk.green(`✓ Log Stream: ${svc.logStreamPrefix} → ${svc.logGroup}`));
                         }
+                    }
+
+                    if (filterPatterns) {
+                        console.log(chalk.dim("  (Filtered to Benchling containers only. Use --all-containers to see all)"));
                     }
                 } else {
                     console.log(chalk.dim("  No ECS services found in stack"));

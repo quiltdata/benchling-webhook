@@ -270,6 +270,53 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     console.error(chalk.red("[ERROR] Stack:"), (error as Error).stack);
                 }
 
+                // Attempt to detect API Gateway log groups if not exported
+                // This is a fallback for integrated stacks that don't export log groups
+                if (stackInfo.benchlingApiId && !stackInfo.apiGatewayLogGroup) {
+                    // Try to detect if API Gateway execution logs exist
+                    // Standard format: API-Gateway-Execution-Logs_{restApiId}/{stage}
+                    // We'll try common stage names: prod, dev, staging
+                    const possibleLogGroups = [
+                        `API-Gateway-Execution-Logs_${stackInfo.benchlingApiId}/prod`,
+                        `API-Gateway-Execution-Logs_${stackInfo.benchlingApiId}/dev`,
+                        `API-Gateway-Execution-Logs_${stackInfo.benchlingApiId}/staging`,
+                    ];
+
+                    // Try to check if any of these log groups exist
+                    try {
+                        const { CloudWatchLogsClient, DescribeLogGroupsCommand } = await import("@aws-sdk/client-cloudwatch-logs");
+                        const logsClientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region };
+                        if (profile) {
+                            logsClientConfig.credentials = fromIni({ profile });
+                        }
+                        const logsClient = new CloudWatchLogsClient(logsClientConfig);
+
+                        for (const logGroupName of possibleLogGroups) {
+                            try {
+                                const command = new DescribeLogGroupsCommand({
+                                    logGroupNamePrefix: logGroupName,
+                                    limit: 1,
+                                });
+                                const response = await logsClient.send(command);
+                                if (response.logGroups && response.logGroups.length > 0) {
+                                    stackInfo.apiGatewayLogGroup = logGroupName;
+                                    console.log(chalk.dim(`  Detected API Gateway Log Group: ${logGroupName}`));
+                                    break;
+                                }
+                            } catch {
+                                // Log group doesn't exist, try next one
+                                continue;
+                            }
+                        }
+
+                        if (!stackInfo.apiGatewayLogGroup) {
+                            console.log(chalk.dim("  API Gateway execution logs not found (may not be enabled)"));
+                        }
+                    } catch (error) {
+                        console.log(chalk.dim(`  Could not check API Gateway log groups: ${(error as Error).message}`));
+                    }
+                }
+
                 stackInfos.push(stackInfo);
 
                 // If we're looking for a specific catalog and found it, stop searching
