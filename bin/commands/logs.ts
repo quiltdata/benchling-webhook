@@ -1089,7 +1089,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
         timer,
         limit = 50,
         configStorage,
-        dashboard = false,
+        dashboard = true, // Default to dashboard mode
     } = options;
 
     // Validate log type
