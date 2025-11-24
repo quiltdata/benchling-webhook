@@ -48,6 +48,13 @@ interface QuiltStackInfo {
     athenaResultsBucketPolicy?: string;
     readRoleArn?: string;
     writeRoleArn?: string;
+    // New integrated architecture fields (PR #2199)
+    benchlingUrl?: string;
+    benchlingApiId?: string;
+    benchlingDockerImage?: string;
+    benchlingWriteRoleArn?: string;
+    ecsLogGroup?: string;
+    apiGatewayLogGroup?: string;
 }
 
 /**
@@ -71,6 +78,13 @@ interface InferenceResult {
     athenaResultsBucketPolicy?: string;
     readRoleArn?: string;
     writeRoleArn?: string;
+    // New integrated architecture fields (PR #2199)
+    benchlingUrl?: string;
+    benchlingApiId?: string;
+    benchlingDockerImage?: string;
+    benchlingWriteRoleArn?: string;
+    ecsLogGroup?: string;
+    apiGatewayLogGroup?: string;
     source: string;
 }
 
@@ -191,6 +205,24 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     } else if (key === "IcebergDatabase") {
                         // Extract IcebergDatabase from outputs (fallback)
                         stackInfo.icebergDatabase = value;
+                    } else if (key === "BenchlingUrl") {
+                        // New integrated architecture: API Gateway endpoint URL
+                        stackInfo.benchlingUrl = value;
+                    } else if (key === "BenchlingApiId") {
+                        // New integrated architecture: API Gateway ID
+                        stackInfo.benchlingApiId = value;
+                    } else if (key === "BenchlingDockerImage") {
+                        // New integrated architecture: Container image URI
+                        stackInfo.benchlingDockerImage = value;
+                    } else if (key === "BenchlingWriteRoleArn") {
+                        // New integrated architecture: IAM role for webhook operations
+                        stackInfo.benchlingWriteRoleArn = value;
+                    } else if (key === "EcsLogGroup") {
+                        // New integrated architecture: ECS container log group
+                        stackInfo.ecsLogGroup = value;
+                    } else if (key === "ApiGatewayLogGroup") {
+                        // New integrated architecture: API Gateway log group
+                        stackInfo.apiGatewayLogGroup = value;
                     }
                 }
 
@@ -566,6 +598,32 @@ export async function inferQuiltConfig(options: {
         console.log("  (Write role will be used for all S3 operations)");
     } else {
         console.log(chalk.yellow("⚠ T4BucketWriteRole: NOT FOUND (optional - will use task role for S3 access)"));
+    }
+
+    // New integrated architecture fields (PR #2199)
+    if (selectedStack.benchlingUrl) {
+        result.benchlingUrl = selectedStack.benchlingUrl;
+        console.log(`✓ Benchling Webhook URL: ${selectedStack.benchlingUrl}`);
+    }
+    if (selectedStack.benchlingApiId) {
+        result.benchlingApiId = selectedStack.benchlingApiId;
+        console.log(chalk.dim(`  API Gateway ID: ${selectedStack.benchlingApiId}`));
+    }
+    if (selectedStack.benchlingDockerImage) {
+        result.benchlingDockerImage = selectedStack.benchlingDockerImage;
+        console.log(chalk.dim(`  Docker Image: ${selectedStack.benchlingDockerImage}`));
+    }
+    if (selectedStack.benchlingWriteRoleArn) {
+        result.benchlingWriteRoleArn = selectedStack.benchlingWriteRoleArn;
+        console.log(`✓ Benchling Write Role: ${selectedStack.benchlingWriteRoleArn}`);
+    }
+    if (selectedStack.ecsLogGroup) {
+        result.ecsLogGroup = selectedStack.ecsLogGroup;
+        console.log(chalk.dim(`  ECS Log Group: ${selectedStack.ecsLogGroup}`));
+    }
+    if (selectedStack.apiGatewayLogGroup) {
+        result.apiGatewayLogGroup = selectedStack.apiGatewayLogGroup;
+        console.log(chalk.dim(`  API Gateway Log Group: ${selectedStack.apiGatewayLogGroup}`));
     }
     if (result.source === "quilt3-cli") {
         result.source = "quilt3-cli+cloudformation";

@@ -87,6 +87,13 @@ export async function runStackQuery(
         const athenaResultsBucketPolicy = inferenceResult.athenaResultsBucketPolicy;
         const readRoleArn = inferenceResult.readRoleArn;
         const writeRoleArn = inferenceResult.writeRoleArn;
+        // New integrated architecture fields (PR #2199)
+        const benchlingUrl = inferenceResult.benchlingUrl;
+        const benchlingApiId = inferenceResult.benchlingApiId;
+        const benchlingDockerImage = inferenceResult.benchlingDockerImage;
+        const benchlingWriteRoleArn = inferenceResult.benchlingWriteRoleArn;
+        const ecsLogGroup = inferenceResult.ecsLogGroup;
+        const apiGatewayLogGroup = inferenceResult.apiGatewayLogGroup;
 
         // Log what we found
         console.log(chalk.green("✓ Stack query succeeded\n"));
@@ -196,6 +203,13 @@ export async function runStackQuery(
             readRoleArn,
             writeRoleArn,
             logGroups: logGroups.length > 0 ? logGroups : undefined,
+            // New integrated architecture fields (PR #2199)
+            benchlingUrl,
+            benchlingApiId,
+            benchlingDockerImage,
+            benchlingWriteRoleArn,
+            ecsLogGroup,
+            apiGatewayLogGroup,
             stackQuerySucceeded: true,
         };
     } catch (error) {

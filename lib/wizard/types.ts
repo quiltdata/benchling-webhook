@@ -64,6 +64,19 @@ export interface StackQueryResult {
     writeRoleArn?: string;
     /** Discovered CloudWatch log groups from the Quilt stack */
     logGroups?: LogGroupInfo[];
+    // New integrated architecture fields (PR #2199)
+    /** Benchling webhook URL from API Gateway (integrated mode) */
+    benchlingUrl?: string;
+    /** API Gateway ID (integrated mode) */
+    benchlingApiId?: string;
+    /** Docker image URI for Benchling webhook container (integrated mode) */
+    benchlingDockerImage?: string;
+    /** IAM role ARN for Benchling webhook operations (may differ from T4BucketWriteRole) */
+    benchlingWriteRoleArn?: string;
+    /** ECS container log group name (integrated mode) */
+    ecsLogGroup?: string;
+    /** API Gateway log group name (integrated mode) */
+    apiGatewayLogGroup?: string;
 }
 
 /**

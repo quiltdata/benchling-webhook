@@ -91,6 +91,26 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
         config.quilt.writeRoleArn = stackQuery.writeRoleArn;
     }
 
+    // Add new integrated architecture fields (PR #2199)
+    if (stackQuery.benchlingUrl) {
+        config.quilt.benchlingUrl = stackQuery.benchlingUrl;
+    }
+    if (stackQuery.benchlingApiId) {
+        config.quilt.benchlingApiId = stackQuery.benchlingApiId;
+    }
+    if (stackQuery.benchlingDockerImage) {
+        config.quilt.benchlingDockerImage = stackQuery.benchlingDockerImage;
+    }
+    if (stackQuery.benchlingWriteRoleArn) {
+        config.quilt.benchlingWriteRoleArn = stackQuery.benchlingWriteRoleArn;
+    }
+    if (stackQuery.ecsLogGroup) {
+        config.quilt.ecsLogGroup = stackQuery.ecsLogGroup;
+    }
+    if (stackQuery.apiGatewayLogGroup) {
+        config.quilt.apiGatewayLogGroup = stackQuery.apiGatewayLogGroup;
+    }
+
     return config;
 }
 
@@ -228,13 +248,23 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
     }
 
     console.log(chalk.bold("Next steps:"));
-    console.log("  1. Monitor stack update:");
-    console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook status --profile ${profile}`));
-    console.log("  2. Configure webhook URL in Benchling app settings");
-    console.log("     (Get the webhook URL from your Quilt stack outputs)");
-    console.log("  3. Test the webhook integration");
-    console.log("  4. Monitor logs:");
-    console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook logs --profile ${profile}`));
+
+    // Show webhook URL if available
+    if (stackQuery.benchlingUrl) {
+        console.log("  1. Configure webhook URL in Benchling app settings:");
+        console.log(chalk.cyan(`     ${stackQuery.benchlingUrl}`));
+        console.log("  2. Test the webhook integration");
+        console.log("  3. Monitor logs:");
+        console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook logs --profile ${profile}`));
+    } else {
+        console.log("  1. Monitor stack update:");
+        console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook status --profile ${profile}`));
+        console.log("  2. Configure webhook URL in Benchling app settings");
+        console.log("     (Get the webhook URL from your Quilt stack outputs)");
+        console.log("  3. Test the webhook integration");
+        console.log("  4. Monitor logs:");
+        console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook logs --profile ${profile}`));
+    }
     console.log("");
 
     return {

@@ -276,6 +276,80 @@ export interface QuiltConfig {
      * @example "arn:aws:iam::123456789012:role/quilt-stack-T4BucketWriteRole-XYZ789"
      */
     writeRoleArn?: string;
+
+    // New integrated architecture fields (PR #2199)
+    /**
+     * Benchling webhook URL from integrated API Gateway (optional)
+     *
+     * Only present when using integrated mode (BenchlingWebhook=Enabled in Quilt stack).
+     * This is the public HTTPS endpoint where Benchling sends webhook events.
+     *
+     * Resolved from stack output `BenchlingUrl` at deployment time.
+     *
+     * @example "https://abc123xyz.execute-api.us-east-1.amazonaws.com"
+     */
+    benchlingUrl?: string;
+
+    /**
+     * API Gateway ID for integrated Benchling webhook (optional)
+     *
+     * Only present when using integrated mode.
+     * Used for debugging and monitoring API Gateway.
+     *
+     * Resolved from stack output `BenchlingApiId` at deployment time.
+     *
+     * @example "abc123xyz"
+     */
+    benchlingApiId?: string;
+
+    /**
+     * Docker image URI for integrated Benchling webhook container (optional)
+     *
+     * Only present when using integrated mode.
+     * Shows which container image is deployed in the Quilt stack.
+     *
+     * Resolved from stack output `BenchlingDockerImage` at deployment time.
+     *
+     * @example "712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest"
+     */
+    benchlingDockerImage?: string;
+
+    /**
+     * IAM role ARN for Benchling webhook operations (optional)
+     *
+     * Only present when using integrated mode.
+     * This role may differ from the general T4BucketWriteRole and is specific
+     * to Benchling webhook operations.
+     *
+     * Resolved from stack output `BenchlingWriteRoleArn` at deployment time.
+     *
+     * @example "arn:aws:iam::123456789012:role/quilt-stack-BenchlingWriteRole-ABC123"
+     */
+    benchlingWriteRoleArn?: string;
+
+    /**
+     * ECS container log group name for integrated Benchling webhook (optional)
+     *
+     * Only present when using integrated mode.
+     * Used for log discovery and monitoring.
+     *
+     * Resolved from stack output `EcsLogGroup` at deployment time.
+     *
+     * @example "/ecs/quilt-stack-benchling/benchling"
+     */
+    ecsLogGroup?: string;
+
+    /**
+     * API Gateway log group name for integrated Benchling webhook (optional)
+     *
+     * Only present when using integrated mode.
+     * Used for API Gateway access/execution log discovery.
+     *
+     * Resolved from stack output `ApiGatewayLogGroup` at deployment time.
+     *
+     * @example "/aws/apigateway/quilt-stack-benchling"
+     */
+    apiGatewayLogGroup?: string;
 }
 
 /**
