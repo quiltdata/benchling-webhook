@@ -42,7 +42,7 @@ export interface StackQueryResult {
     stackVersion?: string;
     /** BenchlingSecret ARN from stack outputs (if exists) */
     benchlingSecretArn?: string;
-    /** Whether BenchlingIntegration parameter is enabled in the stack */
+    /** Whether BenchlingWebhook parameter is enabled in the stack */
     benchlingIntegrationEnabled?: boolean;
     /** Whether stack query succeeded */
     stackQuerySucceeded: boolean;

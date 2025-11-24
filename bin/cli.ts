@@ -119,7 +119,7 @@ program
 program
     .command("status")
     .description(
-        "Check CloudFormation stack status and BenchlingIntegration parameter",
+        "Check CloudFormation stack status and BenchlingWebhook parameter",
     )
     .option(
         "--profile <name>",

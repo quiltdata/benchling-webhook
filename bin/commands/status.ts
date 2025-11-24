@@ -2,7 +2,7 @@
 /**
  * Stack Status Command
  *
- * Reports CloudFormation stack status and BenchlingIntegration parameter state
+ * Reports CloudFormation stack status and BenchlingWebhook parameter state
  * for a given configuration profile.
  *
  * @module commands/status
@@ -122,8 +122,8 @@ async function getStackStatus(
             throw new Error(`Stack not found: ${stackName}`);
         }
 
-        // Extract BenchlingIntegration parameter
-        const param = stack.Parameters?.find((p) => p.ParameterKey === "BenchlingIntegration");
+        // Extract BenchlingWebhook parameter
+        const param = stack.Parameters?.find((p) => p.ParameterKey === "BenchlingWebhook");
         const benchlingIntegrationEnabled = param?.ParameterValue === "Enabled";
 
         // Extract stack outputs
@@ -610,7 +610,7 @@ function displayStatusResult(result: StatusResult, profile: string, quiltConfig?
     console.log(chalk.bold(`\nStack Status for Profile: ${profile}${lastUpdatedStr}\n`));
     console.log(chalk.dim("─".repeat(80)));
     console.log(`${chalk.bold("Stack:")} ${chalk.cyan(stackName)}  ${chalk.bold("Region:")} ${chalk.cyan(region)}`);
-    console.log(`${chalk.bold("Stack Status:")} ${formatStackStatus(result.stackStatus!)}  ${chalk.bold("BenchlingIntegration:")} ${result.benchlingIntegrationEnabled ? chalk.green("✓ Enabled") : chalk.yellow("⚠ Disabled")}`);
+    console.log(`${chalk.bold("Stack Status:")} ${formatStackStatus(result.stackStatus!)}  ${chalk.bold("BenchlingWebhook:")} ${result.benchlingIntegrationEnabled ? chalk.green("✓ Enabled") : chalk.yellow("⚠ Disabled")}`);
     console.log("");
 
     // Display stack outputs and secret info on one line each
@@ -832,7 +832,7 @@ function displayStatusResult(result: StatusResult, profile: string, quiltConfig?
 
         if (!result.benchlingIntegrationEnabled) {
             console.log(chalk.bold("Action Required:"));
-            console.log(chalk.yellow("  BenchlingIntegration is Disabled"));
+            console.log(chalk.yellow("  BenchlingWebhook is Disabled"));
             console.log(chalk.dim("  Enable it via CloudFormation console or re-run setup\n"));
         }
     } else if (result.stackStatus?.includes("FAILED") || result.stackStatus?.includes("ROLLBACK")) {

@@ -23,6 +23,9 @@ import type { XDGBase } from "../../lib/xdg-base";
 import type { LogGroupInfo as ConfigLogGroupInfo } from "../../lib/types/config";
 import { parseTimeRange, formatLocalDateTime, formatLocalTime, getLocalTimezone } from "../../lib/utils/time-format";
 import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+import { homedir } from "os";
 
 /**
  * Configuration constants for log fetching
@@ -45,7 +48,15 @@ interface LogGroupCache {
 }
 
 /**
- * Global cache map (session-scoped)
+ * Persistent cache structure (stored in profile directory)
+ */
+interface PersistentLogCache {
+    version: string;
+    groups: Record<string, LogGroupCache>;
+}
+
+/**
+ * Global cache map (session-scoped, backed by persistent storage)
  */
 const LOG_CACHE = new Map<string, LogGroupCache>();
 
@@ -97,6 +108,63 @@ export interface HealthCheckSummary {
     lastSeen: number;
     count: number;
     statusCode?: number;
+}
+
+/**
+ * Get the path to the persistent log cache file for a profile
+ */
+function getCachePath(profile: string): string {
+    const configDir = join(homedir(), ".config", "benchling-webhook", profile);
+    return join(configDir, "logs-cache.json");
+}
+
+/**
+ * Load persistent cache from disk
+ */
+function loadPersistentCache(profile: string): void {
+    const cachePath = getCachePath(profile);
+
+    if (!existsSync(cachePath)) {
+        return;
+    }
+
+    try {
+        const data = readFileSync(cachePath, "utf-8");
+        const cache: PersistentLogCache = JSON.parse(data);
+
+        // Load cache entries into memory
+        for (const [key, value] of Object.entries(cache.groups)) {
+            LOG_CACHE.set(key, value);
+        }
+    } catch (error) {
+        // Silently ignore cache read errors - we'll just start fresh
+        console.warn(chalk.yellow(`⚠️  Failed to load log cache: ${(error as Error).message}`));
+    }
+}
+
+/**
+ * Save persistent cache to disk
+ */
+function savePersistentCache(profile: string): void {
+    const cachePath = getCachePath(profile);
+    const cacheDir = dirname(cachePath);
+
+    // Ensure directory exists
+    if (!existsSync(cacheDir)) {
+        mkdirSync(cacheDir, { recursive: true });
+    }
+
+    const cache: PersistentLogCache = {
+        version: "1.0",
+        groups: Object.fromEntries(LOG_CACHE.entries()),
+    };
+
+    try {
+        writeFileSync(cachePath, JSON.stringify(cache, null, 2), "utf-8");
+    } catch (error) {
+        // Silently ignore cache write errors
+        console.warn(chalk.yellow(`⚠️  Failed to save log cache: ${(error as Error).message}`));
+    }
 }
 
 /**
@@ -793,7 +861,54 @@ function displayLogs(
 
 
 /**
- * Fetch logs from all relevant log groups (parallel implementation with spinners)
+ * Status tracking for each log group fetch
+ */
+interface LogGroupFetchStatus {
+    displayName: string;
+    status: "pending" | "fetching" | "completed" | "error";
+    progress: string;
+    logsCount: number;
+    error?: string;
+}
+
+/**
+ * Build dynamic status display for all log groups
+ */
+function buildFetchStatusDisplay(
+    statuses: Map<string, LogGroupFetchStatus>,
+    cachedCount: number,
+    totalCount: number,
+): string {
+    const lines: string[] = [];
+
+    lines.push(chalk.dim(`Fetching logs from ${totalCount} log group${totalCount !== 1 ? "s" : ""} (${cachedCount}/${totalCount} cached)...\n`));
+
+    for (const [_key, status] of statuses.entries()) {
+        let icon = "";
+        let message = "";
+
+        if (status.status === "pending") {
+            icon = chalk.dim("○");
+            message = chalk.dim("waiting...");
+        } else if (status.status === "fetching") {
+            icon = chalk.cyan("◐");
+            message = chalk.cyan(status.progress);
+        } else if (status.status === "completed") {
+            icon = chalk.green("✔");
+            message = chalk.green(`${status.logsCount} logs retrieved`);
+        } else if (status.status === "error") {
+            icon = chalk.red("✖");
+            message = chalk.red(status.error || "unknown error");
+        }
+
+        lines.push(`${icon} ${status.displayName} ${message}`);
+    }
+
+    return lines.join("\n");
+}
+
+/**
+ * Fetch logs from all relevant log groups (parallel implementation with single dynamic screen)
  */
 async function fetchAllLogs(
     logGroupsFromConfig: ConfigLogGroupInfo[],
@@ -817,18 +932,84 @@ async function fetchAllLogs(
     }));
 
     const cachedCount = cacheStatus.filter(s => s.cached).length;
-    const fetchMode = useCache && cachedCount > 0
-        ? `${cachedCount}/${filteredLogGroups.length} cached`
-        : "initial fetch";
 
-    console.log(chalk.dim(`\nFetching logs from ${filteredLogGroups.length} log group${filteredLogGroups.length !== 1 ? "s" : ""} (${fetchMode})...\n`));
+    // Sort log groups with priority ordering:
+    // 1. Main benchling application (benchling/benchling) comes first
+    // 2. Then alphabetically by display name
+    const sortedLogGroups = [...filteredLogGroups].sort((a, b) => {
+        const aIsBenchlingApp = a.name.includes("/benchling") && a.name.includes("benchling/benchling");
+        const bIsBenchlingApp = b.name.includes("/benchling") && b.name.includes("benchling/benchling");
 
-    // Create a spinner for each log group and fetch in parallel
-    const fetchPromises = filteredLogGroups.map(async (logGroupInfo) => {
-        const spinner = ora({
-            text: `${logGroupInfo.displayName} - starting...`,
-            color: "cyan",
-        }).start();
+        // If one is the main benchling app, it comes first
+        if (aIsBenchlingApp && !bIsBenchlingApp) return -1;
+        if (!aIsBenchlingApp && bIsBenchlingApp) return 1;
+
+        // Otherwise sort alphabetically
+        return a.displayName.localeCompare(b.displayName);
+    });
+
+    // Initialize status tracking for each log group
+    const statusMap = new Map<string, LogGroupFetchStatus>();
+    for (const lg of sortedLogGroups) {
+        statusMap.set(lg.name, {
+            displayName: lg.displayName,
+            status: "pending",
+            progress: "",
+            logsCount: 0,
+        });
+    }
+
+    // Create a single spinner that we'll update dynamically
+    const mainSpinner = ora({
+        text: buildFetchStatusDisplay(statusMap, cachedCount, filteredLogGroups.length),
+        color: "cyan",
+    }).start();
+
+    // Update spinner with current status
+    const updateSpinner = (): void => {
+        mainSpinner.text = buildFetchStatusDisplay(statusMap, cachedCount, filteredLogGroups.length);
+    };
+
+    // Create a custom spinner interface for each log group
+    const createGroupSpinner = (logGroupName: string): Ora => {
+        const status = statusMap.get(logGroupName)!;
+
+        const spinner = {
+            get text(): string {
+                return status.progress;
+            },
+            set text(value: string) {
+                status.progress = value;
+                status.status = "fetching";
+                updateSpinner();
+            },
+            succeed: (text?: string): Ora => {
+                if (text) {
+                    status.progress = text;
+                }
+                status.status = "completed";
+                updateSpinner();
+                return spinner as Ora;
+            },
+            fail: (text?: string): Ora => {
+                status.status = "error";
+                status.error = text || "error";
+                updateSpinner();
+                return spinner as Ora;
+            },
+            warn: (text?: string): Ora => {
+                status.progress = text || "";
+                updateSpinner();
+                return spinner as Ora;
+            },
+        };
+
+        return spinner as unknown as Ora;
+    };
+
+    // Fetch all log groups in parallel
+    const fetchPromises = sortedLogGroups.map(async (logGroupInfo) => {
+        const groupSpinner = createGroupSpinner(logGroupInfo.name);
 
         try {
             const entries = await fetchLogsFromGroup(
@@ -839,7 +1020,7 @@ async function fetchAllLogs(
                 filterPattern,
                 awsProfile,
                 logGroupInfo.streamPrefix,
-                spinner,
+                groupSpinner,
                 useCache,
             );
 
@@ -855,12 +1036,13 @@ async function fetchAllLogs(
             const nonHealthCount = allNonHealthEvents.length;
 
             // Keep enough entries to ensure we show non-health logs even if most recent are health checks
-            // Since health checks can dominate (every 10 seconds), we need a generous buffer
             const limitedEntries = sortedEntries.slice(0, Math.max(limit * 50, 500));
 
-            spinner.succeed(chalk.green(
-                `${logGroupInfo.displayName} - ${nonHealthCount} logs retrieved`,
-            ));
+            // Update status
+            const status = statusMap.get(logGroupInfo.name)!;
+            status.status = "completed";
+            status.logsCount = nonHealthCount;
+            updateSpinner();
 
             return {
                 name: logGroupInfo.name,
@@ -868,9 +1050,11 @@ async function fetchAllLogs(
                 entries: limitedEntries,
             };
         } catch (error) {
-            spinner.fail(chalk.red(
-                `${logGroupInfo.displayName} - ${(error as Error).message}`,
-            ));
+            const status = statusMap.get(logGroupInfo.name)!;
+            status.status = "error";
+            status.error = (error as Error).message;
+            updateSpinner();
+
             return {
                 name: logGroupInfo.name,
                 displayName: logGroupInfo.displayName,
@@ -882,7 +1066,9 @@ async function fetchAllLogs(
     // Wait for all log groups to finish fetching in parallel
     const result = await Promise.all(fetchPromises);
 
-    console.log(""); // Add blank line after spinners
+    // Stop the spinner and show final status
+    mainSpinner.succeed(chalk.green("Fetch complete"));
+    console.log(""); // Add blank line after spinner
 
     return result;
 }
@@ -928,6 +1114,9 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
     }
 
     try {
+        // Load persistent cache from disk
+        loadPersistentCache(profile);
+
         // Get log groups from profile configuration
         const configInfo = getLogGroupsFromConfig(profile, xdg);
         if (!configInfo) {
@@ -945,6 +1134,8 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
         let shouldExit = false;
         const exitHandler = (): void => {
             shouldExit = true;
+            // Save cache before exiting
+            savePersistentCache(profile);
             console.log(chalk.dim("\n\n⚠️  Interrupted by user. Exiting...\n"));
             process.exit(0);
         };
@@ -1019,6 +1210,9 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
             displayLogs(fetchedLogGroups, profile, region, since, limit, oldestTimestamp, logGroups);
 
             result.logGroups = fetchedLogGroups;
+
+            // Save cache after each fetch cycle
+            savePersistentCache(profile);
 
             // Show helpful message if no non-health logs found
             if (totalEntries > 0 && nonHealthEntries === 0) {

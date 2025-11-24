@@ -2,7 +2,7 @@
  * Unit tests for Status Command
  *
  * Tests the status command that reports CloudFormation stack status and
- * BenchlingIntegration parameter state for integrated mode profiles.
+ * BenchlingWebhook parameter state for integrated mode profiles.
  */
 
 // Mock all ESM dependencies BEFORE importing anything else
@@ -132,7 +132,7 @@ describe("statusCommand", () => {
                     StackStatus: "UPDATE_COMPLETE",
                     Parameters: [
                         {
-                            ParameterKey: "BenchlingIntegration",
+                            ParameterKey: "BenchlingWebhook",
                             ParameterValue: "Enabled",
                         },
                     ],
@@ -233,7 +233,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "UPDATE_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -255,7 +255,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "CREATE_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     CreationTime: new Date(),
                 }],
             });
@@ -274,7 +274,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "UPDATE_IN_PROGRESS",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -297,7 +297,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "CREATE_IN_PROGRESS",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     CreationTime: new Date(),
                 }],
             });
@@ -317,7 +317,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "UPDATE_FAILED",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -339,7 +339,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "ROLLBACK_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -361,7 +361,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "UPDATE_ROLLBACK_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -376,14 +376,14 @@ describe("statusCommand", () => {
         });
     });
 
-    describe("BenchlingIntegration Parameter", () => {
-        it("should extract and display BenchlingIntegration parameter correctly when Enabled", async () => {
+    describe("BenchlingWebhook Parameter", () => {
+        it("should extract and display BenchlingWebhook parameter correctly when Enabled", async () => {
             mockStorage.writeProfile("default", validIntegratedConfig);
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "UPDATE_COMPLETE",
                     Parameters: [
-                        { ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" },
+                        { ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" },
                     ],
                     LastUpdatedTime: new Date(),
                 }],
@@ -401,13 +401,13 @@ describe("statusCommand", () => {
             );
         });
 
-        it("should extract and display BenchlingIntegration parameter correctly when Disabled", async () => {
+        it("should extract and display BenchlingWebhook parameter correctly when Disabled", async () => {
             mockStorage.writeProfile("default", validIntegratedConfig);
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "UPDATE_COMPLETE",
                     Parameters: [
-                        { ParameterKey: "BenchlingIntegration", ParameterValue: "Disabled" },
+                        { ParameterKey: "BenchlingWebhook", ParameterValue: "Disabled" },
                     ],
                     LastUpdatedTime: new Date(),
                 }],
@@ -425,7 +425,7 @@ describe("statusCommand", () => {
             );
         });
 
-        it("should handle missing BenchlingIntegration parameter", async () => {
+        it("should handle missing BenchlingWebhook parameter", async () => {
             mockStorage.writeProfile("default", validIntegratedConfig);
             mockSend.mockResolvedValue({
                 Stacks: [{
@@ -451,7 +451,7 @@ describe("statusCommand", () => {
                     StackStatus: "UPDATE_COMPLETE",
                     Parameters: [
                         { ParameterKey: "OtherParam1", ParameterValue: "Value1" },
-                        { ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" },
+                        { ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" },
                         { ParameterKey: "OtherParam2", ParameterValue: "Value2" },
                     ],
                     LastUpdatedTime: new Date(),
@@ -474,7 +474,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "UPDATE_IN_PROGRESS",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -498,7 +498,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "UPDATE_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -513,12 +513,12 @@ describe("statusCommand", () => {
             );
         });
 
-        it("should show action required message when BenchlingIntegration is Disabled", async () => {
+        it("should show action required message when BenchlingWebhook is Disabled", async () => {
             mockStorage.writeProfile("default", validIntegratedConfig);
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "UPDATE_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Disabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Disabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -529,7 +529,7 @@ describe("statusCommand", () => {
             });
 
             expect(mockConsoleLog).toHaveBeenCalledWith(
-                expect.stringContaining("BenchlingIntegration is Disabled")
+                expect.stringContaining("BenchlingWebhook is Disabled")
             );
             expect(mockConsoleLog).toHaveBeenCalledWith(
                 expect.stringContaining("Enable it via CloudFormation console or re-run setup")
@@ -541,7 +541,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "UPDATE_FAILED",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -564,7 +564,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "ROLLBACK_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -731,7 +731,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "UPDATE_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: lastUpdated,
                     CreationTime: new Date("2025-11-01T10:00:00Z"),
                 }],
@@ -756,7 +756,7 @@ describe("statusCommand", () => {
             mockSend.mockResolvedValue({
                 Stacks: [{
                     StackStatus: "CREATE_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     CreationTime: creationTime,
                 }],
             });
@@ -884,7 +884,7 @@ describe("Auto-refresh Timer Functionality", () => {
         mockSend.mockResolvedValue({
             Stacks: [{
                 StackStatus: "UPDATE_COMPLETE",
-                Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                 LastUpdatedTime: new Date(),
             }],
         });
@@ -991,7 +991,7 @@ describe("Auto-refresh Timer Functionality", () => {
         mockSend.mockResolvedValue({
             Stacks: [{
                 StackStatus: "UPDATE_FAILED",
-                Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                 LastUpdatedTime: new Date(),
             }],
         });
@@ -1016,7 +1016,7 @@ describe("Auto-refresh Timer Functionality", () => {
         mockSend.mockResolvedValue({
             Stacks: [{
                 StackStatus: "UPDATE_COMPLETE",
-                Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                 LastUpdatedTime: new Date(),
             }],
         });
@@ -1068,7 +1068,7 @@ describe("Health Check Functions", () => {
                     return Promise.resolve({
                         Stacks: [{
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });
@@ -1121,7 +1121,7 @@ describe("Health Check Functions", () => {
                     return Promise.resolve({
                         Stacks: [{
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });
@@ -1153,7 +1153,7 @@ describe("Health Check Functions", () => {
                     return Promise.resolve({
                         Stacks: [{
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });
@@ -1213,7 +1213,7 @@ describe("Health Check Functions", () => {
                     return Promise.resolve({
                         Stacks: [{
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });
@@ -1271,7 +1271,7 @@ describe("Health Check Functions", () => {
                     return Promise.resolve({
                         Stacks: [{
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });
@@ -1305,7 +1305,7 @@ describe("Health Check Functions", () => {
                     return Promise.resolve({
                         Stacks: [{
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                             Outputs: [
                                 { OutputKey: "BenchlingSecretArn", OutputValue: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-secret" },
@@ -1341,7 +1341,7 @@ describe("Health Check Functions", () => {
                     return Promise.resolve({
                         Stacks: [{
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                             Outputs: [
                                 { OutputKey: "BenchlingSecretArn", OutputValue: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-secret" },
@@ -1385,7 +1385,7 @@ describe("Health Check Functions", () => {
                     return Promise.resolve({
                         Stacks: [{
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });
@@ -1425,7 +1425,7 @@ describe("Health Check Functions", () => {
                     return Promise.resolve({
                         Stacks: [{
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });

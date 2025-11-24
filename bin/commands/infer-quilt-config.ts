@@ -200,7 +200,7 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     const key = param.ParameterKey || "";
                     const value = param.ParameterValue || "";
 
-                    if (key === "BenchlingIntegration") {
+                    if (key === "BenchlingWebhook") {
                         stackInfo.benchlingIntegrationEnabled = value === "Enabled";
                     }
                 }
@@ -528,7 +528,7 @@ export async function inferQuiltConfig(options: {
     }
     if (selectedStack.benchlingIntegrationEnabled !== undefined) {
         result.benchlingIntegrationEnabled = selectedStack.benchlingIntegrationEnabled;
-        console.log(`✓ BenchlingIntegration: ${selectedStack.benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`);
+        console.log(`✓ BenchlingWebhook: ${selectedStack.benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`);
     }
     // Add discovered workgroups and resources to result
     if (selectedStack.athenaUserWorkgroup) {
