@@ -189,6 +189,7 @@ program
     .option("--filter <pattern>", "Filter logs by pattern (example: ERROR)")
     .option("--limit <n>", "Number of log entries to show per log group (default: 20)", "20")
     .option("--timer <seconds>", "Auto-refresh interval in seconds (default: 10, use 0 to disable)", "10")
+    .option("--dashboard", "Use interactive dashboard UI (blessed)")
     .addHelpText(
         "after",
         `
@@ -202,6 +203,9 @@ Log Types:
 Examples:
   View all logs (auto-refreshes every 10 seconds):
     $ npx @quiltdata/benchling-webhook logs --profile sales
+
+  Use interactive dashboard UI (recommended):
+    $ npx @quiltdata/benchling-webhook logs --profile sales --dashboard
 
   View only ECS logs:
     $ npx @quiltdata/benchling-webhook logs --profile sales --type ecs

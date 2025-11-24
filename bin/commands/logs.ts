@@ -26,6 +26,7 @@ import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
+import { LogsDashboardController } from "./logs/dashboard-controller";
 
 /**
  * Configuration constants for log fetching
@@ -72,6 +73,7 @@ export interface LogsCommandOptions {
     configStorage?: XDGBase;
     timer?: string | number;
     limit?: number;
+    dashboard?: boolean;
 }
 
 export interface LogsResult {
@@ -1087,6 +1089,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
         timer,
         limit = 50,
         configStorage,
+        dashboard = false,
     } = options;
 
     // Validate log type
@@ -1126,6 +1129,59 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
         }
 
         const { region, logGroups } = configInfo;
+
+        // Check if terminal supports dashboard mode (TTY + not CI)
+        const supportsDashboard = process.stdout.isTTY && !process.env.CI;
+
+        // If dashboard mode requested, use blessed UI
+        if (dashboard && supportsDashboard) {
+            // Filter log groups by type
+            const filteredLogGroups = type === "all"
+                ? logGroups
+                : logGroups.filter((lg) => lg.type === type);
+
+            if (filteredLogGroups.length === 0) {
+                console.error(chalk.red(`\n❌ No log groups found for type '${type}'.\n`));
+                return { success: false, error: `No log groups found for type '${type}'` };
+            }
+
+            // Create dashboard controller
+            const dashboardController = new LogsDashboardController({
+                profile,
+                region,
+                since,
+                logGroups: filteredLogGroups,
+                fetchLogsFunction: async (logGroupInfo: ConfigLogGroupInfo): Promise<FilteredLogEvent[]> => {
+                    return await fetchLogsFromGroup(
+                        logGroupInfo.name,
+                        region,
+                        since,
+                        limit,
+                        filter,
+                        awsProfile,
+                        logGroupInfo.streamPrefix,
+                        undefined,
+                        true,
+                    );
+                },
+            });
+
+            // Setup exit handler
+            process.on("SIGINT", () => {
+                dashboardController.exit();
+            });
+
+            // Initialize and run dashboard
+            await dashboardController.initialize();
+
+            return { success: true };
+        }
+
+        // Fall back to text mode if dashboard not supported
+        if (dashboard && !supportsDashboard) {
+            console.warn(chalk.yellow("\n⚠️  Dashboard mode not supported in this terminal (no TTY or CI environment)."));
+            console.warn(chalk.dim("   Falling back to text mode...\n"));
+        }
 
         // Parse timer value
         const refreshInterval = parseTimerValue(timer);
