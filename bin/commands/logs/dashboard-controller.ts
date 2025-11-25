@@ -178,7 +178,7 @@ export class LogsDashboardController {
                 }, 500);
 
                 // Create fetch promise
-                const fetchPromise = (async () => {
+                const fetchPromise = (async (): Promise<{ success: boolean; logs?: FilteredLogEvent[]; error?: unknown }> => {
                 // Update status: fetching
                     this.dashboard.updateSection(logGroup.displayName, {
                         header: {
@@ -201,9 +201,6 @@ export class LogsDashboardController {
                         // Extract health checks and non-health logs
                         const healthSummary = extractHealthCheckSummary(logs);
                         const nonHealthLogs = logs.filter(e => e.message && !isHealthCheck(e.message));
-
-                        // Calculate final elapsed time
-                        const elapsed = Math.floor((Date.now() - startTime) / 1000);
 
                         // Update with fresh data
                         const section: Partial<LogGroupSection> = {

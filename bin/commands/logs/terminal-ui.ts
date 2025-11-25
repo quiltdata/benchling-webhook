@@ -17,7 +17,7 @@ export class LogsDashboard {
     private region: string;
     private since: string;
     private priorityStrategy: PriorityOrderingStrategy;
-    private renderDebounceTimer: NodeJS.Timeout | null = null;
+    private renderDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     private readonly RENDER_DEBOUNCE_MS = 50; // 50ms debounce for render calls
 
     constructor(profile: string, region: string, since: string) {
