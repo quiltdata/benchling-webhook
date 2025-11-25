@@ -162,7 +162,11 @@ class TestPackageFileFetcher:
         """Test skipping .quilt/ metadata files."""
         manifest = [
             {"logical_key": "README.md", "physical_keys": ["s3://bucket/README.md"], "size": 512},
-            {"logical_key": ".quilt/metadata.json", "physical_keys": ["s3://bucket/.quilt/metadata.json"], "size": 100},
+            {
+                "logical_key": ".quilt/metadata.json",
+                "physical_keys": ["s3://bucket/.quilt/metadata.json"],
+                "size": 100,
+            },
             {"logical_key": "data/exp.csv", "physical_keys": ["s3://bucket/data/exp.csv"], "size": 2048},
         ]
 
