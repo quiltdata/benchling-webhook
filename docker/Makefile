@@ -23,6 +23,9 @@ PORT_NATIVE := 5001
 PORT_DOCKER_DEV := 5002
 PORT_DOCKER_PROD := 5003
 
+# UV command with dev group (for linting and testing)
+UVDEV = uv run --group dev
+
 .PHONY: help build test clean install lint ngrok kill \
         check-xdg check-ngrok run-native run-native-verbose run-dev run run-native-ngrok run-ecr \
         test test-unit test-integration test-dev test-docker-dev test-docker-prod test-deployed-dev test-deployed-dev-direct test-deployed-prod test-ecr test-native test-benchling test-query \
@@ -117,7 +120,7 @@ check-ngrok:
 
 # Install dependencies
 install:
-	uv sync --all-extras
+	uv sync --group dev --group docs
 
 # Test Benchling OAuth credentials from AWS Secrets Manager
 test-benchling: check-xdg
@@ -212,7 +215,7 @@ test-all: lint test-unit test-dev test-integration
 
 # Run unit tests with pytest
 test-unit:
-	uv run pytest -v
+	$(UVDEV) pytest -v
 
 # Run integration tests with execution monitoring (requires real Benchling credentials)
 test-integration: test-benchling
@@ -371,9 +374,9 @@ test-deployed-prod: check-xdg
 
 # Auto-fix code formatting (black + isort) and type check (pyright)
 lint:
-	uv run black src/ tests/ scripts/
-	uv run isort src/ tests/ scripts/
-	uv run pyright src/ tests/ scripts/
+	$(UVDEV) black src/ tests/ scripts/
+	$(UVDEV) isort src/ tests/ scripts/
+	$(UVDEV) pyright src/ tests/ scripts/
 
 # Deployment
 
