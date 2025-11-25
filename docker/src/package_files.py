@@ -16,11 +16,18 @@ Does NOT handle:
 - Package creation (see entry_packager.py)
 """
 
-from typing import List, Optional
+import io
+import json
+import os
+from typing import Dict, List, Optional, Tuple
 
-import quilt3
+import jsonlines
 import structlog
+from quilt3.backends import get_package_registry
+from quilt3.packages import ManifestJSONDecoder
+from quilt3.util import PhysicalKey
 
+from .auth.role_manager import RoleManager
 from .packages import Package
 
 logger = structlog.get_logger(__name__)
@@ -82,25 +89,104 @@ class PackageFileFetcher:
     """Fetches file lists and metadata from Quilt packages.
 
     Responsibilities:
-    - Browse package contents via quilt3.Package.browse()
+    - Browse package manifests directly from S3 (no local writes)
     - List all files in a package with metadata
     - Fetch package-level metadata
-    - Create PackageFile instances from browse results
+    - Create PackageFile instances from manifest entries
 
     Designed to be reusable and cacheable to avoid repeated API calls.
     Does not modify packages, only reads their contents.
     """
 
-    def __init__(self, catalog_url: str, bucket: str):
+    def __init__(
+        self,
+        catalog_url: str,
+        bucket: str,
+        role_arn: Optional[str] = None,
+        region: Optional[str] = None,
+        role_manager: Optional[RoleManager] = None,
+    ):
         """Initialize fetcher.
 
         Args:
             catalog_url: Quilt catalog URL (e.g., "nightly.quilttest.com")
             bucket: S3 bucket name
+            role_arn: Optional IAM role ARN for cross-account access
+            region: Optional AWS region (defaults to AWS_REGION env or us-east-1)
+            role_manager: Optional RoleManager instance (used in tests)
         """
         self.catalog_url = catalog_url
         self.bucket = bucket
         self.logger = structlog.get_logger(__name__)
+        self.role_manager = role_manager or RoleManager(
+            role_arn=role_arn,
+            region=region or os.getenv("AWS_REGION", "us-east-1"),
+        )
+
+    def _get_registry(self):
+        """Create an S3-backed package registry."""
+        return get_package_registry(f"s3://{self.bucket}")
+
+    def _fetch_physical_key_bytes(self, physical_key: PhysicalKey) -> bytes:
+        """Read bytes from a PhysicalKey without touching the local filesystem."""
+        if physical_key.is_local():
+            with open(physical_key.path, "rb") as file:
+                return file.read()
+
+        s3_client = self.role_manager.get_s3_client()
+        params = {"Bucket": physical_key.bucket, "Key": physical_key.path}
+        if physical_key.version_id:
+            params["VersionId"] = physical_key.version_id
+        response = s3_client.get_object(**params)
+        return response["Body"].read()
+
+    def _load_manifest_data(self, package_name: str) -> Tuple[Dict, List[Dict]]:
+        """Load manifest metadata and entries for the latest package version."""
+        registry = self._get_registry()
+
+        top_hash = (
+            self._fetch_physical_key_bytes(registry.pointer_latest_pk(package_name))
+            .decode("utf-8")
+            .strip()
+        )
+        manifest_bytes = self._fetch_physical_key_bytes(registry.manifest_pk(package_name, top_hash))
+
+        manifest_stream = io.StringIO(manifest_bytes.decode("utf-8"))
+        reader = jsonlines.Reader(manifest_stream, loads=ManifestJSONDecoder().decode)
+
+        manifest_meta = reader.read()
+        entries = list(reader)
+
+        return manifest_meta, entries
+
+    @staticmethod
+    def _is_valid_file_entry(entry: Dict) -> bool:
+        """Return True if manifest entry represents a real file."""
+        logical_key = entry.get("logical_key")
+        physical_keys = entry.get("physical_keys") or []
+
+        if not logical_key or logical_key.startswith(".quilt/"):
+            return False
+
+        return bool(physical_keys)
+
+    def _parse_entry_json(self, entries: List[Dict]) -> Optional[dict]:
+        """Load entry.json contents if present."""
+        entry_json = next((entry for entry in entries if entry.get("logical_key") == "entry.json"), None)
+        if not entry_json:
+            return None
+
+        physical_keys = entry_json.get("physical_keys") or []
+        if not physical_keys:
+            return None
+
+        try:
+            physical_key = PhysicalKey.from_url(physical_keys[0])
+            data = self._fetch_physical_key_bytes(physical_key)
+            return json.loads(data.decode("utf-8"))
+        except Exception as exc:  # pragma: no cover - defensive logging
+            self.logger.warning("Failed to load entry.json", error=str(exc))
+            return None
 
     def get_package_files(
         self,
@@ -124,18 +210,18 @@ class PackageFileFetcher:
         self.logger.info("Fetching package files", package_name=package_name)
 
         try:
-            # Browse package
-            pkg = quilt3.Package.browse(package_name, registry=f"s3://{self.bucket}")
+            _, entries = self._load_manifest_data(package_name)
 
-            # Collect all files (not directories)
-            files = []
-            for logical_key, entry in pkg.walk():
-                # Skip metadata files (internal to Quilt)
-                if logical_key.startswith(".quilt/"):
+            files: List[PackageFile] = []
+            for entry in entries:
+                if not self._is_valid_file_entry(entry):
                     continue
 
-                # Get file size
-                size = entry.size if hasattr(entry, "size") else 0
+                logical_key = entry["logical_key"]
+                try:
+                    size = int(entry.get("size", 0) or 0)
+                except (TypeError, ValueError):
+                    size = 0
 
                 files.append(
                     PackageFile(
@@ -147,7 +233,6 @@ class PackageFileFetcher:
                     )
                 )
 
-                # Respect max_files limit
                 if max_files and len(files) >= max_files:
                     break
 
@@ -183,16 +268,14 @@ class PackageFileFetcher:
         self.logger.info("Fetching package metadata", package_name=package_name)
 
         try:
-            pkg = quilt3.Package.browse(package_name, registry=f"s3://{self.bucket}")
+            manifest_meta, entries = self._load_manifest_data(package_name)
 
-            # Try to read entry.json if it exists
-            if "entry.json" in pkg:
-                metadata = pkg["entry.json"]()  # Fetch and deserialize
+            entry_metadata = self._parse_entry_json(entries)
+            if entry_metadata is not None:
                 self.logger.info("Fetched entry.json metadata", package_name=package_name)
-                return metadata
+                return entry_metadata
 
-            # Otherwise return package-level metadata
-            metadata = pkg.meta or {}
+            metadata = manifest_meta.get("user_meta") or {}
             self.logger.info("Fetched package metadata", package_name=package_name)
             return metadata
 
