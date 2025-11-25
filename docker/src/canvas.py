@@ -76,6 +76,8 @@ class CanvasManager:
         self._package_file_fetcher = package_file_fetcher or PackageFileFetcher(
             catalog_url=config.quilt_catalog,
             bucket=config.s3_bucket_name,
+            role_arn=config.quilt_write_role_arn,
+            region=config.aws_region,
         )
 
     @property
