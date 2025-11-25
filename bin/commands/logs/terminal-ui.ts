@@ -17,6 +17,8 @@ export class LogsDashboard {
     private region: string;
     private since: string;
     private priorityStrategy: PriorityOrderingStrategy;
+    private renderDebounceTimer: NodeJS.Timeout | null = null;
+    private readonly RENDER_DEBOUNCE_MS = 50; // 50ms debounce for render calls
 
     constructor(profile: string, region: string, since: string) {
         this.profile = profile;
@@ -111,7 +113,8 @@ export class LogsDashboard {
             this.priorityStrategy,
         );
 
-        this.sections.set(logGroupInfo.name, widget);
+        // Use displayName as key since multiple log groups can have the same name but different stream prefixes
+        this.sections.set(logGroupInfo.displayName, widget);
     }
 
     public updateSection(logGroupName: string, update: Partial<LogGroupSection>): void {
@@ -119,7 +122,7 @@ export class LogsDashboard {
         if (!widget) return;
 
         widget.update(update);
-        this.screen.render();
+        this.debouncedRender();
     }
 
     public updateSummary(totalLogs: number, errors: number, warnings: number, info: number): void {
@@ -130,10 +133,28 @@ export class LogsDashboard {
             `Errors: {red-fg}${errors}{/}   Warnings: {yellow-fg}${warnings}{/}   Info: {cyan-fg}${info}{/}`,
         );
 
-        this.screen.render();
+        this.debouncedRender();
+    }
+
+    private debouncedRender(): void {
+        // Clear existing timer
+        if (this.renderDebounceTimer) {
+            clearTimeout(this.renderDebounceTimer);
+        }
+
+        // Set new timer
+        this.renderDebounceTimer = setTimeout(() => {
+            this.screen.render();
+            this.renderDebounceTimer = null;
+        }, this.RENDER_DEBOUNCE_MS);
     }
 
     public render(): void {
+        // Immediate render for initial display
+        if (this.renderDebounceTimer) {
+            clearTimeout(this.renderDebounceTimer);
+            this.renderDebounceTimer = null;
+        }
         this.screen.render();
     }
 
@@ -150,7 +171,7 @@ export class LogsDashboard {
 class LogGroupWidget {
     private box: blessed.Widgets.BoxElement;
     private statusText: blessed.Widgets.TextElement;
-    private healthBox: blessed.Widgets.BoxElement;
+    private healthBox: blessed.Widgets.TextElement;
     private logsBox: blessed.Widgets.BoxElement;
     private progressText: blessed.Widgets.TextElement;
     private logGroupInfo: ConfigLogGroupInfo;
@@ -222,33 +243,43 @@ class LogGroupWidget {
             width: "100%-2",
             height: 1,
             tags: true,
-            content: "{gray-fg}○{/} {dim}Pending...{/}",
+            content: "{gray-fg}○ Pending...{/}",
         });
 
-        // Health checks section
-        this.healthBox = blessed.box({
-            parent: this.box,
-            top: 2,
-            left: 1,
-            width: "100%-2",
-            height: "shrink",
-            tags: true,
-            content: "",
-        });
-
-        // Application logs section
+        // Application logs section - takes most space
         this.logsBox = blessed.box({
             parent: this.box,
-            top: 5,
+            top: 1,
             left: 1,
             width: "100%-2",
-            height: "100%-7",
+            height: "100%-3",  // Leave room for health footer and progress
             tags: true,
             scrollable: true,
+            alwaysScroll: true,
+            scrollbar: {
+                ch: " ",
+                track: {
+                    bg: "cyan",
+                },
+                style: {
+                    inverse: true,
+                },
+            },
             content: "",
         });
 
-        // Progress indicator
+        // Health checks as single-line footer (second from bottom)
+        this.healthBox = blessed.text({
+            parent: this.box,
+            bottom: 1,
+            left: 1,
+            width: "100%-2",
+            height: 1,
+            tags: true,
+            content: "",
+        });
+
+        // Progress indicator at very bottom
         this.progressText = blessed.text({
             parent: this.box,
             bottom: 0,
@@ -285,7 +316,7 @@ class LogGroupWidget {
 
         this.statusText.setContent(
             `{${color}-fg}${icon}{/} {${color}-fg}${statusLabel}{/}` +
-            `{|}Last update: {dim}${lastUpdate}{/}`,
+            `{|}Last update: {gray-fg}${lastUpdate}{/}`,
         );
     }
 
@@ -295,29 +326,30 @@ class LogGroupWidget {
             return;
         }
 
-        const lines: string[] = ["{bold}{dim}Health Checks:{/}{/}"];
+        // Compact single-line format: Health: ✓ /health: HEALTHY (200) @ 1m ago ×60
+        const healthSummaries: string[] = [];
 
         for (const health of healthChecks.entries) {
             const statusIcon = health.status === "success" ? "{green-fg}✓{/}" :
                 health.status === "failure" ? "{red-fg}✗{/}" :
                     "{yellow-fg}?{/}";
-            const statusText = health.status === "success" ? "{green-fg}HEALTHY{/}" :
-                health.status === "failure" ? "{red-fg}FAILED{/}" :
-                    "{yellow-fg}UNKNOWN{/}";
+            const statusText = health.status === "success" ? "{green-fg}OK{/}" :
+                health.status === "failure" ? "{red-fg}FAIL{/}" :
+                    "{yellow-fg}?{/}";
             const statusCode = health.statusCode ? ` (${health.statusCode})` : "";
             const timeAgo = this.formatTimeAgo(health.lastSeen);
 
-            lines.push(
-                `  ${statusIcon} {cyan-fg}${health.endpoint}{/}: ${statusText}${statusCode} @ {dim}${timeAgo}{/} {magenta-fg}×${health.count}{/}`,
+            healthSummaries.push(
+                `${statusIcon} {cyan-fg}${health.endpoint}{/}:${statusText}${statusCode} {gray-fg}${timeAgo} ×${health.count}{/}`,
             );
         }
 
-        this.healthBox.setContent(lines.join("\n"));
+        this.healthBox.setContent(`{bold}Health:{/} ${healthSummaries.join(" · ")}`);
     }
 
     private updateLogs(applicationLogs: LogGroupSection["applicationLogs"]): void {
         if (applicationLogs.state === "loading") {
-            this.logsBox.setContent("{dim}Loading...{/}");
+            this.logsBox.setContent("{gray-fg}Loading...{/}");
             return;
         }
 
@@ -327,18 +359,18 @@ class LogGroupWidget {
         }
 
         if (applicationLogs.count === 0) {
-            this.logsBox.setContent("{dim}No log entries found{/}");
+            this.logsBox.setContent("{gray-fg}No log entries found{/}");
             return;
         }
 
         const lines: string[] = [
-            `{bold}{dim}Application Logs ({/}{cyan-fg}${applicationLogs.count}{/}{dim} entries, ${applicationLogs.streams.length} streams):{/}{/}`,
+            `{bold}Application Logs ({cyan-fg}${applicationLogs.count}{/} entries, ${applicationLogs.streams.length} streams):{/}`,
             "",
         ];
 
         // Display grouped by stream
         for (const stream of applicationLogs.streams.slice(0, 3)) { // Show top 3 streams
-            lines.push(`{bold}{blue-fg}${stream.displayName}{/}{/} {dim}· ${stream.patterns.length} patterns:{/}`);
+            lines.push(`{bold}{blue-fg}${stream.displayName}{/} {gray-fg}· ${stream.patterns.length} patterns:{/}`);
 
             for (const pattern of stream.patterns.slice(0, 2)) { // Show top 2 patterns per stream
                 const firstTime = formatLocalTime(pattern.firstSeen);
@@ -358,19 +390,19 @@ class LogGroupWidget {
 
                 const countBadge = pattern.count > 1 ? `{magenta-fg}×${pattern.count}{/}` : "";
 
-                lines.push(`  {dim}${timeRange}{/} ${badge} ${countBadge}`);
+                lines.push(`  {gray-fg}${timeRange}{/} ${badge} ${countBadge}`);
                 lines.push(`    ${this.truncate(sample, 100)}`);
             }
 
             if (stream.patterns.length > 2) {
-                lines.push(`  {dim}... ${stream.patterns.length - 2} more patterns{/}`);
+                lines.push(`  {gray-fg}... ${stream.patterns.length - 2} more patterns{/}`);
             }
 
             lines.push("");
         }
 
         if (applicationLogs.streams.length > 3) {
-            lines.push(`{dim}... ${applicationLogs.streams.length - 3} more streams{/}`);
+            lines.push(`{gray-fg}... ${applicationLogs.streams.length - 3} more streams{/}`);
         }
 
         this.logsBox.setContent(lines.join("\n"));
@@ -382,7 +414,7 @@ class LogGroupWidget {
             return;
         }
 
-        this.progressText.setContent(`{dim}${progressIndicator.text}{/}`);
+        this.progressText.setContent(`{gray-fg}${progressIndicator.text}{/}`);
     }
 
     private getStatusIcon(status: StatusIndicator): string {

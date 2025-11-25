@@ -464,9 +464,90 @@ npm run deploy:prod -- \
 
 ### Logs
 
+#### Using the Built-in Logs Command (Recommended)
+
 ```bash
-aws logs tail /ecs/benchling-webhook --follow
+# Interactive dashboard with auto-refresh (default)
+benchling-webhook logs --profile sales
+
+# Show only application logs (filters out bucket_scanner, etc.)
+benchling-webhook logs --profile sales --type ecs
+
+# Show ALL containers (including non-Benchling services)
+benchling-webhook logs --profile sales --all-containers
+
+# Text mode with custom refresh interval
+benchling-webhook logs --profile sales --no-dashboard --timer 5
+
+# Single snapshot (no auto-refresh)
+benchling-webhook logs --profile sales --timer 0
+
+# Filter for errors in last hour
+benchling-webhook logs --profile sales --since 1h --filter ERROR
 ```
+
+#### Using AWS CLI Directly
+
+For advanced use cases or when you need more control:
+
+```bash
+# Get application logs only (most relevant for debugging)
+aws logs tail tf-dev-bench \
+  --follow \
+  --filter-pattern "benchling/benchling" \
+  --region us-east-2
+
+# Get recent application logs with timestamps
+aws logs filter-log-events \
+  --log-group-name tf-dev-bench \
+  --log-stream-name-prefix "benchling/benchling" \
+  --start-time $(($(date +%s) - 1800))000 \
+  --region us-east-2 \
+  --output json | jq -r '.events[] | "\(.timestamp | todate) \(.message)"'
+
+# List all unique container stream prefixes in a log group
+aws logs describe-log-streams \
+  --log-group-name tf-dev-bench \
+  --region us-east-2 \
+  --max-items 1000 \
+  --query 'logStreams[*].logStreamName' \
+  --output text | cut -d/ -f1-2 | sort -u
+
+# Get nginx proxy logs
+aws logs filter-log-events \
+  --log-group-name tf-dev-bench \
+  --log-stream-name-prefix "benchling-nginx/nginx" \
+  --start-time $(($(date +%s) - 3600))000 \
+  --region us-east-2
+
+# Check if API Gateway execution logs exist
+aws logs describe-log-groups \
+  --log-group-name-prefix "API-Gateway-Execution-Logs_" \
+  --region us-east-2
+
+# Tail API Gateway execution logs (if enabled)
+aws logs tail "API-Gateway-Execution-Logs_72569ezcng/prod" \
+  --region us-east-2 \
+  --follow
+
+# Check API Gateway stage configuration for logging
+aws apigateway get-stage \
+  --rest-api-id 72569ezcng \
+  --stage-name prod \
+  --region us-east-2 \
+  --query '{accessLogs: accessLogSettings.destinationArn, executionLogs: methodSettings}'
+```
+
+#### Container Filtering
+
+By default, the `benchling-webhook logs` command filters log output to show only Benchling-related containers:
+- `benchling/benchling` - Application logs (Flask webhook processor)
+- `benchling-nginx/nginx` - Proxy logs (nginx reverse proxy)
+- API Gateway logs (if available)
+
+**Filtered out by default** (use `--all-containers` to see):
+- `bulk_loader/bucket_scanner` - Quilt bulk loader (not relevant for webhook debugging)
+- `registry/nginx-catalog` - Quilt catalog nginx (not relevant for webhook debugging)
 
 ### Health Checks
 
