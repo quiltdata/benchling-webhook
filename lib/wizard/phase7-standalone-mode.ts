@@ -45,6 +45,7 @@ function buildProfileConfig(input: StandaloneModeInput): ProfileConfig {
         deployment: {
             region: parameters.deployment.region,
             account: parameters.deployment.account,
+            logGroups: stackQuery.logGroups, // Include discovered log groups
         },
         integratedStack: false, // CRITICAL: Mark as standalone mode
         logging: {
@@ -123,6 +124,15 @@ export async function runStandaloneMode(input: StandaloneModeInput): Promise<Sta
         console.log(chalk.green(`✓ Configuration saved to: ~/.config/benchling-webhook/${profile}/config.json\n`));
     } catch (error) {
         throw new Error(`Failed to save configuration: ${(error as Error).message}`);
+    }
+
+    // Show discovered log groups
+    if (input.stackQuery.logGroups && input.stackQuery.logGroups.length > 0) {
+        console.log(chalk.bold("Discovered Log Groups:"));
+        for (const logGroup of input.stackQuery.logGroups) {
+            console.log(chalk.cyan(`  • ${logGroup.displayName}: ${logGroup.name}`));
+        }
+        console.log("");
     }
 
     // Step 3: Create dedicated BenchlingSecret
