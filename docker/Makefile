@@ -120,7 +120,7 @@ check-ngrok:
 
 # Install dependencies
 install:
-	uv sync --group dev --group docs
+	uv sync --group dev
 
 # Test Benchling OAuth credentials from AWS Secrets Manager
 test-benchling: check-xdg

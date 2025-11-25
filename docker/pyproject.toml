@@ -47,10 +47,6 @@ dev = [
     "isort==7.0.0",
     "pyright==1.1.407",
 ]
-docs = [
-    "sphinx==8.2.3",
-    "sphinx-rtd-theme==3.0.2",
-]
 
 [project.urls]
 Homepage = "https://github.com/quiltdata/benchling-webhook"
