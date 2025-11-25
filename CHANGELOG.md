@@ -3,15 +3,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.8.8]
 
 ### Added
 
 - Browse buttons for linked packages in Benchling Canvas
+- Read-only package manifest browsing directly from S3 (no local filesystem writes)
 
 ### Changed
 
 - **BREAKING**: Removed `--config` alias, use only `--profile` for all commands
+- `PackageFileFetcher` now reads manifests directly from S3 instead of using `quilt3.Package.browse()`
+- Added `role_arn` and `region` parameters to `PackageFileFetcher` for cross-account access
 
 ### Fixed
 
@@ -19,6 +22,9 @@ All notable changes to this project will be documented in this file.
 - Configuration validation allows additional properties for backward compatibility
 - Status command works with any profile containing stackArn (not just integrated stacks)
 - Python package license corrected to Apache-2.0
+- Docker filesystem writes eliminated by reading package manifests directly from S3 (closes #258)
+- Pyright type error in `_load_manifest_data()` with explicit type casting
+- Python code formatting issues (Black formatter)
 
 ## [0.8.3] - 2025-11-18
 

@@ -1,6 +1,6 @@
 {
   "name": "@quiltdata/benchling-webhook",
-  "version": "0.8.7",
+  "version": "0.8.8",
   "description": "AWS CDK deployment for Benchling webhook processing using Fargate - Deploy directly with npx",
   "main": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
@@ -75,12 +75,11 @@
     "@eslint/js": "^9.22.0",
     "@types/adm-zip": "^0.5.7",
     "@types/aws-lambda": "^8.10.156",
-    "@types/blessed": "^0.1.26",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
-    "aws-cdk": "2.1032.0",
+    "aws-cdk": "2.1033.0",
     "aws-sdk-client-mock": "^4.1.0",
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
@@ -106,8 +105,7 @@
     "adm-zip": "^0.5.10",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
-    "aws-cdk-lib": "2.225.0",
-    "blessed": "^0.1.81",
+    "aws-cdk-lib": "2.229.1",
     "boxen": "^8.0.0",
     "chalk": "^5.0.0",
     "commander": "^14.0.2",
@@ -117,8 +115,7 @@
     "execa": "^9.0.0",
     "inquirer": "^12.10.0",
     "lodash.merge": "^4.6.2",
-    "ora": "^9.0.0",
-    "p-limit": "^5.0.0"
+    "ora": "^9.0.0"
   },
   "engines": {
     "node": ">=18.0.0",
