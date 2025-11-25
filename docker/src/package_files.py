@@ -19,7 +19,7 @@ Does NOT handle:
 import io
 import json
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, cast
 
 import jsonlines
 import structlog
@@ -144,18 +144,14 @@ class PackageFileFetcher:
         """Load manifest metadata and entries for the latest package version."""
         registry = self._get_registry()
 
-        top_hash = (
-            self._fetch_physical_key_bytes(registry.pointer_latest_pk(package_name))
-            .decode("utf-8")
-            .strip()
-        )
+        top_hash = self._fetch_physical_key_bytes(registry.pointer_latest_pk(package_name)).decode("utf-8").strip()
         manifest_bytes = self._fetch_physical_key_bytes(registry.manifest_pk(package_name, top_hash))
 
         manifest_stream = io.StringIO(manifest_bytes.decode("utf-8"))
         reader = jsonlines.Reader(manifest_stream, loads=ManifestJSONDecoder().decode)
 
-        manifest_meta = reader.read()
-        entries = list(reader)
+        manifest_meta = cast(Dict, reader.read())
+        entries = cast(List[Dict], list(reader))
 
         return manifest_meta, entries
 
