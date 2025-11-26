@@ -4,9 +4,9 @@
 # Docker base image name for ECR (without architecture suffix)
 DOCKER_IMAGE_BASE := quiltdata/benchling
 
-# Version is read from pyproject.toml by docker.py
+# Version is read from package.json (defaults to current version)
 # Can be overridden with VERSION=x.y.z
-VERSION ?=
+VERSION ?= $(shell cd .. && npm run version --silent 2>/dev/null | grep -E '^\s*package\.json:\s*' | awk '{print $$2}')
 
 # Detect architecture and set appropriate image name
 ARCH := $(shell uname -m | tr '[:upper:]' '[:lower:]')
@@ -64,7 +64,7 @@ deploy-help:
 	@echo "  CI:     make push-ci     → quiltdata/benchling:v1.0.0"
 	@echo ""
 	@echo "Environment Variables:"
-	@echo "  VERSION               - Docker image version (default: git describe)"
+	@echo "  VERSION               - Docker image version (default: from package.json via npm run version)"
 	@echo "  AWS_REGION            - AWS region for ECR (default: us-east-1)"
 	@echo "  DOCKER_IMAGE_BASE     - Base Docker image name (default: quiltdata/benchling)"
 
