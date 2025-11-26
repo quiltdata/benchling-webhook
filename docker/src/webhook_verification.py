@@ -1,10 +1,8 @@
-"""Webhook verification using Benchling SDK helpers."""
-
-from functools import wraps
+"""Webhook verification using Benchling SDK helpers (FastAPI-compatible)."""
 
 import structlog
 from benchling_sdk.apps.helpers.webhook_helpers import verify
-from flask import Request, jsonify
+from fastapi import HTTPException, Request, status
 
 logger = structlog.get_logger(__name__)
 
@@ -15,13 +13,13 @@ class WebhookVerificationError(Exception):
     pass
 
 
-def verify_webhook(app_definition_id: str, request: Request) -> None:
+async def verify_webhook(app_definition_id: str, request: Request) -> None:
     """
     Verify webhook signature using Benchling SDK.
 
     Args:
         app_definition_id: Benchling app definition ID
-        request: Flask request object
+        request: FastAPI request object
 
     Raises:
         WebhookVerificationError: If verification fails
@@ -30,21 +28,15 @@ def verify_webhook(app_definition_id: str, request: Request) -> None:
         logger.error("Webhook verification failed - no app_definition_id configured")
         raise WebhookVerificationError("Webhook verification requires app_definition_id but none was configured")
 
-    # Initialize variables for exception handler
     data = ""
     headers = {}
 
     try:
-        # Get raw request data as string without consuming the stream
-        # Use cache=True to allow subsequent reads (e.g., request.get_json())
-        data = request.get_data(as_text=True, cache=True)
+        body = await request.body()
+        data = body.decode("utf-8")
 
-        # Convert Flask headers to dict with lowercase keys
-        # Benchling SDK expects lowercase header names (webhook-id, webhook-signature, webhook-timestamp)
-        # but Flask/Werkzeug capitalizes them (Webhook-Id, Webhook-Signature, Webhook-Timestamp)
         headers = {key.lower(): value for key, value in request.headers.items()}
 
-        # Debug logging for troubleshooting
         logger.debug(
             "Webhook verification starting",
             app_definition_id=app_definition_id,
@@ -53,7 +45,6 @@ def verify_webhook(app_definition_id: str, request: Request) -> None:
             data_preview=data[:200] if data else None,
         )
 
-        # Log specific headers expected by Benchling
         logger.debug(
             "Benchling signature headers",
             webhook_id=headers.get("webhook-id"),
@@ -62,7 +53,6 @@ def verify_webhook(app_definition_id: str, request: Request) -> None:
             content_type=headers.get("content-type"),
         )
 
-        # Verify using Benchling SDK helper
         verify(app_definition_id, data, headers)  # type: ignore[arg-type]
 
         logger.debug("Webhook signature verified successfully")
@@ -80,35 +70,29 @@ def verify_webhook(app_definition_id: str, request: Request) -> None:
         raise WebhookVerificationError(f"Webhook verification failed: {str(e)}")
 
 
-def require_webhook_verification(config):
+def webhook_verification_dependency(config):
     """
-    Decorator to verify webhook signatures on Flask routes.
+    Dependency to verify webhook signatures on FastAPI routes.
 
     Args:
         config: Application config with app_definition_id and enable_webhook_verification
 
     Returns:
-        Decorator function
+        Dependency function
     """
 
-    def decorator(f):
-        @wraps(f)
-        def wrapped_function(*args, **kwargs):
-            # Skip verification if disabled
-            if not config.enable_webhook_verification:
-                logger.debug("Webhook verification disabled")
-                return f(*args, **kwargs)
+    async def verify_request(request: Request):
+        if not config.enable_webhook_verification:
+            logger.debug("Webhook verification disabled")
+            return
 
-            # Import here to avoid circular dependency
-            from flask import request
+        try:
+            await verify_webhook(config.benchling_app_definition_id, request)
+        except WebhookVerificationError as e:
+            logger.warning("Webhook verification failed", error=str(e))
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Webhook verification failed",
+            ) from e
 
-            try:
-                verify_webhook(config.benchling_app_definition_id, request)
-                return f(*args, **kwargs)
-            except WebhookVerificationError as e:
-                logger.warning("Webhook verification failed", error=str(e))
-                return jsonify({"error": "Webhook verification failed"}), 401
-
-        return wrapped_function
-
-    return decorator
+    return verify_request

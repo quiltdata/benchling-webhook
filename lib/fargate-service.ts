@@ -317,7 +317,7 @@ export class FargateService extends Construct {
             ENABLE_WEBHOOK_VERIFICATION: String(config.security?.enableVerification !== false),
 
             // Application Configuration
-            FLASK_ENV: "production",
+            APP_ENV: "production",
             LOG_LEVEL: props.logLevel || config.logging?.level || "INFO",
         };
 

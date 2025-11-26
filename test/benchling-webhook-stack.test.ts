@@ -255,7 +255,7 @@ describe("BenchlingWebhookStack", () => {
             "AWS_REGION",
             "AWS_DEFAULT_REGION",
             "ENABLE_WEBHOOK_VERIFICATION",
-            "FLASK_ENV",
+            "APP_ENV",
             "PORT",
         ];
 

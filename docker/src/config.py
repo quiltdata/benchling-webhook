@@ -23,7 +23,7 @@ class Config:
     No CloudFormation queries! Only Secrets Manager for Benchling credentials.
     """
 
-    flask_env: str = ""
+    app_env: str = ""
     log_level: str = ""
     aws_region: str = ""
     s3_bucket_name: str = ""
@@ -56,7 +56,7 @@ class Config:
             - BenchlingSecret: Secrets Manager secret name for Benchling credentials
 
         Optional environment variables:
-            - FLASK_ENV: Flask environment (default: production)
+            - APP_ENV: Application environment (default: production)
             - LOG_LEVEL: Logging level (default: INFO)
             - ENABLE_WEBHOOK_VERIFICATION: Enable verification (default: true)
             - BENCHLING_TEST_MODE: Disable verification for testing (default: false)
@@ -91,8 +91,8 @@ class Config:
         self.package_key = "experiment_id"
         self.pkg_prefix = "benchling"
 
-        # Flask configuration
-        self.flask_env = os.getenv("FLASK_ENV", "production")
+        # Application configuration
+        self.app_env = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "production"))
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
 
         # Security configuration - ENABLE_WEBHOOK_VERIFICATION can be overridden for testing
