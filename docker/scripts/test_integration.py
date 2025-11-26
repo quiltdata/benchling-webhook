@@ -44,7 +44,7 @@ class IntegrationTest:
         },
     ]
 
-    def __init__(self, base_url: str = "http://localhost:5000", entry_id: Optional[str] = None, verbose: bool = False):
+    def __init__(self, base_url: str = "http://localhost:8080", entry_id: Optional[str] = None, verbose: bool = False):
         self.base_url = base_url
         self.entry_id = entry_id
         self.verbose = verbose
@@ -245,8 +245,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Benchling-Quilt integration tests")
     parser.add_argument(
         "--url",
-        default="http://localhost:5000",
-        help="Base URL of the webhook service (default: http://localhost:5000)",
+        default="http://localhost:8080",
+        help="Base URL of the webhook service (default: http://localhost:8080)",
     )
     parser.add_argument(
         "--entry-id",

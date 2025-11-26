@@ -1,8 +1,7 @@
 import * as cdk from "aws-cdk-lib";
-import { Template, Match } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
-import * as s3 from "aws-cdk-lib/aws-s3";
 import { FargateService } from "../lib/fargate-service";
 import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/test-config";
 
@@ -17,7 +16,6 @@ describe("FargateService - Multi-Environment Support", () => {
     let app: cdk.App;
     let stack: cdk.Stack;
     let vpc: ec2.IVpc;
-    let bucket: s3.IBucket;
     let ecrRepository: ecr.IRepository;
 
     beforeEach(() => {
@@ -34,9 +32,6 @@ describe("FargateService - Multi-Environment Support", () => {
             maxAzs: 2,
         });
 
-        // Create S3 bucket
-        bucket = s3.Bucket.fromBucketName(stack, "TestBucket", "test-bucket");
-
         // Create ECR repository
         ecrRepository = ecr.Repository.fromRepositoryName(
             stack,
@@ -50,7 +45,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -74,7 +68,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -99,7 +92,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -114,11 +106,7 @@ describe("FargateService - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
-                Port: 5000,
-                Protocol: "HTTP",
-                TargetType: "ip",
-            });
+            template.resourceCountIs("AWS::ServiceDiscovery::Service", 1);
         });
     });
 
@@ -127,7 +115,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -162,7 +149,6 @@ describe("FargateService - Multi-Environment Support", () => {
 
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -198,7 +184,6 @@ describe("FargateService - Multi-Environment Support", () => {
 
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -226,7 +211,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -260,7 +244,6 @@ describe("FargateService - Multi-Environment Support", () => {
 
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -300,7 +283,6 @@ describe("FargateService - Multi-Environment Support", () => {
             // Create dev service
             const devService = new FargateService(stack, "DevFargateService", {
                 vpc,
-                bucket,
                 config: devConfig,
                 ecrRepository,
                 benchlingSecret: devConfig.benchling.secretArn!,
@@ -317,7 +299,6 @@ describe("FargateService - Multi-Environment Support", () => {
             // Create prod service
             const prodService = new FargateService(stack, "ProdFargateService", {
                 vpc,
-                bucket,
                 config: prodConfig,
                 ecrRepository,
                 benchlingSecret: prodConfig.benchling.secretArn!,
@@ -337,12 +318,11 @@ describe("FargateService - Multi-Environment Support", () => {
         });
     });
 
-    describe("Target Group Configuration", () => {
-        test("configures health check path", () => {
+    describe("Service networking", () => {
+        test("allows VPC traffic to container port 8080", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -358,35 +338,15 @@ describe("FargateService - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
-                HealthCheckPath: "/health/ready",
-                HealthCheckIntervalSeconds: 30,
-            });
-        });
-
-        test("uses IP target type for Fargate", () => {
-            const config = createMockConfig();
-            new FargateService(stack, "TestFargateService", {
-                vpc,
-                bucket,
-                config,
-                ecrRepository,
-                benchlingSecret: config.benchling.secretArn!,
-                packageBucket: config.packages.bucket,
-                quiltDatabase: config.quilt.database || "test-database",
-                logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
-                packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-                athenaUserDatabase: "test-database",
-                quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
-            });
-
-            const template = Template.fromStack(stack);
-
-            template.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
-                TargetType: "ip",
-            });
+            template.hasResourceProperties("AWS::EC2::SecurityGroup", Match.objectLike({
+                SecurityGroupIngress: Match.arrayWith([
+                    Match.objectLike({
+                        FromPort: 8080,
+                        ToPort: 8080,
+                        IpProtocol: "tcp",
+                    }),
+                ]),
+            }));
         });
     });
 
@@ -395,7 +355,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -423,7 +382,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -454,7 +412,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -487,7 +444,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -524,7 +480,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -559,7 +514,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -596,7 +550,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,
@@ -625,7 +578,6 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
                 benchlingSecret: config.benchling.secretArn!,

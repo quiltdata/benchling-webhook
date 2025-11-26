@@ -3,6 +3,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2025-11-24
+
+### Breaking
+
+- REST API + ALB replaced with HTTP API + VPC Link + Cloud Map service discovery (stack recreation required)
+- Flask container now listens on port 8080; Docker dev/prod host ports updated to 8082/8083
+
+### Added
+
+- Cloud Map namespace (`benchling.local`) registration for the webhook service
+- HTTP API access logs in `/aws/apigateway/benchling-webhook-http`
+- Migration guide for upgrading from 0.8.x (`MIGRATION.md`)
+
+### Changed
+
+- ECS tasks run without an ALB; API Gateway routes directly to service discovery
+- Default deploy outputs reflect the new HTTP API endpoint (no ALB DNS output)
+
 ## [0.8.8]
 
 ### Added

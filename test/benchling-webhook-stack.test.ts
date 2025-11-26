@@ -46,59 +46,41 @@ describe("BenchlingWebhookStack", () => {
     test("creates CloudWatch log groups", () => {
         template.resourceCountIs("AWS::Logs::LogGroup", 2); // One for API Gateway, one for container logs
 
-        template.hasResourceProperties("AWS::ApiGateway::Stage", {
-            AccessLogSetting: {
+        template.hasResourceProperties("AWS::ApiGatewayV2::Stage", {
+            StageName: "$default",
+            AccessLogSettings: Match.objectLike({
                 DestinationArn: {
                     "Fn::GetAtt": [
                         Match.stringLikeRegexp("ApiGatewayAccessLogs.*"),
                         "Arn",
                     ],
                 },
-            },
+            }),
         });
     });
 
     test("creates API Gateway with correct configuration", () => {
-        template.hasResourceProperties("AWS::ApiGateway::RestApi", {
-            Name: "BenchlingWebhookAPI",
+        template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+            Name: "BenchlingWebhookHttpAPI",
+            ProtocolType: "HTTP",
         });
 
-        template.hasResourceProperties("AWS::ApiGateway::Stage", {
-            StageName: "prod",
-            MethodSettings: [{
-                LoggingLevel: "INFO",
-                DataTraceEnabled: true,
-                HttpMethod: "*",
-                ResourcePath: "/*",
-            }],
-        });
+        template.resourceCountIs("AWS::ApiGateway::RestApi", 0);
 
-        // Check that API Gateway has HTTP_PROXY integration to ALB (not Step Functions)
-        template.hasResourceProperties("AWS::ApiGateway::Method", {
-            HttpMethod: "ANY",
-            AuthorizationType: "NONE",
-            Integration: {
-                Type: "HTTP_PROXY",
-            },
+        template.hasResourceProperties("AWS::ApiGatewayV2::Integration", {
+            IntegrationType: "HTTP_PROXY",
+            ConnectionType: "VPC_LINK",
         });
     });
 
-    test("creates Application Load Balancer", () => {
-        template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
-            Name: "benchling-webhook-alb",
-            Scheme: "internet-facing",
-            Type: "application",
-        });
+    test("creates VPC Link and Cloud Map service", () => {
+        template.resourceCountIs("AWS::ApiGatewayV2::VpcLink", 1);
+        template.resourceCountIs("AWS::ServiceDiscovery::PrivateDnsNamespace", 1);
+        template.resourceCountIs("AWS::ServiceDiscovery::Service", 1);
     });
 
-    test("creates ALB target group with health checks", () => {
-        template.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
-            Port: 5000,
-            Protocol: "HTTP",
-            TargetType: "ip",
-            HealthCheckPath: "/health/ready",
-            HealthCheckIntervalSeconds: 30,
-        });
+    test("does not create Application Load Balancer", () => {
+        template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 0);
     });
 
     test("throws error when missing required parameters", () => {
@@ -175,6 +157,25 @@ describe("BenchlingWebhookStack", () => {
             Memory: "2048",
             NetworkMode: "awsvpc",
             RequiresCompatibilities: ["FARGATE"],
+        });
+    });
+
+    test("configures container for port 8080 with updated health check", () => {
+        template.hasResourceProperties("AWS::ECS::TaskDefinition", {
+            ContainerDefinitions: Match.arrayWith([
+                Match.objectLike({
+                    PortMappings: Match.arrayWith([
+                        Match.objectLike({
+                            ContainerPort: 8080,
+                        }),
+                    ]),
+                    HealthCheck: Match.objectLike({
+                        Command: Match.arrayWith([
+                            Match.stringLikeRegexp("8080"),
+                        ]),
+                    }),
+                }),
+            ]),
         });
     });
 
@@ -255,6 +256,7 @@ describe("BenchlingWebhookStack", () => {
             "AWS_DEFAULT_REGION",
             "ENABLE_WEBHOOK_VERIFICATION",
             "FLASK_ENV",
+            "PORT",
         ];
 
         // Verify explicit service variables are present

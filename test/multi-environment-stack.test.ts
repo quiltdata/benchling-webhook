@@ -35,9 +35,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
                 ServiceName: "benchling-webhook-service",
             });
 
-            // Should create API Gateway with prod stage
-            template.hasResourceProperties("AWS::ApiGateway::Stage", {
-                StageName: "prod",
+            // Should create HTTP API with default stage
+            template.hasResourceProperties("AWS::ApiGatewayV2::Stage", {
+                StageName: "$default",
             });
         });
 
@@ -215,7 +215,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             });
         });
 
-        test("creates Application Load Balancer", () => {
+        test("does not create Application Load Balancer", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -227,13 +227,10 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
-                Name: "benchling-webhook-alb",
-                Scheme: "internet-facing",
-            });
+            template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 0);
         });
 
-        test("creates API Gateway REST API", () => {
+        test("creates HTTP API for webhooks", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -245,8 +242,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ApiGateway::RestApi", {
-                Name: "BenchlingWebhookAPI",
+            template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+                Name: "BenchlingWebhookHttpAPI",
+                ProtocolType: "HTTP",
             });
         });
 
@@ -446,12 +444,12 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasOutput("ApiGatewayId", {
-                Description: "API Gateway REST API ID",
+            template.hasOutput("WebhookEndpoint", {
+                Description: "Webhook endpoint URL - use this in Benchling app configuration",
             });
         });
 
-        test("exports Load Balancer DNS", () => {
+        test("exports API Gateway log group", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -463,8 +461,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasOutput("LoadBalancerDNS", {
-                Description: "Application Load Balancer DNS name for direct testing",
+            template.hasOutput("ApiGatewayLogGroup", {
+                Description: "CloudWatch log group for API Gateway access logs",
             });
         });
     });
