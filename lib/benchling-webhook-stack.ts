@@ -146,10 +146,51 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         // Bucket name will be resolved at runtime from CloudFormation outputs
         // For CDK purposes, we use a placeholder for IAM permissions
-        // Get the default VPC or create a new one
-        const vpc = ec2.Vpc.fromLookup(this, "DefaultVPC", {
-            isDefault: true,
-        });
+
+        // VPC Configuration (v0.9.0+)
+        // Architecture mirrors ~/GitHub/deployment/t4/template/network.py (network_version=2.0)
+        // - Option 1: Use existing VPC (if vpcId specified in config)
+        // - Option 2: Create new VPC with private subnets and NAT Gateway (production HA setup)
+        const vpc = config.deployment.vpc?.vpcId
+            ? ec2.Vpc.fromLookup(this, "ExistingVPC", {
+                  vpcId: config.deployment.vpc.vpcId,
+              })
+            : new ec2.Vpc(this, "BenchlingWebhookVPC", {
+                  maxAzs: 2,
+                  natGateways: 2, // Mirror production: 1 NAT Gateway per AZ for high availability
+                  subnetConfiguration: [
+                      {
+                          name: "Public",
+                          subnetType: ec2.SubnetType.PUBLIC,
+                          cidrMask: 24,
+                      },
+                      {
+                          name: "Private",
+                          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS, // Private + NAT Gateway
+                          cidrMask: 24,
+                      },
+                  ],
+              });
+
+        // Validate VPC has private subnets (required for VPC Link and ECS with assignPublicIp: false)
+        if (vpc.privateSubnets.length === 0) {
+            const vpcIdentifier = config.deployment.vpc?.vpcId || "created";
+            throw new Error(
+                `VPC (${vpcIdentifier}) does not have private subnets. ` +
+                    `The v0.9.0 architecture requires private subnets with NAT Gateway for:\n` +
+                    `  - VPC Link to connect API Gateway to ECS tasks\n` +
+                    `  - ECS Fargate tasks with assignPublicIp: false\n\n` +
+                    `If using an existing VPC, ensure it has:\n` +
+                    `  - Private subnets in at least 2 availability zones\n` +
+                    `  - NAT Gateway(s) for outbound internet access\n` +
+                    `  - Proper route tables configured\n\n` +
+                    `Or omit vpc.vpcId from config to auto-create a VPC with the correct configuration.`,
+            );
+        }
+
+        console.log(
+            `Using VPC: ${config.deployment.vpc?.vpcId || "auto-created"} (${vpc.privateSubnets.length} private subnets)`,
+        );
 
         // HARDCODED: Always use the quiltdata AWS account for ECR images
         const account = "712023778557";

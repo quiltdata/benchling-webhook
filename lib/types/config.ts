@@ -382,6 +382,44 @@ export interface DeploymentConfig {
      * @default "latest"
      */
     imageTag?: string;
+
+    /**
+     * VPC configuration for ECS deployment
+     * If not specified, a new VPC will be created with private subnets and NAT Gateway
+     *
+     * @example { vpcId: "vpc-0123456789abcdef0" }
+     */
+    vpc?: VpcConfig;
+}
+
+/**
+ * VPC Configuration
+ *
+ * Configures VPC for ECS deployment. Supports both existing VPC (by ID) and auto-creation.
+ */
+export interface VpcConfig {
+    /**
+     * Existing VPC ID to use (optional)
+     *
+     * If specified, the VPC must have:
+     * - Private subnets with NAT Gateway for outbound internet access
+     * - Proper routing for ECS tasks
+     *
+     * If not specified, a new VPC will be created matching the Quilt production architecture:
+     * - 2 Availability Zones
+     * - Public subnets (for NAT Gateways)
+     * - Private subnets with NAT Gateway (for ECS tasks)
+     *
+     * @example "vpc-0123456789abcdef0"
+     */
+    vpcId?: string;
+
+    /**
+     * Whether to create a new VPC if vpcId is not specified
+     *
+     * @default true
+     */
+    createIfMissing?: boolean;
 }
 
 /**
