@@ -1,5 +1,5 @@
 /**
- * Unit tests for XDGConfig class (v0.7.0)
+ * Unit tests for XDGConfig class
  *
  * Tests the new profile-based configuration API with NO backward compatibility.
  */

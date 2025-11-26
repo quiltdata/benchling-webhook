@@ -1,5 +1,5 @@
 /**
- * Unit tests for Deployment Tracking (v0.7.0)
+ * Unit tests for Deployment Tracking
  *
  * Tests deployment history management and active deployment tracking.
  */

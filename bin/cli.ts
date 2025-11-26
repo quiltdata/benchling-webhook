@@ -59,7 +59,7 @@ program
         "Name or ARN of Benchling secret in Secrets Manager",
     )
     .option("--env-file <path>", "Path to .env file", ".env")
-// Multi-environment options (v0.7.0)
+// Multi-environment options
     .option("--profile <name>", "Configuration profile to use (default: default)")
     .option("--stage <name>", "API Gateway stage: dev or prod (default: prod)")
 // Common options
@@ -324,7 +324,7 @@ program
         }
     });
 
-// Setup profile command (v0.7.0)
+// Setup profile command
 program
     .command("setup-profile <name>")
     .description("Create a new configuration profile with optional inheritance")
