@@ -386,6 +386,39 @@ export abstract class XDGBase implements IConfigStorage {
         }
     }
 
+    /**
+     * Clears the active deployment for a specific stage
+     *
+     * Removes the active deployment entry for the given stage, but keeps
+     * the deployment history intact.
+     *
+     * @param profile - Profile name
+     * @param stage - Stage name (e.g., "dev", "prod")
+     *
+     * @example
+     * ```typescript
+     * // Clear production deployment tracking after destroying the stack
+     * storage.clearDeployment("default", "prod");
+     * ```
+     */
+    public clearDeployment(profile: string, stage: string): void {
+        try {
+            const deployments = this.getDeployments(profile);
+
+            // Remove active deployment for this stage
+            if (deployments.active[stage]) {
+                delete deployments.active[stage];
+
+                // Write updated deployments
+                this.writeDeploymentsRaw(profile, deployments);
+            }
+        } catch (error) {
+            throw new Error(
+                `Failed to clear deployment for profile "${profile}" stage "${stage}": ${(error as Error).message}`,
+            );
+        }
+    }
+
     // ====================================================================
     // Profile Inheritance (Business Logic)
     // ====================================================================
