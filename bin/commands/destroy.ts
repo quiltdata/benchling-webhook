@@ -73,6 +73,41 @@ export async function destroyCommand(options: {
             stackExists = true;
             stackStatus = response.Stacks[0].StackStatus || "UNKNOWN";
             spinner.succeed(`Stack exists (status: ${stackStatus})`);
+
+            // Check if stack is in a transitional state
+            const transitionalStates = [
+                "CREATE_IN_PROGRESS",
+                "UPDATE_IN_PROGRESS",
+                "DELETE_IN_PROGRESS",
+                "ROLLBACK_IN_PROGRESS",
+                "UPDATE_ROLLBACK_IN_PROGRESS",
+                "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS",
+            ];
+
+            if (transitionalStates.includes(stackStatus)) {
+                spinner.warn(`Stack is in transitional state: ${stackStatus}`);
+                console.log();
+                console.log(
+                    boxen(
+                        `${chalk.yellow.bold("⚠ Stack in Transitional State")}\n\n` +
+                            `The stack is currently: ${chalk.cyan(stackStatus)}\n\n` +
+                            `${chalk.bold("CloudFormation is still processing this stack.")}\n\n` +
+                            `You must wait for the stack to reach a stable state before destroying it.\n\n` +
+                            `${chalk.bold("Stable states:")}\n` +
+                            "  • UPDATE_ROLLBACK_COMPLETE\n" +
+                            "  • CREATE_COMPLETE\n" +
+                            "  • UPDATE_COMPLETE\n\n" +
+                            `${chalk.bold("To check status:")}\n` +
+                            `  aws cloudformation describe-stacks \\${"\n"}` +
+                            `    --stack-name BenchlingWebhookStack \\${"\n"}` +
+                            `    --region ${destroyRegion} \\${"\n"}` +
+                            `    --query 'Stacks[0].StackStatus'`,
+                        { padding: 1, borderColor: "yellow", borderStyle: "round" },
+                    ),
+                );
+                console.log();
+                process.exit(1);
+            }
         } else {
             spinner.warn("Stack does not exist");
         }
@@ -137,23 +172,49 @@ export async function destroyCommand(options: {
         }
     }
 
-    // Execute CDK destroy
+    // Execute CloudFormation delete directly (avoid CDK synthesis issues)
     console.log();
     console.log(chalk.bold("Destroying stack..."));
     console.log(chalk.dim("This may take several minutes..."));
     console.log();
 
     try {
-        const cdkCommand = [
-            "cdk",
-            "destroy",
-            "BenchlingWebhookStack",
-            "--force", // Skip confirmation since we already confirmed
-            `--profile ${profileName}`,
+        // Use AWS CLI directly to avoid CDK synthesis issues with incomplete configs
+        const deleteCommand = [
+            "aws",
+            "cloudformation",
+            "delete-stack",
+            "--stack-name BenchlingWebhookStack",
             `--region ${destroyRegion}`,
         ].join(" ");
 
-        execSync(cdkCommand, {
+        console.log(chalk.dim(`Executing: ${deleteCommand}`));
+        console.log();
+
+        execSync(deleteCommand, {
+            stdio: "inherit",
+            env: {
+                ...process.env,
+                AWS_REGION: destroyRegion,
+            },
+        });
+
+        // Wait for deletion to complete
+        console.log();
+        console.log(chalk.dim("Waiting for stack deletion to complete..."));
+        console.log(chalk.dim("(This may take several minutes)"));
+        console.log();
+
+        const waitCommand = [
+            "aws",
+            "cloudformation",
+            "wait",
+            "stack-delete-complete",
+            "--stack-name BenchlingWebhookStack",
+            `--region ${destroyRegion}`,
+        ].join(" ");
+
+        execSync(waitCommand, {
             stdio: "inherit",
             env: {
                 ...process.env,
