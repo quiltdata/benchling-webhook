@@ -187,8 +187,8 @@ export async function destroyCommand(options: {
                     `Stage:   ${chalk.cyan(stage)}\n` +
                     `Profile: ${chalk.cyan(profileName)}\n\n` +
                     `${chalk.bold("Next steps:")}\n` +
-                    `  • To deploy a new stack: ${chalk.cyan(`npm run deploy:${stage} -- --profile ${profileName}`)}\n` +
-                    `  • To update configuration: ${chalk.cyan(`npm run setup -- --profile ${profileName}`)}`,
+                    `  • To deploy a new stack: ${chalk.cyan(`npx @quiltdata/benchling-webhook deploy --stage ${stage} --profile ${profileName}`)}\n` +
+                    `  • To update configuration: ${chalk.cyan(`npx @quiltdata/benchling-webhook setup --profile ${profileName}`)}`,
                 { padding: 1, borderColor: "green", borderStyle: "round" },
             ),
         );
