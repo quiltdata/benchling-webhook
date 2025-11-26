@@ -1,5 +1,5 @@
 /**
- * XDG Base Abstract Class (v0.7.0)
+ * XDG Base Abstract Class
  *
  * Abstract base class containing all shared business logic for configuration management.
  * Concrete implementations (XDGConfig, XDGTest) provide storage primitives.

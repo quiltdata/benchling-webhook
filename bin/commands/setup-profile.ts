@@ -1,5 +1,5 @@
 /**
- * Setup Profile Command (v0.7.0)
+ * Setup Profile Command
  *
  * Creates a new profile for multi-environment deployment with support for
  * profile inheritance. Profiles enable separate configurations for dev,

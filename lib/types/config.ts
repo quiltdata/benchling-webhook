@@ -688,7 +688,7 @@ export interface ProfileOptions {
 export const ProfileConfigSchema = {
     $schema: "http://json-schema.org/draft-07/schema#",
     title: "ProfileConfig",
-    description: "Benchling Webhook Profile Configuration (v0.7.0)",
+    description: "Benchling Webhook Profile Configuration",
     type: "object",
     required: ["quilt", "benchling", "packages", "deployment", "_metadata"],
     properties: {

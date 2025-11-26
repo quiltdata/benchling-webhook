@@ -33,7 +33,7 @@ import { ProfileConfig, DeploymentHistory } from "./types/config";
 import { XDGBase } from "./xdg-base";
 
 /**
- * XDG Configuration Manager (v0.7.0)
+ * XDG Configuration Manager
  *
  * Filesystem-based implementation extending XDGBase.
  * Manages profile-based configuration with deployment tracking.
