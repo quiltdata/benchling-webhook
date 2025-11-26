@@ -119,7 +119,7 @@ program
 program
     .command("status")
     .description(
-        "Check CloudFormation stack status and BenchlingIntegration parameter",
+        "Check CloudFormation stack status and BenchlingWebhook parameter",
     )
     .option(
         "--profile <name>",
@@ -187,8 +187,10 @@ program
         "5m",
     )
     .option("--filter <pattern>", "Filter logs by pattern (example: ERROR)")
-    .option("--limit <n>", "Number of log entries to show per log group (default: 5)", "5")
+    .option("--limit <n>", "Number of log entries to show per log group (default: 20)", "20")
     .option("--timer <seconds>", "Auto-refresh interval in seconds (default: 10, use 0 to disable)", "10")
+    .option("--no-dashboard", "Disable interactive dashboard UI (use text mode)")
+    .option("--all-containers", "Show all containers (including bucket_scanner, registry, etc.)")
     .addHelpText(
         "after",
         `
@@ -200,8 +202,11 @@ Log Types:
   api-exec  API Gateway execution logs (detailed debugging)
 
 Examples:
-  View all logs (auto-refreshes every 10 seconds):
+  View all logs with interactive dashboard (default):
     $ npx @quiltdata/benchling-webhook logs --profile sales
+
+  Use text mode instead of dashboard:
+    $ npx @quiltdata/benchling-webhook logs --profile sales --no-dashboard
 
   View only ECS logs:
     $ npx @quiltdata/benchling-webhook logs --profile sales --type ecs

@@ -10,6 +10,8 @@
 import chalk from "chalk";
 import { inferQuiltConfig } from "../../bin/commands/infer-quilt-config";
 import { StackQueryResult } from "./types";
+import { discoverECSServices } from "../utils/ecs-service-discovery";
+import { LogGroupInfo } from "../types/config";
 
 /**
  * Phase 2 options
@@ -74,6 +76,7 @@ export async function runStackQuery(
         const queueUrl = inferenceResult.queueUrl || "";
         const region = inferenceResult.region || awsRegion || "us-east-1";
         const account = inferenceResult.account || "";
+        const stackVersion = inferenceResult.stackVersion;
         const benchlingSecretArn = inferenceResult.benchlingSecretArn;
         const benchlingIntegrationEnabled = inferenceResult.benchlingIntegrationEnabled;
         const athenaUserWorkgroup = inferenceResult.athenaUserWorkgroup;
@@ -84,12 +87,22 @@ export async function runStackQuery(
         const athenaResultsBucketPolicy = inferenceResult.athenaResultsBucketPolicy;
         const readRoleArn = inferenceResult.readRoleArn;
         const writeRoleArn = inferenceResult.writeRoleArn;
+        // New integrated architecture fields (PR #2199)
+        const benchlingUrl = inferenceResult.benchlingUrl;
+        const benchlingApiId = inferenceResult.benchlingApiId;
+        const benchlingDockerImage = inferenceResult.benchlingDockerImage;
+        const benchlingWriteRoleArn = inferenceResult.benchlingWriteRoleArn;
+        const ecsLogGroup = inferenceResult.ecsLogGroup;
+        const apiGatewayLogGroup = inferenceResult.apiGatewayLogGroup;
 
         // Log what we found
         console.log(chalk.green("✓ Stack query succeeded\n"));
         console.log(chalk.dim(`✓ Stack ARN: ${stackArn}`));
         console.log(chalk.dim(`✓ Account: ${account}`));
         console.log(chalk.dim(`✓ Region: ${region}`));
+        if (stackVersion) {
+            console.log(chalk.dim(`✓ Stack Version: ${stackVersion}`));
+        }
         console.log(chalk.dim(`✓ Queue URL: ${queueUrl}`));
         console.log(chalk.dim(`✓ Database: ${database}`));
         console.log(chalk.dim(`✓ Workgroup: ${athenaUserWorkgroup}`));
@@ -133,6 +146,65 @@ export async function runStackQuery(
 
         console.log("");
 
+        // Discover log groups from the Quilt stack's ECS services
+        let logGroups: LogGroupInfo[] = [];
+        try {
+            // Extract stack name from ARN (format: arn:aws:cloudformation:region:account:stack/name/id)
+            const stackNameMatch = stackArn.match(/stack\/([^/]+)\//);
+            const stackName = stackNameMatch ? stackNameMatch[1] : "";
+
+            if (stackName) {
+                console.log(chalk.dim("Discovering CloudWatch log groups..."));
+
+                // For integrated architecture stacks, filter to Benchling-related containers only
+                // This prevents noise from unrelated services like bucket_scanner, registry, etc.
+                const filterPatterns = benchlingIntegrationEnabled
+                    ? ["benchling/", "benchling-nginx/"]
+                    : undefined;
+
+                const services = await discoverECSServices(stackName, region, awsProfile, {
+                    containerFilterPatterns: filterPatterns,
+                });
+
+                if (services.length > 0) {
+                    for (const svc of services) {
+                        if (svc.logGroup && svc.logStreamPrefix) {
+                            // Create better display names for known Benchling containers
+                            let displayName: string;
+                            if (svc.logStreamPrefix?.startsWith("benchling/benchling")) {
+                                displayName = "Benchling Webhook (Application)";
+                            } else if (svc.logStreamPrefix?.startsWith("benchling-nginx/nginx")) {
+                                displayName = "Benchling Webhook (Proxy)";
+                            } else {
+                                // Fallback for other containers
+                                displayName = svc.containerName
+                                    ? `${svc.serviceName}/${svc.containerName}`
+                                    : svc.serviceName;
+                            }
+
+                            logGroups.push({
+                                name: svc.logGroup,
+                                type: "ecs",
+                                displayName: `${displayName} (ECS)`,
+                                streamPrefix: svc.logStreamPrefix,
+                            });
+                            console.log(chalk.green(`✓ Log Stream: ${svc.logStreamPrefix} → ${svc.logGroup}`));
+                        }
+                    }
+
+                    if (filterPatterns) {
+                        console.log(chalk.dim("  (Filtered to Benchling containers only. Use --all-containers to see all)"));
+                    }
+                } else {
+                    console.log(chalk.dim("  No ECS services found in stack"));
+                }
+            }
+        } catch (error) {
+            console.log(chalk.dim(`  Could not discover log groups: ${(error as Error).message}`));
+        }
+
+        console.log("");
+
         return {
             stackArn,
             catalog: normalizedConfirmed,
@@ -140,6 +212,7 @@ export async function runStackQuery(
             queueUrl,
             region,
             account,
+            stackVersion,
             benchlingSecretArn,
             benchlingIntegrationEnabled,
             athenaUserWorkgroup,
@@ -150,6 +223,14 @@ export async function runStackQuery(
             athenaResultsBucketPolicy,
             readRoleArn,
             writeRoleArn,
+            logGroups: logGroups.length > 0 ? logGroups : undefined,
+            // New integrated architecture fields (PR #2199)
+            benchlingUrl,
+            benchlingApiId,
+            benchlingDockerImage,
+            benchlingWriteRoleArn,
+            ecsLogGroup,
+            apiGatewayLogGroup,
             stackQuerySucceeded: true,
         };
     } catch (error) {

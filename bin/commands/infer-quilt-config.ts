@@ -37,6 +37,7 @@ interface QuiltStackInfo {
     database?: string;
     queueUrl?: string;
     catalogUrl?: string;
+    stackVersion?: string;
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
     athenaUserWorkgroup?: string;
@@ -47,6 +48,13 @@ interface QuiltStackInfo {
     athenaResultsBucketPolicy?: string;
     readRoleArn?: string;
     writeRoleArn?: string;
+    // New integrated architecture fields (PR #2199)
+    benchlingUrl?: string;
+    benchlingApiId?: string;
+    benchlingDockerImage?: string;
+    benchlingWriteRoleArn?: string;
+    ecsLogGroup?: string;
+    apiGatewayLogGroup?: string;
 }
 
 /**
@@ -59,6 +67,7 @@ interface InferenceResult {
     region?: string;
     account?: string;
     queueUrl?: string;
+    stackVersion?: string;
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
     athenaUserWorkgroup?: string;
@@ -69,6 +78,13 @@ interface InferenceResult {
     athenaResultsBucketPolicy?: string;
     readRoleArn?: string;
     writeRoleArn?: string;
+    // New integrated architecture fields (PR #2199)
+    benchlingUrl?: string;
+    benchlingApiId?: string;
+    benchlingDockerImage?: string;
+    benchlingWriteRoleArn?: string;
+    ecsLogGroup?: string;
+    apiGatewayLogGroup?: string;
     source: string;
 }
 
@@ -189,6 +205,24 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     } else if (key === "IcebergDatabase") {
                         // Extract IcebergDatabase from outputs (fallback)
                         stackInfo.icebergDatabase = value;
+                    } else if (key === "BenchlingUrl") {
+                        // New integrated architecture: API Gateway endpoint URL
+                        stackInfo.benchlingUrl = value;
+                    } else if (key === "BenchlingApiId") {
+                        // New integrated architecture: API Gateway ID
+                        stackInfo.benchlingApiId = value;
+                    } else if (key === "BenchlingDockerImage") {
+                        // New integrated architecture: Container image URI
+                        stackInfo.benchlingDockerImage = value;
+                    } else if (key === "BenchlingWriteRoleArn") {
+                        // New integrated architecture: IAM role for webhook operations
+                        stackInfo.benchlingWriteRoleArn = value;
+                    } else if (key === "EcsLogGroup") {
+                        // New integrated architecture: ECS container log group
+                        stackInfo.ecsLogGroup = value;
+                    } else if (key === "ApiGatewayLogGroup") {
+                        // New integrated architecture: API Gateway log group
+                        stackInfo.apiGatewayLogGroup = value;
                     }
                 }
 
@@ -198,7 +232,7 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     const key = param.ParameterKey || "";
                     const value = param.ParameterValue || "";
 
-                    if (key === "BenchlingIntegration") {
+                    if (key === "BenchlingWebhook") {
                         stackInfo.benchlingIntegrationEnabled = value === "Enabled";
                     }
                 }
@@ -234,6 +268,53 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     // FAIL LOUDLY - show the error with full stack trace
                     console.error(chalk.red(`[ERROR] Failed to query stack resources: ${(error as Error).message}`));
                     console.error(chalk.red("[ERROR] Stack:"), (error as Error).stack);
+                }
+
+                // Attempt to detect API Gateway log groups if not exported
+                // This is a fallback for integrated stacks that don't export log groups
+                if (stackInfo.benchlingApiId && !stackInfo.apiGatewayLogGroup) {
+                    // Try to detect if API Gateway execution logs exist
+                    // Standard format: API-Gateway-Execution-Logs_{restApiId}/{stage}
+                    // We'll try common stage names: prod, dev, staging
+                    const possibleLogGroups = [
+                        `API-Gateway-Execution-Logs_${stackInfo.benchlingApiId}/prod`,
+                        `API-Gateway-Execution-Logs_${stackInfo.benchlingApiId}/dev`,
+                        `API-Gateway-Execution-Logs_${stackInfo.benchlingApiId}/staging`,
+                    ];
+
+                    // Try to check if any of these log groups exist
+                    try {
+                        const { CloudWatchLogsClient, DescribeLogGroupsCommand } = await import("@aws-sdk/client-cloudwatch-logs");
+                        const logsClientConfig: { region: string; credentials?: AwsCredentialIdentityProvider } = { region };
+                        if (profile) {
+                            logsClientConfig.credentials = fromIni({ profile });
+                        }
+                        const logsClient = new CloudWatchLogsClient(logsClientConfig);
+
+                        for (const logGroupName of possibleLogGroups) {
+                            try {
+                                const command = new DescribeLogGroupsCommand({
+                                    logGroupNamePrefix: logGroupName,
+                                    limit: 1,
+                                });
+                                const response = await logsClient.send(command);
+                                if (response.logGroups && response.logGroups.length > 0) {
+                                    stackInfo.apiGatewayLogGroup = logGroupName;
+                                    console.log(chalk.dim(`  Detected API Gateway Log Group: ${logGroupName}`));
+                                    break;
+                                }
+                            } catch {
+                                // Log group doesn't exist, try next one
+                                continue;
+                            }
+                        }
+
+                        if (!stackInfo.apiGatewayLogGroup) {
+                            console.log(chalk.dim("  API Gateway execution logs not found (may not be enabled)"));
+                        }
+                    } catch (error) {
+                        console.log(chalk.dim(`  Could not check API Gateway log groups: ${(error as Error).message}`));
+                    }
                 }
 
                 stackInfos.push(stackInfo);
@@ -354,7 +435,7 @@ export async function inferQuiltConfig(options: {
         try {
             console.log(`\nFetching catalog configuration from ${quilt3Config.catalogUrl}...`);
             const configUrl = quilt3Config.catalogUrl.replace(/\/$/, "") + "/config.json";
-            const catalogConfig = (await fetchJson(configUrl)) as { region?: string; stackName?: string; [key: string]: unknown };
+            const catalogConfig = (await fetchJson(configUrl)) as { region?: string; stackVersion?: string; stackName?: string; [key: string]: unknown };
 
             if (catalogConfig.region) {
                 searchRegion = catalogConfig.region;
@@ -367,6 +448,12 @@ export async function inferQuiltConfig(options: {
                     "Cannot determine which AWS region to search for the CloudFormation stack. " +
                     "This catalog may be using an older version of Quilt that doesn't support automatic region detection.",
                 );
+            }
+
+            // Capture stackVersion if available
+            if (catalogConfig.stackVersion) {
+                result.stackVersion = catalogConfig.stackVersion;
+                console.log(`✓ Found stack version: ${catalogConfig.stackVersion}`);
             }
         } catch (error) {
             const err = error as Error;
@@ -511,13 +598,16 @@ export async function inferQuiltConfig(options: {
     if (selectedStack.region) {
         result.region = selectedStack.region;
     }
+    if (selectedStack.stackVersion && !result.stackVersion) {
+        result.stackVersion = selectedStack.stackVersion;
+    }
     if (selectedStack.benchlingSecretArn) {
         result.benchlingSecretArn = selectedStack.benchlingSecretArn;
         console.log(`✓ Found BenchlingSecret from Quilt stack: ${selectedStack.benchlingSecretArn}`);
     }
     if (selectedStack.benchlingIntegrationEnabled !== undefined) {
         result.benchlingIntegrationEnabled = selectedStack.benchlingIntegrationEnabled;
-        console.log(`✓ BenchlingIntegration: ${selectedStack.benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`);
+        console.log(`✓ BenchlingWebhook: ${selectedStack.benchlingIntegrationEnabled ? "Enabled" : "Disabled"}`);
     }
     // Add discovered workgroups and resources to result
     if (selectedStack.athenaUserWorkgroup) {
@@ -555,6 +645,32 @@ export async function inferQuiltConfig(options: {
         console.log("  (Write role will be used for all S3 operations)");
     } else {
         console.log(chalk.yellow("⚠ T4BucketWriteRole: NOT FOUND (optional - will use task role for S3 access)"));
+    }
+
+    // New integrated architecture fields (PR #2199)
+    if (selectedStack.benchlingUrl) {
+        result.benchlingUrl = selectedStack.benchlingUrl;
+        console.log(`✓ Benchling Webhook URL: ${selectedStack.benchlingUrl}`);
+    }
+    if (selectedStack.benchlingApiId) {
+        result.benchlingApiId = selectedStack.benchlingApiId;
+        console.log(chalk.dim(`  API Gateway ID: ${selectedStack.benchlingApiId}`));
+    }
+    if (selectedStack.benchlingDockerImage) {
+        result.benchlingDockerImage = selectedStack.benchlingDockerImage;
+        console.log(chalk.dim(`  Docker Image: ${selectedStack.benchlingDockerImage}`));
+    }
+    if (selectedStack.benchlingWriteRoleArn) {
+        result.benchlingWriteRoleArn = selectedStack.benchlingWriteRoleArn;
+        console.log(`✓ Benchling Write Role: ${selectedStack.benchlingWriteRoleArn}`);
+    }
+    if (selectedStack.ecsLogGroup) {
+        result.ecsLogGroup = selectedStack.ecsLogGroup;
+        console.log(chalk.dim(`  ECS Log Group: ${selectedStack.ecsLogGroup}`));
+    }
+    if (selectedStack.apiGatewayLogGroup) {
+        result.apiGatewayLogGroup = selectedStack.apiGatewayLogGroup;
+        console.log(chalk.dim(`  API Gateway Log Group: ${selectedStack.apiGatewayLogGroup}`));
     }
     if (result.source === "quilt3-cli") {
         result.source = "quilt3-cli+cloudformation";
@@ -595,6 +711,7 @@ async function main(): Promise<void> {
     console.log("\n=== Inference Results ===");
     console.log(`Source: ${result.source}`);
     if (result.catalog) console.log(`Catalog URL: ${result.catalog}`);
+    if (result.stackVersion) console.log(`Stack Version: ${result.stackVersion}`);
     if (result.database) console.log(`Database: ${result.database}`);
     if (result.stackArn) console.log(`Stack ARN: ${result.stackArn}`);
     if (result.region) console.log(`Region: ${result.region}`);

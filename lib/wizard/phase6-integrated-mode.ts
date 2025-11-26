@@ -28,6 +28,7 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
             database: stackQuery.database,
             queueUrl: stackQuery.queueUrl,
             region: stackQuery.region,
+            ...(stackQuery.stackVersion && { stackVersion: stackQuery.stackVersion }),
         },
         benchling: {
             tenant: parameters.benchling.tenant,
@@ -44,6 +45,7 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
         deployment: {
             region: parameters.deployment.region,
             account: parameters.deployment.account,
+            logGroups: stackQuery.logGroups, // Include discovered log groups
         },
         integratedStack: true, // CRITICAL: Mark as integrated mode
         logging: {
@@ -89,6 +91,26 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
         config.quilt.writeRoleArn = stackQuery.writeRoleArn;
     }
 
+    // Add new integrated architecture fields (PR #2199)
+    if (stackQuery.benchlingUrl) {
+        config.quilt.benchlingUrl = stackQuery.benchlingUrl;
+    }
+    if (stackQuery.benchlingApiId) {
+        config.quilt.benchlingApiId = stackQuery.benchlingApiId;
+    }
+    if (stackQuery.benchlingDockerImage) {
+        config.quilt.benchlingDockerImage = stackQuery.benchlingDockerImage;
+    }
+    if (stackQuery.benchlingWriteRoleArn) {
+        config.quilt.benchlingWriteRoleArn = stackQuery.benchlingWriteRoleArn;
+    }
+    if (stackQuery.ecsLogGroup) {
+        config.quilt.ecsLogGroup = stackQuery.ecsLogGroup;
+    }
+    if (stackQuery.apiGatewayLogGroup) {
+        config.quilt.apiGatewayLogGroup = stackQuery.apiGatewayLogGroup;
+    }
+
     return config;
 }
 
@@ -99,7 +121,7 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
  * - Build complete configuration
  * - Save config with integratedStack: true
  * - Update BenchlingSecret ARN
- * - Check and optionally enable BenchlingIntegration parameter
+ * - Check and optionally enable BenchlingWebhook parameter
  * - Show success message
  * - Return (NO deployment)
  *
@@ -143,20 +165,20 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
         console.warn(chalk.cyan(`   npm run setup:sync-secrets -- --profile ${profile}\n`));
     }
 
-    // Step 3.5: Check and optionally enable BenchlingIntegration parameter
-    console.log("Checking BenchlingIntegration parameter...\n");
+    // Step 3.5: Check and optionally enable BenchlingWebhook parameter
+    console.log("Checking BenchlingWebhook parameter...\n");
 
     const benchlingIntegrationEnabled = stackQuery.benchlingIntegrationEnabled;
     let integrationStatusUpdated = false;
 
     if (benchlingIntegrationEnabled === undefined) {
-        console.log(chalk.yellow("⚠️  Could not determine BenchlingIntegration status"));
+        console.log(chalk.yellow("⚠️  Could not determine BenchlingWebhook status"));
         console.log(chalk.dim("   You may need to enable it manually in CloudFormation\n"));
     } else if (benchlingIntegrationEnabled) {
-        console.log(chalk.green("✓ BenchlingIntegration is already Enabled\n"));
+        console.log(chalk.green("✓ BenchlingWebhook is already Enabled\n"));
     } else {
         // Parameter is disabled - offer to enable
-        console.log(chalk.yellow("BenchlingIntegration is currently Disabled"));
+        console.log(chalk.yellow("BenchlingWebhook is currently Disabled"));
 
         let shouldEnable = yes;
         if (!yes) {
@@ -164,7 +186,7 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
                 {
                     type: "confirm",
                     name: "enable",
-                    message: "Enable BenchlingIntegration now?",
+                    message: "Enable BenchlingWebhook now?",
                     default: true,
                 },
             ]);
@@ -172,13 +194,13 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
         }
 
         if (shouldEnable) {
-            console.log("\nEnabling BenchlingIntegration parameter...");
+            console.log("\nEnabling BenchlingWebhook parameter...");
 
             const { updateStackParameter } = await import("../utils/stack-parameter-update");
             const updateResult = await updateStackParameter({
                 stackArn: stackQuery.stackArn,
                 region: config.deployment.region,
-                parameterKey: "BenchlingIntegration",
+                parameterKey: "BenchlingWebhook",
                 parameterValue: "Enabled",
                 awsProfile,
             });
@@ -188,7 +210,7 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
                 console.log(chalk.dim("  The stack is now updating in the background\n"));
                 integrationStatusUpdated = true;
             } else {
-                console.warn(chalk.yellow(`⚠️  Failed to enable BenchlingIntegration: ${updateResult.error}`));
+                console.warn(chalk.yellow(`⚠️  Failed to enable BenchlingWebhook: ${updateResult.error}`));
                 console.warn(chalk.yellow("   You can enable it manually in CloudFormation console\n"));
             }
         } else {
@@ -206,24 +228,43 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
 
     // Show integration status
     if (benchlingIntegrationEnabled === true && !integrationStatusUpdated) {
-        console.log(chalk.green("✓ BenchlingIntegration is Enabled"));
+        console.log(chalk.green("✓ BenchlingWebhook is Enabled"));
     } else if (benchlingIntegrationEnabled === false || integrationStatusUpdated) {
-        console.log(chalk.yellow("⚠ BenchlingIntegration update in progress"));
+        console.log(chalk.yellow("⚠ BenchlingWebhook update in progress"));
     } else {
-        console.log(chalk.dim("✓ BenchlingIntegration status unknown"));
+        console.log(chalk.dim("✓ BenchlingWebhook status unknown"));
     }
 
     console.log(chalk.dim("✓ No separate webhook deployment needed"));
     console.log(chalk.dim("✓ Quilt stack will handle webhook events\n"));
 
+    // Show discovered log groups
+    if (stackQuery.logGroups && stackQuery.logGroups.length > 0) {
+        console.log(chalk.bold("Discovered Log Groups:"));
+        for (const logGroup of stackQuery.logGroups) {
+            console.log(chalk.cyan(`  • ${logGroup.displayName}: ${logGroup.name}`));
+        }
+        console.log("");
+    }
+
     console.log(chalk.bold("Next steps:"));
-    console.log("  1. Monitor stack update:");
-    console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook status --profile ${profile}`));
-    console.log("  2. Configure webhook URL in Benchling app settings");
-    console.log("     (Get the webhook URL from your Quilt stack outputs)");
-    console.log("  3. Test the webhook integration");
-    console.log("  4. Monitor logs:");
-    console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook logs --profile ${profile}`));
+
+    // Show webhook URL if available
+    if (stackQuery.benchlingUrl) {
+        console.log("  1. Configure webhook URL in Benchling app settings:");
+        console.log(chalk.cyan(`     ${stackQuery.benchlingUrl}`));
+        console.log("  2. Test the webhook integration");
+        console.log("  3. Monitor logs:");
+        console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook logs --profile ${profile}`));
+    } else {
+        console.log("  1. Monitor stack update:");
+        console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook status --profile ${profile}`));
+        console.log("  2. Configure webhook URL in Benchling app settings");
+        console.log("     (Get the webhook URL from your Quilt stack outputs)");
+        console.log("  3. Test the webhook integration");
+        console.log("  4. Monitor logs:");
+        console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook logs --profile ${profile}`));
+    }
     console.log("");
 
     return {

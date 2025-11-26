@@ -161,6 +161,18 @@ export interface QuiltConfig {
     catalog: string;
 
     /**
+     * Quilt stack version (optional)
+     *
+     * Version string from the Quilt catalog's config.json.
+     * Used for informational purposes and diagnostics.
+     *
+     * **Informational only** - not passed to container runtime.
+     *
+     * @example "1.64.2-86-g1bd27a9c"
+     */
+    stackVersion?: string;
+
+    /**
      * Athena/Glue database name for catalog metadata
      *
      * Resolved from stack output `UserAthenaDatabaseName` at deployment time.
@@ -264,6 +276,80 @@ export interface QuiltConfig {
      * @example "arn:aws:iam::123456789012:role/quilt-stack-T4BucketWriteRole-XYZ789"
      */
     writeRoleArn?: string;
+
+    // New integrated architecture fields (PR #2199)
+    /**
+     * Benchling webhook URL from integrated API Gateway (optional)
+     *
+     * Only present when using integrated mode (BenchlingWebhook=Enabled in Quilt stack).
+     * This is the public HTTPS endpoint where Benchling sends webhook events.
+     *
+     * Resolved from stack output `BenchlingUrl` at deployment time.
+     *
+     * @example "https://abc123xyz.execute-api.us-east-1.amazonaws.com"
+     */
+    benchlingUrl?: string;
+
+    /**
+     * API Gateway ID for integrated Benchling webhook (optional)
+     *
+     * Only present when using integrated mode.
+     * Used for debugging and monitoring API Gateway.
+     *
+     * Resolved from stack output `BenchlingApiId` at deployment time.
+     *
+     * @example "abc123xyz"
+     */
+    benchlingApiId?: string;
+
+    /**
+     * Docker image URI for integrated Benchling webhook container (optional)
+     *
+     * Only present when using integrated mode.
+     * Shows which container image is deployed in the Quilt stack.
+     *
+     * Resolved from stack output `BenchlingDockerImage` at deployment time.
+     *
+     * @example "712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest"
+     */
+    benchlingDockerImage?: string;
+
+    /**
+     * IAM role ARN for Benchling webhook operations (optional)
+     *
+     * Only present when using integrated mode.
+     * This role may differ from the general T4BucketWriteRole and is specific
+     * to Benchling webhook operations.
+     *
+     * Resolved from stack output `BenchlingWriteRoleArn` at deployment time.
+     *
+     * @example "arn:aws:iam::123456789012:role/quilt-stack-BenchlingWriteRole-ABC123"
+     */
+    benchlingWriteRoleArn?: string;
+
+    /**
+     * ECS container log group name for integrated Benchling webhook (optional)
+     *
+     * Only present when using integrated mode.
+     * Used for log discovery and monitoring.
+     *
+     * Resolved from stack output `EcsLogGroup` at deployment time.
+     *
+     * @example "/ecs/quilt-stack-benchling/benchling"
+     */
+    ecsLogGroup?: string;
+
+    /**
+     * API Gateway log group name for integrated Benchling webhook (optional)
+     *
+     * Only present when using integrated mode.
+     * Used for API Gateway access/execution log discovery.
+     *
+     * Resolved from stack output `ApiGatewayLogGroup` at deployment time.
+     *
+     * @example "/aws/apigateway/quilt-stack-benchling"
+     */
+    apiGatewayLogGroup?: string;
 }
 
 /**
@@ -348,6 +434,46 @@ export interface PackageConfig {
 }
 
 /**
+ * Log Group Information
+ *
+ * CloudWatch log group details discovered during deployment.
+ */
+export interface LogGroupInfo {
+    /**
+     * CloudWatch log group name
+     *
+     * @example "/ecs/benchling-webhook"
+     * @example "/aws/apigateway/benchling-webhook"
+     */
+    name: string;
+
+    /**
+     * Log type identifier
+     *
+     * @example "ecs"
+     * @example "api"
+     * @example "api-exec"
+     */
+    type: string;
+
+    /**
+     * Human-friendly display name
+     *
+     * @example "ECS Container Logs"
+     * @example "Benchling Webhook (ECS)"
+     */
+    displayName: string;
+
+    /**
+     * Log stream prefix (optional, for ECS task streams)
+     *
+     * @example "ecs"
+     * @example "benchling-webhook"
+     */
+    streamPrefix?: string;
+}
+
+/**
  * Deployment Configuration
  *
  * AWS infrastructure settings for CDK deployment.
@@ -382,6 +508,18 @@ export interface DeploymentConfig {
      * @default "latest"
      */
     imageTag?: string;
+
+    /**
+     * Discovered CloudWatch log groups (populated during first deployment)
+     *
+     * Cached log group metadata for efficient log retrieval without AWS API calls.
+     * - Standalone mode: Captured from stack outputs after CDK deploy
+     * - Integrated mode: Discovered from existing Quilt stack ECS services
+     *
+     * Eliminates need for runtime CloudFormation/ECS discovery on every logs command.
+     * Updated automatically on each deployment to stay in sync with infrastructure.
+     */
+    logGroups?: LogGroupInfo[];
 }
 
 /**

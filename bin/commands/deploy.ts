@@ -11,9 +11,10 @@ import {
 } from "../../lib/utils/service-resolver";
 import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
-import { ProfileConfig } from "../../lib/types/config";
-import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
+import { ProfileConfig, LogGroupInfo } from "../../lib/types/config";
+import { CloudFormationClient, DescribeStacksCommand, type Stack } from "@aws-sdk/client-cloudformation";
 import { syncSecretsToAWS } from "./sync-secrets";
+import { discoverECSServiceLogGroups } from "../../lib/utils/ecs-service-discovery";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -25,6 +26,73 @@ function suggestSetup(profileName: string, message: string): void {
     console.log();
     console.log(chalk.cyan(`  npm run setup -- --profile ${profileName}`));
     console.log();
+}
+
+/**
+ * Discover log groups from CloudFormation stack
+ * Works for both standalone and integrated modes
+ */
+async function discoverLogGroups(
+    stack: Stack,
+    stackName: string,
+    region: string,
+    integratedMode: boolean,
+): Promise<LogGroupInfo[]> {
+    const logGroups: LogGroupInfo[] = [];
+
+    if (integratedMode) {
+        // Integrated mode: Discover ECS services dynamically
+        const serviceLogGroups = await discoverECSServiceLogGroups(stackName, region);
+
+        for (const [serviceName, logGroupName] of Object.entries(serviceLogGroups)) {
+            // Create friendly display name from service name
+            const displayName = serviceName
+                .split("-")
+                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(" ");
+
+            logGroups.push({
+                name: logGroupName,
+                type: "ecs",
+                displayName: `${displayName} (ECS)`,
+                streamPrefix: "benchling-webhook",
+            });
+        }
+    } else {
+        // Standalone mode: Read from stack outputs
+        const outputs = stack.Outputs || [];
+
+        const ecsLogGroup = outputs.find((o) => o.OutputKey === "EcsLogGroup")?.OutputValue;
+        const apiLogGroup = outputs.find((o) => o.OutputKey === "ApiGatewayLogGroup")?.OutputValue;
+        const apiExecLogGroup = outputs.find((o) => o.OutputKey === "ApiGatewayExecutionLogGroup")?.OutputValue;
+
+        if (ecsLogGroup) {
+            logGroups.push({
+                name: ecsLogGroup,
+                type: "ecs",
+                displayName: "ECS Container Logs",
+                streamPrefix: "benchling-webhook",
+            });
+        }
+
+        if (apiLogGroup) {
+            logGroups.push({
+                name: apiLogGroup,
+                type: "api",
+                displayName: "API Gateway Access Logs",
+            });
+        }
+
+        if (apiExecLogGroup) {
+            logGroups.push({
+                name: apiExecLogGroup,
+                type: "api-exec",
+                displayName: "API Gateway Execution Logs",
+            });
+        }
+    }
+
+    return logGroups;
 }
 
 /**
@@ -487,6 +555,14 @@ export async function deploy(
                     // Remove trailing slash to avoid double slashes in test URLs
                     const cleanEndpoint = webhookUrl.replace(/\/$/, "");
 
+                    // Discover log groups from deployment
+                    const logGroups = await discoverLogGroups(
+                        stack,
+                        stackName,
+                        deployRegion,
+                        config.integratedStack || false,
+                    );
+
                     // Record deployment in profile
                     const xdg = new XDGConfig();
                     xdg.recordDeployment(options.profileName, {
@@ -499,7 +575,12 @@ export async function deploy(
                         deployedBy: process.env.USER || process.env.USERNAME,
                     });
 
+                    // Update profile config with discovered log groups
+                    config.deployment.logGroups = logGroups;
+                    xdg.writeProfile(options.profileName, config);
+
                     console.log(`✅ Recorded deployment to profile '${options.profileName}' stage '${options.stage}'`);
+                    console.log(`✅ Discovered and saved ${logGroups.length} log group(s)`);
 
                     // Success message with webhook URL
                     console.log();

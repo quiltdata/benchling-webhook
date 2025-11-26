@@ -1,12 +1,12 @@
-# Specification: Enable BenchlingIntegration Parameter in Integrated Mode
+# Specification: Enable BenchlingWebhook Parameter in Integrated Mode
 
 ## Overview
 
-This specification details the enhancement to the setup wizard's integrated mode (Phase 6) to check, report, and optionally enable the `BenchlingIntegration` CloudFormation parameter in the Quilt stack.
+This specification details the enhancement to the setup wizard's integrated mode (Phase 6) to check, report, and optionally enable the `BenchlingWebhook` CloudFormation parameter in the Quilt stack.
 
 ## Problem Statement
 
-When users complete setup in integrated mode, the `BenchlingIntegration` parameter in the Quilt CloudFormation stack is typically set to `Disabled`. Users must manually:
+When users complete setup in integrated mode, the `BenchlingWebhook` parameter in the Quilt CloudFormation stack is typically set to `Disabled`. Users must manually:
 
 1. Discover that the parameter needs to be enabled
 2. Navigate to CloudFormation console
@@ -17,7 +17,7 @@ This creates friction and potential confusion in the integration workflow.
 
 ## Goals
 
-1. **Automatic Detection**: Query and report `BenchlingIntegration` parameter status during setup
+1. **Automatic Detection**: Query and report `BenchlingWebhook` parameter status during setup
 2. **Smart Prompting**: Offer to enable the parameter if currently disabled
 3. **Non-blocking Updates**: Initiate stack update without blocking the wizard
 4. **Status Monitoring**: Provide a reusable status command for monitoring stack updates
@@ -34,20 +34,20 @@ This creates friction and potential confusion in the integration workflow.
 ### Story 1: First-time Setup with Disabled Parameter
 
 **As a** new user setting up Benchling integration
-**I want** the wizard to enable BenchlingIntegration automatically
+**I want** the wizard to enable BenchlingWebhook automatically
 **So that** I don't have to manually configure CloudFormation
 
 **Acceptance Criteria:**
 
-- Wizard detects `BenchlingIntegration=Disabled`
-- Prompts user: "BenchlingIntegration is currently Disabled. Enable it now? (y/n)"
+- Wizard detects `BenchlingWebhook=Disabled`
+- Prompts user: "BenchlingWebhook is currently Disabled. Enable it now? (y/n)"
 - On confirmation, updates the stack parameter
 - Shows status command for monitoring
 
 ### Story 2: Non-interactive Setup (--yes flag)
 
 **As a** CI/CD pipeline or automation script
-**I want** `--yes` flag to automatically enable BenchlingIntegration
+**I want** `--yes` flag to automatically enable BenchlingWebhook
 **So that** setup can complete without manual intervention
 
 **Acceptance Criteria:**
@@ -66,7 +66,7 @@ This creates friction and potential confusion in the integration workflow.
 **Acceptance Criteria:**
 
 - Can run `npx @quiltdata/benchling-webhook status --profile <current profile>`
-- Shows current BenchlingIntegration parameter value
+- Shows current BenchlingWebhook parameter value
 - Shows stack status (UPDATE_IN_PROGRESS, UPDATE_COMPLETE, etc.)
 - Shows last update timestamp
 
@@ -78,8 +78,8 @@ This creates friction and potential confusion in the integration workflow.
 
 **Acceptance Criteria:**
 
-- Wizard detects `BenchlingIntegration=Enabled`
-- Reports "✓ BenchlingIntegration is already Enabled"
+- Wizard detects `BenchlingWebhook=Enabled`
+- Reports "✓ BenchlingWebhook is already Enabled"
 - Skips update and proceeds with setup
 - No prompts or stack updates
 
@@ -92,13 +92,13 @@ Phase 2: Stack Query (MODIFIED)
 ├── Query CloudFormation stack
 ├── Extract Outputs (existing)
 └── Extract Parameters (NEW)
-    └── Store BenchlingIntegration value
+    └── Store BenchlingWebhook value
 
 Phase 6: Integrated Mode (ENHANCED)
 ├── Build configuration
 ├── Save configuration
 ├── Sync BenchlingSecret
-├── Check BenchlingIntegration (NEW)
+├── Check BenchlingWebhook (NEW)
 │   ├── Report current status
 │   ├── Prompt if disabled (or auto with --yes)
 │   └── Update stack parameter if confirmed
@@ -107,7 +107,7 @@ Phase 6: Integrated Mode (ENHANCED)
 New Command: status
 ├── Read profile config
 ├── Query stack status
-└── Report BenchlingIntegration + stack state
+└── Report BenchlingWebhook + stack state
 ```
 
 ### Component Changes
@@ -173,7 +173,7 @@ for (const param of parameters) {
     const key = param.ParameterKey || "";
     const value = param.ParameterValue || "";
 
-    if (key === "BenchlingIntegration") {
+    if (key === "BenchlingWebhook") {
         stackInfo.benchlingIntegrationEnabled = value === "Enabled";
     }
 }
@@ -201,7 +201,7 @@ interface QuiltStackInfo {
 ```typescript
 if (selectedStack.benchlingIntegrationEnabled !== undefined) {
     result.benchlingIntegrationEnabled = selectedStack.benchlingIntegrationEnabled;
-    console.log(`✓ BenchlingIntegration: ${selectedStack.benchlingIntegrationEnabled ? 'Enabled' : 'Disabled'}`);
+    console.log(`✓ BenchlingWebhook: ${selectedStack.benchlingIntegrationEnabled ? 'Enabled' : 'Disabled'}`);
 }
 ```
 
@@ -231,7 +231,7 @@ return {
 
 ```typescript
 if (inferenceResult.benchlingIntegrationEnabled !== undefined) {
-    console.log(chalk.dim(`BenchlingIntegration: ${inferenceResult.benchlingIntegrationEnabled ? 'Enabled' : 'Disabled'}`));
+    console.log(chalk.dim(`BenchlingWebhook: ${inferenceResult.benchlingIntegrationEnabled ? 'Enabled' : 'Disabled'}`));
 }
 ```
 
@@ -406,19 +406,19 @@ export async function getStackParameter(
 **Add**:
 
 ```typescript
-// Step 3.5: Check and optionally enable BenchlingIntegration parameter
-console.log("Checking BenchlingIntegration parameter...\n");
+// Step 3.5: Check and optionally enable BenchlingWebhook parameter
+console.log("Checking BenchlingWebhook parameter...\n");
 
 const benchlingIntegrationEnabled = stackQuery.benchlingIntegrationEnabled;
 
 if (benchlingIntegrationEnabled === undefined) {
-    console.log(chalk.yellow("⚠️  Could not determine BenchlingIntegration status"));
+    console.log(chalk.yellow("⚠️  Could not determine BenchlingWebhook status"));
     console.log(chalk.dim("   You may need to enable it manually in CloudFormation\n"));
 } else if (benchlingIntegrationEnabled) {
-    console.log(chalk.green("✓ BenchlingIntegration is already Enabled\n"));
+    console.log(chalk.green("✓ BenchlingWebhook is already Enabled\n"));
 } else {
     // Parameter is disabled - offer to enable
-    console.log(chalk.yellow("BenchlingIntegration is currently Disabled"));
+    console.log(chalk.yellow("BenchlingWebhook is currently Disabled"));
 
     let shouldEnable = yes;
     if (!yes) {
@@ -426,7 +426,7 @@ if (benchlingIntegrationEnabled === undefined) {
             {
                 type: "confirm",
                 name: "enable",
-                message: "Enable BenchlingIntegration now?",
+                message: "Enable BenchlingWebhook now?",
                 default: true,
             },
         ]);
@@ -434,13 +434,13 @@ if (benchlingIntegrationEnabled === undefined) {
     }
 
     if (shouldEnable) {
-        console.log("\nEnabling BenchlingIntegration parameter...");
+        console.log("\nEnabling BenchlingWebhook parameter...");
 
         const { updateStackParameter } = await import("../utils/stack-parameter-update");
         const updateResult = await updateStackParameter({
             stackArn: stackQuery.stackArn,
             region: config.deployment.region,
-            parameterKey: "BenchlingIntegration",
+            parameterKey: "BenchlingWebhook",
             parameterValue: "Enabled",
             awsProfile,
         });
@@ -449,7 +449,7 @@ if (benchlingIntegrationEnabled === undefined) {
             console.log(chalk.green("✓ Stack update initiated"));
             console.log(chalk.dim("  The stack is now updating in the background\n"));
         } else {
-            console.warn(chalk.yellow(`⚠️  Failed to enable BenchlingIntegration: ${updateResult.error}`));
+            console.warn(chalk.yellow(`⚠️  Failed to enable BenchlingWebhook: ${updateResult.error}`));
             console.warn(chalk.yellow("   You can enable it manually in CloudFormation console\n"));
         }
     } else {
@@ -471,11 +471,11 @@ console.log(chalk.green("✓ BenchlingSecret updated in Quilt stack"));
 
 // Show integration status
 if (benchlingIntegrationEnabled === true) {
-    console.log(chalk.green("✓ BenchlingIntegration is Enabled"));
+    console.log(chalk.green("✓ BenchlingWebhook is Enabled"));
 } else if (benchlingIntegrationEnabled === false) {
-    console.log(chalk.yellow("⚠ BenchlingIntegration update in progress"));
+    console.log(chalk.yellow("⚠ BenchlingWebhook update in progress"));
 } else {
-    console.log(chalk.dim("✓ BenchlingIntegration status unknown"));
+    console.log(chalk.dim("✓ BenchlingWebhook status unknown"));
 }
 
 console.log(chalk.dim("✓ No separate webhook deployment needed"));
@@ -499,7 +499,7 @@ console.log(`  4. Monitor logs: npx ts-node scripts/check-logs.ts --profile ${pr
 /**
  * Stack Status Command
  *
- * Reports CloudFormation stack status and BenchlingIntegration parameter state
+ * Reports CloudFormation stack status and BenchlingWebhook parameter state
  * for a given configuration profile.
  *
  * @module commands/status
@@ -566,8 +566,8 @@ async function getStackStatus(
             throw new Error(`Stack not found: ${stackName}`);
         }
 
-        // Extract BenchlingIntegration parameter
-        const param = stack.Parameters?.find((p) => p.ParameterKey === "BenchlingIntegration");
+        // Extract BenchlingWebhook parameter
+        const param = stack.Parameters?.find((p) => p.ParameterKey === "BenchlingWebhook");
         const benchlingIntegrationEnabled = param?.ParameterValue === "Enabled";
 
         return {
@@ -663,7 +663,7 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
     console.log(`  ${formatStackStatus(result.stackStatus!)}`);
     console.log("");
 
-    console.log(chalk.bold("BenchlingIntegration:"));
+    console.log(chalk.bold("BenchlingWebhook:"));
     if (result.benchlingIntegrationEnabled) {
         console.log(chalk.green("  ✓ Enabled"));
     } else {
@@ -688,7 +688,7 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
 
         if (!result.benchlingIntegrationEnabled) {
             console.log(chalk.bold("Action Required:"));
-            console.log(chalk.yellow("  BenchlingIntegration is Disabled"));
+            console.log(chalk.yellow("  BenchlingWebhook is Disabled"));
             console.log(chalk.dim("  Enable it via CloudFormation console or re-run setup\n"));
         }
     } else if (result.stackStatus?.includes("FAILED") || result.stackStatus?.includes("ROLLBACK")) {
@@ -718,7 +718,7 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
 // Status command
 program
     .command("status")
-    .description("Check CloudFormation stack status and BenchlingIntegration parameter")
+    .description("Check CloudFormation stack status and BenchlingWebhook parameter")
     .option("--profile <name>", "Configuration profile to check (default: default)")
     .option("--aws-profile <name>", "AWS credentials profile")
     .option("--detailed", "Show detailed stack events")
@@ -758,7 +758,7 @@ import { statusCommand } from "./commands/status";
 ### Phase 1: Stack Query Enhancement (2 hours)
 
 1. Update `QuiltStackInfo` interface in `infer-quilt-config.ts`
-2. Extract `BenchlingIntegration` parameter in `findQuiltStacks()`
+2. Extract `BenchlingWebhook` parameter in `findQuiltStacks()`
 3. Update `StackQueryResult` interface in `lib/wizard/types.ts`
 4. Pass parameter through Phase 2 stack query
 5. Add logging for parameter status
@@ -773,7 +773,7 @@ import { statusCommand } from "./commands/status";
 
 ### Phase 3: Phase 6 Enhancement (3 hours)
 
-1. Add BenchlingIntegration check in `phase6-integrated-mode.ts`
+1. Add BenchlingWebhook check in `phase6-integrated-mode.ts`
 2. Implement prompt logic (with --yes support)
 3. Call `updateStackParameter()` on confirmation
 4. Update success message with status command
@@ -812,7 +812,7 @@ describe("updateStackParameter", () => {
 });
 
 // test/lib/wizard/phase6-integrated-mode.test.ts
-describe("Phase 6 with BenchlingIntegration", () => {
+describe("Phase 6 with BenchlingWebhook", () => {
     it("should skip update if already enabled");
     it("should prompt if disabled in interactive mode");
     it("should auto-enable with --yes flag");
@@ -838,7 +838,7 @@ npx ts-node bin/commands/setup-wizard.ts --profile bench --yes
 npx ts-node bin/cli.ts status --profile bench
 
 # Test parameter already enabled case
-# (bench profile should now have BenchlingIntegration=Enabled)
+# (bench profile should now have BenchlingWebhook=Enabled)
 npx ts-node bin/commands/setup-wizard.ts --profile bench --yes
 ```
 
@@ -875,7 +875,7 @@ npx ts-node bin/commands/setup-wizard.ts --profile bench --yes
 
 ### Edge Case 3: Parameter Not Found
 
-**Scenario**: Old Quilt stack version without BenchlingIntegration parameter
+**Scenario**: Old Quilt stack version without BenchlingWebhook parameter
 **Handling**: Show warning and skip feature gracefully
 
 ### Edge Case 4: Network Failure During Update
@@ -919,11 +919,11 @@ npx ts-node bin/commands/setup-wizard.ts --profile bench --yes
 Add section:
 
 ```markdown
-## Integrated Mode: BenchlingIntegration Parameter
+## Integrated Mode: BenchlingWebhook Parameter
 
 When using integrated mode (built-in Quilt stack webhook), the setup wizard will:
 
-1. Check if `BenchlingIntegration` is enabled in your Quilt stack
+1. Check if `BenchlingWebhook` is enabled in your Quilt stack
 2. Offer to enable it automatically if disabled
 3. Provide a status command to monitor the stack update
 
@@ -936,7 +936,7 @@ npx @quiltdata/benchling-webhook status --profile myprofile
 This shows:
 
 - CloudFormation stack status
-- BenchlingIntegration parameter state
+- BenchlingWebhook parameter state
 - Last update timestamp
 - Direct link to CloudFormation console
 
@@ -959,7 +959,7 @@ Update `bin/cli.ts` help text to mention status command in Quick Start section.
 ### Parameter Definition
 
 ```yaml
-BenchlingIntegration:
+BenchlingWebhook:
   Type: String
   Default: Disabled
   AllowedValues:
@@ -974,7 +974,7 @@ BenchlingIntegration:
 await cloudformation.send(new UpdateStackCommand({
     StackName: "tf-dev-bench",
     Parameters: [
-        { ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" },
+        { ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" },
         { ParameterKey: "QuiltWebHost", UsePreviousValue: true },
         { ParameterKey: "VPC", UsePreviousValue: true },
         // ... all other parameters with UsePreviousValue

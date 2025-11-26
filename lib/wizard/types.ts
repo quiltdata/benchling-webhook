@@ -7,7 +7,7 @@
  * @module wizard/types
  */
 
-import { ProfileConfig } from "../types/config";
+import { ProfileConfig, LogGroupInfo } from "../types/config";
 import { XDGBase } from "../xdg-base";
 
 /**
@@ -38,9 +38,11 @@ export interface StackQueryResult {
     region: string;
     /** AWS account ID */
     account: string;
+    /** Quilt stack version from catalog config.json */
+    stackVersion?: string;
     /** BenchlingSecret ARN from stack outputs (if exists) */
     benchlingSecretArn?: string;
-    /** Whether BenchlingIntegration parameter is enabled in the stack */
+    /** Whether BenchlingWebhook parameter is enabled in the stack */
     benchlingIntegrationEnabled?: boolean;
     /** Whether stack query succeeded */
     stackQuerySucceeded: boolean;
@@ -60,6 +62,21 @@ export interface StackQueryResult {
     readRoleArn?: string;
     /** IAM role ARN for read-write S3 access (from T4BucketWriteRole) */
     writeRoleArn?: string;
+    /** Discovered CloudWatch log groups from the Quilt stack */
+    logGroups?: LogGroupInfo[];
+    // New integrated architecture fields (PR #2199)
+    /** Benchling webhook URL from API Gateway (integrated mode) */
+    benchlingUrl?: string;
+    /** API Gateway ID (integrated mode) */
+    benchlingApiId?: string;
+    /** Docker image URI for Benchling webhook container (integrated mode) */
+    benchlingDockerImage?: string;
+    /** IAM role ARN for Benchling webhook operations (may differ from T4BucketWriteRole) */
+    benchlingWriteRoleArn?: string;
+    /** ECS container log group name (integrated mode) */
+    ecsLogGroup?: string;
+    /** API Gateway log group name (integrated mode) */
+    apiGatewayLogGroup?: string;
 }
 
 /**

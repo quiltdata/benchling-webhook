@@ -11,8 +11,19 @@ import type { fromIni } from "@aws-sdk/credential-providers";
 
 export interface ECSServiceInfo {
     serviceName: string;
+    containerName?: string;
     logGroup?: string;
     logStreamPrefix?: string;
+}
+
+export interface ECSServiceDiscoveryOptions {
+    /**
+     * Optional patterns to filter containers by their log stream prefix.
+     * Only containers whose logStreamPrefix starts with one of these patterns will be included.
+     * If not specified, all containers are included.
+     * Example: ['benchling/', 'benchling-nginx/']
+     */
+    containerFilterPatterns?: string[];
 }
 
 /**
@@ -118,12 +129,14 @@ export async function discoverECSServiceLogGroups(
  * @param stackName - CloudFormation stack name
  * @param region - AWS region
  * @param awsProfile - Optional AWS profile name
+ * @param options - Optional discovery options (e.g., container filtering)
  * @returns Array of ECS service information
  */
 export async function discoverECSServices(
     stackName: string,
     region: string,
     awsProfile?: string,
+    options?: ECSServiceDiscoveryOptions,
 ): Promise<ECSServiceInfo[]> {
     try {
         const { CloudFormationClient, DescribeStackResourcesCommand } = await import("@aws-sdk/client-cloudformation");
@@ -176,35 +189,60 @@ export async function discoverECSServices(
         const servicesResponse = await ecsClient.send(servicesCommand);
 
         // Get log groups from task definitions
+        // IMPORTANT: Return one entry per CONTAINER, not per service
+        // Multi-container services (like benchling with nginx + app) need separate entries
         const services: ECSServiceInfo[] = [];
 
         for (const svc of servicesResponse.services || []) {
-            let logGroup: string | undefined;
-            let logStreamPrefix: string | undefined;
-
             const taskDefArn = svc.deployments?.[0]?.taskDefinition;
-            if (taskDefArn) {
-                try {
-                    const taskDefCommand = new DescribeTaskDefinitionCommand({
-                        taskDefinition: taskDefArn,
-                    });
-                    const taskDefResponse = await ecsClient.send(taskDefCommand);
-
-                    const logConfig = taskDefResponse.taskDefinition?.containerDefinitions?.[0]?.logConfiguration;
-                    if (logConfig?.logDriver === "awslogs") {
-                        logGroup = logConfig.options?.["awslogs-group"];
-                        logStreamPrefix = logConfig.options?.["awslogs-stream-prefix"];
-                    }
-                } catch {
-                    // Skip log group if we can't get task definition
-                }
+            if (!taskDefArn) {
+                continue;
             }
 
-            services.push({
-                serviceName: svc.serviceName || "unknown",
-                logGroup,
-                logStreamPrefix,
-            });
+            try {
+                const taskDefCommand = new DescribeTaskDefinitionCommand({
+                    taskDefinition: taskDefArn,
+                });
+                const taskDefResponse = await ecsClient.send(taskDefCommand);
+
+                // Iterate through ALL containers in the task definition
+                const containers = taskDefResponse.taskDefinition?.containerDefinitions || [];
+                for (const container of containers) {
+                    const logConfig = container.logConfiguration;
+                    if (logConfig?.logDriver === "awslogs") {
+                        const logGroup = logConfig.options?.["awslogs-group"];
+                        const awslogsStreamPrefix = logConfig.options?.["awslogs-stream-prefix"];
+
+                        // ECS log streams follow the pattern: {awslogs-stream-prefix}/{container-name}/{task-id}
+                        // So we need to construct the full prefix including the container name
+                        const fullStreamPrefix = awslogsStreamPrefix && container.name
+                            ? `${awslogsStreamPrefix}/${container.name}`
+                            : awslogsStreamPrefix;
+
+                        if (logGroup && fullStreamPrefix) {
+                            // Apply container filter if specified
+                            if (options?.containerFilterPatterns && options.containerFilterPatterns.length > 0) {
+                                const matchesFilter = options.containerFilterPatterns.some(
+                                    (pattern) => fullStreamPrefix.startsWith(pattern),
+                                );
+                                if (!matchesFilter) {
+                                    continue; // Skip this container
+                                }
+                            }
+
+                            services.push({
+                                serviceName: svc.serviceName || "unknown",
+                                containerName: container.name,
+                                logGroup,
+                                logStreamPrefix: fullStreamPrefix,
+                            });
+                        }
+                    }
+                }
+            } catch {
+                // Skip this service if we can't get task definition
+                continue;
+            }
         }
 
         return services;
