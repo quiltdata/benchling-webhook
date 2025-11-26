@@ -76,8 +76,8 @@ export async function destroyCommand(options: {
         } else {
             spinner.warn("Stack does not exist");
         }
-    } catch (error: any) {
-        if (error.name === "ValidationError" || error.message?.includes("does not exist")) {
+    } catch (error: unknown) {
+        if ((error as Error).name === "ValidationError" || (error as Error).message?.includes("does not exist")) {
             spinner.warn("Stack does not exist");
         } else {
             spinner.fail("Error checking stack");
@@ -215,11 +215,11 @@ async function confirmDestruction(): Promise<boolean> {
     console.log(
         boxen(
             `${chalk.red.bold("⚠ WARNING: This will permanently delete the stack")}\n\n` +
-                `This action will:\n` +
-                `  • Delete all AWS resources in the stack\n` +
-                `  • Remove the API Gateway endpoint\n` +
-                `  • Stop the ECS tasks\n` +
-                `  • Delete VPC Link, Cloud Map, and other networking resources\n\n` +
+                "This action will:\n" +
+                "  • Delete all AWS resources in the stack\n" +
+                "  • Remove the API Gateway endpoint\n" +
+                "  • Stop the ECS tasks\n" +
+                "  • Delete VPC Link, Cloud Map, and other networking resources\n\n" +
                 `${chalk.yellow("This action cannot be undone.")}`,
             { padding: 1, borderColor: "red", borderStyle: "double" },
         ),
