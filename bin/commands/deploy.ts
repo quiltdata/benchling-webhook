@@ -59,21 +59,21 @@ async function detectLegacyStack(region: string): Promise<boolean> {
         // - Has AWS::ApiGatewayV2::VpcLink (VPC Link)
         // - Has AWS::ApiGatewayV2::Api (HTTP API)
         const hasALB = resourcesResponse.StackResources.some(
-            r => r.ResourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer"
+            r => r.ResourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer",
         );
         const hasRestAPI = resourcesResponse.StackResources.some(
-            r => r.ResourceType === "AWS::ApiGateway::RestApi"
+            r => r.ResourceType === "AWS::ApiGateway::RestApi",
         );
         const hasVpcLink = resourcesResponse.StackResources.some(
-            r => r.ResourceType === "AWS::ApiGatewayV2::VpcLink"
+            r => r.ResourceType === "AWS::ApiGatewayV2::VpcLink",
         );
         const hasHttpAPI = resourcesResponse.StackResources.some(
-            r => r.ResourceType === "AWS::ApiGatewayV2::Api"
+            r => r.ResourceType === "AWS::ApiGatewayV2::Api",
         );
 
         // If has ALB or REST API but not VPC Link or HTTP API, it's v0.8.x
         return (hasALB || hasRestAPI) && !hasVpcLink && !hasHttpAPI;
-    } catch (error) {
+    } catch (_error) {
         // Stack doesn't exist or error checking - not a v0.8.x stack
         return false;
     }
@@ -361,12 +361,12 @@ export async function deploy(
             boxen(
                 `${chalk.red.bold("⚠ BREAKING CHANGE: v0.8.x → v0.9.0 Migration Required")}\n\n` +
                 `${chalk.yellow("Your existing stack uses the v0.8.x architecture:")}\n` +
-                `  • REST API + Application Load Balancer (ALB)\n` +
-                `  • Flask service on port 5000\n\n` +
+                "  • REST API + Application Load Balancer (ALB)\n" +
+                "  • Flask service on port 5000\n\n" +
                 `${chalk.yellow("v0.9.0 introduces a new architecture:")}\n` +
-                `  • HTTP API + VPC Link + Cloud Map\n` +
-                `  • FastAPI service on port 8080\n` +
-                `  • Private subnets with NAT Gateways\n\n` +
+                "  • HTTP API + VPC Link + Cloud Map\n" +
+                "  • FastAPI service on port 8080\n" +
+                "  • Private subnets with NAT Gateways\n\n" +
                 `${chalk.red.bold("⚠ The stack cannot be updated in-place.")}\n\n` +
                 `${chalk.bold("Required steps:")}\n` +
                 `  1. ${chalk.cyan("Destroy the existing v0.8.x stack:")}\n` +
