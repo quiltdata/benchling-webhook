@@ -334,6 +334,8 @@ function spawnDockerCompose(
             const value = envVars[key];
             console.log(`  ${key}=${value ? (key.includes("Secret") ? "***" : value) : "MISSING"}`);
         });
+        console.log(`DEBUG: cwd=${dockerDir}`);
+        console.log(`DEBUG: command=docker-compose ${args.join(" ")}`);
     }
 
     return spawn("docker-compose", args, {
@@ -626,10 +628,11 @@ async function launchDocker(envVars: EnvVars, options: LaunchOptions): Promise<v
  * @param options - Launch options
  */
 async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promise<void> {
-    const port = options.port || 8082;
-    envVars.PORT = String(port);
+    const hostPort = options.port || 8082;
+    // Note: Container always listens on 8080, hostPort is for the port mapping
+    // Don't set PORT in envVars - let docker-compose.yml handle it
 
-    console.log(`🐳 Launching Docker development (port ${port}, hot-reload enabled)...`);
+    console.log(`🐳 Launching Docker development (port ${hostPort}, hot-reload enabled)...`);
 
     if (options.verbose) {
         console.log("\nEnvironment Variables:");
@@ -670,40 +673,34 @@ async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promis
         buildProc.on("error", reject);
     });
 
-    // Now start the container
-    // In test mode, use detached mode (-d) to avoid stdio issues
-    const args = options.test
-        ? ["--profile", "dev", "up", "-d", "app-dev"]
-        : ["--profile", "dev", "up", "app-dev"];
-    console.log(`Command: docker-compose ${args.join(" ")}\n`);
-
-    const proc = spawnDockerCompose(
-        args,
-        dockerDir,
-        envVars,
-        "inherit", // Always use inherit to show output
-    );
-
-    // Wait for container to start
-    await new Promise<void>((resolve, reject) => {
-        proc.on("exit", (code) => {
-            if (code === 0) {
-                resolve();
-            } else {
-                reject(new Error(`docker-compose up failed with exit code ${code}`));
-            }
-        });
-        proc.on("error", reject);
-    });
-
     // If in test mode, run tests after server is healthy
     if (options.test) {
+        // In test mode, use detached mode (-d) to start container in background
+        console.log("Command: docker-compose --profile dev up -d app-dev\n");
+        const startProc = spawnDockerCompose(
+            ["--profile", "dev", "up", "-d", "app-dev"],
+            dockerDir,
+            envVars,
+            "inherit",
+        );
+
+        // Wait for docker-compose to start the container
+        await new Promise<void>((resolve, reject) => {
+            startProc.on("exit", (code) => {
+                if (code === 0) {
+                    resolve();
+                } else {
+                    reject(new Error(`docker-compose up failed with exit code ${code}`));
+                }
+            });
+            startProc.on("error", reject);
+        });
         const dockerCleanup = (): void => {
             spawnDockerCompose(["--profile", "dev", "down"], dockerDir, envVars);
         };
 
         try {
-            const serverUrl = `http://localhost:${port}`;
+            const serverUrl = `http://localhost:${hostPort}`;
             await waitForHealth(serverUrl);
             const exitCode = await runTests(serverUrl, options.profile);
 
@@ -720,7 +717,15 @@ async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promis
             process.exit(1);
         }
     } else {
-        // Non-test mode: run server interactively with graceful shutdown
+        // Non-test mode: run server interactively (foreground)
+        console.log("Command: docker-compose --profile dev up app-dev\n");
+        const proc = spawnDockerCompose(
+            ["--profile", "dev", "up", "app-dev"],
+            dockerDir,
+            envVars,
+            "inherit",
+        );
+
         const cleanup = (): void => {
             console.log("\n\n🛑 Shutting down Docker dev container...");
             spawnDockerCompose(["--profile", "dev", "down"], dockerDir, envVars);
