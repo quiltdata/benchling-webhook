@@ -89,21 +89,126 @@ export interface StatusResult {
 }
 
 /**
+ * Stack identification result
+ * Determines which CloudFormation stack to query based on profile configuration
+ */
+export interface StackIdentification {
+    /** Full stack ARN if available (null for standalone until resolved) */
+    stackArn: string | null;
+    /** Stack name for CloudFormation queries */
+    stackName: string;
+    /** AWS region */
+    region: string;
+    /** Deployment mode */
+    mode: "integrated" | "standalone";
+    /** Whether deployment tracking exists */
+    hasDeployment: boolean;
+}
+
+/**
+ * Identifies which stack to query based on profile configuration
+ *
+ * For integrated stacks: queries the Quilt stack (config.quilt.stackArn)
+ * For standalone stacks: queries the BenchlingWebhookStack from deployment tracking
+ *
+ * @param config - Profile configuration
+ * @param xdg - XDG configuration storage
+ * @param profile - Profile name
+ * @returns Stack identification with ARN, name, region, and mode
+ * @throws Error if configuration is incomplete or deployment is missing
+ */
+function identifyTargetStack(
+    config: import("../../lib/types/config").ProfileConfig,
+    xdg: XDGBase,
+    profile: string,
+): StackIdentification {
+    // Handle undefined integratedStack (legacy configs)
+    let isIntegrated = config.integratedStack === true;
+
+    if (config.integratedStack === undefined) {
+        // Legacy config - default to integrated and warn
+        console.warn(chalk.yellow(
+            "⚠️  Configuration is missing 'integratedStack' field.\n" +
+            "   Defaulting to integrated mode.\n" +
+            "   Run 'npm run setup' to update configuration.\n",
+        ));
+        isIntegrated = true;
+    }
+
+    if (isIntegrated) {
+        // Integrated: Query Quilt stack
+        const stackArn = config.quilt.stackArn;
+        if (!stackArn) {
+            throw new Error(
+                "Integrated mode requires quilt.stackArn in configuration.\n\n" +
+                "Run setup to configure the Quilt stack ARN:\n" +
+                `  npm run setup -- --profile ${profile}`,
+            );
+        }
+
+        const stackName = stackArn.match(/stack\/([^/]+)\//)?.[1] || stackArn;
+        const region = config.deployment.region || config.quilt.region;
+
+        return {
+            stackArn,
+            stackName,
+            region,
+            mode: "integrated",
+            hasDeployment: false,
+        };
+    } else {
+        // Standalone: Query BenchlingWebhookStack from deployments
+        const deployments = xdg.getDeployments(profile);
+
+        // Find any active deployment (prefer prod, then dev, then any)
+        const stages = ["prod", "dev", ...Object.keys(deployments.active)];
+        let activeDeployment = null;
+
+        for (const stage of stages) {
+            if (deployments.active[stage]) {
+                activeDeployment = deployments.active[stage];
+                break;
+            }
+        }
+
+        if (!activeDeployment) {
+            throw new Error(
+                "No active deployments found for standalone stack.\n\n" +
+                "This profile is configured for standalone mode but has no deployed stack.\n" +
+                "Deploy the stack first with:\n" +
+                `  npm run deploy -- --profile ${profile}`,
+            );
+        }
+
+        // Use deployment tracking info
+        const stackName = activeDeployment.stackName; // "BenchlingWebhookStack"
+        const region = activeDeployment.region;
+
+        return {
+            stackArn: null, // Will be resolved from CloudFormation query
+            stackName, // "BenchlingWebhookStack"
+            region,
+            mode: "standalone",
+            hasDeployment: true,
+        };
+    }
+}
+
+/**
  * Gets stack status from CloudFormation
+ *
+ * @param stackName - Stack name or ARN to query
+ * @param region - AWS region
+ * @param mode - Deployment mode (integrated or standalone)
+ * @param awsProfile - AWS profile to use
  */
 async function getStackStatus(
-    stackArn: string,
+    stackName: string,
     region: string,
+    mode: "integrated" | "standalone",
     awsProfile?: string,
 ): Promise<StatusResult> {
     try {
-        // Extract stack name from ARN
-        const stackNameMatch = stackArn.match(/stack\/([^/]+)\//);
-        if (!stackNameMatch) {
-            throw new Error(`Invalid stack ARN format: ${stackArn}`);
-        }
-        const stackName = stackNameMatch[1];
-
         // Configure AWS SDK client
         const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
         if (awsProfile) {
@@ -111,7 +216,7 @@ async function getStackStatus(
         }
         const client = new CloudFormationClient(clientConfig);
 
-        // Describe stack
+        // Describe stack (works with both ARN and name)
         const command = new DescribeStacksCommand({
             StackName: stackName,
         });
@@ -119,12 +224,18 @@ async function getStackStatus(
         const stack = response.Stacks?.[0];
 
         if (!stack) {
-            throw new Error(`Stack not found: ${stackName}`);
+            const helpText = mode === "integrated"
+                ? "Verify that the Quilt stack exists and is deployed."
+                : "Verify that the BenchlingWebhookStack has been deployed. Run: npm run deploy";
+            throw new Error(`Stack not found: ${stackName}\n\n${helpText}`);
         }
 
-        // Extract BenchlingIntegration parameter
-        const param = stack.Parameters?.find((p) => p.ParameterKey === "BenchlingIntegration");
-        const benchlingIntegrationEnabled = param?.ParameterValue === "Enabled";
+        // Extract BenchlingIntegration parameter (ONLY for integrated mode)
+        let benchlingIntegrationEnabled: boolean | undefined;
+        if (mode === "integrated") {
+            const param = stack.Parameters?.find((p) => p.ParameterKey === "BenchlingIntegration");
+            benchlingIntegrationEnabled = param?.ParameterValue === "Enabled";
+        }
 
         // Extract stack outputs
         const outputs = stack.Outputs || [];
@@ -139,9 +250,9 @@ async function getStackStatus(
         return {
             success: true,
             stackStatus: stack.StackStatus,
-            benchlingIntegrationEnabled,
+            benchlingIntegrationEnabled, // undefined for standalone
             lastUpdateTime: stack.LastUpdatedTime?.toISOString() || stack.CreationTime?.toISOString(),
-            stackArn,
+            stackArn: stack.StackId, // Use actual ARN from response
             region,
             stackOutputs,
         };
@@ -149,7 +260,7 @@ async function getStackStatus(
         return {
             success: false,
             error: (error as Error).message,
-            stackArn,
+            stackArn: stackName,
             region,
         };
     }
@@ -550,14 +661,19 @@ async function getListenerRules(
 
 /**
  * Fetches complete status including all health checks
+ *
+ * @param stackName - Stack name to query
+ * @param region - AWS region
+ * @param mode - Deployment mode (integrated or standalone)
+ * @param awsProfile - AWS profile to use
  */
 async function fetchCompleteStatus(
-    stackArn: string,
     stackName: string,
     region: string,
+    mode: "integrated" | "standalone",
     awsProfile?: string,
 ): Promise<StatusResult> {
-    const result = await getStackStatus(stackArn, region, awsProfile);
+    const result = await getStackStatus(stackName, region, mode, awsProfile);
 
     if (!result.success) {
         return result;
@@ -584,9 +700,19 @@ async function fetchCompleteStatus(
 
 /**
  * Displays status result to console
+ *
+ * @param result - Status result to display
+ * @param profile - Profile name
+ * @param mode - Deployment mode (integrated or standalone)
+ * @param quiltConfig - Quilt configuration (optional)
  */
 /* istanbul ignore next */
-function displayStatusResult(result: StatusResult, profile: string, quiltConfig?: import("../../lib/types/config").QuiltConfig): void {
+function displayStatusResult(
+    result: StatusResult,
+    profile: string,
+    mode: "integrated" | "standalone",
+    quiltConfig?: import("../../lib/types/config").QuiltConfig,
+): void {
     const stackName = result.stackArn?.match(/stack\/([^/]+)\//)?.[1] || result.stackArn || "Unknown";
     const region = result.region || "Unknown";
 
@@ -606,11 +732,28 @@ function displayStatusResult(result: StatusResult, profile: string, quiltConfig?
         lastUpdatedStr = ` @ ${timeStr} (${timezone})`;
     }
 
-    // Display header with last updated time
-    console.log(chalk.bold(`\nStack Status for Profile: ${profile}${lastUpdatedStr}\n`));
+    // Display header with mode indicator
+    const modeLabel = mode === "integrated"
+        ? chalk.blue("[Integrated]")
+        : chalk.cyan("[Standalone]");
+
+    console.log(chalk.bold(`\nStack Status for Profile: ${profile} ${modeLabel}${lastUpdatedStr}\n`));
     console.log(chalk.dim("─".repeat(80)));
     console.log(`${chalk.bold("Stack:")} ${chalk.cyan(stackName)}  ${chalk.bold("Region:")} ${chalk.cyan(region)}`);
-    console.log(`${chalk.bold("Stack Status:")} ${formatStackStatus(result.stackStatus!)}  ${chalk.bold("BenchlingIntegration:")} ${result.benchlingIntegrationEnabled ? chalk.green("✓ Enabled") : chalk.yellow("⚠ Disabled")}`);
+
+    // Show stack status
+    let statusLine = `${chalk.bold("Stack Status:")} ${formatStackStatus(result.stackStatus!)}`;
+
+    // Only show BenchlingIntegration for integrated stacks
+    if (mode === "integrated" && result.benchlingIntegrationEnabled !== undefined) {
+        statusLine += `  ${chalk.bold("BenchlingIntegration:")} ${
+            result.benchlingIntegrationEnabled
+                ? chalk.green("✓ Enabled")
+                : chalk.yellow("⚠ Disabled")
+        }`;
+    }
+
+    console.log(statusLine);
     console.log("");
 
     // Display stack outputs and secret info on one line each
@@ -830,7 +973,8 @@ function displayStatusResult(result: StatusResult, profile: string, quiltConfig?
         console.log(chalk.bold("Status:"));
         console.log(chalk.green("  ✓ Stack is up to date\n"));
 
-        if (!result.benchlingIntegrationEnabled) {
+        // Only show BenchlingIntegration warning for integrated stacks
+        if (mode === "integrated" && !result.benchlingIntegrationEnabled) {
             console.log(chalk.bold("Action Required:"));
             console.log(chalk.yellow("  BenchlingIntegration is Disabled"));
             console.log(chalk.dim("  Enable it via CloudFormation console or re-run setup\n"));
@@ -877,16 +1021,20 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
         };
     }
 
-    // Extract stack info - if stackArn is present, status should work regardless of integratedStack flag
-    const stackArn = config.quilt.stackArn;
-    if (!stackArn) {
+    // Identify target stack based on mode
+    let stackIdentification: StackIdentification;
+    try {
+        stackIdentification = identifyTargetStack(config, xdg, profile);
+    } catch (error) {
+        const errorMsg = (error as Error).message;
+        console.error(chalk.red(`\n❌ ${errorMsg}\n`));
         return {
             success: false,
-            error: "Quilt stack ARN not found in configuration. This command requires a Quilt stack ARN to check stack status.",
+            error: errorMsg,
         };
     }
-    const region = config.deployment.region;
-    const stackName = stackArn.match(/stack\/([^/]+)\//)?.[1] || stackArn;
+
+    const { stackName, region, mode } = stackIdentification;
 
     // Parse timer value
     const refreshInterval = parseTimerValue(timer);
@@ -912,14 +1060,14 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
             }
 
             // Fetch and display status
-            result = await fetchCompleteStatus(stackArn, stackName, region, awsProfile);
+            result = await fetchCompleteStatus(stackName, region, mode, awsProfile);
 
             if (!result.success) {
                 console.error(chalk.red(`❌ Failed to get stack status: ${result.error}\n`));
                 return result;
             }
 
-            displayStatusResult(result, profile, config.quilt);
+            displayStatusResult(result, profile, mode, config.quilt);
 
             // Check if we should exit (no timer or user disabled it)
             if (!refreshInterval) {
