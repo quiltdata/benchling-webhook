@@ -19,9 +19,9 @@ PROFILE_DIR = $(XDG_CONFIG)/$(PROFILE)
 LOG_LEVEL ?= INFO
 
 # Port configuration
-PORT_NATIVE := 5001
-PORT_DOCKER_DEV := 5002
-PORT_DOCKER_PROD := 5003
+PORT_NATIVE := 8080
+PORT_DOCKER_DEV := 8082
+PORT_DOCKER_PROD := 8083
 
 # UV command with dev group (for linting and testing)
 UVDEV = uv run --group dev
@@ -80,7 +80,7 @@ help:
 	@echo "  Add DRY_RUN=1 for dry run: make push-local DRY_RUN=1"
 	@echo ""
 	@echo "Infrastructure:"
-	@echo "  ngrok                 - Expose server via ngrok (auto-cleanup, use PORT=5002 SLEEP=10)"
+	@echo "  ngrok                 - Expose server via ngrok (auto-cleanup, use PORT=8082 SLEEP=10)"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  clean                 - Remove containers and images"
@@ -199,7 +199,7 @@ run-ecr: check-xdg docker-ecr-login
 	docker pull $$ECR_IMAGE; \
 	echo "Starting container from ECR image..."; \
 	docker run -d --name benchling-ecr-test \
-		-p $(PORT_DOCKER_PROD):5000 \
+		-p $(PORT_DOCKER_PROD):8080 \
 		-v ~/.aws:/home/appuser/.aws:ro \
 		$$ECR_IMAGE; \
 	echo "✅ Container started on port $(PORT_DOCKER_PROD)"; \

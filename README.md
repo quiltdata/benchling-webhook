@@ -65,6 +65,13 @@ If the App Canvas is not already part of your standard notebook template, Benchl
 
 ![App Canvas - Insert](imgs/benchling-insert.png)
 
+## Architecture (v0.9.0)
+
+- **API Gateway HTTP API** terminates TLS and forwards requests through a **VPC Link** to **Cloud Map** service discovery
+- **ECS Fargate** tasks register in `benchling.local` and serve Flask on port **8080** (no ALB hop)
+- **S3 + SQS** remain the storage and queue backends for package creation
+- **CloudWatch Logs** capture API access logs (`/aws/apigateway/benchling-webhook-http`) and container logs (stack name)
+
 ## Installation
 
 ### 1. Installing the Benchling App

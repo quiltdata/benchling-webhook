@@ -2,10 +2,9 @@ import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as ecs from "aws-cdk-lib/aws-ecs";
-import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
+import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
-import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { ProfileConfig } from "./types/config";
 
@@ -21,7 +20,6 @@ import { ProfileConfig } from "./types/config";
  */
 export interface FargateServiceProps {
     readonly vpc: ec2.IVpc;
-    readonly bucket: s3.IBucket;
     readonly config: ProfileConfig;
     readonly ecrRepository: ecr.IRepository;
     readonly imageTag?: string;
@@ -51,7 +49,7 @@ export interface FargateServiceProps {
 
 export class FargateService extends Construct {
     public readonly service: ecs.FargateService;
-    public readonly loadBalancer: elbv2.ApplicationLoadBalancer;
+    public readonly cloudMapService: servicediscovery.IService;
     public readonly cluster: ecs.Cluster;
     public readonly logGroup: logs.ILogGroup;
 
@@ -297,6 +295,7 @@ export class FargateService extends Construct {
             // AWS Configuration
             AWS_REGION: region,
             AWS_DEFAULT_REGION: region,
+            PORT: "8080",
 
             // Quilt Services (v0.8.0+ service-specific - NO MORE STACK ARN!)
             QUILT_WEB_HOST: props.quiltWebHost,
@@ -334,7 +333,7 @@ export class FargateService extends Construct {
             }),
             environment: environmentVars,
             healthCheck: {
-                command: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"],
+                command: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"],
                 interval: cdk.Duration.seconds(30),
                 timeout: cdk.Duration.seconds(10),
                 retries: 3,
@@ -344,54 +343,8 @@ export class FargateService extends Construct {
 
         // Map container port
         container.addPortMappings({
-            containerPort: 5000,
+            containerPort: 8080,
             protocol: ecs.Protocol.TCP,
-        });
-
-        // Create S3 bucket for ALB access logs
-        const albLogsBucket = new s3.Bucket(this, "AlbLogsBucket", {
-            bucketName: `benchling-webhook-alb-logs-${account}`,
-            removalPolicy: cdk.RemovalPolicy.DESTROY,
-            autoDeleteObjects: true,
-            lifecycleRules: [
-                {
-                    expiration: cdk.Duration.days(7),
-                },
-            ],
-        });
-
-        // Create Application Load Balancer
-        this.loadBalancer = new elbv2.ApplicationLoadBalancer(this, "ALB", {
-            vpc: props.vpc,
-            internetFacing: true,
-            loadBalancerName: "benchling-webhook-alb",
-        });
-
-        // Enable ALB access logs
-        this.loadBalancer.logAccessLogs(albLogsBucket, "alb-access-logs");
-
-        // Create ALB Target Group
-        const targetGroup = new elbv2.ApplicationTargetGroup(this, "TargetGroup", {
-            vpc: props.vpc,
-            port: 5000,
-            protocol: elbv2.ApplicationProtocol.HTTP,
-            targetType: elbv2.TargetType.IP,
-            healthCheck: {
-                path: "/health/ready",
-                interval: cdk.Duration.seconds(30),
-                timeout: cdk.Duration.seconds(10),
-                healthyThresholdCount: 2,
-                unhealthyThresholdCount: 3,
-                healthyHttpCodes: "200",
-            },
-            deregistrationDelay: cdk.Duration.seconds(30),
-        });
-
-        // Add HTTP listener
-        this.loadBalancer.addListener("HttpListener", {
-            port: 80,
-            protocol: elbv2.ApplicationProtocol.HTTP,
-            defaultAction: elbv2.ListenerAction.forward([targetGroup]),
         });
 
         // Create Security Group for Fargate tasks
@@ -401,11 +354,11 @@ export class FargateService extends Construct {
             allowAllOutbound: true,
         });
 
-        // Allow ALB to communicate with Fargate tasks
+        // Allow VPC traffic to reach the service on 8080 (for VPC Link)
         fargateSecurityGroup.addIngressRule(
-            ec2.Peer.securityGroupId(this.loadBalancer.connections.securityGroups[0].securityGroupId),
-            ec2.Port.tcp(5000),
-            "Allow traffic from ALB",
+            ec2.Peer.ipv4(props.vpc.vpcCidrBlock),
+            ec2.Port.tcp(8080),
+            "Allow VPC traffic to service",
         );
 
         // Create Fargate Service
@@ -414,7 +367,7 @@ export class FargateService extends Construct {
             taskDefinition: taskDefinition,
             desiredCount: 2,
             serviceName: "benchling-webhook-service",
-            assignPublicIp: true,
+            assignPublicIp: false,
             securityGroups: [fargateSecurityGroup],
             healthCheckGracePeriod: cdk.Duration.seconds(60),
             minHealthyPercent: 50,
@@ -422,10 +375,21 @@ export class FargateService extends Construct {
             circuitBreaker: {
                 rollback: true,
             },
+            cloudMapOptions: {
+                name: "benchling-webhook",
+                cloudMapNamespace: new servicediscovery.PrivateDnsNamespace(this, "ServiceDiscoveryNamespace", {
+                    name: "benchling.local",
+                    vpc: props.vpc,
+                    description: "Service discovery namespace for Benchling webhook",
+                }),
+                dnsRecordType: servicediscovery.DnsRecordType.A,
+                dnsTtl: cdk.Duration.seconds(30),
+                container,
+                containerPort: 8080,
+            },
         });
 
-        // Attach the service to the target group
-        this.service.attachToApplicationTargetGroup(targetGroup);
+        this.cloudMapService = this.service.cloudMapService!;
 
         // Configure auto-scaling
         const scaling = this.service.autoScaleTaskCount({
@@ -448,12 +412,6 @@ export class FargateService extends Construct {
         });
 
         // Outputs
-        new cdk.CfnOutput(this, "LoadBalancerDNS", {
-            value: this.loadBalancer.loadBalancerDnsName,
-            description: "Load Balancer DNS Name",
-            exportName: "BenchlingWebhookALBDNS",
-        });
-
         new cdk.CfnOutput(this, "ServiceName", {
             value: this.service.serviceName,
             description: "ECS Service Name",

@@ -401,7 +401,7 @@ async function runTests(url: string, profile: string): Promise<number> {
  * @param options - Launch options
  */
 async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<void> {
-    const port = options.port || 5001;
+    const port = options.port || 8080;
     envVars.PORT = String(port);
 
     console.log(`🚀 Launching native Flask (port ${port})...`);
@@ -486,7 +486,7 @@ async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<v
  * @param options - Launch options
  */
 async function launchDocker(envVars: EnvVars, options: LaunchOptions): Promise<void> {
-    const port = options.port || 5003;
+    const port = options.port || 8083;
     envVars.PORT = String(port);
 
     console.log(`🐳 Launching Docker production (port ${port})...`);
@@ -575,7 +575,7 @@ async function launchDocker(envVars: EnvVars, options: LaunchOptions): Promise<v
  * @param options - Launch options
  */
 async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promise<void> {
-    const port = options.port || 5002;
+    const port = options.port || 8082;
     envVars.PORT = String(port);
 
     console.log(`🐳 Launching Docker development (port ${port}, hot-reload enabled)...`);

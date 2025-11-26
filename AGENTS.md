@@ -71,7 +71,7 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 
 - [lib/benchling-webhook-stack.ts](lib/benchling-webhook-stack.ts) - Main orchestration
 - [lib/fargate-service.ts](lib/fargate-service.ts) - ECS Fargate service
-- [lib/alb-api-gateway.ts](lib/alb-api-gateway.ts) - API Gateway + ALB
+- [lib/http-api-gateway.ts](lib/http-api-gateway.ts) - HTTP API + VPC Link routing
 - [lib/ecr-repository.ts](lib/ecr-repository.ts) - Docker registry
 - [lib/xdg-config.ts](lib/xdg-config.ts) - XDG configuration management
 - [lib/types/](lib/types/) - TypeScript type definitions
@@ -115,15 +115,15 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 
 AWS CDK application deploying auto-scaling webhook processor:
 
-- **API Gateway** → HTTPS webhook routing with IP filtering
-- **ALB** → Load balancing across containers
-- **Fargate (ECS)** → Flask app (auto-scales 2-10 tasks)
+- **API Gateway (HTTP API)** → HTTPS webhook routing
+- **VPC Link + Cloud Map** → Private service discovery to tasks
+- **Fargate (ECS)** → Flask app on port 8080 (auto-scales 2-10 tasks)
 - **S3** → Payload and package storage
 - **SQS** → Quilt package creation queue
 - **Secrets Manager** → Benchling OAuth credentials
 - **CloudWatch** → Logging and monitoring
 
-**Flow:** Benchling → API Gateway → ALB → Fargate → S3 + SQS
+**Flow:** Benchling → API Gateway → VPC Link → Cloud Map → Fargate → S3 + SQS
 
 ---
 
@@ -147,9 +147,9 @@ npm run test:dev             # Test deployed dev stack via API Gateway (auto-dep
 ```bash
 # Local testing (no deployment)
 npm run test                 # Unit tests: lint + typecheck + TS + Python
-npm run test:local           # Docker dev container (hot-reload, port 5002)
-npm run test:local:prod      # Docker prod container (production mode, port 5003)
-npm run test:native          # Native Flask with mocked AWS (no Docker, port 5001)
+npm run test:local           # Docker dev container (hot-reload, port 8082)
+npm run test:local:prod      # Docker prod container (production mode, port 8083)
+npm run test:native          # Native Flask with mocked AWS (no Docker, port 8080)
 
 # Remote deployment testing
 npm run test:dev             # Deployed dev stack via API Gateway (auto-deploys if needed)
