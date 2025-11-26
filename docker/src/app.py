@@ -166,7 +166,8 @@ def create_app() -> FastAPI:
                     return arn
                 parts = arn.split(":")
                 if len(parts) >= 5:
-                    parts[4] = mask_value(parts[4], 4)
+                    masked = mask_value(parts[4], 4)
+                    parts[4] = masked if masked is not None else "***"
                 return ":".join(parts)
 
             def mask_queue_url(url: str | None):
@@ -505,7 +506,9 @@ def create_app() -> FastAPI:
 
             threading.Thread(target=async_update, daemon=True).start()
 
-            return JSONResponse({"status": "ACCEPTED", "message": f"Loading page {page_number + 1}..."}, status_code=202)
+            return JSONResponse(
+                {"status": "ACCEPTED", "message": f"Loading page {page_number + 1}..."}, status_code=202
+            )
 
         except Exception as e:
             logger.error("Page navigation failed", error=str(e))
@@ -543,7 +546,9 @@ def create_app() -> FastAPI:
 
             threading.Thread(target=async_update, daemon=True).start()
 
-            return JSONResponse({"status": "ACCEPTED", "message": f"Loading page {page_number + 1}..."}, status_code=202)
+            return JSONResponse(
+                {"status": "ACCEPTED", "message": f"Loading page {page_number + 1}..."}, status_code=202
+            )
 
         except Exception as e:
             logger.error("Linked package page navigation failed", error=str(e))
