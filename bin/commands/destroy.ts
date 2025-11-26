@@ -92,19 +92,21 @@ export async function destroyCommand(options: {
                         `${chalk.yellow.bold("⚠ Stack in Transitional State")}\n\n` +
                             `The stack is currently: ${chalk.cyan(stackStatus)}\n\n` +
                             `${chalk.bold("CloudFormation is still processing this stack.")}\n\n` +
-                            `You must wait for the stack to reach a stable state before destroying it.\n\n` +
+                            "You must wait for the stack to reach a stable state before destroying it.\n\n" +
                             `${chalk.bold("Stable states:")}\n` +
                             "  • UPDATE_ROLLBACK_COMPLETE\n" +
                             "  • CREATE_COMPLETE\n" +
-                            "  • UPDATE_COMPLETE\n\n" +
-                            `${chalk.bold("To check status:")}\n` +
-                            `  aws cloudformation describe-stacks \\${"\n"}` +
-                            `    --stack-name BenchlingWebhookStack \\${"\n"}` +
-                            `    --region ${destroyRegion} \\${"\n"}` +
-                            `    --query 'Stacks[0].StackStatus'`,
+                            "  • UPDATE_COMPLETE",
                         { padding: 1, borderColor: "yellow", borderStyle: "round" },
                     ),
                 );
+                console.log();
+                console.log(chalk.bold("To check status:"));
+                console.log();
+                console.log(chalk.cyan("  aws cloudformation describe-stacks \\"));
+                console.log(chalk.cyan("    --stack-name BenchlingWebhookStack \\"));
+                console.log(chalk.cyan(`    --region ${destroyRegion} \\`));
+                console.log(chalk.cyan("    --query 'Stacks[0].StackStatus'"));
                 console.log();
                 process.exit(1);
             }

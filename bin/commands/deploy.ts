@@ -390,17 +390,23 @@ export async function deploy(
                 "  • Failed deployment in rollback state (UPDATE_ROLLBACK_COMPLETE)\n" +
                 "  • Incomplete stack that needs cleanup\n\n" +
                 `${chalk.red.bold("⚠ CloudFormation cannot update stacks in these states.")}\n\n` +
-                `${chalk.bold("Required steps:")}\n` +
-                `  1. ${chalk.cyan("Destroy the existing v0.8.x stack:")}\n` +
-                `     ${chalk.dim(`npx @quiltdata/benchling-webhook destroy --profile ${options.profileName} --stage ${options.stage}`)}\n\n` +
-                `  2. ${chalk.cyan("Deploy v0.9.0:")}\n` +
-                `     ${chalk.dim(`npx @quiltdata/benchling-webhook deploy --profile ${options.profileName} --stage ${options.stage}`)}\n\n` +
-                `  3. ${chalk.cyan("Update Benchling webhook URL")} to the new HTTP API endpoint\n\n` +
-                `${chalk.dim("See MIGRATION.md for full details: https://github.com/quiltdata/benchling-webhook/blob/main/MIGRATION.md")}\n\n` +
                 `${chalk.yellow("To proceed, you must first destroy the existing stack.")}`,
                 { padding: 1, borderColor: "red", borderStyle: "double" },
             ),
         );
+        console.log();
+        console.log(chalk.bold("Required steps:"));
+        console.log();
+        console.log(`  ${chalk.cyan("1. Destroy the existing v0.8.x stack:")}`);
+        console.log(chalk.dim(`     npx @quiltdata/benchling-webhook destroy --profile ${options.profileName} --stage ${options.stage}`));
+        console.log();
+        console.log(`  ${chalk.cyan("2. Deploy v0.9.0:")}`);
+        console.log(chalk.dim(`     npx @quiltdata/benchling-webhook deploy --profile ${options.profileName} --stage ${options.stage}`));
+        console.log();
+        console.log(`  ${chalk.cyan("3. Update Benchling webhook URL")} to the new HTTP API endpoint`);
+        console.log();
+        console.log(chalk.dim("See MIGRATION.md for full details:"));
+        console.log(chalk.dim("https://github.com/quiltdata/benchling-webhook/blob/main/MIGRATION.md"));
         console.log();
         process.exit(1);
     }
