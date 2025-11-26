@@ -30,6 +30,8 @@ function suggestSetup(profileName: string, message: string): void {
 /**
  * Detect if the existing stack is v0.8.x (REST API + ALB architecture)
  * Returns true if v0.8.x stack detected, false otherwise
+ *
+ * Also handles stacks in failed/rollback states by examining existing resources
  */
 async function detectLegacyStack(region: string): Promise<boolean> {
     try {
@@ -44,7 +46,29 @@ async function detectLegacyStack(region: string): Promise<boolean> {
             return false; // No stack exists
         }
 
-        // Get stack resources
+        const stack = describeResponse.Stacks[0];
+        const stackStatus = stack.StackStatus || "";
+
+        // Check if stack is in a rollback/failed state that blocks updates
+        // These states indicate a previous deployment attempt failed
+        const blockingStates = [
+            "UPDATE_ROLLBACK_COMPLETE",
+            "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS",
+            "UPDATE_ROLLBACK_IN_PROGRESS",
+            "UPDATE_ROLLBACK_FAILED",
+            "ROLLBACK_COMPLETE",
+            "ROLLBACK_IN_PROGRESS",
+            "ROLLBACK_FAILED",
+        ];
+
+        if (blockingStates.includes(stackStatus)) {
+            // Stack is in a failed state - can't determine architecture reliably
+            // User needs to destroy and redeploy regardless
+            // Return true to trigger migration warning which tells them to destroy
+            return true;
+        }
+
+        // Get stack resources to check architecture
         const resourcesCommand = new DescribeStackResourcesCommand({ StackName: stackName });
         const resourcesResponse = await cloudformation.send(resourcesCommand);
 
@@ -351,23 +375,21 @@ export async function deploy(
     }
 
     // Check for v0.8.x stack and warn about migration
-    spinner.start("Checking for legacy stack...");
+    spinner.start("Checking for legacy stack or failed deployment...");
     const isLegacyStack = await detectLegacyStack(deployRegion);
 
     if (isLegacyStack) {
-        spinner.fail("v0.8.x stack detected - migration required");
+        spinner.fail("Stack must be destroyed before deploying v0.9.0");
         console.log();
         console.log(
             boxen(
-                `${chalk.red.bold("⚠ BREAKING CHANGE: v0.8.x → v0.9.0 Migration Required")}\n\n` +
-                `${chalk.yellow("Your existing stack uses the v0.8.x architecture:")}\n` +
-                "  • REST API + Application Load Balancer (ALB)\n" +
-                "  • Flask service on port 5000\n\n" +
-                `${chalk.yellow("v0.9.0 introduces a new architecture:")}\n` +
-                "  • HTTP API + VPC Link + Cloud Map\n" +
-                "  • FastAPI service on port 8080\n" +
-                "  • Private subnets with NAT Gateways\n\n" +
-                `${chalk.red.bold("⚠ The stack cannot be updated in-place.")}\n\n` +
+                `${chalk.red.bold("⚠ Stack Destruction Required")}\n\n` +
+                `${chalk.yellow("The existing BenchlingWebhookStack must be destroyed before deploying v0.9.0.")}\n\n` +
+                `${chalk.bold("This could be due to:")}\n` +
+                "  • v0.8.x → v0.9.0 migration (REST API + ALB → HTTP API + VPC Link)\n" +
+                "  • Failed deployment in rollback state (UPDATE_ROLLBACK_COMPLETE)\n" +
+                "  • Incomplete stack that needs cleanup\n\n" +
+                `${chalk.red.bold("⚠ CloudFormation cannot update stacks in these states.")}\n\n` +
                 `${chalk.bold("Required steps:")}\n` +
                 `  1. ${chalk.cyan("Destroy the existing v0.8.x stack:")}\n` +
                 `     ${chalk.dim(`npx @quiltdata/benchling-webhook destroy --profile ${options.profileName} --stage ${options.stage}`)}\n\n` +
@@ -383,7 +405,7 @@ export async function deploy(
         process.exit(1);
     }
 
-    spinner.succeed("No legacy stack detected");
+    spinner.succeed("Stack status OK - ready for deployment");
 
     // Load Quilt configuration from config.quilt.*
     spinner.start("Loading Quilt configuration...");
