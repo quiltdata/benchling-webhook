@@ -180,9 +180,17 @@ function extractSecretName(arn: string): string {
  * @returns Environment variables map
  */
 function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOptions): EnvVars {
+    // Filter out undefined values from process.env and convert to Record<string, string>
+    const filteredProcessEnv: EnvVars = {};
+    for (const [key, value] of Object.entries(process.env)) {
+        if (value !== undefined) {
+            filteredProcessEnv[key] = value;
+        }
+    }
+
     const envVars: EnvVars = {
-        // Preserve existing process.env
-        ...process.env as EnvVars,
+        // Preserve existing process.env (with undefined values filtered out)
+        ...filteredProcessEnv,
 
         // Quilt Services (v0.8.0+ service-specific - NO MORE STACK ARN!)
         QUILT_WEB_HOST: config.quilt.catalog,
@@ -317,6 +325,17 @@ function spawnDockerCompose(
     envVars: EnvVars,
     stdio: "inherit" | "pipe" = "inherit",
 ): ReturnType<typeof spawn> {
+    // Debug: Log key environment variables being passed
+    const keyVars = ["QUILT_WEB_HOST", "ATHENA_USER_DATABASE", "PACKAGER_SQS_URL", "BenchlingSecret"];
+    const debug = process.env.DEBUG_XDG === "true";
+    if (debug) {
+        console.log("DEBUG: Spawning docker-compose with environment:");
+        keyVars.forEach(key => {
+            const value = envVars[key];
+            console.log(`  ${key}=${value ? (key.includes("Secret") ? "***" : value) : "MISSING"}`);
+        });
+    }
+
     return spawn("docker-compose", args, {
         cwd: dockerDir,
         env: envVars,
@@ -344,9 +363,18 @@ async function waitForHealth(url: string, maxAttempts = 30, delayMs = 1000): Pro
             if (response.ok) {
                 console.log(`✅ Server is healthy (attempt ${attempt}/${maxAttempts})\n`);
                 return;
+            } else {
+                // Log non-OK responses for debugging
+                if (process.env.DEBUG_XDG === "true") {
+                    console.log(`DEBUG: Health check attempt ${attempt}: HTTP ${response.status}`);
+                }
             }
-        } catch {
-            // Ignore errors and retry
+        } catch (error) {
+            // Log errors for debugging
+            if (process.env.DEBUG_XDG === "true" && attempt % 5 === 0) {
+                const err = error as Error;
+                console.log(`DEBUG: Health check attempt ${attempt}: ${err.message}`);
+            }
         }
 
         if (attempt < maxAttempts) {
@@ -505,8 +533,32 @@ async function launchDocker(envVars: EnvVars, options: LaunchOptions): Promise<v
     }
 
     console.log(`Working directory: ${dockerDir}`);
-    console.log("Command: docker-compose up app\n");
 
+    // Build first with --pull to ensure base image is current
+    // This forces Docker to check if source files have changed
+    console.log("Building image with latest source changes...");
+    const buildProc = spawnDockerCompose(
+        ["build", "--pull", "app"],
+        dockerDir,
+        envVars,
+        "inherit",
+    );
+
+    // Wait for build to complete
+    await new Promise<void>((resolve, reject) => {
+        buildProc.on("exit", (code) => {
+            if (code === 0) {
+                console.log("\n✅ Build complete, starting container...\n");
+                resolve();
+            } else {
+                reject(new Error(`Build failed with exit code ${code}`));
+            }
+        });
+        buildProc.on("error", reject);
+    });
+
+    // Now start the container
+    console.log("Command: docker-compose up app\n");
     const proc = spawnDockerCompose(
         ["up", "app"],
         dockerDir,
@@ -594,14 +646,55 @@ async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promis
     }
 
     console.log(`Working directory: ${dockerDir}`);
-    console.log("Command: docker-compose --profile dev up app-dev\n");
 
-    const proc = spawnDockerCompose(
-        ["--profile", "dev", "up", "app-dev"],
+    // Build first with --pull to ensure base image is current
+    // This forces Docker to check if source files have changed
+    console.log("Building image with latest source changes...");
+    const buildProc = spawnDockerCompose(
+        ["--profile", "dev", "build", "--pull", "app-dev"],
         dockerDir,
         envVars,
-        options.test ? "pipe" : "inherit",
+        "inherit",
     );
+
+    // Wait for build to complete
+    await new Promise<void>((resolve, reject) => {
+        buildProc.on("exit", (code) => {
+            if (code === 0) {
+                console.log("\n✅ Build complete, starting container...\n");
+                resolve();
+            } else {
+                reject(new Error(`Build failed with exit code ${code}`));
+            }
+        });
+        buildProc.on("error", reject);
+    });
+
+    // Now start the container
+    // In test mode, use detached mode (-d) to avoid stdio issues
+    const args = options.test
+        ? ["--profile", "dev", "up", "-d", "app-dev"]
+        : ["--profile", "dev", "up", "app-dev"];
+    console.log(`Command: docker-compose ${args.join(" ")}\n`);
+
+    const proc = spawnDockerCompose(
+        args,
+        dockerDir,
+        envVars,
+        "inherit", // Always use inherit to show output
+    );
+
+    // Wait for container to start
+    await new Promise<void>((resolve, reject) => {
+        proc.on("exit", (code) => {
+            if (code === 0) {
+                resolve();
+            } else {
+                reject(new Error(`docker-compose up failed with exit code ${code}`));
+            }
+        });
+        proc.on("error", reject);
+    });
 
     // If in test mode, run tests after server is healthy
     if (options.test) {
