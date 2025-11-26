@@ -420,4 +420,75 @@ describe("BenchlingWebhookStack", () => {
         const secretEnv = environment.find((e: any) => e.Name === "BenchlingSecret");
         expect(secretEnv).toBeDefined();
     });
+
+    // ===================================================================
+    // VPC Configuration Tests (v0.9.0)
+    // ===================================================================
+
+    test("creates VPC with private subnets when not specified", () => {
+        const app = new cdk.App();
+        const config = createMockConfig();
+        // Don't specify vpc in config - should auto-create
+
+        const stack = new BenchlingWebhookStack(app, "TestVPCStack", {
+            config,
+            env: {
+                account: "123456789012",
+                region: "us-east-1",
+            },
+        });
+
+        const template = Template.fromStack(stack);
+
+        // Should create VPC
+        template.resourceCountIs("AWS::EC2::VPC", 1);
+
+        // Should create 2 NAT Gateways (one per AZ for HA)
+        template.resourceCountIs("AWS::EC2::NatGateway", 2);
+
+        // Should create both public and private subnets
+        const subnets = template.findResources("AWS::EC2::Subnet");
+        const subnetKeys = Object.keys(subnets);
+
+        // Should have at least 4 subnets (2 public + 2 private across 2 AZs)
+        expect(subnetKeys.length).toBeGreaterThanOrEqual(4);
+
+        // Verify we have both public and private subnets
+        const publicSubnets = subnetKeys.filter(
+            (key) => subnets[key].Properties?.MapPublicIpOnLaunch === true,
+        );
+        const privateSubnets = subnetKeys.filter(
+            (key) => subnets[key].Properties?.MapPublicIpOnLaunch === false,
+        );
+
+        expect(publicSubnets.length).toBeGreaterThanOrEqual(2);
+        expect(privateSubnets.length).toBeGreaterThanOrEqual(2);
+    });
+
+    test("uses existing VPC when vpcId is specified", () => {
+        const app = new cdk.App();
+        const config = createMockConfig({
+            deployment: {
+                region: "us-east-1",
+                imageTag: "latest",
+                vpc: { vpcId: "vpc-0123456789abcdef0" },
+            },
+        });
+
+        const stack = new BenchlingWebhookStack(app, "TestExistingVPCStack", {
+            config,
+            env: {
+                account: "123456789012",
+                region: "us-east-1",
+            },
+        });
+
+        const template = Template.fromStack(stack);
+
+        // Should NOT create VPC (using existing)
+        template.resourceCountIs("AWS::EC2::VPC", 0);
+
+        // Should NOT create NAT Gateway (existing VPC)
+        template.resourceCountIs("AWS::EC2::NatGateway", 0);
+    });
 });

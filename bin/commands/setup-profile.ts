@@ -104,6 +104,7 @@ export async function setupProfileCommand(
         imageTag: string;
         customizeQuiltStack: boolean;
         customizeSecretArn: boolean;
+        customizeVpc: boolean;
     }>([
         {
             type: "confirm",
@@ -137,6 +138,12 @@ export async function setupProfileCommand(
             type: "confirm",
             name: "customizeSecretArn",
             message: "Use a different Secrets Manager ARN for this profile?",
+            default: false,
+        },
+        {
+            type: "confirm",
+            name: "customizeVpc",
+            message: "Specify an existing VPC (or auto-create)?",
             default: false,
         },
     ]);
@@ -185,6 +192,44 @@ export async function setupProfileCommand(
         secretArn = secretAnswer.secretArn;
     }
 
+    // Optionally prompt for VPC ID
+    let vpcId: string | undefined;
+    if (answers.customizeVpc) {
+        const vpcAnswer = await inquirer.prompt<{ vpcId: string }>([
+            {
+                type: "input",
+                name: "vpcId",
+                message: "VPC ID (leave empty to auto-create VPC with private subnets):",
+                default: baseConfig.deployment.vpc?.vpcId || "",
+                validate: (input: string): boolean | string => {
+                    if (!input || input.trim().length === 0) {
+                        return true; // Empty is OK - will auto-create VPC
+                    }
+                    if (!/^vpc-[a-f0-9]{8,17}$/.test(input)) {
+                        return "Invalid VPC ID format (expected vpc-xxxxxxxx)";
+                    }
+                    return true;
+                },
+            },
+        ]);
+        vpcId = vpcAnswer.vpcId.trim() || undefined;
+
+        // If VPC ID was provided, show a warning about requirements
+        if (vpcId) {
+            console.log(chalk.yellow("\n⚠️  VPC Requirements (v0.9.0):"));
+            console.log(chalk.dim("  - Must have private subnets in at least 2 availability zones"));
+            console.log(chalk.dim("  - Private subnets must have NAT Gateway for outbound internet"));
+            console.log(chalk.dim("  - VPC Link requires proper routing configuration"));
+            console.log(chalk.dim("  - Deployment will fail if VPC doesn't meet these requirements\n"));
+        } else {
+            console.log(chalk.green("\n✓ Will auto-create VPC with:"));
+            console.log(chalk.dim("  - 2 Availability Zones"));
+            console.log(chalk.dim("  - Public subnets (for NAT Gateways)"));
+            console.log(chalk.dim("  - Private subnets (for ECS tasks)"));
+            console.log(chalk.dim("  - 2 NAT Gateways (~$64/month)\n"));
+        }
+    }
+
     // Create profile config
     const profileConfig: ProfileConfig = {
         quilt: {
@@ -202,6 +247,7 @@ export async function setupProfileCommand(
         deployment: {
             ...baseConfig.deployment,
             imageTag: answers.imageTag,
+            vpc: vpcId ? { vpcId } : baseConfig.deployment.vpc,
         },
         logging: baseConfig.logging,
         security: baseConfig.security,
@@ -242,6 +288,7 @@ export async function setupProfileCommand(
         console.log(chalk.dim(`  Image Tag: ${profileConfig.deployment.imageTag}`));
         console.log(chalk.dim(`  Secret ARN: ${profileConfig.benchling.secretArn}`));
         console.log(chalk.dim(`  Quilt Stack: ${profileConfig.quilt.stackArn}`));
+        console.log(chalk.dim(`  VPC: ${profileConfig.deployment.vpc?.vpcId || "auto-create"}`));
         console.log();
     } catch (error) {
         throw new Error(`Failed to save profile configuration: ${(error as Error).message}`);
