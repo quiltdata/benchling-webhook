@@ -387,7 +387,7 @@ export interface DeploymentConfig {
 /**
  * Logging Configuration
  *
- * Python logging level for Flask application.
+ * Python logging level for FastAPI application.
  */
 export interface LoggingConfig {
     /**

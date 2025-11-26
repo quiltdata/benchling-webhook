@@ -2,7 +2,7 @@
 /**
  * XDG Launch: Unified Configuration Bridge
  *
- * Single command to launch Flask application in different modes (native, docker, docker-dev)
+ * Single command to launch FastAPI application in different modes (native, docker, docker-dev)
  * using profile-based XDG configuration as the single source of truth.
  *
  * Eliminates .env files and manual environment variable management.
@@ -209,8 +209,7 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
 
     // Mode-specific variables
     if (mode === "native" || mode === "docker-dev") {
-        envVars.FLASK_ENV = "development";
-        envVars.FLASK_DEBUG = "true";
+        envVars.APP_ENV = "development";
         envVars.LOG_LEVEL = config.logging?.level || "DEBUG";
 
         // Disable verification in dev mode for easier testing
@@ -219,7 +218,7 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         }
     } else {
         // docker (production)
-        envVars.FLASK_ENV = "production";
+        envVars.APP_ENV = "production";
         envVars.LOG_LEVEL = config.logging?.level || "INFO";
     }
 
@@ -393,9 +392,9 @@ async function runTests(url: string, profile: string): Promise<number> {
 }
 
 /**
- * Launch Flask application in native mode
+ * Launch FastAPI application in native mode
  *
- * Runs Flask directly on host using uv.
+ * Runs FastAPI directly on host using uv.
  *
  * @param envVars - Environment variables
  * @param options - Launch options
@@ -404,7 +403,7 @@ async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<v
     const port = options.port || 8080;
     envVars.PORT = String(port);
 
-    console.log(`🚀 Launching native Flask (port ${port})...`);
+    console.log(`🚀 Launching native FastAPI (port ${port})...`);
 
     if (options.verbose) {
         console.log("\nEnvironment Variables:");
@@ -422,9 +421,9 @@ async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<v
     }
 
     console.log(`Working directory: ${dockerDir}`);
-    console.log("Command: uv run python -m src.app\n");
+    console.log(`Command: uv run uvicorn src.app:create_app --factory --host 0.0.0.0 --port ${port}\n`);
 
-    const proc = spawn("uv", ["run", "python", "-m", "src.app"], {
+    const proc = spawn("uv", ["run", "uvicorn", "src.app:create_app", "--factory", "--host", "0.0.0.0", "--port", String(port)], {
         cwd: dockerDir,
         env: envVars,
         stdio: options.test ? "pipe" : "inherit",
@@ -460,7 +459,7 @@ async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<v
         process.on("SIGTERM", cleanup);
 
         proc.on("error", (error: Error & { code?: string }) => {
-            console.error(`\n❌ Failed to start native Flask: ${error.message}`);
+            console.error(`\n❌ Failed to start native FastAPI: ${error.message}`);
             if (error.code === "ENOENT") {
                 console.error("\nIs \"uv\" installed and in your PATH?");
                 console.error("Install uv: https://docs.astral.sh/uv/getting-started/installation/");
@@ -470,7 +469,7 @@ async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<v
 
         proc.on("exit", (code) => {
             if (code !== 0 && code !== null) {
-                console.error(`\n❌ Native Flask exited with code ${code}`);
+                console.error(`\n❌ Native FastAPI exited with code ${code}`);
             }
             process.exit(code || 0);
         });
@@ -478,7 +477,7 @@ async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<v
 }
 
 /**
- * Launch Flask application in Docker production mode
+ * Launch FastAPI application in Docker production mode
  *
  * Runs production Docker container via docker-compose.
  *
@@ -567,7 +566,7 @@ async function launchDocker(envVars: EnvVars, options: LaunchOptions): Promise<v
 }
 
 /**
- * Launch Flask application in Docker development mode
+ * Launch FastAPI application in Docker development mode
  *
  * Runs Docker container with hot-reload enabled via docker-compose --profile dev.
  *

@@ -4,8 +4,8 @@ services:
     ports:
       - "8083:8080"
     environment:
-      # Flask Configuration
-      - FLASK_ENV=production
+      # Application Configuration
+      - APP_ENV=production
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - PORT=8080
 
@@ -45,8 +45,8 @@ services:
     ports:
       - "8082:8080"
     environment:
-      # Flask Configuration
-      - FLASK_ENV=development
+      # Application Configuration
+      - APP_ENV=development
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - PORT=8080
 
@@ -75,4 +75,4 @@ services:
       - ./src:/app/src
       - ./pyproject.toml:/app/pyproject.toml
       - ./uv.lock:/app/uv.lock
-    command: ["sh", "-c", "uv sync --all-extras --frozen && uv run python -m src.app"]
+    command: ["sh", "-c", "uv sync --all-extras --frozen && uv run uvicorn src.app:create_app --factory --host 0.0.0.0 --port ${PORT:-8080} --reload"]

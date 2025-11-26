@@ -1,11 +1,40 @@
 """Tests for webhook verification."""
 
+import asyncio
+from typing import Dict
 from unittest.mock import Mock, patch
 
 import pytest
-from flask import Flask
+from fastapi import Depends, FastAPI, Request
+from fastapi.testclient import TestClient
 
-from src.webhook_verification import WebhookVerificationError, require_webhook_verification, verify_webhook
+from src.webhook_verification import WebhookVerificationError, verify_webhook, webhook_verification_dependency
+
+
+def build_request(body: str = '{"test": "data"}', headers: Dict[str, str] | None = None) -> Request:
+    """Create a Starlette Request for testing."""
+    headers = headers or {
+        "webhook-id": "msg_123",
+        "webhook-timestamp": "1234567890",
+        "webhook-signature": "v1,signature_here",
+    }
+
+    scope = {
+        "type": "http",
+        "http_version": "1.1",
+        "method": "POST",
+        "path": "/test",
+        "headers": [(key.encode("latin-1"), value.encode("latin-1")) for key, value in headers.items()],
+        "query_string": b"",
+        "scheme": "http",
+        "client": ("testserver", 80),
+        "server": ("testserver", 80),
+    }
+
+    async def receive():
+        return {"type": "http.request", "body": body.encode("utf-8"), "more_body": False}
+
+    return Request(scope, receive)
 
 
 @pytest.fixture
@@ -26,158 +55,103 @@ def mock_config_disabled():
     return config
 
 
-@pytest.fixture
-def mock_request():
-    """Create a mock Flask request."""
-    request = Mock()
-    request.get_data.return_value = '{"test": "data"}'
-    request.headers = {
-        "webhook-id": "msg_123",
-        "webhook-timestamp": "1234567890",
-        "webhook-signature": "v1,signature_here",
-    }
-    return request
-
-
 class TestVerifyWebhook:
     """Tests for verify_webhook function."""
 
     @patch("src.webhook_verification.verify")
-    def test_verify_webhook_success(self, mock_verify, mock_request):
+    def test_verify_webhook_success(self, mock_verify):
         """Test successful webhook verification."""
         app_definition_id = "appdef_test123"
+        request = build_request()
 
-        # Should not raise exception
-        verify_webhook(app_definition_id, mock_request)
+        asyncio.run(verify_webhook(app_definition_id, request))
 
-        # Verify SDK function was called with correct parameters
-        mock_verify.assert_called_once_with(app_definition_id, '{"test": "data"}', dict(mock_request.headers))
+        mock_verify.assert_called_once_with(app_definition_id, '{"test": "data"}', dict(request.headers))
 
     @patch("src.webhook_verification.verify")
-    def test_verify_webhook_failure(self, mock_verify, mock_request):
+    def test_verify_webhook_failure(self, mock_verify):
         """Test webhook verification failure."""
         mock_verify.side_effect = Exception("Signature verification failed")
         app_definition_id = "appdef_test123"
+        request = build_request()
 
         with pytest.raises(WebhookVerificationError, match="Webhook verification failed"):
-            verify_webhook(app_definition_id, mock_request)
+            asyncio.run(verify_webhook(app_definition_id, request))
 
-    def test_verify_webhook_no_app_id(self, mock_request):
+    def test_verify_webhook_no_app_id(self):
         """Test webhook verification fails when no app_definition_id."""
-        # Should raise exception for empty string
+        request = build_request()
+
         with pytest.raises(WebhookVerificationError, match="Webhook verification requires app_definition_id"):
-            verify_webhook("", mock_request)
+            asyncio.run(verify_webhook("", request))
 
-        # Should raise exception for None
         with pytest.raises(WebhookVerificationError, match="Webhook verification requires app_definition_id"):
-            verify_webhook(None, mock_request)  # type: ignore[arg-type]
+            asyncio.run(verify_webhook(None, request))  # type: ignore[arg-type]
 
 
-class TestRequireWebhookVerification:
-    """Tests for require_webhook_verification decorator."""
+class TestWebhookVerificationDependency:
+    """Tests for FastAPI dependency."""
 
-    def test_decorator_success(self, mock_config):
-        """Test decorator with successful verification."""
-        app = Flask(__name__)
+    def test_dependency_success(self, mock_config):
+        app = FastAPI()
 
-        @require_webhook_verification(mock_config)
-        def test_route():
-            return {"status": "ok"}
-
-        with app.test_request_context(
-            "/test",
-            method="POST",
-            data='{"test": "data"}',
-            headers={
-                "webhook-id": "msg_123",
-                "webhook-timestamp": "1234567890",
-                "webhook-signature": "v1,signature_here",
-            },
-        ):
-            with patch("src.webhook_verification.verify") as mock_verify:
-                result = test_route()
-                assert result == {"status": "ok"}
-                mock_verify.assert_called_once()
-
-    def test_decorator_failure(self, mock_config):
-        """Test decorator with failed verification."""
-        app = Flask(__name__)
-
-        @require_webhook_verification(mock_config)
-        def test_route():
-            return {"status": "ok"}
-
-        with app.test_request_context(
-            "/test",
-            method="POST",
-            data='{"test": "data"}',
-            headers={
-                "webhook-id": "msg_123",
-                "webhook-timestamp": "1234567890",
-                "webhook-signature": "v1,invalid_signature",
-            },
-        ):
-            with patch("src.webhook_verification.verify") as mock_verify:
-                mock_verify.side_effect = Exception("Signature verification failed")
-                result, status_code = test_route()
-                assert status_code == 401
-                assert "error" in result.json  # type: ignore[attr-defined]
-
-    def test_decorator_disabled(self, mock_config_disabled):
-        """Test decorator with verification disabled."""
-        app = Flask(__name__)
-
-        @require_webhook_verification(mock_config_disabled)
-        def test_route():
-            return {"status": "ok"}
-
-        with app.test_request_context(
-            "/test",
-            method="POST",
-            data='{"test": "data"}',
-        ):
-            with patch("src.webhook_verification.verify") as mock_verify:
-                result = test_route()
-                assert result == {"status": "ok"}
-                # Verify SDK function was NOT called
-                mock_verify.assert_not_called()
-
-    def test_request_body_accessible_after_verification(self, mock_config):
-        """Test that request body is still accessible after verification (cache=True fix)."""
-        app = Flask(__name__)
-
-        @require_webhook_verification(mock_config)
-        def test_route():
-            from flask import request
-
-            # This should work after verification because we use cache=True
-            json_data = request.get_json()
+        @app.post("/test")
+        async def test_route(request: Request, _: None = Depends(webhook_verification_dependency(mock_config))):
+            json_data = await request.json()
             return {"received": json_data}
 
-        with app.test_request_context(
-            "/test",
-            method="POST",
-            json={"test": "data", "foo": "bar"},
-            headers={
-                "webhook-id": "msg_123",
-                "webhook-timestamp": "1234567890",
-                "webhook-signature": "v1,signature_here",
-            },
-        ):
-            with patch("src.webhook_verification.verify") as mock_verify:
-                result = test_route()
-                # Verify we can still read the JSON body after verification
-                assert result == {"received": {"test": "data", "foo": "bar"}}
-                mock_verify.assert_called_once()
+        client = TestClient(app)
 
-    def test_decorator_preserves_function_metadata(self, mock_config):
-        """Test that @wraps preserves function name and docstring."""
+        with patch("src.webhook_verification.verify") as mock_verify:
+            response = client.post(
+                "/test",
+                json={"test": "data", "foo": "bar"},
+                headers={
+                    "webhook-id": "msg_123",
+                    "webhook-timestamp": "1234567890",
+                    "webhook-signature": "v1,signature_here",
+                },
+            )
 
-        @require_webhook_verification(mock_config)
-        def my_webhook_handler():
-            """This is a webhook handler."""
+            assert response.status_code == 200
+            assert response.json() == {"received": {"test": "data", "foo": "bar"}}
+            mock_verify.assert_called_once()
+
+    def test_dependency_failure(self, mock_config):
+        app = FastAPI()
+
+        @app.post("/test")
+        async def test_route(_: None = Depends(webhook_verification_dependency(mock_config))):
             return {"status": "ok"}
 
-        # Check that function metadata is preserved
-        assert my_webhook_handler.__name__ == "my_webhook_handler"
-        assert my_webhook_handler.__doc__ == "This is a webhook handler."
+        client = TestClient(app)
+
+        with patch("src.webhook_verification.verify") as mock_verify:
+            mock_verify.side_effect = Exception("Signature verification failed")
+            response = client.post(
+                "/test",
+                json={"test": "data"},
+                headers={
+                    "webhook-id": "msg_123",
+                    "webhook-timestamp": "1234567890",
+                    "webhook-signature": "v1,invalid_signature",
+                },
+            )
+
+            assert response.status_code == 401
+            assert response.json()["detail"] == "Webhook verification failed"
+
+    def test_dependency_disabled(self, mock_config_disabled):
+        app = FastAPI()
+
+        @app.post("/test")
+        async def test_route(_: None = Depends(webhook_verification_dependency(mock_config_disabled))):
+            return {"status": "ok"}
+
+        client = TestClient(app)
+
+        with patch("src.webhook_verification.verify") as mock_verify:
+            response = client.post("/test", json={"test": "data"})
+            assert response.status_code == 200
+            assert response.json() == {"status": "ok"}
+            mock_verify.assert_not_called()

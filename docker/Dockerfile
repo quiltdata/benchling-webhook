@@ -133,14 +133,14 @@ ARG VERSION
 # - PATH: Prepend .venv/bin to activate virtual environment
 #   This allows direct Python execution without uv wrapper
 # - PYTHONPATH: Ensure Python can find application modules
-# - FLASK_APP: Flask application entry point
+# - APP_ENV: Application environment indicator (influences logging format)
 # - BUILD_VERSION: Git tag version from CI (overrides pyproject.toml version)
-# - PORT: Flask application port (default 8080)
+# - PORT: Application port (default 8080)
 # - UV_NO_CACHE: Disable UV cache to prevent read-only filesystem errors
 # - UV_CACHE_DIR: Set cache to /tmp (writable) as fallback if UV is invoked
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH="/app" \
-    FLASK_APP="src.app" \
+    APP_ENV="production" \
     BUILD_VERSION="${VERSION}" \
     PORT="8080" \
     UV_NO_CACHE="1" \
@@ -160,11 +160,6 @@ EXPOSE ${PORT}
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Start application with direct Python execution
-# Using python -m src.app instead of uv run to avoid:
-# - Read-only filesystem errors (uv tries to create cache directory)
-# - Runtime environment modification attempts
-# - Unnecessary uv dependency at runtime
-#
-# Virtual environment is activated via PATH, so Python finds all dependencies
-CMD ["python", "-m", "src.app"]
+# Start application with uvicorn (ASGI factory)
+# Virtual environment is activated via PATH, so uvicorn finds all dependencies
+CMD ["sh", "-c", "uvicorn src.app:create_app --factory --host 0.0.0.0 --port ${PORT:-8080}"]
