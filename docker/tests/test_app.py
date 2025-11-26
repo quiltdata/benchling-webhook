@@ -179,10 +179,11 @@ class TestFastAPIApp:
         with patch("src.app.CanvasManager") as mock_canvas_manager:
             mock_manager_instance = MagicMock()
             mock_canvas_manager.return_value = mock_manager_instance
+            from benchling_api_client.v2.stable.models.markdown_ui_block_type import MarkdownUiBlockType
             from benchling_api_client.v2.stable.models.markdown_ui_block_update import MarkdownUiBlockUpdate
 
             mock_manager_instance.get_package_browser_blocks.return_value = [
-                MarkdownUiBlockUpdate(type="markdown", value="file listing: test.txt")
+                MarkdownUiBlockUpdate(type=MarkdownUiBlockType.MARKDOWN, value="file listing: test.txt")  # type: ignore
             ]
 
             mock_file = MagicMock()

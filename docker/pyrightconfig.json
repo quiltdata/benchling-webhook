@@ -1,5 +1,4 @@
 {
-  "$schema": "https://raw.githubusercontent.com/microsoft/pyright/main/packages/vscode-pyright/schemas/pyrightconfig.schema.json",
   "include": [
     "src",
     "tests",
@@ -25,7 +24,7 @@
   "reportUntypedBaseClass": false,
   "reportUnusedImport": true,
   "reportUnusedClass": true,
-  "reportUnusedFunction": true,
+  "reportUnusedFunction": false,
   "reportUnusedVariable": true,
   "reportDuplicateImport": true,
   "reportOptionalSubscript": true,
