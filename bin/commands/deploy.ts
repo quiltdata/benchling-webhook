@@ -370,9 +370,9 @@ export async function deploy(
                 `${chalk.red.bold("⚠ The stack cannot be updated in-place.")}\n\n` +
                 `${chalk.bold("Required steps:")}\n` +
                 `  1. ${chalk.cyan("Destroy the existing v0.8.x stack:")}\n` +
-                `     ${chalk.dim(`npm run destroy -- --profile ${options.profileName} --stage ${options.stage}`)}\n` +
-                `     ${chalk.dim("or manually: cdk destroy BenchlingWebhookStack")}\n\n` +
-                `  2. ${chalk.cyan("Deploy v0.9.0 with this command")}\n\n` +
+                `     ${chalk.dim(`npx @quiltdata/benchling-webhook destroy --profile ${options.profileName} --stage ${options.stage}`)}\n\n` +
+                `  2. ${chalk.cyan("Deploy v0.9.0:")}\n` +
+                `     ${chalk.dim(`npx @quiltdata/benchling-webhook deploy --profile ${options.profileName} --stage ${options.stage}`)}\n\n` +
                 `  3. ${chalk.cyan("Update Benchling webhook URL")} to the new HTTP API endpoint\n\n` +
                 `${chalk.dim("See MIGRATION.md for full details: https://github.com/quiltdata/benchling-webhook/blob/main/MIGRATION.md")}\n\n` +
                 `${chalk.yellow("To proceed, you must first destroy the existing stack.")}`,

@@ -9,29 +9,44 @@ This release replaces the REST API + ALB architecture with an HTTP API that conn
 ## What Changed
 
 - API Gateway **HTTP API** + **VPC Link** + **Cloud Map** replace REST API + ALB
-- Fargate tasks register in `benchling.local` and serve Flask on port **8080**
+- Fargate tasks register in `benchling.local` and serve FastAPI on port **8080**
 - New API access log group: `/aws/apigateway/benchling-webhook-http`
 - ALB resources (listeners, target groups, log bucket) removed
 
 ## Upgrade Steps
 
 1. **Prepare downtime window**: the stack must be recreated to switch from REST to HTTP API.
-2. **Destroy the existing stack** (REST API cannot be migrated in-place). Use your existing deploy command with `cdk destroy`/`npm run deploy -- destroy` equivalent for your profile/stage.
-3. **Deploy v0.9.0** using your normal workflow, for example:
-   - `npm run deploy:dev -- --profile <profile> --yes`
-   - `npm run deploy:prod -- --profile <profile> --yes`
+
+2. **Destroy the existing v0.8.x stack** (REST API cannot be migrated in-place):
+
+   ```bash
+   npx @quiltdata/benchling-webhook destroy --profile <profile> --stage <stage>
+   ```
+
+3. **Deploy v0.9.0**:
+
+   ```bash
+   # For production
+   npx @quiltdata/benchling-webhook deploy --stage prod
+
+   # For dev
+   npx @quiltdata/benchling-webhook deploy --stage dev --profile dev
+   ```
+
 4. **Update Benchling webhook URL** in your Benchling app to the new HTTP API endpoint output by the stack.
-5. **Validate**:
+
+5. **Validate** (for local testing with source code):
    - `npm run test:local` (Docker dev on port 8082)
    - `npm run test:local:prod` (Docker prod on port 8083)
-   - `npm run test:native` (native Flask on port 8080)
+   - `npm run test:native` (native FastAPI on port 8080)
+
 6. **Monitor logs**:
    - API access logs: `/aws/apigateway/benchling-webhook-http`
    - Container logs: stack-named log group
 
 ## Local Development Notes
 
-- Flask default port is now **8080** (set via `PORT` env var).
+- FastAPI default port is now **8080** (set via `PORT` env var).
 - Docker Compose maps to ports **8082** (dev) and **8083** (prod).
 - Update any local curl scripts or tunnels that assumed port 5000.
 
