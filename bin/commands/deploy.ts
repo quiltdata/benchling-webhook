@@ -12,7 +12,7 @@ import {
 import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig } from "../../lib/types/config";
-import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
+import { CloudFormationClient, DescribeStacksCommand, DescribeStackResourcesCommand } from "@aws-sdk/client-cloudformation";
 import { syncSecretsToAWS } from "./sync-secrets";
 import * as fs from "fs";
 import * as path from "path";
@@ -25,6 +25,58 @@ function suggestSetup(profileName: string, message: string): void {
     console.log();
     console.log(chalk.cyan(`  npm run setup -- --profile ${profileName}`));
     console.log();
+}
+
+/**
+ * Detect if the existing stack is v0.8.x (REST API + ALB architecture)
+ * Returns true if v0.8.x stack detected, false otherwise
+ */
+async function detectLegacyStack(region: string): Promise<boolean> {
+    try {
+        const cloudformation = new CloudFormationClient({ region });
+        const stackName = "BenchlingWebhookStack";
+
+        // Check if stack exists
+        const describeCommand = new DescribeStacksCommand({ StackName: stackName });
+        const describeResponse = await cloudformation.send(describeCommand);
+
+        if (!describeResponse.Stacks || describeResponse.Stacks.length === 0) {
+            return false; // No stack exists
+        }
+
+        // Get stack resources
+        const resourcesCommand = new DescribeStackResourcesCommand({ StackName: stackName });
+        const resourcesResponse = await cloudformation.send(resourcesCommand);
+
+        if (!resourcesResponse.StackResources) {
+            return false;
+        }
+
+        // v0.8.x indicators:
+        // - Has AWS::ElasticLoadBalancingV2::LoadBalancer (ALB)
+        // - Has AWS::ApiGateway::RestApi (REST API)
+        // v0.9.0 indicators:
+        // - Has AWS::ApiGatewayV2::VpcLink (VPC Link)
+        // - Has AWS::ApiGatewayV2::Api (HTTP API)
+        const hasALB = resourcesResponse.StackResources.some(
+            r => r.ResourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer"
+        );
+        const hasRestAPI = resourcesResponse.StackResources.some(
+            r => r.ResourceType === "AWS::ApiGateway::RestApi"
+        );
+        const hasVpcLink = resourcesResponse.StackResources.some(
+            r => r.ResourceType === "AWS::ApiGatewayV2::VpcLink"
+        );
+        const hasHttpAPI = resourcesResponse.StackResources.some(
+            r => r.ResourceType === "AWS::ApiGatewayV2::Api"
+        );
+
+        // If has ALB or REST API but not VPC Link or HTTP API, it's v0.8.x
+        return (hasALB || hasRestAPI) && !hasVpcLink && !hasHttpAPI;
+    } catch (error) {
+        // Stack doesn't exist or error checking - not a v0.8.x stack
+        return false;
+    }
 }
 
 /**
@@ -297,6 +349,41 @@ export async function deploy(
             spinner.succeed(`CDK is bootstrapped (${bootstrapStatus.status})`);
         }
     }
+
+    // Check for v0.8.x stack and warn about migration
+    spinner.start("Checking for legacy stack...");
+    const isLegacyStack = await detectLegacyStack(deployRegion);
+
+    if (isLegacyStack) {
+        spinner.fail("v0.8.x stack detected - migration required");
+        console.log();
+        console.log(
+            boxen(
+                `${chalk.red.bold("⚠ BREAKING CHANGE: v0.8.x → v0.9.0 Migration Required")}\n\n` +
+                `${chalk.yellow("Your existing stack uses the v0.8.x architecture:")}\n` +
+                `  • REST API + Application Load Balancer (ALB)\n` +
+                `  • Flask service on port 5000\n\n` +
+                `${chalk.yellow("v0.9.0 introduces a new architecture:")}\n` +
+                `  • HTTP API + VPC Link + Cloud Map\n` +
+                `  • FastAPI service on port 8080\n` +
+                `  • Private subnets with NAT Gateways\n\n` +
+                `${chalk.red.bold("⚠ The stack cannot be updated in-place.")}\n\n` +
+                `${chalk.bold("Required steps:")}\n` +
+                `  1. ${chalk.cyan("Destroy the existing v0.8.x stack:")}\n` +
+                `     ${chalk.dim(`npm run destroy -- --profile ${options.profileName} --stage ${options.stage}`)}\n` +
+                `     ${chalk.dim("or manually: cdk destroy BenchlingWebhookStack")}\n\n` +
+                `  2. ${chalk.cyan("Deploy v0.9.0 with this command")}\n\n` +
+                `  3. ${chalk.cyan("Update Benchling webhook URL")} to the new HTTP API endpoint\n\n` +
+                `${chalk.dim("See MIGRATION.md for full details: https://github.com/quiltdata/benchling-webhook/blob/main/MIGRATION.md")}\n\n` +
+                `${chalk.yellow("To proceed, you must first destroy the existing stack.")}`,
+                { padding: 1, borderColor: "red", borderStyle: "double" },
+            ),
+        );
+        console.log();
+        process.exit(1);
+    }
+
+    spinner.succeed("No legacy stack detected");
 
     // Load Quilt configuration from config.quilt.*
     spinner.start("Loading Quilt configuration...");

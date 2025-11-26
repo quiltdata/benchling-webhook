@@ -1,6 +1,10 @@
 # Migration Guide: 0.9.0 (HTTP API + VPC Link)
 
-This release replaces the REST API + ALB architecture with an HTTP API that connects to ECS through a VPC Link and Cloud Map. The Flask service now listens on port **8080**. These changes require a fresh stack because REST and HTTP APIs cannot be swapped in-place.
+This release replaces the REST API + ALB architecture with an HTTP API that connects to ECS through a VPC Link and Cloud Map. The FastAPI service now listens on port **8080**. These changes require a fresh stack because REST and HTTP APIs cannot be swapped in-place.
+
+## Automatic Detection
+
+**v0.9.0 automatically detects v0.8.x stacks** and prevents in-place updates. If you attempt to deploy v0.9.0 over a v0.8.x stack, the deployment will fail with clear instructions on how to migrate safely.
 
 ## What Changed
 
