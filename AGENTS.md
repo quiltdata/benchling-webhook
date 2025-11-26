@@ -16,7 +16,7 @@ npm run setup                # Interactive wizard: deps + XDG config + secrets
 
 ```bash
 npm run test                 # Fast unit tests (lint + typecheck + mocked tests)
-npm run test:native          # Local Flask (mocked) integration tests
+npm run test:native          # Local FastAPI (mocked) integration tests
 ```
 
 #### Before creating PR
@@ -99,7 +99,7 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 
 ### Application
 
-#### `docker/` — Flask webhook processor (Python)
+#### `docker/` — FastAPI webhook processor (Python)
 
 - See [docker/README.md](docker/README.md) for details
 
@@ -117,7 +117,7 @@ AWS CDK application deploying auto-scaling webhook processor:
 
 - **API Gateway (HTTP API)** → HTTPS webhook routing
 - **VPC Link + Cloud Map** → Private service discovery to tasks
-- **Fargate (ECS)** → Flask app on port 8080 (auto-scales 2-10 tasks)
+- **Fargate (ECS)** → FastAPI app on port 8080 (auto-scales 2-10 tasks)
 - **S3** → Payload and package storage
 - **SQS** → Quilt package creation queue
 - **Secrets Manager** → Benchling OAuth credentials
@@ -149,7 +149,7 @@ npm run test:dev             # Test deployed dev stack via API Gateway (auto-dep
 npm run test                 # Unit tests: lint + typecheck + TS + Python
 npm run test:local           # Docker dev container (hot-reload, port 8082)
 npm run test:local:prod      # Docker prod container (production mode, port 8083)
-npm run test:native          # Native Flask with mocked AWS (no Docker, port 8080)
+npm run test:native          # Native FastAPI with mocked AWS (no Docker, port 8080)
 
 # Remote deployment testing
 npm run test:dev             # Deployed dev stack via API Gateway (auto-deploys if needed)
@@ -168,7 +168,7 @@ npm run lint                 # Auto-fix formatting
 | `test` | No | Mocked | Daily development, pre-commit |
 | `test:local` | Yes (dev) | Real | Before PR, local integration testing |
 | `test:local:prod` | Yes (prod) | Real | Test prod Docker config locally |
-| `test:native` | No | Mocked | Quick Flask testing without Docker |
+| `test:native` | No | Mocked | Quick FastAPI testing without Docker |
 | `test:dev` | Remote | Real | CI/CD, verify deployed dev stack |
 | `test:prod` | Remote | Real | After production deployment |
 

@@ -4,14 +4,14 @@ This directory contains the core components of the Benchling integration service
 
 ## Architecture Overview
 
-The service uses Python-based orchestration (replacing AWS Step Functions) to handle Benchling entry updates and export workflows. It's built as a Flask application with modular components for different responsibilities.
+The service uses Python-based orchestration (replacing AWS Step Functions) to handle Benchling entry updates and export workflows. It's built as a FastAPI application running under uvicorn with modular components for different responsibilities.
 
 ## Components
 
 ### Core Application
 
-- **`app.py`** - Flask application with webhook endpoints, health checks, and initialization logic
-- **`config.py`** - Configuration management using environment variables
+- **`app.py`** - FastAPI application with webhook endpoints, health checks, and initialization logic
+- **`config.py`** - Configuration management using environment variables (APP_ENV/LOG_LEVEL)
 
 ### Orchestration & Workflow
 
