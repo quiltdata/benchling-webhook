@@ -44,6 +44,7 @@ function buildProfileConfig(input: StandaloneModeInput): ProfileConfig {
         deployment: {
             region: parameters.deployment.region,
             account: parameters.deployment.account,
+            vpc: parameters.deployment.vpc,
         },
         integratedStack: false, // CRITICAL: Mark as standalone mode
         logging: {

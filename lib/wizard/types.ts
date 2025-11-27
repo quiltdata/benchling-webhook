@@ -101,6 +101,9 @@ export interface ParameterCollectionResult {
     deployment: {
         region: string;
         account: string;
+        vpc?: {
+            vpcId?: string;
+        };
     };
     logging: {
         level: "DEBUG" | "INFO" | "WARNING" | "ERROR";

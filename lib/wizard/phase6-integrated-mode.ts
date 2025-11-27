@@ -44,6 +44,7 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
         deployment: {
             region: parameters.deployment.region,
             account: parameters.deployment.account,
+            vpc: parameters.deployment.vpc,
         },
         integratedStack: true, // CRITICAL: Mark as integrated mode
         logging: {
