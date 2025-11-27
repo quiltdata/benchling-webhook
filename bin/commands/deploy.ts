@@ -386,7 +386,7 @@ export async function deploy(
                 `${chalk.red.bold("Stack state requires action")}\n\n` +
                 `${chalk.yellow("Detected a legacy/failed BenchlingWebhookStack that may block update.")}\n\n` +
                 `${chalk.bold("Evidence:")}\n` +
-                "  • Stack has ALB/REST API resources or is in a rollback/failed state\n\n" +
+                `  • Detected ALB/REST API or rollback/failed status for stack in ${deployRegion}\n\n` +
                 `${chalk.bold("Options:")}\n` +
                 "  1) Destroy the existing stack and redeploy clean (recommended if rollback/failed)\n" +
                 "  2) Proceed anyway (may fail if CloudFormation cannot update)\n",
