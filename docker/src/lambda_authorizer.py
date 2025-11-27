@@ -155,23 +155,21 @@ def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
             exc.reason,
             headers.get("webhook-id"),
         )
-        return _build_policy(
-            "Deny",
-            method_arn,
-            principal,
-            {
-                "authorized": "false",
-                "reason": exc.reason,
-            },
-        )
+        # Raise exception instead of returning Deny policy so API Gateway
+        # returns proper 401/403 with meaningful error message
+        error_messages = {
+            "invalid_signature": "Webhook signature verification failed",
+            "missing_headers": "Required webhook headers missing (webhook-id, webhook-signature, webhook-timestamp)",
+            "missing_secret_arn": "Authorizer configuration error: BENCHLING_SECRET_ARN not set",
+            "secrets_manager_error": "Failed to retrieve Benchling credentials",
+            "missing_secret_string": "Benchling secret is empty",
+            "invalid_secret_json": "Benchling secret is not valid JSON",
+            "missing_app_definition_id": "Benchling secret missing app_definition_id field",
+            "invalid_body_encoding": "Request body encoding is invalid",
+        }
+        message = error_messages.get(exc.reason, f"Authorization failed: {exc.reason}")
+        logger.warning("Returning 401 Unauthorized: %s", message)
+        raise Exception(message)
     except Exception as exc:  # pragma: no cover - defense for unexpected errors
         logger.error("Unexpected error during authorization: %s", exc, exc_info=True)
-        return _build_policy(
-            "Deny",
-            method_arn,
-            principal,
-            {
-                "authorized": "false",
-                "reason": "unexpected_error",
-            },
-        )
+        raise Exception("Authorization failed: unexpected error")
