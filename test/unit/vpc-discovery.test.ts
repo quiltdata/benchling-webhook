@@ -12,7 +12,7 @@ jest.mock("@aws-sdk/client-ec2");
 
 import {
     CloudFormationClient,
-    DescribeStackResourcesCommand,
+    DescribeStacksCommand,
 } from "@aws-sdk/client-cloudformation";
 import {
     EC2Client,
@@ -29,14 +29,18 @@ describe("VPC Discovery", () => {
 
     describe("discoverVpcFromStack", () => {
         it("should discover valid VPC with private subnets and NAT Gateway", async () => {
-            // Mock CloudFormation response
+            // Mock CloudFormation response - stack outputs with OutboundSecurityGroup
             (CloudFormationClient.prototype.send as jest.Mock).mockImplementation((command) => {
-                if (command instanceof DescribeStackResourcesCommand) {
+                if (command instanceof DescribeStacksCommand) {
                     return Promise.resolve({
-                        StackResources: [
+                        Stacks: [
                             {
-                                ResourceType: "AWS::EC2::VPC",
-                                PhysicalResourceId: "vpc-12345",
+                                Outputs: [
+                                    {
+                                        OutputKey: "OutboundSecurityGroup",
+                                        OutputValue: "sg-test123",
+                                    },
+                                ],
                             },
                         ],
                     });
@@ -45,8 +49,30 @@ describe("VPC Discovery", () => {
             });
 
             // Mock EC2 responses
+            let sgCallCount = 0;
             (EC2Client.prototype.send as jest.Mock).mockImplementation((command) => {
-                if (command instanceof DescribeVpcsCommand) {
+                if (command instanceof DescribeSecurityGroupsCommand) {
+                    sgCallCount++;
+                    if (sgCallCount === 1) {
+                        // First call: get VPC from security group
+                        return Promise.resolve({
+                            SecurityGroups: [
+                                {
+                                    GroupId: "sg-test123",
+                                    VpcId: "vpc-12345",
+                                },
+                            ],
+                        });
+                    } else {
+                        // Second call: get all security groups in VPC
+                        return Promise.resolve({
+                            SecurityGroups: [
+                                { GroupId: "sg-1" },
+                                { GroupId: "sg-2" },
+                            ],
+                        });
+                    }
+                } else if (command instanceof DescribeVpcsCommand) {
                     return Promise.resolve({
                         Vpcs: [
                             {
@@ -91,13 +117,6 @@ describe("VPC Discovery", () => {
                             },
                         ],
                     });
-                } else if (command instanceof DescribeSecurityGroupsCommand) {
-                    return Promise.resolve({
-                        SecurityGroups: [
-                            { GroupId: "sg-1" },
-                            { GroupId: "sg-2" },
-                        ],
-                    });
                 }
                 return Promise.resolve({});
             });
@@ -116,9 +135,13 @@ describe("VPC Discovery", () => {
             expect(result?.validationErrors).toHaveLength(0);
         });
 
-        it("should return null when no VPC found in stack", async () => {
+        it("should return null when no OutboundSecurityGroup found in stack", async () => {
             (CloudFormationClient.prototype.send as jest.Mock).mockResolvedValue({
-                StackResources: [],
+                Stacks: [
+                    {
+                        Outputs: [],
+                    },
+                ],
             });
 
             const result = await discoverVpcFromStack({
@@ -130,14 +153,18 @@ describe("VPC Discovery", () => {
         });
 
         it("should mark VPC as invalid when insufficient private subnets", async () => {
-            // Mock CloudFormation response
+            // Mock CloudFormation response - stack outputs with OutboundSecurityGroup
             (CloudFormationClient.prototype.send as jest.Mock).mockImplementation((command) => {
-                if (command instanceof DescribeStackResourcesCommand) {
+                if (command instanceof DescribeStacksCommand) {
                     return Promise.resolve({
-                        StackResources: [
+                        Stacks: [
                             {
-                                ResourceType: "AWS::EC2::VPC",
-                                PhysicalResourceId: "vpc-12345",
+                                Outputs: [
+                                    {
+                                        OutputKey: "OutboundSecurityGroup",
+                                        OutputValue: "sg-test123",
+                                    },
+                                ],
                             },
                         ],
                     });
@@ -146,8 +173,27 @@ describe("VPC Discovery", () => {
             });
 
             // Mock EC2 responses - only 1 private subnet
+            let sgCallCount = 0;
             (EC2Client.prototype.send as jest.Mock).mockImplementation((command) => {
-                if (command instanceof DescribeVpcsCommand) {
+                if (command instanceof DescribeSecurityGroupsCommand) {
+                    sgCallCount++;
+                    if (sgCallCount === 1) {
+                        // First call: get VPC from security group
+                        return Promise.resolve({
+                            SecurityGroups: [
+                                {
+                                    GroupId: "sg-test123",
+                                    VpcId: "vpc-12345",
+                                },
+                            ],
+                        });
+                    } else {
+                        // Second call: get all security groups in VPC
+                        return Promise.resolve({
+                            SecurityGroups: [],
+                        });
+                    }
+                } else if (command instanceof DescribeVpcsCommand) {
                     return Promise.resolve({
                         Vpcs: [
                             {
@@ -180,10 +226,6 @@ describe("VPC Discovery", () => {
                             },
                         ],
                     });
-                } else if (command instanceof DescribeSecurityGroupsCommand) {
-                    return Promise.resolve({
-                        SecurityGroups: [],
-                    });
                 }
                 return Promise.resolve({});
             });
@@ -201,14 +243,18 @@ describe("VPC Discovery", () => {
         });
 
         it("should mark VPC as invalid when no NAT Gateway", async () => {
-            // Mock CloudFormation response
+            // Mock CloudFormation response - stack outputs with OutboundSecurityGroup
             (CloudFormationClient.prototype.send as jest.Mock).mockImplementation((command) => {
-                if (command instanceof DescribeStackResourcesCommand) {
+                if (command instanceof DescribeStacksCommand) {
                     return Promise.resolve({
-                        StackResources: [
+                        Stacks: [
                             {
-                                ResourceType: "AWS::EC2::VPC",
-                                PhysicalResourceId: "vpc-12345",
+                                Outputs: [
+                                    {
+                                        OutputKey: "OutboundSecurityGroup",
+                                        OutputValue: "sg-test123",
+                                    },
+                                ],
                             },
                         ],
                     });
@@ -217,8 +263,27 @@ describe("VPC Discovery", () => {
             });
 
             // Mock EC2 responses - 2 subnets but no NAT Gateway
+            let sgCallCount = 0;
             (EC2Client.prototype.send as jest.Mock).mockImplementation((command) => {
-                if (command instanceof DescribeVpcsCommand) {
+                if (command instanceof DescribeSecurityGroupsCommand) {
+                    sgCallCount++;
+                    if (sgCallCount === 1) {
+                        // First call: get VPC from security group
+                        return Promise.resolve({
+                            SecurityGroups: [
+                                {
+                                    GroupId: "sg-test123",
+                                    VpcId: "vpc-12345",
+                                },
+                            ],
+                        });
+                    } else {
+                        // Second call: get all security groups in VPC
+                        return Promise.resolve({
+                            SecurityGroups: [],
+                        });
+                    }
+                } else if (command instanceof DescribeVpcsCommand) {
                     return Promise.resolve({
                         Vpcs: [
                             {
@@ -253,10 +318,6 @@ describe("VPC Discovery", () => {
                                 ],
                             },
                         ],
-                    });
-                } else if (command instanceof DescribeSecurityGroupsCommand) {
-                    return Promise.resolve({
-                        SecurityGroups: [],
                     });
                 }
                 return Promise.resolve({});

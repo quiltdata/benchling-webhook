@@ -9,7 +9,7 @@
 
 import {
     CloudFormationClient,
-    DescribeStackResourcesCommand,
+    DescribeStacksCommand,
 } from "@aws-sdk/client-cloudformation";
 import {
     EC2Client,
@@ -86,6 +86,10 @@ function extractStackNameFromArn(arn: string): string {
 /**
  * Discovers VPC resources from CloudFormation stack
  *
+ * Quilt stacks don't create their own VPC - they use existing VPCs.
+ * We discover the VPC by looking at the OutboundSecurityGroup output,
+ * which references the VPC used by the stack.
+ *
  * @param options - Discovery options
  * @returns Discovered VPC or null if not found
  */
@@ -102,24 +106,42 @@ export async function discoverVpcFromStack(
     const ec2Client = new EC2Client(ec2Config);
 
     try {
-        // Step 1: Query CloudFormation for VPC resources
+        // Step 1: Get OutboundSecurityGroup from stack outputs
         const stackName = extractStackNameFromArn(stackArn);
-        const stackResourcesCmd = new DescribeStackResourcesCommand({
+        const describeStacksCmd = new DescribeStacksCommand({
             StackName: stackName,
         });
 
-        const stackResourcesResponse = await cfnClient.send(stackResourcesCmd);
-        const resources = stackResourcesResponse.StackResources || [];
-
-        // Find VPC resource
-        const vpcResource = resources.find((r) => r.ResourceType === "AWS::EC2::VPC");
-        if (!vpcResource || !vpcResource.PhysicalResourceId) {
+        const stacksResponse = await cfnClient.send(describeStacksCmd);
+        const stack = stacksResponse.Stacks?.[0];
+        if (!stack) {
             return null;
         }
 
-        const vpcId = vpcResource.PhysicalResourceId;
+        // Find OutboundSecurityGroup output
+        const outboundSgOutput = stack.Outputs?.find(
+            (o) => o.OutputKey === "OutboundSecurityGroup",
+        );
+        if (!outboundSgOutput || !outboundSgOutput.OutputValue) {
+            return null;
+        }
 
-        // Step 2: Enrich VPC metadata via EC2 API
+        const securityGroupId = outboundSgOutput.OutputValue;
+
+        // Step 2: Get VPC ID from security group
+        const sgDetailsCmd = new DescribeSecurityGroupsCommand({
+            GroupIds: [securityGroupId],
+        });
+        const sgDetailsResponse = await ec2Client.send(sgDetailsCmd);
+        const securityGroup = sgDetailsResponse.SecurityGroups?.[0];
+
+        if (!securityGroup || !securityGroup.VpcId) {
+            return null;
+        }
+
+        const vpcId = securityGroup.VpcId;
+
+        // Step 3: Enrich VPC metadata via EC2 API
         const vpcDetailsCmd = new DescribeVpcsCommand({
             VpcIds: [vpcId],
         });
@@ -133,7 +155,7 @@ export async function discoverVpcFromStack(
         const vpcName = vpcDetails.Tags?.find((t) => t.Key === "Name")?.Value;
         const cidrBlock = vpcDetails.CidrBlock || "";
 
-        // Step 3: Get subnet details
+        // Step 4: Get subnet details
         const subnetsCmd = new DescribeSubnetsCommand({
             Filters: [
                 {
@@ -145,7 +167,7 @@ export async function discoverVpcFromStack(
         const subnetsResponse = await ec2Client.send(subnetsCmd);
         const ec2Subnets = subnetsResponse.Subnets || [];
 
-        // Step 4: Get route tables to determine subnet types
+        // Step 5: Get route tables to determine subnet types
         const routeTablesCmd = new DescribeRouteTablesCommand({
             Filters: [
                 {
@@ -205,7 +227,7 @@ export async function discoverVpcFromStack(
             };
         });
 
-        // Step 5: Get security groups
+        // Step 6: Get security groups
         const securityGroupsCmd = new DescribeSecurityGroupsCommand({
             Filters: [
                 {
@@ -219,7 +241,7 @@ export async function discoverVpcFromStack(
             .map((sg) => sg.GroupId)
             .filter((id): id is string => !!id);
 
-        // Build discovered VPC
+        // Step 7: Build discovered VPC
         const discoveredVpc: DiscoveredVpc = {
             vpcId,
             name: vpcName,
@@ -231,7 +253,7 @@ export async function discoverVpcFromStack(
             validationErrors: [],
         };
 
-        // Step 6: Validate VPC
+        // Step 8: Validate VPC
         validateVpc(discoveredVpc);
 
         return discoveredVpc;
