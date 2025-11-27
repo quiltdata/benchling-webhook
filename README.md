@@ -137,6 +137,9 @@ npx @quiltdata/benchling-webhook@latest status [--profile <name>]
 
 # Show all available commands
 npx @quiltdata/benchling-webhook@latest --help
+
+# Validate Lambda authorizer bundle locally (offline-friendly)
+npm run test:lambda-bundle
 ```
 
 ## License
