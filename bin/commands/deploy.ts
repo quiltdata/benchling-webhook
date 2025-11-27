@@ -27,13 +27,19 @@ function suggestSetup(profileName: string, message: string): void {
     console.log();
 }
 
+type LegacyCheck = {
+    stackExists: boolean;
+    stackStatus?: string;
+    statusCategory: "none" | "in_progress" | "failed" | "rolled_back";
+    hasLegacyResources: boolean;
+    hasVpcLink: boolean;
+    hasHttpApi: boolean;
+};
+
 /**
- * Detect if the existing stack is v0.8.x (REST API + ALB architecture)
- * Returns true if v0.8.x stack detected, false otherwise
- *
- * Also handles stacks in failed/rollback states by examining existing resources
+ * Detect if the existing stack is legacy shape or in a rollback state
  */
-async function detectLegacyStack(region: string): Promise<boolean> {
+async function detectLegacyStack(region: string): Promise<LegacyCheck> {
     try {
         const cloudformation = new CloudFormationClient({ region });
         const stackName = "BenchlingWebhookStack";
@@ -43,37 +49,45 @@ async function detectLegacyStack(region: string): Promise<boolean> {
         const describeResponse = await cloudformation.send(describeCommand);
 
         if (!describeResponse.Stacks || describeResponse.Stacks.length === 0) {
-            return false; // No stack exists
+            return {
+                stackExists: false,
+                statusCategory: "none",
+                hasLegacyResources: false,
+                hasVpcLink: false,
+                hasHttpApi: false,
+            };
         }
 
         const stack = describeResponse.Stacks[0];
         const stackStatus = stack.StackStatus || "";
 
-        // Check if stack is in a rollback/failed state that blocks updates
-        // These states indicate a previous deployment attempt failed
-        const blockingStates = [
-            "UPDATE_ROLLBACK_COMPLETE",
+        const inProgressStates = [
             "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS",
             "UPDATE_ROLLBACK_IN_PROGRESS",
-            "UPDATE_ROLLBACK_FAILED",
-            "ROLLBACK_COMPLETE",
             "ROLLBACK_IN_PROGRESS",
-            "ROLLBACK_FAILED",
         ];
-
-        if (blockingStates.includes(stackStatus)) {
-            // Stack is in a failed state - can't determine architecture reliably
-            // User needs to destroy and redeploy regardless
-            // Return true to trigger migration warning which tells them to destroy
-            return true;
-        }
+        const failedStates = ["ROLLBACK_FAILED", "UPDATE_ROLLBACK_FAILED"];
+        const rolledBackStates = ["UPDATE_ROLLBACK_COMPLETE", "ROLLBACK_COMPLETE"];
 
         // Get stack resources to check architecture
         const resourcesCommand = new DescribeStackResourcesCommand({ StackName: stackName });
         const resourcesResponse = await cloudformation.send(resourcesCommand);
 
         if (!resourcesResponse.StackResources) {
-            return false;
+            return {
+                stackExists: true,
+                stackStatus,
+                statusCategory: rolledBackStates.includes(stackStatus)
+                    ? "rolled_back"
+                    : failedStates.includes(stackStatus)
+                        ? "failed"
+                        : inProgressStates.includes(stackStatus)
+                            ? "in_progress"
+                            : "none",
+                hasLegacyResources: false,
+                hasVpcLink: false,
+                hasHttpApi: false,
+            };
         }
 
         // v0.8.x indicators:
@@ -95,11 +109,31 @@ async function detectLegacyStack(region: string): Promise<boolean> {
             r => r.ResourceType === "AWS::ApiGatewayV2::Api",
         );
 
-        // If has ALB or REST API but not VPC Link or HTTP API, it's v0.8.x
-        return (hasALB || hasRestAPI) && !hasVpcLink && !hasHttpAPI;
+        const statusCategory = inProgressStates.includes(stackStatus)
+            ? "in_progress"
+            : failedStates.includes(stackStatus)
+                ? "failed"
+                : rolledBackStates.includes(stackStatus)
+                    ? "rolled_back"
+                    : "none";
+
+        return {
+            stackExists: true,
+            stackStatus,
+            statusCategory,
+            hasLegacyResources: (hasALB || hasRestAPI) && !hasVpcLink && !hasHttpAPI,
+            hasVpcLink,
+            hasHttpApi: hasHttpAPI,
+        };
     } catch (_error) {
-        // Stack doesn't exist or error checking - not a v0.8.x stack
-        return false;
+        // Stack doesn't exist or error checking
+        return {
+            stackExists: false,
+            statusCategory: "none",
+            hasLegacyResources: false,
+            hasVpcLink: false,
+            hasHttpApi: false,
+        };
     }
 }
 
@@ -374,23 +408,39 @@ export async function deploy(
         }
     }
 
-    // Check for v0.8.x stack and warn about migration
+    // Check for legacy stack or rollback state and ask user how to proceed
     spinner.start("Checking for legacy stack or failed deployment...");
-    const isLegacyStack = await detectLegacyStack(deployRegion);
+    const legacyCheck = await detectLegacyStack(deployRegion);
 
-    if (isLegacyStack) {
-        spinner.fail("Existing stack blocks update");
+    const needsAttention =
+        legacyCheck.hasLegacyResources ||
+        ["in_progress", "failed", "rolled_back"].includes(legacyCheck.statusCategory);
+
+    if (needsAttention) {
+        const evidence: string[] = [];
+        if (legacyCheck.hasLegacyResources) {
+            evidence.push("ALB/REST API detected without HTTP API/VPC Link (legacy v0.8 shape)");
+        }
+        if (legacyCheck.stackStatus) {
+            evidence.push(`Stack status: ${legacyCheck.stackStatus}`);
+        }
+        const evidenceText = evidence.length > 0 ? evidence.map(e => `  • ${e}`).join("\n") : "  • None";
+
+        const isActiveRollback = legacyCheck.statusCategory === "in_progress";
+        const borderColor = isActiveRollback ? "red" : "yellow";
+        const title = isActiveRollback ? "Stack is rolling back" : "Stack state needs attention";
+
+        spinner[isActiveRollback ? "fail" : "warn"]("Stack state may block update");
         console.log();
         console.log(
             boxen(
-                `${chalk.red.bold("Stack state requires action")}\n\n` +
-                `${chalk.yellow("Detected a legacy/failed BenchlingWebhookStack that may block update.")}\n\n` +
-                `${chalk.bold("Evidence:")}\n` +
-                `  • Detected ALB/REST API or rollback/failed status for stack in ${deployRegion}\n\n` +
+                `${chalk.red.bold(title)}\n\n` +
+                `${chalk.bold("Evidence:")}\n${evidenceText}\n\n` +
                 `${chalk.bold("Options:")}\n` +
-                "  1) Destroy the existing stack and redeploy clean (recommended if rollback/failed)\n" +
-                "  2) Proceed anyway (may fail if CloudFormation cannot update)\n",
-                { padding: 1, borderColor: "yellow", borderStyle: "round" },
+                (isActiveRollback
+                    ? "  1) Wait/abort (recommended while rollback is in progress)\n  2) Destroy and redeploy if stuck\n  3) Proceed anyway (likely to fail)\n"
+                    : "  1) Proceed with deploy\n  2) Destroy and redeploy clean\n  3) Abort\n"),
+                { padding: 1, borderColor, borderStyle: "round" },
             ),
         );
         console.log();
@@ -400,12 +450,18 @@ export async function deploy(
                 type: "select",
                 name: "proceedChoice",
                 message: "How would you like to proceed?",
-                choices: [
-                    { name: "destroy", message: "Destroy existing stack then deploy clean (recommended)" },
-                    { name: "proceed", message: "Proceed with deployment (may fail if stack is blocked)" },
-                    { name: "abort", message: "Abort now" },
-                ],
-                initial: 0,
+                choices: isActiveRollback
+                    ? [
+                        { name: "abort", message: "Abort / wait for rollback to finish (recommended)" },
+                        { name: "destroy", message: "Destroy existing stack then redeploy clean" },
+                        { name: "proceed", message: "Proceed anyway (likely to fail while rollback active)" },
+                    ]
+                    : [
+                        { name: "proceed", message: "Proceed with deployment" },
+                        { name: "destroy", message: "Destroy existing stack then redeploy clean" },
+                        { name: "abort", message: "Abort now" },
+                    ],
+                initial: isActiveRollback ? 0 : 0,
             },
         ]);
 
@@ -423,10 +479,10 @@ export async function deploy(
             process.exit(1);
         }
 
-        spinner.warn("Proceeding despite legacy/failed stack detection; deployment may fail.");
+        spinner.warn("Proceeding despite stack state; deployment may fail.");
+    } else {
+        spinner.succeed("Stack status OK - ready for deployment");
     }
-
-    spinner.succeed("Stack status OK - ready for deployment");
 
     // Load Quilt configuration from config.quilt.*
     spinner.start("Loading Quilt configuration...");
