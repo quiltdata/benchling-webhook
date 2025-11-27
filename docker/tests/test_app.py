@@ -20,7 +20,7 @@ class TestFastAPIApp:
         config.queue_url = "https://sqs.us-west-2.amazonaws.com/123456789012/test"
         config.quilt_catalog = "test.quiltdata.com"
         config.benchling_app_definition_id = ""
-        config.enable_webhook_verification = False  # Disable verification for tests
+        config.enable_webhook_verification = False  # Lambda authorizer handles verification; flag retained for compatibility
         config.quilt_write_role_arn = ""
         config.webhook_allow_list = ""
         config.pkg_key = "experiment_id"

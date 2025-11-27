@@ -76,32 +76,14 @@ make health                 # Check status
 
 ### Webhook Security
 
-The service supports webhook signature verification using the Benchling SDK to ensure webhooks are authentic:
+Webhook authentication now runs in an API Gateway Lambda Authorizer before requests reach FastAPI:
 
-**Setup:**
+- Signature verification runs in Lambda using the Benchling SDK with `BENCHLING_SECRET_ARN` from Secrets Manager
+- FastAPI receives only pre-authenticated requests; HMAC verification is no longer performed in the app
+- `ENABLE_WEBHOOK_VERIFICATION` / `security.enableVerification` controls whether the authorizer is attached (default: true)
+- Health endpoints remain unauthenticated for readiness probes
 
-1. Get your app definition ID from Benchling app settings (format: `appdef_xxxx`)
-2. Add to `.env`make t:
-
-   ```bash
-   BENCHLING_APP_DEFINITION_ID=appdef_your_id_here
-   ENABLE_WEBHOOK_VERIFICATION=true
-   ```
-
-**Configuration:**
-
-- `ENABLE_WEBHOOK_VERIFICATION=true` (default) - Verifies all webhook signatures
-- `ENABLE_WEBHOOK_VERIFICATION=false` - Disables verification (development only)
-- `APP_ENV` controls logging format (replaces `FLASK_ENV`)
-
-**How it works:**
-
-- Uses Benchling SDK's `verify()` helper to validate webhook signatures
-- Checks `webhook-id`, `webhook-timestamp`, and `webhook-signature` headers
-- Returns 401 if verification fails
-- Applied to all webhook endpoints: `/event`, `/lifecycle`, `/canvas`
-
-See [Benchling Webhook Verification Docs](https://docs.benchling.com/docs/webhook-verification) for details.
+See [Benchling Webhook Verification Docs](https://docs.benchling.com/docs/webhook-verification) for header requirements.
 
 ## Documentation
 

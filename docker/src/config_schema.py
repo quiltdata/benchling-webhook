@@ -97,7 +97,9 @@ class UserConfig(BaseModel):
     log_level: Optional[str] = Field("INFO", alias="logLevel", description="Logging level")
     webhook_allow_list: Optional[str] = Field("", alias="webhookAllowList", description="Comma-separated IP allowlist")
     enable_webhook_verification: Optional[str] = Field(
-        "true", alias="enableWebhookVerification", description="Enable webhook signature verification"
+        "true",
+        alias="enableWebhookVerification",
+        description="Enable Lambda authorizer for webhook signature verification (API Gateway)",
     )
 
     # ECR Configuration
@@ -178,7 +180,9 @@ class BenchlingSecret(BaseModel):
     pkg_prefix: str = Field("benchling", description="S3 key prefix for packages")
     pkg_key: str = Field("experiment_id", description="Package metadata key")
     log_level: str = Field("INFO", description="Logging level")
-    enable_webhook_verification: str = Field("true", description="Enable webhook signature verification")
+    enable_webhook_verification: str = Field(
+        "true", description="Enable Lambda authorizer for webhook signature verification (API Gateway)"
+    )
     webhook_allow_list: str = Field("", description="Comma-separated IP allowlist")
     queue_url: Optional[str] = Field(None, description="SQS queue URL (optional)")
 

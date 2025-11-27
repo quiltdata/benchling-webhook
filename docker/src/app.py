@@ -8,7 +8,7 @@ from benchling_api_client.v2.stable.models.app_canvas_update import AppCanvasUpd
 from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
 from benchling_sdk.benchling import Benchling
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Request, status
+from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -18,7 +18,6 @@ from .config import get_config
 from .entry_packager import EntryPackager
 from .payload import Payload
 from .version import __version__
-from .webhook_verification import webhook_verification_dependency
 
 # Load environment variables
 load_dotenv()
@@ -115,8 +114,6 @@ def create_app() -> FastAPI:
         logger.error("Failed to initialize application", error=str(e))
         raise
 
-    verification_dependency = webhook_verification_dependency(config)
-
     @app.get("/health")
     async def health() -> Dict[str, Any]:
         """Application health status."""
@@ -189,6 +186,10 @@ def create_app() -> FastAPI:
                     "quilt_stack_arn": mask_arn(quilt_stack_arn),
                     "benchling_secret_name": benchling_secret_name,
                 },
+                "authorizer": {
+                    "enabled": config.enable_webhook_verification,
+                    "mode": "lambda",
+                },
                 "quilt": {
                     "catalog": config.quilt_catalog,
                     "database": config.quilt_database,
@@ -218,8 +219,8 @@ def create_app() -> FastAPI:
             return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
 
     @app.post("/event")
-    async def handle_event(request: Request, _: None = Depends(verification_dependency)):
-        """Handle Benchling webhook events."""
+    async def handle_event(request: Request):
+        """Handle Benchling webhook events (pre-authenticated by Lambda authorizer)."""
         try:
             logger.info("Received /event", headers=dict(request.headers))
             payload = await Payload.from_request(request, benchling)
@@ -283,8 +284,8 @@ def create_app() -> FastAPI:
             return JSONResponse({"error": "Internal server error"}, status_code=500)
 
     @app.post("/lifecycle")
-    async def lifecycle(request: Request, _: None = Depends(verification_dependency)):
-        """Handle Benchling app lifecycle events."""
+    async def lifecycle(request: Request):
+        """Handle Benchling app lifecycle events (pre-authenticated by Lambda authorizer)."""
         try:
             logger.info("Received /lifecycle", headers=dict(request.headers))
             payload_obj = await Payload.from_request(request, benchling)
@@ -329,8 +330,8 @@ def create_app() -> FastAPI:
         return {"status": "success", "message": "Configuration updated successfully"}
 
     @app.post("/canvas")
-    async def canvas_initialize(request: Request, _: None = Depends(verification_dependency)):
-        """Handle /canvas webhook from Benchling."""
+    async def canvas_initialize(request: Request):
+        """Handle /canvas webhook from Benchling (pre-authenticated by Lambda authorizer)."""
         try:
             logger.info("Received /canvas", headers=dict(request.headers))
             payload = await Payload.from_request(request, benchling)

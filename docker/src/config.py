@@ -58,8 +58,8 @@ class Config:
         Optional environment variables:
             - APP_ENV: Application environment (default: production)
             - LOG_LEVEL: Logging level (default: INFO)
-            - ENABLE_WEBHOOK_VERIFICATION: Enable verification (default: true)
-            - BENCHLING_TEST_MODE: Disable verification for testing (default: false)
+            - ENABLE_WEBHOOK_VERIFICATION: Enable Lambda authorizer verification (default: true)
+            - BENCHLING_TEST_MODE: Disable verification for testing workflows (default: false)
             - ATHENA_USER_WORKGROUP: Athena workgroup (default: primary, v0.8.0+)
             - ATHENA_RESULTS_BUCKET: Athena results S3 bucket (default: "", v0.8.0+)
             - ICEBERG_DATABASE: Iceberg database name (default: "", v0.8.0+)
@@ -95,7 +95,7 @@ class Config:
         self.app_env = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "production"))
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
 
-        # Security configuration - ENABLE_WEBHOOK_VERIFICATION can be overridden for testing
+        # Security configuration - propagated to API Gateway Lambda authorizer
         enable_verification = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "true").lower()
         self.enable_webhook_verification = enable_verification in ("true", "1", "yes")
         self.webhook_allow_list = ""  # Will be set from Secrets Manager
