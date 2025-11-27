@@ -67,10 +67,8 @@ def test_denies_when_signature_invalid(monkeypatch):
 
     monkeypatch.setattr(authorizer, "verify", failing_verify)
 
-    result = authorizer.handler(_base_event(), {})
-
-    assert result["policyDocument"]["Statement"][0]["Effect"] == "Deny"
-    assert result["context"]["reason"] == "invalid_signature"
+    with pytest.raises(Exception, match="Webhook signature verification failed"):
+        authorizer.handler(_base_event(), {})
 
 
 def test_denies_when_headers_missing(monkeypatch):
@@ -80,30 +78,24 @@ def test_denies_when_headers_missing(monkeypatch):
     event = _base_event()
     event["headers"].pop("webhook-signature")
 
-    result = authorizer.handler(event, {})
-
-    assert result["policyDocument"]["Statement"][0]["Effect"] == "Deny"
-    assert result["context"]["reason"] == "missing_headers"
+    with pytest.raises(Exception, match="Required webhook headers missing"):
+        authorizer.handler(event, {})
 
 
 def test_denies_when_secret_missing_app_definition(monkeypatch):
     client = DummySecretsClient({"client_id": "abc"})
     monkeypatch.setattr(authorizer, "_get_secrets_client", lambda: client)
 
-    result = authorizer.handler(_base_event(), {})
-
-    assert result["policyDocument"]["Statement"][0]["Effect"] == "Deny"
-    assert result["context"]["reason"] == "missing_app_definition_id"
+    with pytest.raises(Exception, match="Benchling secret missing app_definition_id field"):
+        authorizer.handler(_base_event(), {})
 
 
 def test_denies_when_secret_lookup_fails(monkeypatch):
     client = DummySecretsClient({"app_definition_id": "app_123"}, raise_error=True)
     monkeypatch.setattr(authorizer, "_get_secrets_client", lambda: client)
 
-    result = authorizer.handler(_base_event(), {})
-
-    assert result["policyDocument"]["Statement"][0]["Effect"] == "Deny"
-    assert result["context"]["reason"] == "secrets_manager_error"
+    with pytest.raises(Exception, match="Failed to retrieve Benchling credentials"):
+        authorizer.handler(_base_event(), {})
 
 
 def test_decodes_base64_body(monkeypatch):
