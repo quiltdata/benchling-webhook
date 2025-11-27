@@ -35,9 +35,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
                 ServiceName: "benchling-webhook-service",
             });
 
-            // Should create HTTP API with default stage
-            template.hasResourceProperties("AWS::ApiGatewayV2::Stage", {
-                StageName: "$default",
+            // Should create REST API with prod stage (v1.0.0+)
+            template.hasResourceProperties("AWS::ApiGateway::Stage", {
+                StageName: "prod",
             });
         });
 
@@ -215,7 +215,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             });
         });
 
-        test("does not create Application Load Balancer", () => {
+        test("creates Network Load Balancer (not ALB)", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -227,7 +227,12 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 0);
+            // v1.0.0+ creates NLB for REST API Gateway VPC Link
+            template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 1);
+            template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
+                Type: "network",
+                Scheme: "internal",
+            });
         });
 
         test("creates HTTP API for webhooks", () => {
@@ -242,9 +247,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
-                Name: "BenchlingWebhookHttpAPI",
-                ProtocolType: "HTTP",
+            // v1.0.0+ uses REST API Gateway (not HTTP API)
+            template.hasResourceProperties("AWS::ApiGateway::RestApi", {
+                Name: "BenchlingWebhookRestAPI",
             });
         });
 

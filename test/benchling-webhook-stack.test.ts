@@ -46,9 +46,10 @@ describe("BenchlingWebhookStack", () => {
     test("creates CloudWatch log groups", () => {
         template.resourceCountIs("AWS::Logs::LogGroup", 2); // One for API Gateway, one for container logs
 
-        template.hasResourceProperties("AWS::ApiGatewayV2::Stage", {
-            StageName: "$default",
-            AccessLogSettings: Match.objectLike({
+        // REST API Gateway uses AWS::ApiGateway::Stage (not V2)
+        template.hasResourceProperties("AWS::ApiGateway::Stage", {
+            StageName: "prod",
+            AccessLogSetting: Match.objectLike({
                 DestinationArn: {
                     "Fn::GetAtt": [
                         Match.stringLikeRegexp("ApiGatewayAccessLogs.*"),
@@ -60,27 +61,34 @@ describe("BenchlingWebhookStack", () => {
     });
 
     test("creates API Gateway with correct configuration", () => {
-        template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
-            Name: "BenchlingWebhookHttpAPI",
-            ProtocolType: "HTTP",
+        // v1.0.0+ uses REST API Gateway (not HTTP API) for IP whitelisting support
+        template.hasResourceProperties("AWS::ApiGateway::RestApi", {
+            Name: "BenchlingWebhookRestAPI",
         });
 
-        template.resourceCountIs("AWS::ApiGateway::RestApi", 0);
+        // Should not create HTTP API (v2)
+        template.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
 
-        template.hasResourceProperties("AWS::ApiGatewayV2::Integration", {
-            IntegrationType: "HTTP_PROXY",
-            ConnectionType: "VPC_LINK",
+        // REST API Gateway uses AWS::ApiGateway::Method with VPC_LINK integration
+        template.hasResourceProperties("AWS::ApiGateway::Method", {
+            HttpMethod: "ANY",
         });
     });
 
     test("creates VPC Link and Cloud Map service", () => {
-        template.resourceCountIs("AWS::ApiGatewayV2::VpcLink", 1);
+        // REST API Gateway uses AWS::ApiGateway::VpcLink (not V2)
+        template.resourceCountIs("AWS::ApiGateway::VpcLink", 1);
         template.resourceCountIs("AWS::ServiceDiscovery::PrivateDnsNamespace", 1);
         template.resourceCountIs("AWS::ServiceDiscovery::Service", 1);
     });
 
-    test("does not create Application Load Balancer", () => {
-        template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 0);
+    test("creates Network Load Balancer for REST API VPC Link", () => {
+        // REST API Gateway requires NLB for VPC Link integration
+        template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 1);
+        template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
+            Type: "network",
+            Scheme: "internal",
+        });
     });
 
     test("throws error when missing required parameters", () => {
