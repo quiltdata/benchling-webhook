@@ -138,19 +138,7 @@ export class RestApiGateway {
             }),
         );
 
-        const requestAuthorizer = verificationEnabled
-            ? new apigateway.RequestAuthorizer(scope, "WebhookRequestAuthorizer", {
-                handler: this.authorizer,
-                identitySources: [
-                    apigateway.IdentitySource.header("webhook-id"),
-                    apigateway.IdentitySource.header("webhook-signature"),
-                    apigateway.IdentitySource.header("webhook-timestamp"),
-                ],
-                resultsCacheTtl: cdk.Duration.seconds(0),
-            })
-            : undefined;
-
-        // Create REST API
+        // Create REST API first (needed for proper authorizer permissions)
         this.api = new apigateway.RestApi(scope, "BenchlingWebhookRestAPI", {
             restApiName: "BenchlingWebhookRestAPI",
             description: "REST API for Benchling webhook integration with IP whitelisting (v1.0.0+)",
@@ -176,6 +164,30 @@ export class RestApiGateway {
                 types: [apigateway.EndpointType.REGIONAL],
             },
         });
+
+        // Create authorizer AFTER API is created (for proper source ARN permissions)
+        const requestAuthorizer = verificationEnabled
+            ? new apigateway.RequestAuthorizer(scope, "WebhookRequestAuthorizer", {
+                handler: this.authorizer,
+                identitySources: [
+                    apigateway.IdentitySource.header("webhook-id"),
+                    apigateway.IdentitySource.header("webhook-signature"),
+                    apigateway.IdentitySource.header("webhook-timestamp"),
+                ],
+                resultsCacheTtl: cdk.Duration.seconds(0),
+            })
+            : undefined;
+
+        // Grant API Gateway permission to invoke Lambda authorizer from any method
+        // The CDK RequestAuthorizer grants permission only for /authorizers/{id},
+        // but API Gateway invokes from /{stage}/{method}/{path}, so we add explicit permission
+        if (verificationEnabled && this.authorizer) {
+            this.authorizer.addPermission("ApiGatewayInvokePermission", {
+                principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+                action: "lambda:InvokeFunction",
+                sourceArn: this.api.arnForExecuteApi("*", "*", "*"),
+            });
+        }
 
         const createIntegration = (path: string): apigateway.Integration =>
             new apigateway.Integration({

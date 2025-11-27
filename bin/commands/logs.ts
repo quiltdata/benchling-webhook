@@ -142,10 +142,12 @@ async function getLogGroupsFromStack(
         const ecsLogGroup = outputs.find((o) => o.OutputKey === "EcsLogGroup")?.OutputValue;
         const apiLogGroup = outputs.find((o) => o.OutputKey === "ApiGatewayLogGroup")?.OutputValue;
         const apiExecLogGroup = outputs.find((o) => o.OutputKey === "ApiGatewayExecutionLogGroup")?.OutputValue;
+        const authorizerLogGroup = outputs.find((o) => o.OutputKey === "AuthorizerLogGroup")?.OutputValue;
 
         if (ecsLogGroup) logGroups["ecs"] = ecsLogGroup;
         if (apiLogGroup) logGroups["api"] = apiLogGroup;
         if (apiExecLogGroup) logGroups["api-exec"] = apiExecLogGroup;
+        if (authorizerLogGroup) logGroups["authorizer"] = authorizerLogGroup;
 
         return logGroups;
     } catch (error) {
@@ -317,7 +319,7 @@ async function fetchAllLogs(
     }
 
     // For standalone mode, use the traditional type-based approach
-    const typesToQuery = type === "all" ? ["ecs", "api", "api-exec"] : [type];
+    const typesToQuery = type === "all" ? ["ecs", "api", "api-exec", "authorizer"] : [type];
 
     for (const logType of typesToQuery) {
         const logGroupName = discoveredLogGroups[logType];
@@ -337,6 +339,9 @@ async function fetchAllLogs(
             break;
         case "api-exec":
             displayName = "API Gateway Execution Logs";
+            break;
+        case "authorizer":
+            displayName = "Lambda Authorizer Logs";
             break;
         default:
             displayName = logType;
@@ -384,8 +389,8 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
     } = options;
 
     // Validate log type
-    if (!["ecs", "api", "api-exec", "all"].includes(type)) {
-        const errorMsg = "Invalid log type. Must be 'ecs', 'api', 'api-exec', or 'all'";
+    if (!["ecs", "api", "api-exec", "authorizer", "all"].includes(type)) {
+        const errorMsg = "Invalid log type. Must be 'ecs', 'api', 'api-exec', 'authorizer', or 'all'";
         console.error(chalk.red(`\n❌ ${errorMsg}\n`));
         return { success: false, error: errorMsg };
     }
