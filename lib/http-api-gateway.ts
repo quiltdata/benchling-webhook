@@ -6,6 +6,7 @@ import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
 import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import { ProfileConfig } from "./types/config";
+import { API_GATEWAY_INTEGRATION_TIMEOUT_SECONDS } from "./constants";
 
 export interface HttpApiGatewayProps {
     readonly vpc: ec2.IVpc;
@@ -41,7 +42,10 @@ export class HttpApiGateway {
         const integration = new apigatewayv2Integrations.HttpServiceDiscoveryIntegration(
             "CloudMapIntegration",
             props.cloudMapService,
-            { vpcLink: this.vpcLink },
+            {
+                vpcLink: this.vpcLink,
+                timeout: cdk.Duration.seconds(API_GATEWAY_INTEGRATION_TIMEOUT_SECONDS),
+            },
         );
 
         this.api.addRoutes({
