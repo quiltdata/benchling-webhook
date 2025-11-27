@@ -12,7 +12,7 @@ import {
 import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig } from "../../lib/types/config";
-import { CloudFormationClient, DescribeStacksCommand, DescribeStackResourcesCommand } from "@aws-sdk/client-cloudformation";
+import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 import { syncSecretsToAWS } from "./sync-secrets";
 import * as fs from "fs";
 import * as path from "path";
@@ -27,19 +27,19 @@ function suggestSetup(profileName: string, message: string): void {
     console.log();
 }
 
-type LegacyCheck = {
+type StackCheck = {
     stackExists: boolean;
     stackStatus?: string;
     statusCategory: "none" | "in_progress" | "failed" | "rolled_back";
-    hasLegacyResources: boolean;
-    hasVpcLink: boolean;
-    hasHttpApi: boolean;
 };
 
 /**
- * Detect if the existing stack is legacy shape or in a rollback state
+ * Check if the existing stack is in a problematic state (rollback, failed, etc.)
+ *
+ * Note: v0.8.8+ all use the same architecture (REST API + ALB + VPC Link), so there's
+ * no "legacy architecture" to detect. CloudFormation handles in-place updates seamlessly.
  */
-async function detectLegacyStack(region: string): Promise<LegacyCheck> {
+async function checkStackStatus(region: string): Promise<StackCheck> {
     try {
         const cloudformation = new CloudFormationClient({ region });
         const stackName = "BenchlingWebhookStack";
@@ -52,9 +52,6 @@ async function detectLegacyStack(region: string): Promise<LegacyCheck> {
             return {
                 stackExists: false,
                 statusCategory: "none",
-                hasLegacyResources: false,
-                hasVpcLink: false,
-                hasHttpApi: false,
             };
         }
 
@@ -69,46 +66,6 @@ async function detectLegacyStack(region: string): Promise<LegacyCheck> {
         const failedStates = ["ROLLBACK_FAILED", "UPDATE_ROLLBACK_FAILED"];
         const rolledBackStates = ["UPDATE_ROLLBACK_COMPLETE", "ROLLBACK_COMPLETE"];
 
-        // Get stack resources to check architecture
-        const resourcesCommand = new DescribeStackResourcesCommand({ StackName: stackName });
-        const resourcesResponse = await cloudformation.send(resourcesCommand);
-
-        if (!resourcesResponse.StackResources) {
-            return {
-                stackExists: true,
-                stackStatus,
-                statusCategory: rolledBackStates.includes(stackStatus)
-                    ? "rolled_back"
-                    : failedStates.includes(stackStatus)
-                        ? "failed"
-                        : inProgressStates.includes(stackStatus)
-                            ? "in_progress"
-                            : "none",
-                hasLegacyResources: false,
-                hasVpcLink: false,
-                hasHttpApi: false,
-            };
-        }
-
-        // v0.8.x indicators:
-        // - Has AWS::ElasticLoadBalancingV2::LoadBalancer (ALB)
-        // - Has AWS::ApiGateway::RestApi (REST API)
-        // v0.9.0 indicators:
-        // - Has AWS::ApiGatewayV2::VpcLink (VPC Link)
-        // - Has AWS::ApiGatewayV2::Api (HTTP API)
-        const hasALB = resourcesResponse.StackResources.some(
-            r => r.ResourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer",
-        );
-        const hasRestAPI = resourcesResponse.StackResources.some(
-            r => r.ResourceType === "AWS::ApiGateway::RestApi",
-        );
-        const hasVpcLink = resourcesResponse.StackResources.some(
-            r => r.ResourceType === "AWS::ApiGatewayV2::VpcLink",
-        );
-        const hasHttpAPI = resourcesResponse.StackResources.some(
-            r => r.ResourceType === "AWS::ApiGatewayV2::Api",
-        );
-
         const statusCategory = inProgressStates.includes(stackStatus)
             ? "in_progress"
             : failedStates.includes(stackStatus)
@@ -121,18 +78,12 @@ async function detectLegacyStack(region: string): Promise<LegacyCheck> {
             stackExists: true,
             stackStatus,
             statusCategory,
-            hasLegacyResources: (hasALB || hasRestAPI) && !hasVpcLink && !hasHttpAPI,
-            hasVpcLink,
-            hasHttpApi: hasHttpAPI,
         };
     } catch (_error) {
         // Stack doesn't exist or error checking
         return {
             stackExists: false,
             statusCategory: "none",
-            hasLegacyResources: false,
-            hasVpcLink: false,
-            hasHttpApi: false,
         };
     }
 }
@@ -408,34 +359,23 @@ export async function deploy(
         }
     }
 
-    // Check for legacy stack or rollback state and ask user how to proceed
-    spinner.start("Checking for legacy stack or failed deployment...");
-    const legacyCheck = await detectLegacyStack(deployRegion);
+    // Check for rollback or failed state
+    spinner.start("Checking stack status...");
+    const stackCheck = await checkStackStatus(deployRegion);
 
-    const needsAttention =
-        legacyCheck.hasLegacyResources ||
-        ["in_progress", "failed", "rolled_back"].includes(legacyCheck.statusCategory);
+    const needsAttention = ["in_progress", "failed", "rolled_back"].includes(stackCheck.statusCategory);
 
     if (needsAttention) {
-        const evidence: string[] = [];
-        if (legacyCheck.hasLegacyResources) {
-            evidence.push("ALB/REST API detected without HTTP API/VPC Link (legacy v0.8 shape)");
-        }
-        if (legacyCheck.stackStatus) {
-            evidence.push(`Stack status: ${legacyCheck.stackStatus}`);
-        }
-        const evidenceText = evidence.length > 0 ? evidence.map(e => `  • ${e}`).join("\n") : "  • None";
-
-        const isActiveRollback = legacyCheck.statusCategory === "in_progress";
+        const isActiveRollback = stackCheck.statusCategory === "in_progress";
         const borderColor = isActiveRollback ? "red" : "yellow";
-        const title = isActiveRollback ? "Stack is rolling back" : "Stack state needs attention";
+        const title = isActiveRollback ? "Stack is rolling back" : "Stack in problematic state";
 
         spinner[isActiveRollback ? "fail" : "warn"]("Stack state may block update");
         console.log();
         console.log(
             boxen(
                 `${chalk.red.bold(title)}\n\n` +
-                `${chalk.bold("Evidence:")}\n${evidenceText}\n\n` +
+                `${chalk.bold("Stack status:")} ${stackCheck.stackStatus}\n\n` +
                 `${chalk.bold("Options:")}\n` +
                 (isActiveRollback
                     ? "  1) Wait/abort (recommended while rollback is in progress)\n  2) Destroy and redeploy if stuck\n  3) Proceed anyway (likely to fail)\n"
