@@ -62,7 +62,7 @@ export class RestApiGateway {
         });
 
         // Add listener to NLB
-        const listener = this.nlb.addListener("Listener", {
+        this.nlb.addListener("Listener", {
             port: 80,
             protocol: elbv2.Protocol.TCP,
             defaultTargetGroups: [targetGroup],
@@ -176,7 +176,7 @@ export class RestApiGateway {
             },
         });
 
-        const createIntegration = (path: string) =>
+        const createIntegration = (path: string): apigateway.Integration =>
             new apigateway.Integration({
                 type: apigateway.IntegrationType.HTTP_PROXY,
                 integrationHttpMethod: "ANY",

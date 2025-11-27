@@ -90,7 +90,9 @@ def _decode_body(event: Dict[str, Any]) -> str:
     return body
 
 
-def _build_policy(effect: str, method_arn: str, principal_id: str, context: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+def _build_policy(
+    effect: str, method_arn: str, principal_id: str, context: Optional[Dict[str, str]] = None
+) -> Dict[str, Any]:
     return {
         "principalId": principal_id or "benchling-webhook",
         "policyDocument": {
