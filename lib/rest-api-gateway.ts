@@ -101,19 +101,19 @@ export class RestApiGateway {
             removalPolicy: cdk.RemovalPolicy.DESTROY,
         });
 
+        const bundlingCommands = [
+            "set -euo pipefail",
+            "export PIP_NO_BUILD_ISOLATION=1 PIP_ONLY_BINARY=:all: PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_CACHE_DIR=/tmp/pipcache",
+            "pip install -q --platform manylinux2014_x86_64 --implementation cp --python-version 3.11 --abi cp311 --only-binary=:all: -t /asset-output -r /asset-input/lambda/authorizer/requirements.txt -c /asset-input/lambda/authorizer/constraints.txt",
+            "cp /asset-input/docker/src/lambda_authorizer.py /asset-output/index.py",
+        ].join(" && ");
+
         const authorizerCode = process.env.NODE_ENV === "test"
             ? lambda.Code.fromInline("def handler(event, context):\n    return {}")
             : lambda.Code.fromAsset(".", {
                 bundling: {
                     image: lambda.Runtime.PYTHON_3_11.bundlingImage,
-                    command: [
-                        "bash",
-                        "-c",
-                        [
-                            "pip install -q -r /asset-input/lambda/authorizer/requirements.txt -t /asset-output",
-                            "cp /asset-input/docker/src/lambda_authorizer.py /asset-output/index.py",
-                        ].join(" && "),
-                    ],
+                    command: ["bash", "-c", bundlingCommands],
                 },
             });
 
@@ -122,6 +122,7 @@ export class RestApiGateway {
             handler: "index.handler",
             memorySize: 128,
             timeout: cdk.Duration.seconds(10),
+            architecture: lambda.Architecture.X86_64,
             description: "Benchling webhook signature verification (defense-in-depth)",
             environment: {
                 BENCHLING_SECRET_ARN: benchlingSecretArn,
