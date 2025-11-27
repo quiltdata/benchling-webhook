@@ -67,8 +67,15 @@ def test_denies_when_signature_invalid(monkeypatch):
 
     monkeypatch.setattr(authorizer, "verify", failing_verify)
 
-    with pytest.raises(Exception, match="Webhook signature verification failed"):
-        authorizer.handler(_base_event(), {})
+    result = authorizer.handler(_base_event(), {})
+
+    # Verify Deny policy is returned
+    assert result["policyDocument"]["Statement"][0]["Effect"] == "Deny"
+    assert result["context"]["authorized"] == "false"
+    assert result["context"]["error"] == "invalid_signature"
+    # Verify the error message includes diagnostic information
+    assert "app_123" in result["context"]["message"]
+    assert "arn:aws:secretsmanager:us-east-1:123456789012:secret:benchling" in result["context"]["message"]
 
 
 def test_denies_when_headers_missing(monkeypatch):
@@ -78,24 +85,30 @@ def test_denies_when_headers_missing(monkeypatch):
     event = _base_event()
     event["headers"].pop("webhook-signature")
 
-    with pytest.raises(Exception, match="Required webhook headers missing"):
-        authorizer.handler(event, {})
+    result = authorizer.handler(event, {})
+
+    assert result["policyDocument"]["Statement"][0]["Effect"] == "Deny"
+    assert result["context"]["error"] == "missing_headers"
 
 
 def test_denies_when_secret_missing_app_definition(monkeypatch):
     client = DummySecretsClient({"client_id": "abc"})
     monkeypatch.setattr(authorizer, "_get_secrets_client", lambda: client)
 
-    with pytest.raises(Exception, match="Benchling secret missing app_definition_id field"):
-        authorizer.handler(_base_event(), {})
+    result = authorizer.handler(_base_event(), {})
+
+    assert result["policyDocument"]["Statement"][0]["Effect"] == "Deny"
+    assert result["context"]["error"] == "missing_app_definition_id"
 
 
 def test_denies_when_secret_lookup_fails(monkeypatch):
     client = DummySecretsClient({"app_definition_id": "app_123"}, raise_error=True)
     monkeypatch.setattr(authorizer, "_get_secrets_client", lambda: client)
 
-    with pytest.raises(Exception, match="Failed to retrieve Benchling credentials"):
-        authorizer.handler(_base_event(), {})
+    result = authorizer.handler(_base_event(), {})
+
+    assert result["policyDocument"]["Statement"][0]["Effect"] == "Deny"
+    assert result["context"]["error"] == "secrets_manager_error"
 
 
 def test_decodes_base64_body(monkeypatch):

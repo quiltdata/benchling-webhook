@@ -132,10 +132,27 @@ def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
         body = _decode_body(event)
         app_definition_id = _load_app_definition_id(secret_arn)
 
+        # Log diagnostic information for troubleshooting
+        logger.info(
+            "Verifying webhook signature (webhook_id=%s, app_definition_id=%s, secret_arn=%s)",
+            headers.get("webhook-id"),
+            app_definition_id,
+            secret_arn,
+        )
+
         try:
             verify(app_definition_id, body, headers)  # type: ignore[arg-type]
         except Exception as exc:
-            logger.warning("Webhook signature verification failed: %s", exc)
+            logger.error(
+                "Webhook signature verification failed: %s | "
+                "TROUBLESHOOTING: Ensure the webhook in Benchling is configured under app '%s'. "
+                "Check that this matches the app_definition_id in secret '%s'. "
+                "webhook_id=%s",
+                exc,
+                app_definition_id,
+                secret_arn,
+                headers.get("webhook-id"),
+            )
             raise AuthorizationError("invalid_signature") from exc
         logger.info("Webhook authorization succeeded for webhook_id=%s", headers.get("webhook-id"))
 
@@ -150,26 +167,61 @@ def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
         )
 
     except AuthorizationError as exc:
-        logger.warning(
-            "Authorization rejected (reason=%s, webhook_id=%s)",
-            exc.reason,
-            headers.get("webhook-id"),
-        )
-        # Raise exception instead of returning Deny policy so API Gateway
-        # returns proper 401/403 with meaningful error message
+        # Build detailed error messages with troubleshooting guidance
+        secret_arn = os.environ.get("BENCHLING_SECRET_ARN", "not_configured")
+        try:
+            app_def_id = _load_app_definition_id(secret_arn) if secret_arn != "not_configured" else "unknown"
+        except Exception:
+            app_def_id = "error_loading"
+
         error_messages = {
-            "invalid_signature": "Webhook signature verification failed",
+            "invalid_signature": (
+                f"Webhook signature verification failed. "
+                f"Expected app: {app_def_id}. "
+                f"Check that the webhook in Benchling is configured under this app, "
+                f"or update app_definition_id in secret: {secret_arn}"
+            ),
             "missing_headers": "Required webhook headers missing (webhook-id, webhook-signature, webhook-timestamp)",
             "missing_secret_arn": "Authorizer configuration error: BENCHLING_SECRET_ARN not set",
-            "secrets_manager_error": "Failed to retrieve Benchling credentials",
-            "missing_secret_string": "Benchling secret is empty",
-            "invalid_secret_json": "Benchling secret is not valid JSON",
-            "missing_app_definition_id": "Benchling secret missing app_definition_id field",
+            "secrets_manager_error": f"Failed to retrieve Benchling credentials from secret: {secret_arn}",
+            "missing_secret_string": f"Benchling secret is empty: {secret_arn}",
+            "invalid_secret_json": f"Benchling secret is not valid JSON: {secret_arn}",
+            "missing_app_definition_id": f"Benchling secret missing app_definition_id field: {secret_arn}",
             "invalid_body_encoding": "Request body encoding is invalid",
         }
         message = error_messages.get(exc.reason, f"Authorization failed: {exc.reason}")
-        logger.warning("Returning 401 Unauthorized: %s", message)
-        raise Exception(message)
+
+        logger.warning(
+            "Authorization rejected (reason=%s, webhook_id=%s) - %s",
+            exc.reason,
+            headers.get("webhook-id"),
+            message,
+        )
+
+        # Return Deny policy with context containing the error message
+        # API Gateway will return 403 Forbidden with this information
+        return _build_policy(
+            "Deny",
+            method_arn,
+            principal,
+            {
+                "authorized": "false",
+                "error": exc.reason,
+                "message": message,  # Full message for gateway response template
+                "webhookId": headers.get("webhook-id", "unknown"),
+            },
+        )
     except Exception as exc:  # pragma: no cover - defense for unexpected errors
         logger.error("Unexpected error during authorization: %s", exc, exc_info=True)
-        raise Exception("Authorization failed: unexpected error")
+        # Return Deny policy for unexpected errors
+        return _build_policy(
+            "Deny",
+            method_arn,
+            headers.get("webhook-id", "unknown"),
+            {
+                "authorized": "false",
+                "error": "unexpected_error",
+                "message": "Authorization failed: unexpected error",
+                "webhookId": headers.get("webhook-id", "unknown"),
+            },
+        )

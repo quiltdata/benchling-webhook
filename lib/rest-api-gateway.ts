@@ -223,6 +223,24 @@ export class RestApiGateway {
         healthResource.addResource("ready").addMethod("GET", createIntegration("/health/ready"));
         healthResource.addResource("live").addMethod("GET", createIntegration("/health/live"));
 
+        // Add custom gateway response for authorization failures
+        // This allows us to return useful diagnostic information in the HTTP response
+        this.api.addGatewayResponse("ACCESS_DENIED", {
+            type: apigateway.ResponseType.ACCESS_DENIED,
+            statusCode: "403",
+            responseHeaders: {
+                "X-Auth-Error": "context.authorizer.error",
+                "X-Auth-Message": "context.authorizer.message",
+            },
+            templates: {
+                "application/json": JSON.stringify({
+                    message: "$context.authorizer.message",
+                    error: "$context.authorizer.error",
+                    webhookId: "$context.authorizer.webhookId",
+                }),
+            },
+        });
+
         // Output IP filtering status
         if (ipAllowList.length > 0) {
             console.log(`IP Whitelisting enabled: ${ipAllowList.length} CIDR blocks`);
