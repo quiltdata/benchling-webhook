@@ -53,7 +53,7 @@ export type ProfileName = string;
  *   },
  *   "integratedStack": true,
  *   "_metadata": {
- *     "version": "0.7.0",
+ *     "version": "0.9.0",
  *     "createdAt": "2025-11-04T10:00:00Z",
  *     "updatedAt": "2025-11-04T10:00:00Z",
  *     "source": "wizard"
