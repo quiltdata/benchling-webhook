@@ -207,47 +207,15 @@ export class RestApiGateway {
             }
             : undefined;
 
-        const addWebhookRoute = (resource: apigateway.IResource, path: string): void => {
-            resource.addMethod("POST", createIntegration(path), webhookMethodOptions);
-            resource.addMethod("OPTIONS", new apigateway.MockIntegration({
-                integrationResponses: [
-                    {
-                        statusCode: "204",
-                        responseParameters: {
-                            "method.response.header.Access-Control-Allow-Origin": "'*'",
-                            "method.response.header.Access-Control-Allow-Headers": "'*'",
-                            "method.response.header.Access-Control-Allow-Methods": "'POST,OPTIONS'",
-                        },
-                    },
-                ],
-                passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
-                requestTemplates: {
-                    "application/json": "{\"statusCode\": 204}",
-                },
-            }), {
-                authorizationType: apigateway.AuthorizationType.NONE,
-                methodResponses: [
-                    {
-                        statusCode: "204",
-                        responseParameters: {
-                            "method.response.header.Access-Control-Allow-Origin": true,
-                            "method.response.header.Access-Control-Allow-Headers": true,
-                            "method.response.header.Access-Control-Allow-Methods": true,
-                        },
-                    },
-                ],
-            });
-        };
-
-        // Webhook endpoints secured by Lambda authorizer (POST only; OPTIONS is unauthenticated)
+        // Webhook endpoints secured by Lambda authorizer
         const eventResource = this.api.root.addResource("event");
-        addWebhookRoute(eventResource, "/event");
+        eventResource.addMethod("ANY", createIntegration("/event"), webhookMethodOptions);
 
         const lifecycleResource = this.api.root.addResource("lifecycle");
-        addWebhookRoute(lifecycleResource, "/lifecycle");
+        lifecycleResource.addMethod("ANY", createIntegration("/lifecycle"), webhookMethodOptions);
 
         const canvasResource = this.api.root.addResource("canvas");
-        addWebhookRoute(canvasResource, "/canvas");
+        canvasResource.addMethod("ANY", createIntegration("/canvas"), webhookMethodOptions);
 
         // Health endpoints remain unauthenticated
         const healthResource = this.api.root.addResource("health");

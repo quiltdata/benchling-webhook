@@ -166,7 +166,7 @@ describe("RestApiGateway", () => {
 
         expect(authMethods.length).toBeGreaterThanOrEqual(3);
         expect(healthMethods.length).toBeGreaterThanOrEqual(3);
-        expect(authMethods.every((method: any) => method.Properties?.HttpMethod === "POST")).toBe(true);
+        expect(authMethods.every((method: any) => method.Properties?.HttpMethod === "ANY")).toBe(true);
     });
 
     test("configures request authorizer with identity headers and zero cache", () => {
