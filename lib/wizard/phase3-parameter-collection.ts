@@ -11,6 +11,7 @@ import inquirer from "inquirer";
 import chalk from "chalk";
 import { manifestCommand } from "../../bin/commands/manifest";
 import { ParameterCollectionInput, ParameterCollectionResult } from "./types";
+import { discoverVpcFromStack } from "../../scripts/discover-vpc";
 
 /**
  * Phase 3: Parameter Collection
@@ -340,6 +341,106 @@ export async function runParameterCollection(
     console.log(`  Account: ${account} (from stack)`);
 
     // =========================================================================
+    // VPC Configuration
+    // =========================================================================
+    console.log("\n" + chalk.cyan("VPC Configuration:"));
+
+    let vpcId: string | undefined;
+
+    // Try to discover VPC from stack
+    console.log(`${chalk.dim("  Discovering VPC resources from Quilt stack...")}`);
+
+    try {
+        const discoveredVpc = await discoverVpcFromStack({
+            stackArn: stackQuery.stackArn,
+            region: stackQuery.region,
+        });
+
+        if (discoveredVpc) {
+            // Display discovered VPC details
+            console.log(chalk.green(`  ✓ Found VPC: ${discoveredVpc.vpcId}`));
+            if (discoveredVpc.name) {
+                console.log(chalk.dim(`    Name: ${discoveredVpc.name}`));
+            }
+            console.log(chalk.dim(`    CIDR: ${discoveredVpc.cidrBlock}`));
+            console.log(chalk.dim(`    Subnets: ${discoveredVpc.subnets.length} total`));
+
+            const privateSubnets = discoveredVpc.subnets.filter((s) => !s.isPublic);
+            const azs = new Set(privateSubnets.map((s) => s.availabilityZone));
+            console.log(chalk.dim(`    Private subnets: ${privateSubnets.length} across ${azs.size} AZs`));
+
+            // Validate VPC
+            if (!discoveredVpc.isValid) {
+                console.log(chalk.yellow("\n  ⚠ Discovered VPC does not meet requirements:"));
+                discoveredVpc.validationErrors.forEach((err) => {
+                    console.log(chalk.yellow(`    - ${err}`));
+                });
+                console.log(chalk.dim("  ℹ A new VPC will be created instead.\n"));
+                vpcId = undefined;
+            } else {
+                // VPC is valid - ask user if they want to use it
+                if (yes) {
+                    // In non-interactive mode, check if there's an existing VPC preference
+                    if (existingConfig?.deployment?.vpc?.vpcId) {
+                        vpcId = existingConfig.deployment.vpc.vpcId;
+                        console.log(`  Using VPC: ${vpcId} (from existing config)`);
+                    } else {
+                        // Default to using discovered VPC in non-interactive mode
+                        vpcId = discoveredVpc.vpcId;
+                        console.log(`  Using VPC: ${vpcId} (discovered from stack)`);
+                    }
+                } else {
+                    // Interactive mode - present choices
+                    const vpcChoices = [
+                        {
+                            name: `Use existing VPC (${discoveredVpc.vpcId})`,
+                            value: discoveredVpc.vpcId,
+                            short: discoveredVpc.vpcId,
+                        },
+                        {
+                            name: "Create new VPC (recommended for isolation)",
+                            value: undefined,
+                            short: "Auto-create",
+                        },
+                    ];
+
+                    // Set default based on existing config
+                    const defaultChoice = existingConfig?.deployment?.vpc?.vpcId === discoveredVpc.vpcId
+                        ? 0
+                        : existingConfig?.deployment?.vpc?.vpcId === undefined
+                            ? 1
+                            : 0;
+
+                    const vpcAnswer = await inquirer.prompt([
+                        {
+                            type: "list",
+                            name: "vpcId",
+                            message: "VPC Configuration:",
+                            choices: vpcChoices,
+                            default: defaultChoice,
+                        },
+                    ]);
+                    vpcId = vpcAnswer.vpcId;
+                }
+            }
+        } else {
+            console.log(chalk.dim("  ℹ No VPC found in Quilt stack. A new VPC will be created."));
+            vpcId = undefined;
+        }
+    } catch (error) {
+        const err = error as Error;
+        console.log(chalk.yellow(`  ⚠ VPC discovery failed: ${err.message}`));
+        console.log(chalk.dim("  ℹ A new VPC will be created."));
+        vpcId = undefined;
+    }
+
+    if (vpcId) {
+        console.log(chalk.green(`  ✓ Will use existing VPC: ${vpcId}`));
+    } else {
+        console.log(chalk.dim("  ✓ Will auto-create new VPC (2 AZs, private subnets, NAT Gateways)"));
+    }
+
+    // =========================================================================
     // Optional Configuration
     // =========================================================================
     console.log("\n" + chalk.cyan("Optional Configuration:"));
@@ -397,6 +498,7 @@ export async function runParameterCollection(
         deployment: {
             region,
             account,
+            vpc: vpcId ? { vpcId } : undefined,
         },
         logging: {
             level: logLevel,
