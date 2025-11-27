@@ -185,7 +185,7 @@ export class RestApiGateway {
             this.authorizer.addPermission("ApiGatewayInvokePermission", {
                 principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
                 action: "lambda:InvokeFunction",
-                sourceArn: this.api.arnForExecuteApi("*", "*", "*"),
+                sourceArn: this.api.arnForExecuteApi("*", "/*", "*"),
             });
         }
 
@@ -207,7 +207,7 @@ export class RestApiGateway {
             }
             : undefined;
 
-        const addWebhookRoute = (resource: apigateway.IResource, path: string) => {
+        const addWebhookRoute = (resource: apigateway.IResource, path: string): void => {
             resource.addMethod("POST", createIntegration(path), webhookMethodOptions);
             resource.addMethod("OPTIONS", new apigateway.MockIntegration({
                 integrationResponses: [
