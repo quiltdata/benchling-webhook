@@ -28,3 +28,9 @@ export const MIME_TYPES = {
     DEFAULT: "application/octet-stream",
 } as const;
 
+/**
+ * API Gateway integration timeout in seconds.
+ * Must be longer than backend processing time (S3 writes + SQS sends + Fargate health checks).
+ */
+export const API_GATEWAY_INTEGRATION_TIMEOUT_SECONDS = 30;
+
