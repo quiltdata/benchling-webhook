@@ -596,6 +596,16 @@ export interface DeploymentRecord {
     commit?: string;
 
     /**
+     * ARN of the Lambda authorizer function (v0.9.1+)
+     */
+    authorizerArn?: string;
+
+    /**
+     * CloudWatch log group for Lambda authorizer (v0.9.1+)
+     */
+    authorizerLogGroup?: string;
+
+    /**
      * Additional metadata (extensible)
      */
     [key: string]: string | undefined;

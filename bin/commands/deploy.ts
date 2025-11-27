@@ -597,6 +597,8 @@ export async function deploy(
                 const stack = response.Stacks[0];
                 const endpointOutput = stack.Outputs?.find((o) => o.OutputKey === "WebhookEndpoint");
                 const webhookUrl = endpointOutput?.OutputValue || "";
+                const authorizerArn = stack.Outputs?.find((o) => o.OutputKey === "AuthorizerFunctionArn")?.OutputValue;
+                const authorizerLogGroup = stack.Outputs?.find((o) => o.OutputKey === "AuthorizerLogGroup")?.OutputValue;
 
                 if (webhookUrl) {
                     // Remove trailing slash to avoid double slashes in test URLs
@@ -612,6 +614,8 @@ export async function deploy(
                         stackName: stackName,
                         region: deployRegion,
                         deployedBy: process.env.USER || process.env.USERNAME,
+                        authorizerArn,
+                        authorizerLogGroup,
                     });
 
                     console.log(`✅ Recorded deployment to profile '${options.profileName}' stage '${options.stage}'`);

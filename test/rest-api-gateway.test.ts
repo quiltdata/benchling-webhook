@@ -70,6 +70,7 @@ describe("RestApiGateway", () => {
                 clientId: "client_test",
                 clientSecret: "secret_test",
                 appDefinitionId: "app_test",
+                secretArn: "arn:aws:secretsmanager:us-west-2:987654321098:secret:benchling",
             },
             packages: {
                 bucket: "test-packages",
@@ -112,7 +113,7 @@ describe("RestApiGateway", () => {
         });
     });
 
-    test("configures proxy integration for all methods", () => {
+    test("creates Lambda authorizer with minimal permissions", () => {
         new RestApiGateway(stack, "TestApiGateway", {
             vpc,
             cloudMapService,
@@ -123,16 +124,32 @@ describe("RestApiGateway", () => {
 
         const template = Template.fromStack(stack);
 
-        template.hasResourceProperties("AWS::ApiGateway::Method", {
-            HttpMethod: "ANY",
-            Integration: Match.objectLike({
-                Type: "HTTP_PROXY",
-                ConnectionType: "VPC_LINK",
-            }),
+        template.hasResourceProperties("AWS::Lambda::Function", {
+            Runtime: "python3.11",
+            Handler: "index.handler",
+            MemorySize: 128,
+            Timeout: 10,
+            Environment: {
+                Variables: {
+                    BENCHLING_SECRET_ARN: mockConfig.benchling.secretArn,
+                },
+            },
         });
+
+        template.hasResourceProperties("AWS::IAM::Policy", Match.objectLike({
+            PolicyDocument: {
+                Statement: Match.arrayWith([
+                    Match.objectLike({
+                        Action: "secretsmanager:GetSecretValue",
+                        Effect: "Allow",
+                        Resource: mockConfig.benchling.secretArn,
+                    }),
+                ]),
+            },
+        }));
     });
 
-    test("enables access logs for prod stage", () => {
+    test("attaches authorizer to webhook routes only", () => {
         new RestApiGateway(stack, "TestApiGateway", {
             vpc,
             cloudMapService,
@@ -143,21 +160,30 @@ describe("RestApiGateway", () => {
 
         const template = Template.fromStack(stack);
 
-        template.hasResourceProperties("AWS::Logs::LogGroup", {
-            LogGroupName: "/aws/apigateway/benchling-webhook-rest",
-            RetentionInDays: 7,
+        const methods = template.findResources("AWS::ApiGateway::Method");
+        const authMethods = Object.values(methods).filter((method: any) => method.Properties?.AuthorizationType === "CUSTOM");
+        const healthMethods = Object.values(methods).filter((method: any) => method.Properties?.HttpMethod === "GET");
+
+        expect(authMethods.length).toBeGreaterThanOrEqual(3);
+        expect(healthMethods.length).toBeGreaterThanOrEqual(3);
+        expect(authMethods.every((method: any) => method.Properties?.HttpMethod === "ANY")).toBe(true);
+    });
+
+    test("configures request authorizer with identity headers and zero cache", () => {
+        new RestApiGateway(stack, "TestApiGateway", {
+            vpc,
+            cloudMapService,
+            serviceSecurityGroup,
+            config: mockConfig,
+            ecsService,
         });
 
-        template.hasResourceProperties("AWS::ApiGateway::Stage", {
-            StageName: "prod",
-            AccessLogSetting: Match.objectLike({
-                DestinationArn: {
-                    "Fn::GetAtt": [
-                        Match.stringLikeRegexp("ApiGatewayAccessLogs.*"),
-                        "Arn",
-                    ],
-                },
-            }),
+        const template = Template.fromStack(stack);
+
+        template.hasResourceProperties("AWS::ApiGateway::Authorizer", {
+            Type: "REQUEST",
+            IdentitySource: Match.stringLikeRegexp("webhook-id.*webhook-signature.*webhook-timestamp"),
+            AuthorizerResultTtlInSeconds: 0,
         });
     });
 
@@ -228,13 +254,10 @@ describe("RestApiGateway", () => {
         const apiKeys = Object.keys(apis);
         expect(apiKeys.length).toBeGreaterThan(0);
 
-        // Check if the policy is undefined or allows all
         const api = apis[apiKeys[0]];
         if (api.Properties.Policy) {
-            // If policy exists, it should allow all (no IP restrictions)
             expect(api.Properties.Policy.Statement).toBeDefined();
         } else {
-            // No policy means all IPs are allowed
             expect(api.Properties.Policy).toBeUndefined();
         }
     });

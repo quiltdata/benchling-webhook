@@ -4,6 +4,7 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
 import * as logs from "aws-cdk-lib/aws-logs";
+import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 import { ProfileConfig } from "./types/config";
@@ -21,6 +22,8 @@ export class RestApiGateway {
     public readonly vpcLink: apigateway.VpcLink;
     public readonly nlb: elbv2.NetworkLoadBalancer;
     public readonly logGroup: logs.ILogGroup;
+    public readonly authorizer?: lambda.Function;
+    public readonly authorizerLogGroup?: logs.ILogGroup;
 
     constructor(scope: Construct, id: string, props: RestApiGatewayProps) {
         // Access logs for REST API
@@ -83,8 +86,68 @@ export class RestApiGateway {
             .map((ip) => ip.trim())
             .filter((ip) => ip.length > 0) || [];
 
+        const verificationEnabled = props.config.security?.enableVerification !== false;
+        const benchlingSecretArn = props.config.benchling.secretArn;
+        if (!benchlingSecretArn) {
+            throw new Error("Benchling secret ARN is required to configure the Lambda authorizer");
+        }
+
         // Build resource policy for IP whitelisting
         const resourcePolicy = this.buildResourcePolicy(ipAllowList);
+
+        // Lambda authorizer for webhook verification
+        this.authorizerLogGroup = new logs.LogGroup(scope, "WebhookAuthorizerLogGroup", {
+            retention: logs.RetentionDays.ONE_WEEK,
+            removalPolicy: cdk.RemovalPolicy.DESTROY,
+        });
+
+        const authorizerCode = process.env.NODE_ENV === "test"
+            ? lambda.Code.fromInline("def handler(event, context):\n    return {}")
+            : lambda.Code.fromAsset(".", {
+                bundling: {
+                    image: lambda.Runtime.PYTHON_3_11.bundlingImage,
+                    command: [
+                        "bash",
+                        "-c",
+                        [
+                            "pip install -q -r /asset-input/lambda/authorizer/requirements.txt -t /asset-output",
+                            "cp /asset-input/docker/src/lambda_authorizer.py /asset-output/index.py",
+                        ].join(" && "),
+                    ],
+                },
+            });
+
+        this.authorizer = new lambda.Function(scope, "WebhookAuthorizerFunction", {
+            runtime: lambda.Runtime.PYTHON_3_11,
+            handler: "index.handler",
+            memorySize: 128,
+            timeout: cdk.Duration.seconds(10),
+            description: "Benchling webhook signature verification (defense-in-depth)",
+            environment: {
+                BENCHLING_SECRET_ARN: benchlingSecretArn,
+            },
+            code: authorizerCode,
+            logGroup: this.authorizerLogGroup,
+        });
+
+        this.authorizer.addToRolePolicy(
+            new iam.PolicyStatement({
+                actions: ["secretsmanager:GetSecretValue"],
+                resources: [benchlingSecretArn],
+            }),
+        );
+
+        const requestAuthorizer = verificationEnabled
+            ? new apigateway.RequestAuthorizer(scope, "WebhookRequestAuthorizer", {
+                handler: this.authorizer,
+                identitySources: [
+                    apigateway.IdentitySource.header("webhook-id"),
+                    apigateway.IdentitySource.header("webhook-signature"),
+                    apigateway.IdentitySource.header("webhook-timestamp"),
+                ],
+                resultsCacheTtl: cdk.Duration.seconds(0),
+            })
+            : undefined;
 
         // Create REST API
         this.api = new apigateway.RestApi(scope, "BenchlingWebhookRestAPI", {
@@ -113,31 +176,39 @@ export class RestApiGateway {
             },
         });
 
-        // Create integration with NLB via VPC Link
-        // Use the NLB DNS name for the integration URI
-        const integration = new apigateway.Integration({
-            type: apigateway.IntegrationType.HTTP_PROXY,
-            integrationHttpMethod: "ANY",
-            uri: `http://${this.nlb.loadBalancerDnsName}:80/{proxy}`,
-            options: {
-                connectionType: apigateway.ConnectionType.VPC_LINK,
-                vpcLink: this.vpcLink,
-                requestParameters: {
-                    "integration.request.path.proxy": "method.request.path.proxy",
+        const createIntegration = (path: string) =>
+            new apigateway.Integration({
+                type: apigateway.IntegrationType.HTTP_PROXY,
+                integrationHttpMethod: "ANY",
+                uri: `http://${this.nlb.loadBalancerDnsName}:80${path}`,
+                options: {
+                    connectionType: apigateway.ConnectionType.VPC_LINK,
+                    vpcLink: this.vpcLink,
                 },
-            },
-        });
+            });
 
-        // Add catch-all proxy resource for all paths
-        const proxyResource = this.api.root.addResource("{proxy+}");
-        proxyResource.addMethod("ANY", integration, {
-            requestParameters: {
-                "method.request.path.proxy": true,
-            },
-        });
+        const webhookMethodOptions = requestAuthorizer
+            ? {
+                authorizer: requestAuthorizer,
+                authorizationType: apigateway.AuthorizationType.CUSTOM,
+            }
+            : undefined;
 
-        // Add root path handler
-        this.api.root.addMethod("ANY", integration);
+        // Webhook endpoints secured by Lambda authorizer
+        const eventResource = this.api.root.addResource("event");
+        eventResource.addMethod("ANY", createIntegration("/event"), webhookMethodOptions);
+
+        const lifecycleResource = this.api.root.addResource("lifecycle");
+        lifecycleResource.addMethod("ANY", createIntegration("/lifecycle"), webhookMethodOptions);
+
+        const canvasResource = this.api.root.addResource("canvas");
+        canvasResource.addMethod("ANY", createIntegration("/canvas"), webhookMethodOptions);
+
+        // Health endpoints remain unauthenticated
+        const healthResource = this.api.root.addResource("health");
+        healthResource.addMethod("GET", createIntegration("/health"));
+        healthResource.addResource("ready").addMethod("GET", createIntegration("/health/ready"));
+        healthResource.addResource("live").addMethod("GET", createIntegration("/health/live"));
 
         // Output IP filtering status
         if (ipAllowList.length > 0) {

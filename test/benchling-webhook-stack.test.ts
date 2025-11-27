@@ -44,7 +44,7 @@ describe("BenchlingWebhookStack", () => {
     });
 
     test("creates CloudWatch log groups", () => {
-        template.resourceCountIs("AWS::Logs::LogGroup", 2); // One for API Gateway, one for container logs
+        template.resourceCountIs("AWS::Logs::LogGroup", 3); // API Gateway, container logs, Lambda authorizer
 
         // REST API Gateway uses AWS::ApiGateway::Stage (not V2)
         template.hasResourceProperties("AWS::ApiGateway::Stage", {
@@ -73,6 +73,28 @@ describe("BenchlingWebhookStack", () => {
         template.hasResourceProperties("AWS::ApiGateway::Method", {
             HttpMethod: "ANY",
         });
+    });
+
+    test("creates Lambda authorizer for webhook authentication", () => {
+        template.hasResourceProperties("AWS::Lambda::Function", {
+            Runtime: "python3.11",
+            Handler: "index.handler",
+        });
+
+        template.hasOutput("AuthorizerFunctionArn", Match.objectLike({
+            Value: {
+                "Fn::GetAtt": [
+                    Match.stringLikeRegexp("WebhookAuthorizerFunction.*"),
+                    "Arn",
+                ],
+            },
+        }));
+
+        template.hasOutput("AuthorizerLogGroup", Match.objectLike({
+            Value: {
+                Ref: Match.stringLikeRegexp("WebhookAuthorizerLogGroup.*"),
+            },
+        }));
     });
 
     test("creates VPC Link and Cloud Map service", () => {
