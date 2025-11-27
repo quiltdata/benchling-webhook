@@ -210,7 +210,7 @@ export class RestApiGateway {
                 ],
                 passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
                 requestTemplates: {
-                    "application/json": '{"statusCode": 204}',
+                    "application/json": "{\"statusCode\": 204}",
                 },
             }), {
                 authorizationType: apigateway.AuthorizationType.NONE,
