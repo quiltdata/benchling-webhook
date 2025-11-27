@@ -9,7 +9,8 @@
 
 import chalk from "chalk";
 import { inferQuiltConfig } from "../../bin/commands/infer-quilt-config";
-import { StackQueryResult } from "./types";
+import { StackQueryResult, DiscoveredVpcInfo } from "./types";
+import { discoverVpcFromStack } from "../../scripts/discover-vpc";
 
 /**
  * Phase 2 options
@@ -131,6 +132,49 @@ export async function runStackQuery(
             );
         }
 
+        // Discover VPC from stack
+        let discoveredVpcInfo: DiscoveredVpcInfo | undefined;
+        try {
+            const discoveredVpc = await discoverVpcFromStack({
+                stackArn,
+                region,
+            });
+
+            if (discoveredVpc) {
+                const privateSubnets = discoveredVpc.subnets.filter((s) => !s.isPublic);
+                const azs = new Set(privateSubnets.map((s) => s.availabilityZone));
+
+                discoveredVpcInfo = {
+                    vpcId: discoveredVpc.vpcId,
+                    name: discoveredVpc.name,
+                    cidrBlock: discoveredVpc.cidrBlock,
+                    privateSubnetCount: privateSubnets.length,
+                    availabilityZoneCount: azs.size,
+                    isValid: discoveredVpc.isValid,
+                    validationErrors: discoveredVpc.validationErrors,
+                };
+
+                if (discoveredVpc.isValid) {
+                    console.log(chalk.green(`✓ VPC: ${discoveredVpc.vpcId}`));
+                    if (discoveredVpc.name) {
+                        console.log(chalk.dim(`  Name: ${discoveredVpc.name}`));
+                    }
+                    console.log(chalk.dim(`  CIDR: ${discoveredVpc.cidrBlock}`));
+                    console.log(chalk.dim(`  Private subnets: ${privateSubnets.length} across ${azs.size} AZs`));
+                } else {
+                    console.log(chalk.yellow(`⚠ VPC: ${discoveredVpc.vpcId} (does not meet requirements)`));
+                    discoveredVpc.validationErrors.forEach((err) => {
+                        console.log(chalk.dim(`  - ${err}`));
+                    });
+                }
+            } else {
+                console.log(chalk.dim("  VPC: Not found in stack"));
+            }
+        } catch (error) {
+            const err = error as Error;
+            console.log(chalk.dim(`  VPC: Discovery failed (${err.message})`));
+        }
+
         console.log("");
 
         return {
@@ -150,6 +194,7 @@ export async function runStackQuery(
             athenaResultsBucketPolicy,
             readRoleArn,
             writeRoleArn,
+            discoveredVpc: discoveredVpcInfo,
             stackQuerySucceeded: true,
         };
     } catch (error) {
