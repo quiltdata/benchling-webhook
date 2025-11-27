@@ -379,36 +379,51 @@ export async function deploy(
     const isLegacyStack = await detectLegacyStack(deployRegion);
 
     if (isLegacyStack) {
-        spinner.fail("Stack must be destroyed before deploying v0.9.0");
+        spinner.fail("Existing stack blocks update");
         console.log();
         console.log(
             boxen(
-                `${chalk.red.bold("⚠ Stack Destruction Required")}\n\n` +
-                `${chalk.yellow("The existing BenchlingWebhookStack must be destroyed before deploying v0.9.0.")}\n\n` +
-                `${chalk.bold("This could be due to:")}\n` +
-                "  • v0.8.x → v0.9.0 migration (REST API + ALB → HTTP API + VPC Link)\n" +
-                "  • Failed deployment in rollback state (UPDATE_ROLLBACK_COMPLETE)\n" +
-                "  • Incomplete stack that needs cleanup\n\n" +
-                `${chalk.red.bold("⚠ CloudFormation cannot update stacks in these states.")}\n\n` +
-                `${chalk.yellow("To proceed, you must first destroy the existing stack.")}`,
-                { padding: 1, borderColor: "red", borderStyle: "double" },
+                `${chalk.red.bold("Stack state requires action")}\n\n` +
+                `${chalk.yellow("Detected a legacy/failed BenchlingWebhookStack that may block update.")}\n\n` +
+                `${chalk.bold("Evidence:")}\n` +
+                "  • Stack has ALB/REST API resources or is in a rollback/failed state\n\n" +
+                `${chalk.bold("Options:")}\n` +
+                "  1) Destroy the existing stack and redeploy clean (recommended if rollback/failed)\n" +
+                "  2) Proceed anyway (may fail if CloudFormation cannot update)\n",
+                { padding: 1, borderColor: "yellow", borderStyle: "round" },
             ),
         );
         console.log();
-        console.log(chalk.bold("Required steps:"));
-        console.log();
-        console.log(`  ${chalk.cyan("1. Destroy the existing v0.8.x stack:")}`);
-        console.log(chalk.dim(`     npx @quiltdata/benchling-webhook destroy --profile ${options.profileName} --stage ${options.stage}`));
-        console.log();
-        console.log(`  ${chalk.cyan("2. Deploy v0.9.0:")}`);
-        console.log(chalk.dim(`     npx @quiltdata/benchling-webhook deploy --profile ${options.profileName} --stage ${options.stage}`));
-        console.log();
-        console.log(`  ${chalk.cyan("3. Update Benchling webhook URL")} to the new HTTP API endpoint`);
-        console.log();
-        console.log(chalk.dim("See MIGRATION.md for full details:"));
-        console.log(chalk.dim("https://github.com/quiltdata/benchling-webhook/blob/main/MIGRATION.md"));
-        console.log();
-        process.exit(1);
+
+        const { proceedChoice } = await prompt<{ proceedChoice: string }>([
+            {
+                type: "select",
+                name: "proceedChoice",
+                message: "How would you like to proceed?",
+                choices: [
+                    { name: "destroy", message: "Destroy existing stack then deploy clean (recommended)" },
+                    { name: "proceed", message: "Proceed with deployment (may fail if stack is blocked)" },
+                    { name: "abort", message: "Abort now" },
+                ],
+                initial: 0,
+            },
+        ]);
+
+        if (proceedChoice === "destroy") {
+            console.log();
+            console.log(chalk.bold("Run destroy then redeploy:"));
+            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook destroy --profile ${options.profileName} --stage ${options.stage}`));
+            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook deploy --profile ${options.profileName} --stage ${options.stage}`));
+            console.log();
+            process.exit(1);
+        }
+
+        if (proceedChoice === "abort") {
+            console.log(chalk.yellow("Aborting by user choice."));
+            process.exit(1);
+        }
+
+        spinner.warn("Proceeding despite legacy/failed stack detection; deployment may fail.");
     }
 
     spinner.succeed("Stack status OK - ready for deployment");
