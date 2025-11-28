@@ -1,6 +1,6 @@
 """Lambda authorizer for Benchling webhook HMAC verification.
 
-This module is designed for AWS API Gateway REST API (REQUEST authorizer).
+This module is designed for AWS API Gateway HTTP API v2 (Lambda authorizer).
 It validates webhook signatures using the Benchling SDK before allowing the
 request to proceed to the backend service.
 """
@@ -90,23 +90,12 @@ def _decode_body(event: Dict[str, Any]) -> str:
     return body
 
 
-def _build_policy(
-    effect: str, method_arn: str, principal_id: str, context: Optional[Dict[str, str]] = None
-) -> Dict[str, Any]:
-    return {
-        "principalId": principal_id or "benchling-webhook",
-        "policyDocument": {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Action": "execute-api:Invoke",
-                    "Effect": effect,
-                    "Resource": method_arn or "*",
-                },
-            ],
-        },
-        "context": context or {},
-    }
+def _build_response(is_authorized: bool, context: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """Build HTTP API v2 authorizer response (simple format)."""
+    response: Dict[str, Any] = {"isAuthorized": is_authorized}
+    if context:
+        response["context"] = context
+    return response
 
 
 def _ensure_required_headers(headers: Dict[str, str]) -> None:
@@ -118,9 +107,20 @@ def _ensure_required_headers(headers: Dict[str, str]) -> None:
 
 def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
     """Entrypoint for API Gateway Lambda authorizer."""
-    method_arn = event.get("methodArn", "*")
+    # Validate HTTP API v2 event format
+    version = event.get("version")
+    if version != "2.0":
+        logger.error("Unsupported event version: %s (expected 2.0)", version)
+        return _build_response(
+            False,
+            {
+                "authorized": "false",
+                "error": "invalid_version",
+                "message": f"Expected HTTP API v2 (version 2.0), got {version}",
+            },
+        )
+
     headers = _normalize_headers(event.get("headers"))
-    principal = headers.get("webhook-id", "benchling-webhook")
 
     try:
         secret_arn = os.environ.get("BENCHLING_SECRET_ARN")
@@ -156,10 +156,8 @@ def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
             raise AuthorizationError("invalid_signature") from exc
         logger.info("Webhook authorization succeeded for webhook_id=%s", headers.get("webhook-id"))
 
-        return _build_policy(
-            "Allow",
-            method_arn,
-            principal,
+        return _build_response(
+            True,
             {
                 "authorized": "true",
                 "webhookId": headers.get("webhook-id", ""),
@@ -198,12 +196,10 @@ def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
             message,
         )
 
-        # Return Deny policy with context containing the error message
+        # Return HTTP API v2 response with context containing the error message
         # API Gateway will return 403 Forbidden with this information
-        return _build_policy(
-            "Deny",
-            method_arn,
-            principal,
+        return _build_response(
+            False,
             {
                 "authorized": "false",
                 "error": exc.reason,
@@ -213,11 +209,9 @@ def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
         )
     except Exception as exc:  # pragma: no cover - defense for unexpected errors
         logger.error("Unexpected error during authorization: %s", exc, exc_info=True)
-        # Return Deny policy for unexpected errors
-        return _build_policy(
-            "Deny",
-            method_arn,
-            headers.get("webhook-id", "unknown"),
+        # Return HTTP API v2 response for unexpected errors
+        return _build_response(
+            False,
             {
                 "authorized": "false",
                 "error": "unexpected_error",
