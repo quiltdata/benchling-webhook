@@ -12,7 +12,7 @@ import {
 import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig } from "../../lib/types/config";
-import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
+import { CloudFormationClient, DescribeStacksCommand, DescribeStackResourcesCommand } from "@aws-sdk/client-cloudformation";
 import { syncSecretsToAWS } from "./sync-secrets";
 import * as fs from "fs";
 import * as path from "path";
@@ -89,6 +89,88 @@ async function checkStackStatus(region: string): Promise<StackCheck> {
 }
 
 /**
+ * Detect if existing stack uses legacy REST API Gateway (v0.8.x)
+ * Returns true if REST API detected, indicating need for stack recreation
+ */
+async function detectLegacyRestApi(stackName: string, region: string): Promise<boolean> {
+    const client = new CloudFormationClient({ region });
+    try {
+        const response = await client.send(
+            new DescribeStackResourcesCommand({ StackName: stackName }),
+        );
+        const hasRestApi = response.StackResources?.some(
+            (resource) => resource.ResourceType === "AWS::ApiGateway::RestApi",
+        );
+        return hasRestApi || false;
+    } catch (_error) {
+        // Stack doesn't exist - first deployment
+        return false;
+    }
+}
+
+/**
+ * Prompt user about legacy stack migration
+ * Returns true if user wants to abort deployment
+ * Returns false if user wants to proceed anyway
+ */
+async function promptLegacyMigration(
+    profileName: string,
+    stage: string,
+    yes: boolean,
+): Promise<boolean> {
+    const migrationMessage =
+        `${chalk.red.bold("⚠️  BREAKING CHANGE DETECTED")}\n\n` +
+        `Your existing stack uses ${chalk.yellow("v0.8.x architecture (REST API Gateway)")}.\n` +
+        `v1.0.0 uses ${chalk.green("HTTP API v2")} (required for Lambda Authorizer body access).\n\n` +
+        `${chalk.bold("Technical reason:")} REST API Lambda Authorizers cannot access request body,\n` +
+        "breaking HMAC signature verification. HTTP API v2 provides body access.\n\n" +
+        `${chalk.bold("Stack resources that will be REPLACED:")}\n` +
+        "  - API Gateway REST API → HTTP API v2\n" +
+        "  - Network Load Balancer → (removed, direct VPC Link)\n" +
+        "  - Endpoint URL format → (stage removed from path)\n\n" +
+        `${chalk.bold("You must destroy the existing stack before deploying v1.0.0:")}\n\n` +
+        `  ${chalk.cyan(`npx cdk destroy --profile ${profileName} --context stage=${stage}`)}\n\n` +
+        `${chalk.bold("After destruction, redeploy with:")}\n\n` +
+        `  ${chalk.cyan(`npm run deploy:${stage} -- --profile ${profileName} --yes`)}\n\n` +
+        `${chalk.bold("Update your Benchling webhook URL after deployment.")}`;
+
+    console.log();
+    console.log(
+        boxen(migrationMessage, {
+            padding: 1,
+            borderColor: "red",
+            borderStyle: "round",
+        }),
+    );
+    console.log();
+
+    if (yes) {
+        console.log(chalk.yellow("⚠️  --yes flag detected, but migration requires manual intervention."));
+        console.log(chalk.yellow("    Deployment aborted. Run destroy command to proceed with v1.0.0 upgrade."));
+        return true; // Abort deployment
+    }
+
+    const { shouldProceed } = await prompt<{ shouldProceed: boolean }>({
+        type: "confirm",
+        name: "shouldProceed",
+        message: "Continue with deployment anyway? (Stack will likely fail to update)",
+        initial: false,
+    });
+
+    if (shouldProceed) {
+        console.log();
+        console.log(chalk.yellow("⚠️  Proceeding despite legacy architecture warning."));
+        console.log(chalk.yellow("    Deployment may fail due to incompatible resource types."));
+        console.log();
+        return false; // Don't abort, let user try
+    }
+
+    console.log();
+    console.log(chalk.yellow("Deployment aborted. Run destroy command to proceed with v1.0.0 upgrade."));
+    return true; // Abort deployment
+}
+
+/**
  * Get the most recent dev version tag (without 'v' prefix)
  * Returns null if no dev tags found
  */
@@ -138,6 +220,7 @@ export async function deployCommand(options: {
     imageTag?: string;
     region?: string;
     envFile?: string;
+    force?: boolean;            // Force deployment despite legacy architecture warning
 }): Promise<void> {
     console.log(
         boxen(chalk.bold("Benchling Webhook Deployment"), {
@@ -250,6 +333,7 @@ export async function deploy(
         imageTag: string;
         region?: string;
         envFile?: string;
+        force?: boolean;
     },
 ): Promise<void> {
     const spinner = ora("Validating parameters...").start();
@@ -422,6 +506,22 @@ export async function deploy(
         spinner.warn("Proceeding despite stack state; deployment may fail.");
     } else {
         spinner.succeed("Stack status OK - ready for deployment");
+    }
+
+    // Check for legacy REST API architecture (v0.8.x)
+    if (stackCheck.stackExists && !options.force) {
+        spinner.start("Checking for legacy architecture...");
+        const hasLegacyRestApi = await detectLegacyRestApi("BenchlingWebhookStack", deployRegion);
+
+        if (hasLegacyRestApi) {
+            spinner.fail("Legacy REST API Gateway detected (v0.8.x)");
+            const shouldAbort = await promptLegacyMigration(options.profileName, options.stage, options.yes || false);
+            if (shouldAbort) {
+                process.exit(1);
+            }
+        } else {
+            spinner.succeed("No legacy architecture detected");
+        }
     }
 
     // Load Quilt configuration from config.quilt.*

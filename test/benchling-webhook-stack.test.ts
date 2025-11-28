@@ -45,39 +45,36 @@ describe("BenchlingWebhookStack", () => {
 
     test("creates CloudWatch log groups", () => {
         template.resourceCountIs("AWS::Logs::LogGroup", 3); // API Gateway, container logs, Lambda authorizer
-
-        // REST API Gateway uses AWS::ApiGateway::Stage (not V2)
-        template.hasResourceProperties("AWS::ApiGateway::Stage", {
-            StageName: "prod",
-            AccessLogSetting: Match.objectLike({
-                DestinationArn: {
-                    "Fn::GetAtt": [
-                        Match.stringLikeRegexp("ApiGatewayAccessLogs.*"),
-                        "Arn",
-                    ],
-                },
-            }),
-        });
     });
 
     test("creates API Gateway with correct configuration", () => {
-        // v1.0.0+ uses REST API Gateway (not HTTP API) for IP whitelisting support
-        template.hasResourceProperties("AWS::ApiGateway::RestApi", {
-            Name: "BenchlingWebhookRestAPI",
+        // HTTP API v2 (not REST API) for simpler routing
+        template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+            Name: "BenchlingWebhookHttpAPI",
+            ProtocolType: "HTTP",
         });
 
-        // Should not create HTTP API (v2)
-        template.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
+        // Should not create REST API (v1)
+        template.resourceCountIs("AWS::ApiGateway::RestApi", 0);
 
-        // REST API Gateway uses AWS::ApiGateway::Method with VPC_LINK integration
-        template.hasResourceProperties("AWS::ApiGateway::Method", {
-            HttpMethod: "ANY",
+        // HTTP API uses AWS::ApiGatewayV2::Route
+        // HTTP API v2 creates multiple routes for different paths
+        // Check that webhook route exists
+        const routes = template.findResources("AWS::ApiGatewayV2::Route");
+        const webhookRoute = Object.values(routes).find((route: any) => 
+            route.Properties?.RouteKey === "ANY /webhook"
+        );
+        expect(webhookRoute).toBeDefined();
+        
+        // Verify health check routes also exist
+        template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
+            RouteKey: "GET /health",
         });
     });
 
     test("creates Lambda authorizer for webhook authentication", () => {
         template.hasResourceProperties("AWS::Lambda::Function", {
-            Runtime: "python3.11",
+            Runtime: "python3.12",
             Handler: "index.handler",
         });
 
@@ -98,19 +95,15 @@ describe("BenchlingWebhookStack", () => {
     });
 
     test("creates VPC Link and Cloud Map service", () => {
-        // REST API Gateway uses AWS::ApiGateway::VpcLink (not V2)
-        template.resourceCountIs("AWS::ApiGateway::VpcLink", 1);
+        // HTTP API v2 uses AWS::ApiGatewayV2::VpcLink (not v1)
+        template.resourceCountIs("AWS::ApiGatewayV2::VpcLink", 1);
         template.resourceCountIs("AWS::ServiceDiscovery::PrivateDnsNamespace", 1);
         template.resourceCountIs("AWS::ServiceDiscovery::Service", 1);
     });
 
-    test("creates Network Load Balancer for REST API VPC Link", () => {
-        // REST API Gateway requires NLB for VPC Link integration
-        template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 1);
-        template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
-            Type: "network",
-            Scheme: "internal",
-        });
+    test("does not create Network Load Balancer (HTTP API v2 uses Cloud Map)", () => {
+        // HTTP API v2 integrates directly with Cloud Map, no NLB needed
+        template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 0);
     });
 
     test("throws error when missing required parameters", () => {

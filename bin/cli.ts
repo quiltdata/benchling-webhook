@@ -68,6 +68,7 @@ program
     .option("--region <region>", "AWS region to deploy to")
     .option("--image-tag <tag>", "Docker image tag to deploy (default: latest)")
     .option("--yes", "Skip confirmation prompts")
+    .option("--force", "Force deployment despite legacy architecture warning (DANGEROUS - use with caution)")
     .addHelpText(
         "after",
         `

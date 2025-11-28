@@ -43,6 +43,7 @@ describe("HttpApiGateway", () => {
                 clientId: "client_test",
                 clientSecret: "secret_test",
                 appDefinitionId: "app_test",
+                secretArn: "arn:aws:secretsmanager:us-west-2:987654321098:secret:benchling",
             },
             packages: {
                 bucket: "test-packages",
