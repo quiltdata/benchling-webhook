@@ -27,6 +27,5 @@
 
 export { BenchlingWebhookStack, type BenchlingWebhookStackProps } from "./benchling-webhook-stack";
 export { FargateService } from "./fargate-service";
-export { RestApiGateway } from "./rest-api-gateway";
-export { HttpApiGateway } from "./http-api-gateway"; // Deprecated: use RestApiGateway
+export { HttpApiGateway } from "./http-api-gateway";
 export { EcrRepository } from "./ecr-repository";
