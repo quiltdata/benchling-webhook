@@ -87,7 +87,7 @@ describe("HttpApiGateway", () => {
         });
     });
 
-    test("configures routes for root and proxy paths", () => {
+    test("configures routes for webhook and health endpoints", () => {
         new HttpApiGateway(stack, "TestApiGateway", {
             vpc,
             cloudMapService,
@@ -97,12 +97,19 @@ describe("HttpApiGateway", () => {
 
         const template = Template.fromStack(stack);
 
+        // Check for root path (GET /)
         template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
-            RouteKey: "ANY /",
+            RouteKey: "GET /",
         });
 
+        // Check for health check routes
         template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
-            RouteKey: "ANY /{proxy+}",
+            RouteKey: "GET /health",
+        });
+
+        // Check for webhook routes (event, lifecycle, canvas)
+        template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
+            RouteKey: "POST /event",
         });
     });
 

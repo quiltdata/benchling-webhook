@@ -35,9 +35,11 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
                 ServiceName: "benchling-webhook-service",
             });
 
-            // Should create REST API with prod stage (v1.0.0+)
-            template.hasResourceProperties("AWS::ApiGateway::Stage", {
-                StageName: "prod",
+            // HTTP API v2 uses implicit default stage (no AWS::ApiGatewayV2::Stage resources)
+            // Should create HTTP API v2 (not REST API v1)
+            template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+                Name: "BenchlingWebhookHttpAPI",
+                ProtocolType: "HTTP",
             });
         });
 
@@ -215,7 +217,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             });
         });
 
-        test("creates Network Load Balancer (not ALB)", () => {
+        test("does not create Network Load Balancer (HTTP API v2 uses Cloud Map)", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -227,15 +229,11 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            // v1.0.0+ creates NLB for REST API Gateway VPC Link
-            template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 1);
-            template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
-                Type: "network",
-                Scheme: "internal",
-            });
+            // HTTP API v2 integrates directly with Cloud Map, no NLB needed
+            template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 0);
         });
 
-        test("creates HTTP API for webhooks", () => {
+        test("creates HTTP API v2 for webhooks", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -247,10 +245,22 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            // v1.0.0+ uses REST API Gateway (not HTTP API)
-            template.hasResourceProperties("AWS::ApiGateway::RestApi", {
-                Name: "BenchlingWebhookRestAPI",
+            // HTTP API v2 (not REST API v1)
+            template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+                Name: "BenchlingWebhookHttpAPI",
+                ProtocolType: "HTTP",
             });
+
+            // Should not create REST API (v1)
+            template.resourceCountIs("AWS::ApiGateway::RestApi", 0);
+
+            // HTTP API v2 creates multiple routes for different paths
+            // Check that webhook routes exist (event, lifecycle, canvas)
+            const routes = template.findResources("AWS::ApiGatewayV2::Route");
+            const eventRoute = Object.values(routes).find((route: any) =>
+                route.Properties?.RouteKey === "POST /event"
+            );
+            expect(eventRoute).toBeDefined();
         });
 
         test("uses hardcoded quiltdata ECR repository", () => {

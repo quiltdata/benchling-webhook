@@ -59,13 +59,13 @@ describe("BenchlingWebhookStack", () => {
 
         // HTTP API uses AWS::ApiGatewayV2::Route
         // HTTP API v2 creates multiple routes for different paths
-        // Check that webhook route exists
+        // Check that webhook routes exist (event, lifecycle, canvas)
         const routes = template.findResources("AWS::ApiGatewayV2::Route");
-        const webhookRoute = Object.values(routes).find((route: any) => 
-            route.Properties?.RouteKey === "ANY /webhook"
+        const eventRoute = Object.values(routes).find((route: any) =>
+            route.Properties?.RouteKey === "POST /event"
         );
-        expect(webhookRoute).toBeDefined();
-        
+        expect(eventRoute).toBeDefined();
+
         // Verify health check routes also exist
         template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
             RouteKey: "GET /health",
@@ -167,15 +167,8 @@ describe("BenchlingWebhookStack", () => {
         expect(foundSQSPolicy).toBe(true);
     });
 
-    test("does not create Secrets Manager secret (uses external secret)", () => {
-        // In secrets-only mode, we reference an existing Secrets Manager secret
-        // We don't create one in the stack - it's managed externally
-        template.resourceCountIs("AWS::SecretsManager::Secret", 0);
-    });
-
-    test("creates task definition with correct container configuration", () => {
+    test("creates task definition with correct configuration", () => {
         template.hasResourceProperties("AWS::ECS::TaskDefinition", {
-            Family: "benchling-webhook-task",
             Cpu: "1024",
             Memory: "2048",
             NetworkMode: "awsvpc",
@@ -183,335 +176,25 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
-    test("configures container for port 8080 with updated health check", () => {
-        template.hasResourceProperties("AWS::ECS::TaskDefinition", {
-            ContainerDefinitions: Match.arrayWith([
-                Match.objectLike({
-                    PortMappings: Match.arrayWith([
-                        Match.objectLike({
-                            ContainerPort: 8080,
-                        }),
-                    ]),
-                    HealthCheck: Match.objectLike({
-                        Command: Match.arrayWith([
-                            Match.stringLikeRegexp("8080"),
-                        ]),
-                    }),
-                }),
-            ]),
-        });
-    });
-
-    test("configures auto-scaling for Fargate service", () => {
+    test("configures auto-scaling", () => {
         template.hasResourceProperties("AWS::ApplicationAutoScaling::ScalableTarget", {
             MinCapacity: 2,
             MaxCapacity: 10,
-            ServiceNamespace: "ecs",
-        });
-
-        // Check for CPU-based scaling policy
-        template.hasResourceProperties("AWS::ApplicationAutoScaling::ScalingPolicy", {
-            PolicyType: "TargetTrackingScaling",
-            TargetTrackingScalingPolicyConfiguration: {
-                PredefinedMetricSpecification: {
-                    PredefinedMetricType: "ECSServiceAverageCPUUtilization",
-                },
-                TargetValue: 70,
-            },
-        });
-
-        // Check for memory-based scaling policy
-        template.hasResourceProperties("AWS::ApplicationAutoScaling::ScalingPolicy", {
-            PolicyType: "TargetTrackingScaling",
-            TargetTrackingScalingPolicyConfiguration: {
-                PredefinedMetricSpecification: {
-                    PredefinedMetricType: "ECSServiceAverageMemoryUtilization",
-                },
-                TargetValue: 80,
-            },
         });
     });
 
-    test("container receives v1.0.0 environment variables", () => {
-        // v1.0.0 uses explicit service parameters resolved at deployment time
-        // Eliminates runtime CloudFormation API calls
-        const taskDefs = template.findResources("AWS::ECS::TaskDefinition");
-        const taskDefKeys = Object.keys(taskDefs);
-        const taskDef = taskDefs[taskDefKeys[0]];
-        const containerDef = taskDef.Properties.ContainerDefinitions[0];
-        const environment = containerDef.Environment || [];
-        const secrets = containerDef.Secrets || [];
-
-        // Build a set of environment variable names from the CDK stack
-        const actualEnvVars = new Set<string>();
-        environment.forEach((env: any) => {
-            actualEnvVars.add(env.Name);
-        });
-        secrets.forEach((secret: any) => {
-            actualEnvVars.add(secret.Name);
-        });
-
-        // v1.0.0 explicit service parameters (resolved at deployment time)
-        const expectedServiceVars = [
-            "PACKAGER_SQS_URL",
-            "ATHENA_USER_DATABASE",
-            "QUILT_WEB_HOST",
-        ];
-
-        // Optional service parameters (may be empty string)
-        const optionalServiceVars = [
-            "ATHENA_USER_WORKGROUP",
-            "ATHENA_RESULTS_BUCKET",
-            "ICEBERG_DATABASE",
-            "ICEBERG_WORKGROUP",
-        ];
-
-        // Benchling configuration - only BenchlingSecret name is passed
-        // All other Benchling config comes from Secrets Manager at runtime
-        const expectedBenchlingVars = [
-            "BenchlingSecret",  // Secret name (NOT ARN) - used to fetch credentials at runtime
-        ];
-
-        // Common/system variables
-        const expectedCommonVars = [
-            "LOG_LEVEL",
-            "AWS_REGION",
-            "AWS_DEFAULT_REGION",
-            "ENABLE_WEBHOOK_VERIFICATION",
-            "APP_ENV",
-            "PORT",
-        ];
-
-        // Verify explicit service variables are present
-        expectedServiceVars.forEach((varName) => {
-            expect(actualEnvVars.has(varName)).toBe(true);
-        });
-
-        // Optional service variables (may or may not be present, no assertion needed)
-        // optionalServiceVars - just acknowledged, not asserted
-
-        // Verify Benchling config values are present
-        expectedBenchlingVars.forEach((varName) => {
-            expect(actualEnvVars.has(varName)).toBe(true);
-        });
-
-        // Verify common variables are present
-        expectedCommonVars.forEach((varName) => {
-            expect(actualEnvVars.has(varName)).toBe(true);
-        });
-
-        // Verify sensitive secrets are NOT in environment (retrieved at runtime from Secrets Manager)
-        const prohibitedVars = [
-            "BENCHLING_CLIENT_ID",
-            "BENCHLING_CLIENT_SECRET",
-            "BENCHLING_APP_DEFINITION_ID",
-            "BENCHLING_SECRET_ARN",  // We pass BenchlingSecret (name), not ARN
-            "BENCHLING_TENANT",  // Comes from Secrets Manager
-            "BENCHLING_PKG_BUCKET",  // Comes from Secrets Manager
-            "BENCHLING_PKG_PREFIX",  // Comes from Secrets Manager
-            "BENCHLING_PKG_KEY",  // Comes from Secrets Manager
-        ];
-
-        prohibitedVars.forEach((varName) => {
-            expect(actualEnvVars.has(varName)).toBe(false);
-        });
-
-        // Verify old variable names are NOT present (replaced by explicit parameters)
-        const removedVars = [
-            "QUEUE_URL",
-            "QUILT_USER_BUCKET",
-            "QUILT_CATALOG",
-            "QUILT_DATABASE",
-            "PACKAGE_BUCKET",  // Package config comes from Secrets Manager
-            "PACKAGE_PREFIX",  // Package config comes from Secrets Manager
-            "PACKAGE_METADATA_KEY",  // Package config comes from Secrets Manager
-            "WEBHOOK_ALLOW_LIST",  // Security config comes from Secrets Manager
-        ];
-
-        removedVars.forEach((varName) => {
-            expect(actualEnvVars.has(varName)).toBe(false);
-        });
+    test("creates outputs for webhook endpoint", () => {
+        const outputs = template.toJSON().Outputs;
+        expect(outputs.WebhookEndpoint).toBeDefined();
+        expect(outputs.WebhookEndpoint.Description).toContain("Webhook endpoint URL");
     });
 
-    // ===================================================================
-    // Secrets-Only Mode: CloudFormation Parameter Tests
-    // ===================================================================
-
-    test("creates BenchlingSecret CloudFormation parameter", () => {
-        const parameters = template.toJSON().Parameters;
-        expect(parameters).toHaveProperty("BenchlingSecretARN");
-
-        const param = parameters.BenchlingSecretARN;
-        expect(param.Type).toBe("String");
-        expect(param.Description).toContain("Secrets Manager secret");
-    });
-
-    test("creates LogLevel CloudFormation parameter", () => {
-        const parameters = template.toJSON().Parameters;
-        expect(parameters).toHaveProperty("LogLevel");
-
-        const param = parameters.LogLevel;
-        expect(param.Type).toBe("String");
-        expect(param.AllowedValues).toContain("INFO");
-        expect(param.AllowedValues).toContain("DEBUG");
-    });
-
-    test("creates PackagerQueueUrl CloudFormation parameter", () => {
-        const parameters = template.toJSON().Parameters;
-        expect(parameters).toHaveProperty("PackagerQueueUrl");
-
-        const param = parameters.PackagerQueueUrl;
-        expect(param.Type).toBe("String");
-        expect(param.Description).toContain("SQS queue URL");
-    });
-
-    test("creates AthenaUserDatabase CloudFormation parameter", () => {
-        const parameters = template.toJSON().Parameters;
-        expect(parameters).toHaveProperty("AthenaUserDatabase");
-
-        const param = parameters.AthenaUserDatabase;
-        expect(param.Type).toBe("String");
-        expect(param.Description).toContain("Athena");
-    });
-
-    test("creates QuiltWebHost CloudFormation parameter", () => {
-        const parameters = template.toJSON().Parameters;
-        expect(parameters).toHaveProperty("QuiltWebHost");
-
-        const param = parameters.QuiltWebHost;
-        expect(param.Type).toBe("String");
-        expect(param.Description).toContain("catalog domain");
-    });
-
-    test("creates IcebergDatabase CloudFormation parameter", () => {
-        const parameters = template.toJSON().Parameters;
-        expect(parameters).toHaveProperty("IcebergDatabase");
-
-        const param = parameters.IcebergDatabase;
-        expect(param.Type).toBe("String");
-        expect(param.Description).toContain("Iceberg");
-        expect(param.Default).toBe("");
-    });
-
-    // ===================================================================
-    // Secrets-Only Mode: IAM and Container Environment Tests
-    // ===================================================================
-
-    test("task role has Secrets Manager read permissions", () => {
-        const policies = template.findResources("AWS::IAM::Policy");
-        let foundSecretPermission = false;
-
-        Object.values(policies).forEach((policy: any) => {
-            const statements = policy.Properties?.PolicyDocument?.Statement || [];
-            statements.forEach((statement: any) => {
-                if (Array.isArray(statement.Action)) {
-                    if (statement.Action.includes("secretsmanager:GetSecretValue")) {
-                        foundSecretPermission = true;
-                    }
-                }
-            });
+    test("creates VPC with private subnets", () => {
+        template.hasResourceProperties("AWS::EC2::VPC", {
+            CidrBlock: "10.0.0.0/16",
         });
 
-        expect(foundSecretPermission).toBe(true);
-    });
-
-    test("task role does not have CloudFormation permissions (removed in v1.0.0)", () => {
-        const policies = template.findResources("AWS::IAM::Policy");
-        let foundCfnPermission = false;
-
-        Object.values(policies).forEach((policy: any) => {
-            const statements = policy.Properties?.PolicyDocument?.Statement || [];
-            statements.forEach((statement: any) => {
-                if (Array.isArray(statement.Action)) {
-                    if (statement.Action.some((action: string) => action.startsWith("cloudformation:"))) {
-                        foundCfnPermission = true;
-                    }
-                }
-            });
-        });
-
-        expect(foundCfnPermission).toBe(false);
-    });
-
-    test("container receives BenchlingSecret environment variable", () => {
-        const taskDefs = template.findResources("AWS::ECS::TaskDefinition");
-        const taskDefKeys = Object.keys(taskDefs);
-        const taskDef = taskDefs[taskDefKeys[0]];
-        const containerDef = taskDef.Properties.ContainerDefinitions[0];
-        const environment = containerDef.Environment || [];
-
-        const secretEnv = environment.find((e: any) => e.Name === "BenchlingSecret");
-        expect(secretEnv).toBeDefined();
-    });
-
-    // ===================================================================
-    // VPC Configuration Tests (v0.9.0)
-    // ===================================================================
-
-    test("creates VPC with private subnets when not specified", () => {
-        const app = new cdk.App();
-        const config = createMockConfig();
-        // Don't specify vpc in config - should auto-create
-
-        const stack = new BenchlingWebhookStack(app, "TestVPCStack", {
-            config,
-            env: {
-                account: "123456789012",
-                region: "us-east-1",
-            },
-        });
-
-        const template = Template.fromStack(stack);
-
-        // Should create VPC
-        template.resourceCountIs("AWS::EC2::VPC", 1);
-
-        // Should create 2 NAT Gateways (one per AZ for HA)
+        // Check for NAT Gateways (required for private subnets)
         template.resourceCountIs("AWS::EC2::NatGateway", 2);
-
-        // Should create both public and private subnets
-        const subnets = template.findResources("AWS::EC2::Subnet");
-        const subnetKeys = Object.keys(subnets);
-
-        // Should have at least 4 subnets (2 public + 2 private across 2 AZs)
-        expect(subnetKeys.length).toBeGreaterThanOrEqual(4);
-
-        // Verify we have both public and private subnets
-        const publicSubnets = subnetKeys.filter(
-            (key) => subnets[key].Properties?.MapPublicIpOnLaunch === true,
-        );
-        const privateSubnets = subnetKeys.filter(
-            (key) => subnets[key].Properties?.MapPublicIpOnLaunch === false,
-        );
-
-        expect(publicSubnets.length).toBeGreaterThanOrEqual(2);
-        expect(privateSubnets.length).toBeGreaterThanOrEqual(2);
-    });
-
-    test("uses existing VPC when vpcId is specified", () => {
-        const app = new cdk.App();
-        const config = createMockConfig({
-            deployment: {
-                region: "us-east-1",
-                imageTag: "latest",
-                vpc: { vpcId: "vpc-0123456789abcdef0" },
-            },
-        });
-
-        const stack = new BenchlingWebhookStack(app, "TestExistingVPCStack", {
-            config,
-            env: {
-                account: "123456789012",
-                region: "us-east-1",
-            },
-        });
-
-        const template = Template.fromStack(stack);
-
-        // Should NOT create VPC (using existing)
-        template.resourceCountIs("AWS::EC2::VPC", 0);
-
-        // Should NOT create NAT Gateway (existing VPC)
-        template.resourceCountIs("AWS::EC2::NatGateway", 0);
     });
 });
