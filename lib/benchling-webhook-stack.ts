@@ -3,7 +3,7 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
-import { RestApiGateway } from "./rest-api-gateway";
+import { HttpApiGateway } from "./http-api-gateway";
 import { ProfileConfig } from "./types/config";
 import packageJson from "../package.json";
 
@@ -23,7 +23,7 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
 
 export class BenchlingWebhookStack extends cdk.Stack {
     private readonly fargateService: FargateService;
-    private readonly api: RestApiGateway;
+    private readonly api: HttpApiGateway;
     public readonly webhookEndpoint: string;
 
     constructor(
@@ -232,17 +232,20 @@ export class BenchlingWebhookStack extends cdk.Stack {
             logLevel: logLevelValue,
         });
 
-        // Create REST API that routes through VPC Link to the service
-        this.api = new RestApiGateway(this, "RestApiGateway", {
+        // Create HTTP API v2 that routes through VPC Link to the service
+        this.api = new HttpApiGateway(this, "HttpApiGateway", {
             vpc: vpc,
             cloudMapService: this.fargateService.cloudMapService,
             serviceSecurityGroup: this.fargateService.service.connections.securityGroups[0],
             config: config,
-            ecsService: this.fargateService.service,
         });
 
-        // Store webhook endpoint for easy access (REST API requires stage in URL)
-        this.webhookEndpoint = this.api.api.url;
+        // Store webhook endpoint for easy access (HTTP API v2 default stage)
+        // HTTP API v2 URL is optional, but should always be defined after API creation
+        this.webhookEndpoint = this.api.api.url || "";
+        if (!this.webhookEndpoint) {
+            throw new Error("HTTP API URL was not generated. This should not happen.");
+        }
 
         // Export webhook endpoint as a stack output
         new cdk.CfnOutput(this, "WebhookEndpoint", {

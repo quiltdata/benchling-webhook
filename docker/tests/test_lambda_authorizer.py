@@ -22,13 +22,14 @@ class DummySecretsClient:
 
 def _base_event():
     return {
+        "version": "2.0",
         "headers": {
             "webhook-id": "abc123",
             "webhook-signature": "sig",
             "webhook-timestamp": "1234567890",
         },
         "body": "{}",
-        "methodArn": "arn:aws:execute-api:region:123456789012:api/prod/POST/event",
+        "routeArn": "arn:aws:execute-api:region:123456789012:api/prod/POST/event",
     }
 
 
@@ -53,7 +54,7 @@ def test_allows_valid_signature(monkeypatch):
 
     result = authorizer.handler(_base_event(), {})
 
-    assert result["policyDocument"]["Statement"][0]["Effect"] == "Allow"
+    assert result["isAuthorized"] is True
     assert result["context"]["authorized"] == "true"
     assert calls["verified"] is True
 
@@ -69,8 +70,8 @@ def test_denies_when_signature_invalid(monkeypatch):
 
     result = authorizer.handler(_base_event(), {})
 
-    # Verify Deny policy is returned
-    assert result["policyDocument"]["Statement"][0]["Effect"] == "Deny"
+    # Verify HTTP API v2 response is returned
+    assert result["isAuthorized"] is False
     assert result["context"]["authorized"] == "false"
     assert result["context"]["error"] == "invalid_signature"
     # Verify the error message includes diagnostic information
@@ -87,7 +88,7 @@ def test_denies_when_headers_missing(monkeypatch):
 
     result = authorizer.handler(event, {})
 
-    assert result["policyDocument"]["Statement"][0]["Effect"] == "Deny"
+    assert result["isAuthorized"] is False
     assert result["context"]["error"] == "missing_headers"
 
 
@@ -97,7 +98,7 @@ def test_denies_when_secret_missing_app_definition(monkeypatch):
 
     result = authorizer.handler(_base_event(), {})
 
-    assert result["policyDocument"]["Statement"][0]["Effect"] == "Deny"
+    assert result["isAuthorized"] is False
     assert result["context"]["error"] == "missing_app_definition_id"
 
 
@@ -107,7 +108,7 @@ def test_denies_when_secret_lookup_fails(monkeypatch):
 
     result = authorizer.handler(_base_event(), {})
 
-    assert result["policyDocument"]["Statement"][0]["Effect"] == "Deny"
+    assert result["isAuthorized"] is False
     assert result["context"]["error"] == "secrets_manager_error"
 
 
@@ -129,3 +130,25 @@ def test_decodes_base64_body(monkeypatch):
     authorizer.handler(event, {})
 
     assert captured["body"] == '{"key": "value"}'
+
+
+def test_rejects_non_v2_events():
+    event = _base_event()
+    event["version"] = "1.0"
+
+    result = authorizer.handler(event, {})
+
+    assert result["isAuthorized"] is False
+    assert result["context"]["error"] == "invalid_version"
+    assert "Expected HTTP API v2 (version 2.0)" in result["context"]["message"]
+
+
+def test_rejects_missing_version():
+    event = _base_event()
+    del event["version"]
+
+    result = authorizer.handler(event, {})
+
+    assert result["isAuthorized"] is False
+    assert result["context"]["error"] == "invalid_version"
+    assert "Expected HTTP API v2 (version 2.0)" in result["context"]["message"]
