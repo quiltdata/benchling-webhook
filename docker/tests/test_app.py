@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from fastapi import status
 from fastapi.testclient import TestClient
 
 from src.app import create_app
@@ -221,3 +222,166 @@ class TestFastAPIApp:
 
                 assert isinstance(blocks[0], MarkdownUiBlockUpdate)
                 assert "test.txt" in blocks[0].value
+
+    def test_webhook_verification_enabled(self, mock_config):
+        """Test webhook verification is enabled when configured."""
+        mock_config.enable_webhook_verification = True
+        mock_config.benchling_app_definition_id = "app_123"
+
+        with (
+            patch("src.app.get_config", return_value=mock_config),
+            patch("src.app.Benchling"),
+            patch("src.app.EntryPackager"),
+            patch("src.app.verify") as mock_verify,
+        ):
+            app = create_app()
+            client = TestClient(app)
+
+            payload = {
+                "channel": "events",
+                "message": {"type": "v2.entry.updated.fields", "resourceId": "etr_123456"},
+                "baseURL": "https://tenant.benchling.com",
+            }
+
+            # Mock successful verification
+            mock_verify.return_value = None
+
+            response = client.post(
+                "/event",
+                json=payload,
+                headers={
+                    "webhook-id": "test-id",
+                    "webhook-signature": "test-sig",
+                    "webhook-timestamp": "1234567890",
+                },
+            )
+
+            # Verify the signature verification was called
+            assert mock_verify.called
+            assert response.status_code == 200
+
+    def test_webhook_verification_disabled(self, mock_config):
+        """Test webhook verification can be disabled."""
+        mock_config.enable_webhook_verification = False
+
+        with (
+            patch("src.app.get_config", return_value=mock_config),
+            patch("src.app.Benchling"),
+            patch("src.app.EntryPackager"),
+            patch("src.app.verify") as mock_verify,
+        ):
+            app = create_app()
+            client = TestClient(app)
+
+            payload = {
+                "channel": "events",
+                "message": {"type": "v2.entry.updated.fields", "resourceId": "etr_123456"},
+                "baseURL": "https://tenant.benchling.com",
+            }
+
+            response = client.post("/event", json=payload)
+
+            # Verification should not be called when disabled
+            assert not mock_verify.called
+            assert response.status_code == 200
+
+    def test_webhook_verification_missing_headers(self, mock_config):
+        """Test webhook verification rejects requests with missing headers."""
+        mock_config.enable_webhook_verification = True
+        mock_config.benchling_app_definition_id = "app_123"
+
+        with (
+            patch("src.app.get_config", return_value=mock_config),
+            patch("src.app.Benchling"),
+            patch("src.app.EntryPackager"),
+        ):
+            app = create_app()
+            client = TestClient(app)
+
+            payload = {
+                "channel": "events",
+                "message": {"type": "v2.entry.updated.fields", "resourceId": "etr_123456"},
+                "baseURL": "https://tenant.benchling.com",
+            }
+
+            # Send request without webhook headers
+            response = client.post("/event", json=payload)
+
+            # Should be rejected with 403 Forbidden
+            assert response.status_code == status.HTTP_403_FORBIDDEN
+            data = response.json()
+            assert data["reason"] == "missing_headers"
+            assert "webhook-id" in data["message"]
+
+    def test_webhook_verification_invalid_signature(self, mock_config):
+        """Test webhook verification rejects requests with invalid signature."""
+        mock_config.enable_webhook_verification = True
+        mock_config.benchling_app_definition_id = "app_123"
+
+        with (
+            patch("src.app.get_config", return_value=mock_config),
+            patch("src.app.Benchling"),
+            patch("src.app.EntryPackager"),
+            patch("src.app.verify") as mock_verify,
+        ):
+            # Mock verification failure
+            mock_verify.side_effect = ValueError("Invalid signature")
+
+            app = create_app()
+            client = TestClient(app)
+
+            payload = {
+                "channel": "events",
+                "message": {"type": "v2.entry.updated.fields", "resourceId": "etr_123456"},
+                "baseURL": "https://tenant.benchling.com",
+            }
+
+            response = client.post(
+                "/event",
+                json=payload,
+                headers={
+                    "webhook-id": "test-id",
+                    "webhook-signature": "bad-signature",
+                    "webhook-timestamp": "1234567890",
+                },
+            )
+
+            # Should be rejected with 403 Forbidden
+            assert response.status_code == status.HTTP_403_FORBIDDEN
+            data = response.json()
+            assert data["reason"] == "invalid_signature"
+            assert "verification failed" in data["message"].lower()
+
+    def test_webhook_verification_missing_app_definition_id(self, mock_config):
+        """Test webhook verification fails when app_definition_id is not configured."""
+        mock_config.enable_webhook_verification = True
+        mock_config.benchling_app_definition_id = ""  # Not configured
+
+        with (
+            patch("src.app.get_config", return_value=mock_config),
+            patch("src.app.Benchling"),
+            patch("src.app.EntryPackager"),
+        ):
+            app = create_app()
+            client = TestClient(app)
+
+            payload = {
+                "channel": "events",
+                "message": {"type": "v2.entry.updated.fields", "resourceId": "etr_123456"},
+                "baseURL": "https://tenant.benchling.com",
+            }
+
+            response = client.post(
+                "/event",
+                json=payload,
+                headers={
+                    "webhook-id": "test-id",
+                    "webhook-signature": "test-sig",
+                    "webhook-timestamp": "1234567890",
+                },
+            )
+
+            # Should be rejected with 403 Forbidden
+            assert response.status_code == status.HTTP_403_FORBIDDEN
+            data = response.json()
+            assert data["reason"] == "missing_app_definition_id"

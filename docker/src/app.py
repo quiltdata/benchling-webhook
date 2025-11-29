@@ -5,10 +5,11 @@ from typing import Any, Dict
 
 import structlog
 from benchling_api_client.v2.stable.models.app_canvas_update import AppCanvasUpdate
+from benchling_sdk.apps.helpers.webhook_helpers import verify
 from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
 from benchling_sdk.benchling import Benchling
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -50,6 +51,128 @@ structlog.configure(
 
 logger = structlog.get_logger(__name__)
 
+# Required webhook headers for HMAC verification
+REQUIRED_WEBHOOK_HEADERS = ("webhook-id", "webhook-signature", "webhook-timestamp")
+
+
+class WebhookVerificationError(Exception):
+    """Raised when webhook signature verification fails."""
+
+    def __init__(self, reason: str, message: str):
+        super().__init__(message)
+        self.reason = reason
+        self.message = message
+
+
+async def verify_webhook_signature(request: Request, config) -> None:
+    """Verify Benchling webhook HMAC signature (defense-in-depth layer).
+
+    This function implements webhook signature verification in the FastAPI application
+    as a defense-in-depth security measure. While the Lambda authorizer provides the
+    first line of defense, this application-layer verification:
+
+    1. Guards against authorization bypass scenarios
+    2. Provides detailed logging for security auditing
+    3. Enables graceful degradation if authorizer is disabled
+    4. Allows local testing without Lambda infrastructure
+
+    Args:
+        request: FastAPI request object containing headers and body
+        config: Application configuration containing app_definition_id
+
+    Raises:
+        WebhookVerificationError: If signature verification fails or required headers are missing
+
+    Environment Variables:
+        ENABLE_WEBHOOK_VERIFICATION: Enable/disable verification (default: true)
+    """
+    # Check if verification is enabled
+    if not config.enable_webhook_verification:
+        logger.info(
+            "Webhook verification disabled",
+            path=request.url.path,
+            verification_enabled=False,
+        )
+        return
+
+    # Extract and normalize headers (case-insensitive)
+    headers = {key.lower(): value for key, value in request.headers.items()}
+
+    # Log incoming webhook details for security auditing
+    webhook_id = headers.get("webhook-id", "unknown")
+    logger.info(
+        "Verifying webhook signature",
+        path=request.url.path,
+        webhook_id=webhook_id,
+        has_app_definition_id=bool(config.benchling_app_definition_id),
+        header_keys=list(headers.keys()),
+    )
+
+    # Validate required headers are present
+    missing_headers = [h for h in REQUIRED_WEBHOOK_HEADERS if h not in headers]
+    if missing_headers:
+        error_msg = f"Missing required webhook headers: {', '.join(missing_headers)}"
+        logger.warning(
+            "Webhook verification failed - missing headers",
+            webhook_id=webhook_id,
+            missing_headers=missing_headers,
+            path=request.url.path,
+        )
+        raise WebhookVerificationError("missing_headers", error_msg)
+
+    # Validate app_definition_id is configured
+    if not config.benchling_app_definition_id:
+        error_msg = "app_definition_id not configured in Benchling secret"
+        logger.error(
+            "Webhook verification failed - missing app_definition_id",
+            webhook_id=webhook_id,
+            path=request.url.path,
+        )
+        raise WebhookVerificationError("missing_app_definition_id", error_msg)
+
+    # Read request body (needed for HMAC computation)
+    body = await request.body()
+    body_str = body.decode("utf-8")
+
+    # Log diagnostic information for troubleshooting
+    logger.debug(
+        "Webhook verification details",
+        webhook_id=webhook_id,
+        app_definition_id=config.benchling_app_definition_id,
+        body_length=len(body_str),
+        signature=headers.get("webhook-signature", "")[:20] + "...",  # Log first 20 chars
+        timestamp=headers.get("webhook-timestamp"),
+    )
+
+    # Verify HMAC signature using Benchling SDK
+    try:
+        verify(config.benchling_app_definition_id, body_str, headers)  # type: ignore[arg-type]
+    except Exception as exc:
+        # Log detailed error for security auditing and troubleshooting
+        logger.error(
+            "Webhook signature verification failed",
+            webhook_id=webhook_id,
+            app_definition_id=config.benchling_app_definition_id,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            path=request.url.path,
+            troubleshooting=(
+                f"Ensure the webhook in Benchling is configured under app '{config.benchling_app_definition_id}'. "
+                "Check that this matches the app_definition_id in your AWS Secrets Manager secret."
+            ),
+        )
+        raise WebhookVerificationError(
+            "invalid_signature",
+            f"Webhook signature verification failed: {str(exc)}",
+        ) from exc
+
+    # Log successful verification for security auditing
+    logger.info(
+        "Webhook signature verified successfully",
+        webhook_id=webhook_id,
+        path=request.url.path,
+    )
+
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Benchling Webhook", version=__version__)
@@ -57,6 +180,11 @@ def create_app() -> FastAPI:
     # Initialize configuration and clients
     try:
         config = get_config()
+
+        # Create a dependency factory for webhook verification that captures config
+        async def verify_webhook_dependency(request: Request) -> None:
+            """FastAPI dependency for webhook signature verification."""
+            await verify_webhook_signature(request, config)
 
         logger.info("Python orchestration enabled")
 
@@ -186,9 +314,10 @@ def create_app() -> FastAPI:
                     "quilt_stack_arn": mask_arn(quilt_stack_arn),
                     "benchling_secret_name": benchling_secret_name,
                 },
-                "authorizer": {
-                    "enabled": config.enable_webhook_verification,
-                    "mode": "lambda",
+                "security": {
+                    "webhook_verification_enabled": config.enable_webhook_verification,
+                    "verification_layers": ["fastapi", "lambda_authorizer"],
+                    "defense_in_depth": True,
                 },
                 "quilt": {
                     "catalog": config.quilt_catalog,
@@ -219,8 +348,8 @@ def create_app() -> FastAPI:
             return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
 
     @app.post("/event")
-    async def handle_event(request: Request):
-        """Handle Benchling webhook events (pre-authenticated by Lambda authorizer)."""
+    async def handle_event(request: Request, _verified: None = Depends(verify_webhook_dependency)):
+        """Handle Benchling webhook events with HMAC signature verification."""
         try:
             logger.info("Received /event", headers=dict(request.headers))
             payload = await Payload.from_request(request, benchling)
@@ -284,8 +413,8 @@ def create_app() -> FastAPI:
             return JSONResponse({"error": "Internal server error"}, status_code=500)
 
     @app.post("/lifecycle")
-    async def lifecycle(request: Request):
-        """Handle Benchling app lifecycle events (pre-authenticated by Lambda authorizer)."""
+    async def lifecycle(request: Request, _verified: None = Depends(verify_webhook_dependency)):
+        """Handle Benchling app lifecycle events with HMAC signature verification."""
         try:
             logger.info("Received /lifecycle", headers=dict(request.headers))
             payload_obj = await Payload.from_request(request, benchling)
@@ -330,8 +459,8 @@ def create_app() -> FastAPI:
         return {"status": "success", "message": "Configuration updated successfully"}
 
     @app.post("/canvas")
-    async def canvas_initialize(request: Request):
-        """Handle /canvas webhook from Benchling (pre-authenticated by Lambda authorizer)."""
+    async def canvas_initialize(request: Request, _verified: None = Depends(verify_webhook_dependency)):
+        """Handle /canvas webhook from Benchling with HMAC signature verification."""
         try:
             logger.info("Received /canvas", headers=dict(request.headers))
             payload = await Payload.from_request(request, benchling)
@@ -653,6 +782,24 @@ def create_app() -> FastAPI:
                 "execution_arn": execution_arn,
             },
             status_code=202,
+        )
+
+    @app.exception_handler(WebhookVerificationError)
+    async def webhook_verification_exception_handler(request: Request, exc: WebhookVerificationError):
+        """Handle webhook signature verification failures with 403 Forbidden."""
+        logger.warning(
+            "Webhook verification failed - returning 403",
+            reason=exc.reason,
+            message=exc.message,
+            path=request.url.path,
+        )
+        return JSONResponse(
+            {
+                "error": "Forbidden",
+                "reason": exc.reason,
+                "message": exc.message,
+            },
+            status_code=status.HTTP_403_FORBIDDEN,
         )
 
     @app.exception_handler(StarletteHTTPException)
