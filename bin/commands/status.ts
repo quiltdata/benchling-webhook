@@ -10,7 +10,7 @@
 
 import chalk from "chalk";
 import ora from "ora";
-import { CloudFormationClient, DescribeStacksCommand, DescribeStackEventsCommand, DescribeStackResourcesCommand } from "@aws-sdk/client-cloudformation";
+import { CloudFormationClient, DescribeStacksCommand, DescribeStackEventsCommand, DescribeStackResourcesCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { ECSClient, DescribeServicesCommand, DescribeTaskDefinitionCommand } from "@aws-sdk/client-ecs";
 import { ElasticLoadBalancingV2Client, DescribeTargetHealthCommand, DescribeTargetGroupsCommand, DescribeRulesCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { SecretsManagerClient, DescribeSecretCommand } from "@aws-sdk/client-secrets-manager";
@@ -257,9 +257,51 @@ async function getStackStatus(
             stackOutputs,
         };
     } catch (error) {
+        const errorMessage = (error as Error).message;
+
+        // Check if stack was deleted (DELETE_COMPLETE status)
+        // DescribeStacksCommand throws "does not exist" for deleted stacks
+        // We need to check ListStacks to differentiate between never-existed and deleted
+        if (errorMessage.includes("does not exist")) {
+            try {
+                // Configure AWS SDK client for ListStacks
+                const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
+                if (awsProfile) {
+                    clientConfig.credentials = fromIni({ profile: awsProfile });
+                }
+                const listClient = new CloudFormationClient(clientConfig);
+
+                // Query ListStacks to check if stack was deleted
+                const listCommand = new ListStacksCommand({
+                    StackStatusFilter: ["DELETE_COMPLETE"],
+                });
+                const listResponse = await listClient.send(listCommand);
+
+                // Find the stack in deleted stacks
+                const deletedStack = listResponse.StackSummaries?.find(
+                    (summary: { StackName?: string }) => summary.StackName === stackName,
+                );
+
+                if (deletedStack) {
+                    // Stack was deleted - return success with DELETE_COMPLETE status
+                    return {
+                        success: true,
+                        stackStatus: "DELETE_COMPLETE",
+                        lastUpdateTime: deletedStack.DeletionTime?.toISOString() || deletedStack.LastUpdatedTime?.toISOString(),
+                        stackArn: deletedStack.StackId,
+                        region,
+                    };
+                }
+            } catch (listError) {
+                // ListStacks failed - fall through to original error handling
+                console.error(chalk.dim(`  Could not check deleted stacks: ${(listError as Error).message}`));
+            }
+        }
+
+        // Stack truly doesn't exist or other error occurred
         return {
             success: false,
-            error: (error as Error).message,
+            error: errorMessage,
             stackArn: stackName,
             region,
         };
@@ -270,7 +312,9 @@ async function getStackStatus(
  * Formats stack status with color coding
  */
 export function formatStackStatus(status: string): string {
-    if (status.includes("COMPLETE") && !status.includes("ROLLBACK")) {
+    if (status === "DELETE_COMPLETE") {
+        return chalk.red(status);
+    } else if (status.includes("COMPLETE") && !status.includes("ROLLBACK")) {
         return chalk.green(status);
     } else if (status.includes("IN_PROGRESS")) {
         return chalk.yellow(status);
@@ -810,8 +854,8 @@ function displayStatusResult(
         }
     }
 
-    // Display Quilt stack resources (discovered from stack, not outputs)
-    if (quiltConfig) {
+    // Display Quilt stack resources (ONLY for integrated mode)
+    if (mode === "integrated" && quiltConfig) {
         const resources = [];
         if (quiltConfig.athenaUserWorkgroup) resources.push({ label: "User Workgroup", value: quiltConfig.athenaUserWorkgroup });
         if (quiltConfig.athenaUserPolicy) resources.push({ label: "User Policy", value: quiltConfig.athenaUserPolicy });
@@ -965,7 +1009,11 @@ function displayStatusResult(
     }
 
     // Show next steps based on status
-    if (result.stackStatus?.includes("IN_PROGRESS")) {
+    if (result.stackStatus === "DELETE_COMPLETE") {
+        console.log(chalk.bold("Status:"));
+        console.log(chalk.red("  🗑️  Stack has been deleted"));
+        console.log(chalk.dim("  Deploy a new stack to recreate it\n"));
+    } else if (result.stackStatus?.includes("IN_PROGRESS")) {
         console.log(chalk.bold("Status:"));
         console.log(chalk.yellow("  ⏳ Stack update in progress..."));
         console.log(chalk.dim("  Auto-refreshing until complete...\n"));
