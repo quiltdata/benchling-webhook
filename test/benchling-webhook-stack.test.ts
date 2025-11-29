@@ -72,24 +72,36 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
-    test("creates Lambda authorizer for webhook authentication", () => {
-        template.hasResourceProperties("AWS::Lambda::Function", {
-            Runtime: "python3.12",
-            Handler: "index.handler",
+    test("creates WAF Web ACL for IP filtering", () => {
+        // Verify WAF Web ACL is created
+        template.hasResourceProperties("AWS::WAFv2::WebACL", {
+            Name: "BenchlingWebhookWebACL",
+            Scope: "REGIONAL",
         });
 
-        template.hasOutput("AuthorizerFunctionArn", Match.objectLike({
+        // Verify IP Set is created
+        template.hasResourceProperties("AWS::WAFv2::IPSet", {
+            Name: "BenchlingWebhookIPSet",
+            Scope: "REGIONAL",
+            IPAddressVersion: "IPV4",
+        });
+
+        // Verify WAF is associated with HTTP API
+        template.hasResourceProperties("AWS::WAFv2::WebACLAssociation", {});
+
+        // Verify WAF outputs
+        template.hasOutput("WafWebAclArn", Match.objectLike({
             Value: {
                 "Fn::GetAtt": [
-                    Match.stringLikeRegexp("WebhookAuthorizerFunction.*"),
+                    Match.stringLikeRegexp(".*WebACL.*"),
                     "Arn",
                 ],
             },
         }));
 
-        template.hasOutput("AuthorizerLogGroup", Match.objectLike({
+        template.hasOutput("WafLogGroup", Match.objectLike({
             Value: {
-                Ref: Match.stringLikeRegexp("WebhookAuthorizerLogGroup.*"),
+                Ref: Match.stringLikeRegexp(".*WafLogGroup.*"),
             },
         }));
     });
