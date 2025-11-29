@@ -57,12 +57,23 @@ export interface LogGroupInfo {
 function getDeploymentInfo(
     profile: string,
     configStorage: XDGBase,
-): { region: string; stackName: string; integratedMode: boolean; quiltStackName?: string } | null {
+): { region: string; stackName: string; integratedMode: boolean; quiltStackName?: string; webhookEndpoint?: string } | null {
     try {
         const config = configStorage.readProfile(profile);
         if (config.deployment?.region) {
             const region = config.deployment.region;
             const integratedMode = config.integratedStack || false;
+
+            // Try to get webhook endpoint from deployment tracking
+            let webhookEndpoint: string | undefined;
+            const deployments = configStorage.getDeployments(profile);
+            const stages = ["prod", "dev", ...Object.keys(deployments.active)];
+            for (const stage of stages) {
+                if (deployments.active[stage]?.endpoint) {
+                    webhookEndpoint = deployments.active[stage].endpoint;
+                    break;
+                }
+            }
 
             // For integrated mode, extract Quilt stack name from ARN
             if (integratedMode && config.quilt?.stackArn) {
@@ -73,6 +84,7 @@ function getDeploymentInfo(
                         stackName: STACK_NAME,
                         integratedMode: true,
                         quiltStackName: match[1],
+                        webhookEndpoint,
                     };
                 }
             }
@@ -82,6 +94,7 @@ function getDeploymentInfo(
                 region,
                 stackName: STACK_NAME,
                 integratedMode: false,
+                webhookEndpoint,
             };
         }
     } catch (error) {
@@ -200,6 +213,7 @@ function displayLogs(
     region: string,
     since: string,
     limit: number,
+    webhookEndpoint?: string,
     expanded?: boolean,
 ): void {
     const timeStr = formatLocalDateTime(new Date());
@@ -207,6 +221,13 @@ function displayLogs(
 
     console.log(chalk.bold(`\nLogs for Profile: ${profile} @ ${timeStr} (${timezone})\n`));
     console.log(chalk.dim("─".repeat(80)));
+
+    // Show webhook URL prominently at the top
+    if (webhookEndpoint) {
+        console.log(`${chalk.bold("Webhook URL:")} ${chalk.cyan(webhookEndpoint)}`);
+        console.log(chalk.dim("─".repeat(80)));
+    }
+
     console.log(`${chalk.bold("Region:")} ${chalk.cyan(region)}  ${chalk.bold("Time Range:")} ${chalk.cyan(`Last ${since}`)}${expanded ? chalk.yellow(" (auto-expanded)") : ""}`);
     console.log(`${chalk.bold("Showing:")} ${chalk.cyan(`Last ~${limit} entries per log group`)}`);
     console.log(chalk.dim("─".repeat(80)));
@@ -421,7 +442,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
             return { success: false, error: errorMsg };
         }
 
-        const { region, integratedMode, quiltStackName } = deploymentInfo;
+        const { region, integratedMode, quiltStackName, webhookEndpoint } = deploymentInfo;
 
         // For integrated mode, use Quilt stack name; for standalone use BenchlingWebhookStack
         const stackName = integratedMode && quiltStackName ? quiltStackName : STACK_NAME;
@@ -516,7 +537,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
             }
 
             // Display logs
-            displayLogs(logGroups, profile, region, currentSince, limit, wasExpanded);
+            displayLogs(logGroups, profile, region, currentSince, limit, webhookEndpoint, wasExpanded);
 
             result.logGroups = logGroups;
 

@@ -46,7 +46,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             );
         }
 
-        console.log(`Deploying with profile configuration (v${config._metadata.version})`);
+        console.log(`Deploying with profile configuration (v${packageJson.version})`);
         console.log(`  Benchling Tenant: ${config.benchling.tenant}`);
         console.log(`  Region: ${config.deployment.region}`);
 

@@ -687,6 +687,8 @@ export async function deploy(
                 CDK_DEFAULT_REGION: deployRegion,
                 QUILT_STACK_ARN: stackArn,
                 BENCHLING_SECRET: benchlingSecret,
+                // Pass VPC configuration if specified in profile
+                ...(config.deployment.vpc?.vpcId && { VPC_ID: config.deployment.vpc.vpcId }),
             },
         });
 

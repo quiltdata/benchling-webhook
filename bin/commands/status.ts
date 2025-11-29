@@ -42,6 +42,7 @@ export interface StatusResult {
     region?: string;
     error?: string;
     stackOutputs?: {
+        webhookEndpoint?: string;
         benchlingUrl?: string;
         secretArn?: string;
         dockerImage?: string;
@@ -240,6 +241,7 @@ async function getStackStatus(
         // Extract stack outputs
         const outputs = stack.Outputs || [];
         const stackOutputs = {
+            webhookEndpoint: outputs.find((o) => o.OutputKey === "WebhookEndpoint")?.OutputValue,
             benchlingUrl: outputs.find((o) => o.OutputKey === "BenchlingUrl")?.OutputValue,
             secretArn: outputs.find((o) => o.OutputKey === "BenchlingSecretArn" || o.OutputKey === "BenchlingClientSecretArn" || o.OutputKey === "SecretArn")?.OutputValue,
             dockerImage: outputs.find((o) => o.OutputKey === "BenchlingDockerImage" || o.OutputKey === "DockerImage")?.OutputValue,
@@ -783,6 +785,13 @@ function displayStatusResult(
 
     console.log(chalk.bold(`\nStack Status for Profile: ${profile} ${modeLabel}${lastUpdatedStr}\n`));
     console.log(chalk.dim("─".repeat(80)));
+
+    // Show webhook URL prominently at the top
+    if (result.stackOutputs?.webhookEndpoint) {
+        console.log(`${chalk.bold("Webhook URL:")} ${chalk.cyan(result.stackOutputs.webhookEndpoint)}`);
+        console.log(chalk.dim("─".repeat(80)));
+    }
+
     console.log(`${chalk.bold("Stack:")} ${chalk.cyan(stackName)}  ${chalk.bold("Region:")} ${chalk.cyan(region)}`);
 
     // Show stack status
