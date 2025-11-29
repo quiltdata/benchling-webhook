@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 
 from .secrets_manager import fetch_benchling_secret
 
@@ -131,7 +132,18 @@ class Config:
             )
 
         # Fetch secret from Secrets Manager
-        sm_client = boto3.client("secretsmanager", region_name=self.aws_region)
+        # Use a session with proper credential caching to avoid signature expiration
+        # during container startup (especially important for ECS Fargate)
+        session = boto3.Session(region_name=self.aws_region)
+        sm_client = session.client(
+            "secretsmanager",
+            config=BotocoreConfig(
+                retries={"max_attempts": 3, "mode": "standard"},
+                # Use a longer timeout to handle slow network conditions
+                connect_timeout=5,
+                read_timeout=10,
+            ),
+        )
         secret_data = fetch_benchling_secret(sm_client, self.aws_region, benchling_secret)
 
         # Set Benchling configuration from secret
