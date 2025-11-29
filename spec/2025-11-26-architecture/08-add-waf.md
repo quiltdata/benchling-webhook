@@ -71,7 +71,7 @@ Internet → WAF (IP filter) → HTTP API v2 → Lambda Authorizer (HMAC) → VP
 - Name: `BenchlingWebhookWebACL`
 - Scope: `REGIONAL` (for API Gateway in us-east-1, us-west-2, etc.)
 - Associated resource: HTTP API Gateway ARN
-- Default action: `BLOCK` (deny-by-default security posture)
+- Default action: **`COUNT` when IP allowlist is empty, `BLOCK` when IPs configured**
 - CloudWatch metrics: Enabled
 
 **Rules to Add (Priority Order):**
@@ -84,24 +84,18 @@ Internet → WAF (IP filter) → HTTP API v2 → Lambda Authorizer (HMAC) → VP
 
 #### Rule 2: IP Allowlist (Priority 20)
 
-- **Action:** Allow requests from allowed IPs
+- **Action:** Allow requests from allowed IPs (when configured)
 - **IP Set:** Created from `config.security.webhookAllowList`
 - **Supports:** IPv4 CIDR blocks (e.g., `192.168.1.0/24`)
 - **Capacity:** Up to 10,000 IP addresses
+- **Behavior:** If empty, default action is COUNT (see below)
 
-#### Rule 3: Rate Limiting (Priority 30, Optional)
+**Why Only Two Rules?**
 
-- **Action:** Block if > threshold requests per 5 minutes from single IP
-- **Scope:** Per-IP address
-- **Configuration:** `config.security.rateLimitPerIp` (default: 100)
-- **Fallback:** COUNT mode if disabled (logs but doesn't block)
-
-#### Rule 4: AWS Managed Rules (Priority 40, Optional)
-
-- **Rule Set:** `AWSManagedRulesCommonRuleSet`
-- **Protection:** SQL injection, XSS, known bad inputs
-- **Configuration:** `config.security.enableManagedRules` (default: false)
-- **Mode:** BLOCK or COUNT (configurable for testing)
+- **Rate limiting not needed:** Benchling controls webhook frequency
+- **AWS managed rules not needed:** HMAC signature already validates authenticity
+- **Geo-blocking not needed:** Benchling IPs are known and allowlisted
+- **Simplicity:** Fewer rules = easier to understand and debug
 
 ### 2. Create IP Set Resource
 
@@ -131,7 +125,7 @@ const ipAllowList = config.security.webhookAllowList
 
 - Each entry must be valid IPv4 CIDR
 - Maximum 10,000 entries
-- If empty, WAF blocks all traffic except health checks (fail-safe)
+- **If empty: WAF uses COUNT mode (logs requests, doesn't block) to allow discovering Benchling IPs**
 
 ### 3. Associate WAF with HTTP API Gateway
 
@@ -143,8 +137,9 @@ Add WAF association after creating HTTP API:
 // Create WAF Web ACL
 const webAcl = new WafWebAcl(scope, "WafWebAcl", {
     ipAllowList: props.config.security.webhookAllowList || "",
-    rateLimitPerIp: props.config.security.rateLimitPerIp || 100,
-    enableManagedRules: props.config.security.enableManagedRules || false,
+    // Auto-selects default action based on IP allowlist:
+    // - Empty allowlist → COUNT mode (discovery phase)
+    // - Has IPs → BLOCK mode (security phase)
 });
 
 // Associate WAF with HTTP API
@@ -207,11 +202,38 @@ new wafv2.CfnWebACLAssociation(scope, "WafAssociation", {
 interface SecurityConfig {
     webhookAllowList?: string;           // Existing - now used by WAF
     enableVerification?: boolean;        // Existing - controls Lambda + FastAPI
-    rateLimitPerIp?: number;             // NEW - WAF rate limit (req per 5min)
-    enableManagedRules?: boolean;        // NEW - AWS managed rules
-    geoBlockList?: string;               // NEW - Country codes (e.g., "CN,RU")
 }
 ```
+
+**No new configuration fields needed!** The WAF uses existing `webhookAllowList` configuration.
+
+**Automatic Default Action Selection:**
+
+The WAF construct automatically chooses the default action based on configuration:
+
+| IP Allowlist | Default Action | Behavior |
+|--------------|----------------|----------|
+| Empty (`""`) | `COUNT` | Logs all requests, allows through to Lambda Authorizer (discovery mode) |
+| Has IPs | `BLOCK` | Blocks requests not matching IP allowlist (security mode) |
+
+**Logic:**
+
+```typescript
+const defaultAction = ipAllowList.length === 0 ? "COUNT" : "BLOCK";
+```
+
+**Rationale:**
+
+- **Empty allowlist = Discovery mode**: Customers often don't know Benchling IPs upfront
+  - WAF logs requests but doesn't block (COUNT mode)
+  - Lambda Authorizer still validates HMAC signatures
+  - CloudWatch logs show actual Benchling IPs
+  - Customer can add IPs and redeploy to enable BLOCK mode
+
+- **Configured allowlist = Security mode**: Once IPs are known
+  - WAF blocks requests from unknown IPs (BLOCK mode)
+  - Only allowed IPs reach Lambda Authorizer
+  - Defense-in-depth: WAF + Lambda + FastAPI layers
 
 **Example Config:**
 
@@ -229,27 +251,9 @@ interface SecurityConfig {
 
 ### 6. Update Setup Wizard
 
-**Prompt for WAF Configuration in `scripts/install-wizard.ts`:**
+**No changes needed to `scripts/install-wizard.ts`!**
 
-```typescript
-// Rate limit configuration
-const rateLimitResponse = await prompts({
-    type: "number",
-    name: "rateLimitPerIp",
-    message: "Rate limit per IP (requests per 5 minutes)",
-    initial: existingConfig?.security?.rateLimitPerIp || 100,
-    min: 10,
-    max: 10000,
-});
-
-// AWS managed rules (optional, disabled by default)
-const managedRulesResponse = await prompts({
-    type: "confirm",
-    name: "enableManagedRules",
-    message: "Enable AWS managed rules (SQL injection, XSS protection)?",
-    initial: existingConfig?.security?.enableManagedRules || false,
-});
-```
+The WAF automatically uses the existing `webhookAllowList` configuration. Users already configure this during initial setup, so no new prompts are required.
 
 ---
 
@@ -395,6 +399,19 @@ All three layers remain active:
 
 ### Log Insights Queries
 
+**Discover Benchling IPs (Discovery Mode):**
+
+When running in COUNT mode with empty IP allowlist, use this query to find Benchling IPs:
+
+```sql
+fields @timestamp, httpRequest.clientIp, httpRequest.uri, action
+| filter httpRequest.uri = "/webhook"
+| stats count() by httpRequest.clientIp
+| sort count desc
+```
+
+Add these IPs to `webhookAllowList` configuration, then redeploy to enable BLOCK mode.
+
 **Top Blocked IPs:**
 
 ```sql
@@ -428,13 +445,13 @@ fields @timestamp, httpRequest.clientIp, terminatingRuleId
 ### WAF Costs (us-east-1)
 
 - **Web ACL:** $5.00/month (base)
-- **Rules:** $1.00/month per rule (4 rules = $4.00/month)
+- **Rules:** $1.00/month per rule (2 rules = $2.00/month)
 - **Requests:** $0.60 per million requests analyzed
 - **Logging:** CloudWatch Logs ingestion (~$0.50/GB)
 
 ### Total Additional Cost
 
-- **Fixed:** ~$9.00/month
+- **Fixed:** ~$7.00/month
 - **Variable:** ~$0.60 per million requests
 
 ### Cost Comparison (per million requests)
@@ -443,15 +460,33 @@ fields @timestamp, httpRequest.clientIp, terminatingRuleId
 |--------------|-------|----------|-------|
 | **REST API + Lambda Authorizer + NLB** | $16.20/mo | $3.70/M | $19.90 |
 | **HTTP API v2 + Lambda Authorizer** | $0/mo | $1.20/M | $1.20 |
-| **HTTP API v2 + Lambda + WAF** | $9.00/mo | $1.80/M | $10.80 |
+| **HTTP API v2 + Lambda + WAF** | $7.00/mo | $1.80/M | $8.80 |
 
-**Net Savings vs REST API:** -$9.10/month + -$1.90/M requests
+**Net Savings vs REST API:** -$9.20/month + -$1.90/M requests
 
-**Trade-off:** Slightly higher cost than HTTP API alone, but provides edge-level security with DDoS protection and rate limiting.
+**Trade-off:** Slightly higher cost than HTTP API alone, but provides edge-level IP filtering with automatic discovery mode.
 
 ---
 
 ## Configuration Examples
+
+### Discovery Mode (No IPs Known Yet)
+
+```json
+{
+    "security": {
+        "webhookAllowList": "",
+        "enableVerification": true
+    }
+}
+```
+
+**WAF Behavior:**
+
+- Default action: `COUNT` (logs requests, doesn't block)
+- Lambda Authorizer: Validates HMAC signatures (blocks invalid)
+- Use case: Initial deployment when Benchling IPs unknown
+- Next step: Check CloudWatch logs for actual IPs, then add to allowlist
 
 ### Minimal (IP Allowlist Only)
 
@@ -464,61 +499,60 @@ fields @timestamp, httpRequest.clientIp, terminatingRuleId
 }
 ```
 
-WAF rules: Health check exception + IP allowlist
+**WAF Behavior:**
 
-### Standard (IP + Rate Limiting)
+- Default action: `BLOCK` (blocks requests not from allowlist)
+- WAF rules: Health check exception + IP allowlist
+- Use case: Production deployment with known Benchling IPs
 
-```json
-{
-    "security": {
-        "webhookAllowList": "192.168.1.0/24,10.0.0.0/8",
-        "enableVerification": true,
-        "rateLimitPerIp": 100
-    }
-}
-```
-
-WAF rules: Health check + IP allowlist + rate limiting
-
-### Maximum (All Features)
+### Production (Multiple IP Ranges)
 
 ```json
 {
     "security": {
-        "webhookAllowList": "192.168.1.0/24,10.0.0.0/8",
-        "enableVerification": true,
-        "rateLimitPerIp": 100,
-        "enableManagedRules": true,
-        "geoBlockList": "CN,RU,KP"
+        "webhookAllowList": "192.168.1.0/24,10.0.0.0/8,203.0.113.0/24",
+        "enableVerification": true
     }
 }
 ```
 
-WAF rules: Health check + IP allowlist + rate limiting + managed rules + geo-blocking
+**WAF Behavior:**
+
+- Default action: `BLOCK` (blocks requests not from allowlist)
+- Supports multiple IP ranges (comma-separated)
+- Defense-in-depth: WAF blocks unknown IPs, Lambda verifies HMAC, FastAPI re-validates
 
 ---
 
 ## Rollout Strategy
 
-### Phase 1: Test Mode (COUNT Mode)
+### Automatic Phased Deployment (Built-in)
 
-- Deploy WAF with default action: `COUNT` (logs but doesn't block)
-- Monitor logs for false positives
-- Verify allowed IPs work correctly
-- Duration: 1 week
+The WAF automatically handles phased deployment based on configuration:
 
-### Phase 2: Block Mode (BLOCK Mode)
+#### Phase 1: Discovery Mode (Automatic)
 
-- Change default action to `BLOCK`
-- Deploy to dev environment first
-- Verify blocked requests return 403
-- Monitor for legitimate traffic blocks
+- Deploy with empty `webhookAllowList: ""`
+- WAF automatically uses `COUNT` mode (logs but doesn't block)
+- Lambda Authorizer still validates HMAC signatures
+- Monitor CloudWatch logs: `/aws/waf/benchling-webhook`
+- Duration: Until you identify Benchling IPs (typically 1-7 days)
 
-### Phase 3: Production Rollout
+#### Phase 2: Security Mode (Automatic)
 
-- Deploy to production with confidence
+- Add discovered IPs to `webhookAllowList: "192.168.1.0/24,10.0.0.0/8"`
+- Redeploy stack
+- WAF automatically switches to `BLOCK` mode
+- Unknown IPs blocked at edge
+- Known IPs pass through to Lambda Authorizer
+
+#### Phase 3: Production Rollout
+
+- Deploy to production with same configuration
 - Monitor metrics and logs closely
 - Adjust rate limits if needed
+
+**Key Advantage:** No manual mode switching required - the WAF adapts to your configuration automatically
 
 ---
 
