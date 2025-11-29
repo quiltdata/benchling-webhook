@@ -11,6 +11,9 @@ dist/
 cdk.out
 cdk-outputs.json
 
+# Lambda build artifacts
+lambda/authorizer/wheelhouse/
+
 # Environment files
 .env*
 !.env.example

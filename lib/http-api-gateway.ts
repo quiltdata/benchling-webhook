@@ -56,10 +56,14 @@ export class HttpApiGateway {
                 removalPolicy: cdk.RemovalPolicy.DESTROY,
             });
 
+            // Use pre-built lambda bundle from Makefile
+            // The bundle should be built by running: make lambda-bundle
+            // This ensures proper dependency tracking and avoids stale bundles
             const bundlingCommands = [
                 "set -euo pipefail",
-                "export PIP_NO_BUILD_ISOLATION=1 PIP_ONLY_BINARY=:all: PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_CACHE_DIR=/tmp/pipcache",
-                "pip install -q --platform manylinux2014_x86_64 --implementation cp --python-version 3.12 --abi cp312 --only-binary=:all: -t /asset-output -r /asset-input/lambda/authorizer/requirements.txt -c /asset-input/lambda/authorizer/constraints.txt",
+                "# Install dependencies from pre-downloaded wheels (built by Makefile)",
+                "pip install -q --no-index --find-links /asset-input/lambda/authorizer/wheelhouse -t /asset-output -r /asset-input/lambda/authorizer/requirements.txt",
+                "# Copy lambda handler source",
                 "cp /asset-input/docker/src/lambda_authorizer.py /asset-output/index.py",
             ].join(" && ");
 

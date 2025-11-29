@@ -107,8 +107,23 @@ def _ensure_required_headers(headers: Dict[str, str]) -> None:
 
 def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
     """Entrypoint for API Gateway Lambda authorizer."""
-    # Validate HTTP API v2 event format
+    # Log comprehensive invocation details
     version = event.get("version")
+    route_key = event.get("routeKey", "unknown")
+    request_id = event.get("requestContext", {}).get("requestId", "unknown")
+
+    logger.info(
+        "Lambda authorizer invoked | "
+        "version=%s route=%s request_id=%s has_body=%s body_length=%s is_base64=%s",
+        version,
+        route_key,
+        request_id,
+        "body" in event,
+        len(event.get("body", "")) if event.get("body") else 0,
+        event.get("isBase64Encoded", False),
+    )
+
+    # Validate HTTP API v2 event format
     if version != "2.0":
         logger.error("Unsupported event version: %s (expected 2.0)", version)
         return _build_response(
@@ -134,10 +149,14 @@ def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
 
         # Log diagnostic information for troubleshooting
         logger.info(
-            "Verifying webhook signature (webhook_id=%s, app_definition_id=%s, secret_arn=%s)",
+            "Verifying webhook signature | "
+            "webhook_id=%s app_definition_id=%s body_received=%s body_length=%s "
+            "headers=%s",
             headers.get("webhook-id"),
             app_definition_id,
-            secret_arn,
+            bool(body),
+            len(body),
+            list(headers.keys()),
         )
 
         try:
