@@ -113,8 +113,7 @@ def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
     request_id = event.get("requestContext", {}).get("requestId", "unknown")
 
     logger.info(
-        "Lambda authorizer invoked | "
-        "version=%s route=%s request_id=%s has_body=%s body_length=%s is_base64=%s",
+        "Lambda authorizer invoked | " "version=%s route=%s request_id=%s has_body=%s body_length=%s is_base64=%s",
         version,
         route_key,
         request_id,
