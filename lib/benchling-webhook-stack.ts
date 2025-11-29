@@ -53,7 +53,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // Create CloudFormation parameters for runtime-configurable values
         // These parameters can be updated via CloudFormation stack updates
 
-        // Explicit service parameters (v1.0.0+)
+        // Explicit service parameters
         // These replace runtime resolution from QuiltStackARN
         const packagerQueueUrlParam = new cdk.CfnParameter(this, "PackagerQueueUrl", {
             type: "String",
@@ -214,7 +214,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             imageTag: imageTagValue,
             stackVersion: stackVersion,
             // Runtime-configurable parameters
-            // New explicit service parameters (v1.0.0+)
+            // New explicit service parameters
             packagerQueueUrl: packagerQueueUrlValue,
             athenaUserDatabase: athenaUserDatabaseValue,
             quiltWebHost: quiltWebHostValue,

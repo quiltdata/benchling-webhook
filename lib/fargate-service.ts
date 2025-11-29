@@ -9,12 +9,12 @@ import { Construct } from "constructs";
 import { ProfileConfig } from "./types/config";
 
 /**
- * Properties for FargateService construct (v1.0.0+)
+ * Properties for FargateService construct
  *
  * Uses ProfileConfig for structured configuration access.
  * Runtime-configurable parameters can be overridden via CloudFormation parameters.
  *
- * **Breaking Change (v1.0.0)**: Removed stackArn in favor of explicit service environment variables.
+ * **Breaking Change (v0.9.0)**: Removed stackArn in favor of explicit service environment variables.
  * The explicit service parameters (packagerQueueUrl, athenaUserDatabase, quiltWebHost, icebergDatabase)
  * are resolved at deployment time and passed directly to the container, eliminating runtime CloudFormation calls.
  */
@@ -25,7 +25,7 @@ export interface FargateServiceProps {
     readonly imageTag?: string;
     readonly stackVersion?: string;
 
-    // Explicit service parameters (v1.0.0+)
+    // Explicit service parameters
     // These replace runtime resolution from stackArn
     readonly packagerQueueUrl: string;
     readonly athenaUserDatabase: string;

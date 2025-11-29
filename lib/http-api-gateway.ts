@@ -40,7 +40,7 @@ export class HttpApiGateway {
         // Create HTTP API v2
         this.api = new apigatewayv2.HttpApi(scope, "BenchlingWebhookHttpAPI", {
             apiName: "BenchlingWebhookHttpAPI",
-            description: "HTTP API for Benchling webhook integration (v1.0.0+ with WAF)",
+            description: "HTTP API for Benchling webhook integration (v0.9.0+ with WAF)",
         });
 
         // Service Discovery integration via VPC Link

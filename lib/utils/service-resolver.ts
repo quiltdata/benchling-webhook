@@ -5,7 +5,7 @@
  * These values are then passed as explicit environment variables to the container,
  * eliminating the need for runtime CloudFormation API calls.
  *
- * **Breaking Change (v1.0.0)**: Replaces runtime config-resolver with deployment-time resolution.
+ * **Breaking Change (v0.9.0)**: Replaces runtime config-resolver with deployment-time resolution.
  *
  * @module utils/service-resolver
  * @version 1.0.0

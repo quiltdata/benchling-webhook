@@ -124,7 +124,7 @@ export interface ProfileConfig {
  * Configuration for Quilt data catalog integration, including service endpoints
  * and SQS queue for package creation.
  *
- * **Breaking Change (v1.0.0)**: `stackArn` is used at deployment time only to resolve services.
+ * **Breaking Change (v0.9.0)**: `stackArn` is used at deployment time only to resolve services.
  * Services are passed as explicit environment variables to the container.
  * No runtime CloudFormation API calls are made.
  *
@@ -140,7 +140,7 @@ export interface QuiltConfig {
      * The resolved services are then passed as explicit environment variables to the container.
      *
      * **Deployment usage only** - not passed to container runtime.
-     * **Breaking Change (v1.0.0)**: No longer passed as environment variable or CloudFormation parameter.
+     * **Breaking Change (v0.9.0)**: No longer passed as environment variable or CloudFormation parameter.
      *
      * @example "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-stack/..."
      */
