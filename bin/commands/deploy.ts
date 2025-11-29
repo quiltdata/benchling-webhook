@@ -121,14 +121,12 @@ async function promptLegacyMigration(
     const migrationMessage =
         `${chalk.red.bold("⚠️  BREAKING CHANGE DETECTED")}\n\n` +
         `Your existing stack uses ${chalk.yellow("v0.8.x architecture (REST API Gateway)")}.\n` +
-        `v1.0.0 uses ${chalk.green("HTTP API v2")} (required for Lambda Authorizer body access).\n\n` +
-        `${chalk.bold("Technical reason:")} REST API Lambda Authorizers cannot access request body,\n` +
-        "breaking HMAC signature verification. HTTP API v2 provides body access.\n\n" +
+        `v0.9.0 uses ${chalk.green("WAF + HTTP API v2")}.\n\n` +
         `${chalk.bold("Stack resources that will be REPLACED:")}\n` +
         "  - API Gateway REST API → HTTP API v2\n" +
         "  - Network Load Balancer → (removed, direct VPC Link)\n" +
         "  - Endpoint URL format → (stage removed from path)\n\n" +
-        `${chalk.bold("You must destroy the existing stack before deploying v1.0.0:")}\n\n` +
+        `${chalk.bold("You must destroy the existing stack before deploying v0.9.0:")}\n\n` +
         `  ${chalk.cyan(`npx cdk destroy --profile ${profileName} --context stage=${stage}`)}\n\n` +
         `${chalk.bold("After destruction, redeploy with:")}\n\n` +
         `  ${chalk.cyan(`npm run deploy:${stage} -- --profile ${profileName} --yes`)}\n\n` +
@@ -624,7 +622,7 @@ export async function deploy(
         // Build CloudFormation parameters
         // Parameter names must match the CfnParameter IDs in BenchlingWebhookStack
         const parameters = [
-            // Explicit service parameters (v1.0.0+)
+            // Explicit service parameters
             `PackagerQueueUrl=${services.packagerQueueUrl}`,
             `AthenaUserDatabase=${services.athenaUserDatabase}`,
             `QuiltWebHost=${services.quiltWebHost}`,

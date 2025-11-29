@@ -50,7 +50,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -73,7 +73,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -97,7 +97,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -120,7 +120,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -155,7 +155,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -191,7 +191,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -216,7 +216,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -249,7 +249,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -289,7 +289,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 packageBucket: devConfig.packages.bucket,
                 quiltDatabase: devConfig.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -305,7 +305,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 packageBucket: prodConfig.packages.bucket,
                 quiltDatabase: prodConfig.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -329,7 +329,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -361,7 +361,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -388,7 +388,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -418,7 +418,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -450,7 +450,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -485,7 +485,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -519,7 +519,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -555,7 +555,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -583,7 +583,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
