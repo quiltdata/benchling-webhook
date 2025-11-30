@@ -48,91 +48,111 @@ describe("BenchlingWebhookStack", () => {
     });
 
     test("creates API Gateway with correct configuration", () => {
-        // HTTP API v2 (not REST API) for simpler routing
-        template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
-            Name: "BenchlingWebhookHttpAPI",
-            ProtocolType: "HTTP",
+        // REST API v1 (not HTTP API v2) for resource policy support
+        template.hasResourceProperties("AWS::ApiGateway::RestApi", {
+            Name: "BenchlingWebhookRestAPI",
         });
 
-        // Should not create REST API (v1)
-        template.resourceCountIs("AWS::ApiGateway::RestApi", 0);
+        // Should not create HTTP API v2
+        template.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
 
-        // HTTP API uses AWS::ApiGatewayV2::Route
-        // HTTP API v2 creates multiple routes for different paths
-        // Check that webhook routes exist (event, lifecycle, canvas)
-        const routes = template.findResources("AWS::ApiGatewayV2::Route");
-        const eventRoute = Object.values(routes).find((route: any) =>
-            route.Properties?.RouteKey === "POST /event"
-        );
-        expect(eventRoute).toBeDefined();
+        // REST API uses AWS::ApiGateway::Resource and AWS::ApiGateway::Method
+        // Check that webhook resource paths exist (event, lifecycle, canvas)
+        template.hasResourceProperties("AWS::ApiGateway::Resource", {
+            PathPart: "event",
+        });
 
-        // Verify health check routes also exist
-        template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
-            RouteKey: "GET /health",
+        template.hasResourceProperties("AWS::ApiGateway::Resource", {
+            PathPart: "lifecycle",
+        });
+
+        template.hasResourceProperties("AWS::ApiGateway::Resource", {
+            PathPart: "canvas",
+        });
+
+        // Verify health check resource exists
+        template.hasResourceProperties("AWS::ApiGateway::Resource", {
+            PathPart: "health",
+        });
+
+        // Verify REST API has resource policy
+        template.hasResourceProperties("AWS::ApiGateway::RestApi", {
+            Policy: Match.objectLike({
+                Statement: Match.arrayWith([
+                    Match.objectLike({
+                        Effect: "Allow",
+                        Action: "execute-api:Invoke",
+                    }),
+                ]),
+            }),
         });
     });
 
-    test("does NOT create WAF when webhookAllowList is empty", () => {
-        // Verify no WAF resources are created (default config has empty allowlist)
+    test("does NOT create WAF (v1.0.0 uses resource policy instead)", () => {
+        // v1.0.0: WAF replaced by resource policy for cost savings
         template.resourceCountIs("AWS::WAFv2::WebACL", 0);
         template.resourceCountIs("AWS::WAFv2::IPSet", 0);
         template.resourceCountIs("AWS::WAFv2::WebACLAssociation", 0);
     });
 
-    test("creates WAF Web ACL when webhookAllowList is configured", () => {
+    test("uses resource policy for IP filtering when webhookAllowList is configured", () => {
         const app = new cdk.App();
-        const configWithWaf = createMockConfig({
+        const configWithIpFilter = createMockConfig({
             security: {
                 webhookAllowList: "192.168.1.0/24,10.0.0.0/8",
                 enableVerification: true,
             },
         });
-        const stack = new BenchlingWebhookStack(app, "TestStackWithWaf", {
-            config: configWithWaf,
+        const stack = new BenchlingWebhookStack(app, "TestStackWithIpFilter", {
+            config: configWithIpFilter,
             env: {
                 account: "123456789012",
                 region: "us-east-1",
             },
         });
-        const wafTemplate = Template.fromStack(stack);
+        const ipFilterTemplate = Template.fromStack(stack);
 
-        // Verify WAF Web ACL is created
-        wafTemplate.hasResourceProperties("AWS::WAFv2::WebACL", {
-            Name: "BenchlingWebhookWebACL",
-            Scope: "REGIONAL",
+        // Verify resource policy is created with IP conditions
+        ipFilterTemplate.hasResourceProperties("AWS::ApiGateway::RestApi", {
+            Policy: Match.objectLike({
+                Statement: Match.arrayWith([
+                    // Health endpoints allowed from anywhere
+                    Match.objectLike({
+                        Effect: "Allow",
+                        Action: "execute-api:Invoke",
+                        Resource: Match.arrayWith([
+                            Match.stringLikeRegexp(".*GET/health.*"),
+                        ]),
+                    }),
+                    // Webhook endpoints restricted by IP
+                    Match.objectLike({
+                        Effect: "Allow",
+                        Action: "execute-api:Invoke",
+                        Resource: Match.arrayWith([
+                            Match.stringLikeRegexp(".*POST/event.*"),
+                        ]),
+                        Condition: {
+                            IpAddress: {
+                                "aws:SourceIp": ["192.168.1.0/24", "10.0.0.0/8"],
+                            },
+                        },
+                    }),
+                ]),
+            }),
         });
 
-        // Verify IP Set is created
-        wafTemplate.hasResourceProperties("AWS::WAFv2::IPSet", {
-            Name: "BenchlingWebhookIPSet",
-            Scope: "REGIONAL",
-            IPAddressVersion: "IPV4",
-        });
-
-        // Verify WAF is associated with HTTP API
-        wafTemplate.hasResourceProperties("AWS::WAFv2::WebACLAssociation", {});
-
-        // Verify WAF outputs
-        wafTemplate.hasOutput("WafWebAclArn", Match.objectLike({
-            Value: {
-                "Fn::GetAtt": [
-                    Match.stringLikeRegexp(".*WebACL.*"),
-                    "Arn",
-                ],
-            },
-        }));
-
-        wafTemplate.hasOutput("WafLogGroup", Match.objectLike({
-            Value: {
-                Ref: Match.stringLikeRegexp(".*WafLogGroup.*"),
-            },
-        }));
+        // Verify NO WAF resources are created (replaced by resource policy)
+        ipFilterTemplate.resourceCountIs("AWS::WAFv2::WebACL", 0);
+        ipFilterTemplate.resourceCountIs("AWS::WAFv2::IPSet", 0);
+        ipFilterTemplate.resourceCountIs("AWS::WAFv2::WebACLAssociation", 0);
     });
 
     test("creates VPC Link and Network Load Balancer", () => {
-        // HTTP API v2 uses AWS::ApiGatewayV2::VpcLink (not v1)
-        template.resourceCountIs("AWS::ApiGatewayV2::VpcLink", 1);
-        // v0.9.0: NLB replaces Cloud Map for reliable health checks
+        // REST API v1 uses AWS::ApiGateway::VpcLink (not v2)
+        template.resourceCountIs("AWS::ApiGateway::VpcLink", 1);
+        // Should not have HTTP API v2 VpcLink
+        template.resourceCountIs("AWS::ApiGatewayV2::VpcLink", 0);
+        // v0.9.0+: NLB replaces Cloud Map for reliable health checks
         template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 1);
         template.resourceCountIs("AWS::ElasticLoadBalancingV2::TargetGroup", 1);
         template.resourceCountIs("AWS::ElasticLoadBalancingV2::Listener", 1);

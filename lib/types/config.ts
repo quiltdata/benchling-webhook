@@ -443,9 +443,11 @@ export interface LoggingConfig {
  */
 export interface SecurityConfig {
     /**
-     * Comma-separated list of allowed IP addresses/CIDR blocks
+     * Comma-separated list of allowed IP addresses/CIDR blocks for webhook endpoints
      *
-     * Empty string means no IP filtering.
+     * v1.0.0+: Enforced via REST API Gateway resource policy (free).
+     * Empty string means no IP filtering (all IPs allowed).
+     * Health endpoints are always accessible from any IP.
      *
      * @example "192.168.1.0/24,10.0.0.0/8"
      * @default ""
@@ -453,7 +455,7 @@ export interface SecurityConfig {
     webhookAllowList?: string;
 
     /**
-     * Enable webhook signature verification
+     * Enable webhook signature verification in FastAPI application
      *
      * @default true
      */

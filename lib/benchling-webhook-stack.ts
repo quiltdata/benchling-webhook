@@ -3,7 +3,7 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
-import { HttpApiGateway } from "./http-api-gateway";
+import { RestApiGateway } from "./rest-api-gateway";
 import { NetworkLoadBalancer } from "./network-load-balancer";
 import { ProfileConfig } from "./types/config";
 import packageJson from "../package.json";
@@ -25,7 +25,7 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
 export class BenchlingWebhookStack extends cdk.Stack {
     private readonly fargateService: FargateService;
     private readonly nlb: NetworkLoadBalancer;
-    private readonly api: HttpApiGateway;
+    private readonly api: RestApiGateway;
     public readonly webhookEndpoint: string;
 
     constructor(
@@ -241,21 +241,25 @@ export class BenchlingWebhookStack extends cdk.Stack {
             logLevel: logLevelValue,
         });
 
-        // Create HTTP API v2 that routes through VPC Link to the NLB
-        // v0.9.0: NLB integration provides reliable routing to ECS tasks
-        this.api = new HttpApiGateway(this, "HttpApiGateway", {
+        // Get stage from environment or default to prod
+        const stage = process.env.STAGE || "prod";
+
+        // Create REST API v1 that routes through VPC Link to the NLB
+        // v1.0.0: REST API with resource policy replaces HTTP API v2 + WAF
+        this.api = new RestApiGateway(this, "RestApiGateway", {
             vpc: vpc,
             networkLoadBalancer: this.nlb.loadBalancer,
             nlbListener: this.nlb.listener,
             serviceSecurityGroup: this.fargateService.securityGroup,
             config: config,
+            stage: stage,
         });
 
-        // Store webhook endpoint for easy access (HTTP API v2 default stage)
-        // HTTP API v2 URL is optional, but should always be defined after API creation
-        this.webhookEndpoint = this.api.api.url || "";
-        if (!this.webhookEndpoint) {
-            throw new Error("HTTP API URL was not generated. This should not happen.");
+        // Store webhook endpoint for easy access (REST API v1 with stage)
+        // REST API URL includes the stage in the path
+        this.webhookEndpoint = `${this.api.api.url}${stage}/`;
+        if (!this.api.api.url) {
+            throw new Error("REST API URL was not generated. This should not happen.");
         }
 
         // Export webhook endpoint as a stack output
@@ -283,8 +287,18 @@ export class BenchlingWebhookStack extends cdk.Stack {
         });
 
         new cdk.CfnOutput(this, "ApiGatewayLogGroup", {
-            value: this.api.logGroup.logGroupName,
+            value: "/aws/apigateway/benchling-webhook-rest",
             description: "CloudWatch log group for API Gateway access logs",
+        });
+
+        new cdk.CfnOutput(this, "ApiType", {
+            value: "REST API v1",
+            description: "API Gateway type",
+        });
+
+        new cdk.CfnOutput(this, "ApiStage", {
+            value: stage,
+            description: "API Gateway deployment stage",
         });
 
         // Export NLB information (v0.9.0)
@@ -297,19 +311,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             value: this.nlb.targetGroup.targetGroupArn,
             description: "NLB Target Group ARN for ECS tasks",
         });
-
-        // Conditionally export WAF outputs only if WAF is enabled
-        if (this.api.wafWebAcl) {
-            new cdk.CfnOutput(this, "WafWebAclArn", {
-                value: this.api.wafWebAcl.webAcl.attrArn,
-                description: "WAF Web ACL ARN for IP filtering",
-            });
-
-            new cdk.CfnOutput(this, "WafLogGroup", {
-                value: this.api.wafWebAcl.logGroup.logGroupName,
-                description: "CloudWatch log group for WAF logs",
-            });
-        }
 
         // Export configuration metadata
         new cdk.CfnOutput(this, "ConfigVersion", {
