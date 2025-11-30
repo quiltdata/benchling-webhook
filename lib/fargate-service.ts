@@ -361,7 +361,9 @@ export class FargateService extends Construct {
             "Allow VPC traffic to service",
         );
 
-        // Create Fargate Service
+        // Create Fargate Service with Cloud Map integration
+        // Configure Cloud Map to track ECS task health instead of custom HTTP health checks
+        // Set failureThreshold to 1 to rely on ECS task health status propagation
         this.service = new ecs.FargateService(this, "Service", {
             cluster: this.cluster,
             taskDefinition: taskDefinition,
@@ -386,6 +388,10 @@ export class FargateService extends Construct {
                 dnsTtl: cdk.Duration.seconds(30),
                 container,
                 containerPort: 8080,
+                // Set failureThreshold to 1 to make Cloud Map rely on ECS task health
+                // This prevents "AWS_INIT_HEALTH_STATUS: UNHEALTHY" by ensuring Cloud Map
+                // instances track ECS container health checks rather than custom HTTP checks
+                failureThreshold: 1,
             },
         });
 
