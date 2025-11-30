@@ -16,7 +16,7 @@ npm run setup                # Interactive wizard: deps + XDG config + secrets
 
 ```bash
 npm run test                 # Fast unit tests (lint + typecheck + mocked tests)
-npm run test:native          # Local Flask (mocked) integration tests
+npm run test:native          # Local FastAPI (mocked) integration tests
 ```
 
 #### Before creating PR
@@ -71,7 +71,8 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 
 - [lib/benchling-webhook-stack.ts](lib/benchling-webhook-stack.ts) - Main orchestration
 - [lib/fargate-service.ts](lib/fargate-service.ts) - ECS Fargate service
-- [lib/alb-api-gateway.ts](lib/alb-api-gateway.ts) - API Gateway + ALB
+- [lib/http-api-gateway.ts](lib/http-api-gateway.ts) - HTTP API + VPC Link routing
+- [lib/lambda-authorizer.ts](lib/lambda-authorizer.ts) - HMAC signature verification
 - [lib/ecr-repository.ts](lib/ecr-repository.ts) - Docker registry
 - [lib/xdg-config.ts](lib/xdg-config.ts) - XDG configuration management
 - [lib/types/](lib/types/) - TypeScript type definitions
@@ -99,7 +100,7 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 
 ### Application
 
-#### `docker/` — Flask webhook processor (Python)
+#### `docker/` — FastAPI webhook processor (Python)
 
 - See [docker/README.md](docker/README.md) for details
 
@@ -111,19 +112,129 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 
 ---
 
-## Architecture
+## Architecture (v1.0.0)
 
-AWS CDK application deploying auto-scaling webhook processor:
+AWS CDK application deploying auto-scaling webhook processor with defense-in-depth security:
 
-- **API Gateway** → HTTPS webhook routing with IP filtering
-- **ALB** → Load balancing across containers
-- **Fargate (ECS)** → Flask app (auto-scales 2-10 tasks)
+### Components
+
+- **API Gateway (HTTP API v2)** → HTTPS webhook routing with Lambda Authorizer
+- **Lambda Authorizer** → HMAC signature verification (first line of defense)
+- **VPC Link + Cloud Map** → Private service discovery to tasks
+- **Fargate (ECS)** → FastAPI app on port 8080 (auto-scales 2-10 tasks, second line of defense)
 - **S3** → Payload and package storage
 - **SQS** → Quilt package creation queue
 - **Secrets Manager** → Benchling OAuth credentials
 - **CloudWatch** → Logging and monitoring
 
-**Flow:** Benchling → API Gateway → ALB → Fargate → S3 + SQS
+### Flow Diagram
+
+```
+Benchling
+   |
+   | HTTPS POST (webhook)
+   v
+API Gateway (HTTP API v2)
+   |
+   | Extract headers + body
+   v
+Lambda Authorizer
+   |
+   | Verify HMAC(secret, body) == signature
+   | - ✅ Valid → Allow request
+   | - ❌ Invalid → 403 Forbidden (reject before ECS)
+   v
+VPC Link
+   |
+   | Private network connection
+   v
+Cloud Map (benchling.local)
+   |
+   | Service discovery
+   v
+ECS Fargate Tasks (FastAPI)
+   |
+   | Re-verify HMAC (defense-in-depth)
+   | Process webhook payload
+   v
+S3 + SQS → Quilt Package Creation
+```
+
+### Defense-in-Depth Security
+
+**Two layers of HMAC verification:**
+
+1. **Lambda Authorizer** (Authorization Layer)
+   - Verifies HMAC signature before request reaches ECS
+   - Rejects invalid signatures with 403 Forbidden
+   - Prevents unauthorized requests from consuming ECS resources
+   - Logs all authorization attempts to CloudWatch
+
+2. **FastAPI Application** (Application Layer)
+   - Re-verifies HMAC signature in application code
+   - Guards against authorization bypass scenarios
+   - Provides detailed logging for security auditing
+   - Enables graceful degradation if authorizer is disabled
+
+**Why both layers?**
+- **Fail-fast**: Lambda rejects bad requests early (cost optimization)
+- **Defense-in-depth**: Application validates independently (security best practice)
+- **Auditability**: Two layers of logging for security events
+- **Flexibility**: Application verification can be toggled via `ENABLE_WEBHOOK_VERIFICATION`
+
+### HTTP API v2 Requirement
+
+**Why HTTP API v2 instead of REST API?**
+
+- **REST API Lambda Authorizers cannot access request body** → HMAC verification impossible
+- **HTTP API v2 Lambda Authorizers can access request body** via `event['body']` field
+- Benchling HMAC signatures are computed over entire request body
+- Without body access, signature verification is broken
+
+### Architecture Evolution
+
+**v0.8.x (REST API + NLB):**
+```
+Benchling → REST API → VPC Link → NLB → ECS
+```
+- Problem: REST API authorizers cannot access body
+- Result: HMAC verification broken
+
+**v0.9.0 (HTTP API, no authorizer):**
+```
+Benchling → HTTP API v2 → VPC Link → Cloud Map → ECS
+```
+- Removed NLB (cost savings)
+- No Lambda Authorizer (all verification in FastAPI)
+
+**v1.0.0 (HTTP API + Lambda Authorizer):**
+```
+Benchling → HTTP API v2 → Lambda Authorizer → VPC Link → Cloud Map → ECS
+```
+- HTTP API v2 provides body access to Lambda
+- Defense-in-depth: Both Lambda and FastAPI verify HMAC
+- No NLB needed (direct VPC Link → Cloud Map)
+
+### Cost Analysis
+
+**Monthly Fixed Costs:**
+
+| Component | v0.8.x | v1.0.0 | Savings |
+|-----------|--------|--------|---------|
+| Network Load Balancer | $16.20 | $0.00 | -$16.20 |
+| VPC Link | $0.00 | $0.00 | $0.00 |
+| **Total Fixed** | **$16.20** | **$0.00** | **-$16.20** |
+
+**Variable Costs (per million requests):**
+
+| Component | Cost |
+|-----------|------|
+| HTTP API v2 | ~$1.00 |
+| Lambda Authorizer | ~$0.20 |
+| ECS Fargate | ~$40.00 (varies by task size/count) |
+| **Total Variable** | **~$41.20** |
+
+**Net Monthly Savings:** ~$16.20 (from NLB removal)
 
 ---
 
@@ -147,9 +258,9 @@ npm run test:dev             # Test deployed dev stack via API Gateway (auto-dep
 ```bash
 # Local testing (no deployment)
 npm run test                 # Unit tests: lint + typecheck + TS + Python
-npm run test:local           # Docker dev container (hot-reload, port 5002)
-npm run test:local:prod      # Docker prod container (production mode, port 5003)
-npm run test:native          # Native Flask with mocked AWS (no Docker, port 5001)
+npm run test:local           # Docker dev container (hot-reload, port 8082)
+npm run test:local:prod      # Docker prod container (production mode, port 8083)
+npm run test:native          # Native FastAPI with mocked AWS (no Docker, port 8080)
 
 # Remote deployment testing
 npm run test:dev             # Deployed dev stack via API Gateway (auto-deploys if needed)
@@ -168,7 +279,7 @@ npm run lint                 # Auto-fix formatting
 | `test` | No | Mocked | Daily development, pre-commit |
 | `test:local` | Yes (dev) | Real | Before PR, local integration testing |
 | `test:local:prod` | Yes (prod) | Real | Test prod Docker config locally |
-| `test:native` | No | Mocked | Quick Flask testing without Docker |
+| `test:native` | No | Mocked | Quick FastAPI testing without Docker |
 | `test:dev` | Remote | Real | CI/CD, verify deployed dev stack |
 | `test:prod` | Remote | Real | After production deployment |
 
@@ -464,8 +575,26 @@ npm run deploy:prod -- \
 
 ### Logs
 
+**CloudWatch Log Groups:**
+
+- `/aws/apigateway/benchling-webhook-http` - API Gateway access logs
+- `/aws/lambda/BenchlingWebhookAuthorizer` - Lambda Authorizer logs (HMAC verification)
+- `/ecs/benchling-webhook` - ECS container logs (FastAPI application)
+
+**View logs:**
+
 ```bash
+# API Gateway access logs
+aws logs tail /aws/apigateway/benchling-webhook-http --follow
+
+# Lambda Authorizer logs (authorization events)
+aws logs tail /aws/lambda/BenchlingWebhookAuthorizer --follow
+
+# ECS application logs
 aws logs tail /ecs/benchling-webhook --follow
+
+# All logs (integrated command)
+npx @quiltdata/benchling-webhook logs --profile default
 ```
 
 ### Health Checks
@@ -475,8 +604,13 @@ aws logs tail /ecs/benchling-webhook --follow
 
 ### Metrics
 
-- CloudWatch: ECS tasks, API Gateway, ALB health
-- Deployment outputs: `~/.config/benchling-webhook/{profile}/deployments.json`
+- **CloudWatch Metrics:**
+  - ECS tasks running/desired
+  - API Gateway 4xx/5xx errors
+  - Lambda Authorizer invocations/errors
+  - ECS CPU/memory utilization
+
+- **Deployment outputs:** `~/.config/benchling-webhook/{profile}/deployments.json`
 
 ---
 
@@ -492,6 +626,8 @@ aws logs tail /ecs/benchling-webhook --follow
 | Secrets not synced | Secrets Manager unreachable | Validate IAM permissions; retry sync with backoff |
 | CDK stack drift | Manual AWS changes | Run `cdk diff` preflight; warn on drift detection |
 | Legacy config detected | Upgrading from v0.6.x | Display migration message; see MIGRATION.md |
+| Lambda auth failures | Invalid HMAC signatures | Check CloudWatch logs for `/aws/lambda/BenchlingWebhookAuthorizer` |
+| 403 Forbidden | Signature verification failed | Verify Benchling secret matches deployed secret |
 
 ---
 
@@ -514,16 +650,20 @@ aws logs tail /ecs/benchling-webhook --follow
 - **Idempotence**: Re-running `npm run setup` updates existing profile
 - **Observability**: Every stage logs explicit diagnostics to CloudWatch
 - **Separation of Concerns**: npm orchestrates, TypeScript/Python implement
+- **Defense-in-Depth**: Multiple layers of security (Lambda + FastAPI verification)
 
 ---
 
 ## Security
 
-- Secrets in AWS Secrets Manager
-- IP-based access control (API Gateway)
-- Container scanning (ECR)
-- Least-privilege IAM roles
-- TLS 1.2+ encryption
+- **HMAC Signature Verification**: Two-layer verification (Lambda Authorizer + FastAPI)
+- **Secrets in AWS Secrets Manager**: Credentials never stored in code
+- **Private Network**: ECS tasks in private subnets, no public IPs
+- **VPC Link**: Encrypted connection between API Gateway and ECS
+- **Container Scanning**: ECR image scanning enabled
+- **Least-Privilege IAM**: Task roles limited to required permissions
+- **TLS 1.2+ Encryption**: All API Gateway endpoints
+- **CloudWatch Logging**: Audit trail for all authorization events
 
 ---
 

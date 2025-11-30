@@ -180,6 +180,12 @@ if (require.main === module) {
             account: process.env.CDK_DEFAULT_ACCOUNT,
             ecrRepository: process.env.ECR_REPOSITORY_NAME || "quiltdata/benchling",
             imageTag: process.env.IMAGE_TAG || "latest",
+            // Include VPC configuration if specified
+            ...(process.env.VPC_ID && {
+                vpc: {
+                    vpcId: process.env.VPC_ID,
+                },
+            }),
         },
         logging: {
             level: (process.env.LOG_LEVEL as "DEBUG" | "INFO" | "WARNING" | "ERROR") || "INFO",

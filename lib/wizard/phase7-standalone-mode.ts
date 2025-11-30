@@ -12,6 +12,7 @@ import chalk from "chalk";
 import { ProfileConfig } from "../types/config";
 import { syncSecretsToAWS } from "../../bin/commands/sync-secrets";
 import { StandaloneModeInput, StandaloneModeResult } from "./types";
+import packageJson from "../../package.json";
 
 /**
  * Builds ProfileConfig from collected parameters
@@ -44,6 +45,7 @@ function buildProfileConfig(input: StandaloneModeInput): ProfileConfig {
         deployment: {
             region: parameters.deployment.region,
             account: parameters.deployment.account,
+            vpc: parameters.deployment.vpc,
         },
         integratedStack: false, // CRITICAL: Mark as standalone mode
         logging: {
@@ -54,7 +56,7 @@ function buildProfileConfig(input: StandaloneModeInput): ProfileConfig {
             webhookAllowList: parameters.security.webhookAllowList,
         },
         _metadata: {
-            version: "0.7.0",
+            version: packageJson.version,
             createdAt: now,
             updatedAt: now,
             source: "wizard",

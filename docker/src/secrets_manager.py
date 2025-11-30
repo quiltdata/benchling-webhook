@@ -61,7 +61,7 @@ class BenchlingSecretData:
         pkg_key: Metadata key for linking Benchling entries to Quilt packages
         user_bucket: S3 bucket name for Benchling exports
         log_level: Application logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        enable_webhook_verification: Verify webhook signatures (boolean)
+        enable_webhook_verification: Enable Lambda authorizer webhook verification (boolean)
         webhook_allow_list: Comma-separated IP allowlist (empty string for no restrictions)
         queue_url: SQS queue URL for package creation (optional, v0.8.0+ gets from env)
     """

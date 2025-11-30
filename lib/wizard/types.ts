@@ -23,6 +23,26 @@ export interface CatalogDiscoveryResult {
 }
 
 /**
+ * Discovered VPC from stack query (subset of full VPC discovery)
+ */
+export interface DiscoveredVpcInfo {
+    /** VPC ID */
+    vpcId: string;
+    /** VPC name from tags */
+    name?: string;
+    /** CIDR block */
+    cidrBlock: string;
+    /** Number of private subnets */
+    privateSubnetCount: number;
+    /** Number of availability zones */
+    availabilityZoneCount: number;
+    /** Whether VPC meets architecture requirements */
+    isValid: boolean;
+    /** Validation error messages */
+    validationErrors: string[];
+}
+
+/**
  * Phase 2: Stack Query Result
  */
 export interface StackQueryResult {
@@ -60,6 +80,8 @@ export interface StackQueryResult {
     readRoleArn?: string;
     /** IAM role ARN for read-write S3 access (from T4BucketWriteRole) */
     writeRoleArn?: string;
+    /** Discovered VPC from Quilt stack (optional) */
+    discoveredVpc?: DiscoveredVpcInfo;
 }
 
 /**
@@ -101,6 +123,9 @@ export interface ParameterCollectionResult {
     deployment: {
         region: string;
         account: string;
+        vpc?: {
+            vpcId?: string;
+        };
     };
     logging: {
         level: "DEBUG" | "INFO" | "WARNING" | "ERROR";

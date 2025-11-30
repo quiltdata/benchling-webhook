@@ -1,5 +1,5 @@
 /**
- * Unit tests for Deployment Tracking (v0.7.0)
+ * Unit tests for Deployment Tracking
  *
  * Tests deployment history management and active deployment tracking.
  */
@@ -24,7 +24,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T10:30:00Z",
                 imageTag: "latest",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
                 deployedBy: "ernest@example.com",
@@ -45,7 +45,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T09:00:00Z",
                 imageTag: "0.6.0",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -54,7 +54,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "0.7.0",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -63,7 +63,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T11:00:00Z",
                 imageTag: "latest",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -85,7 +85,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T09:00:00Z",
                 imageTag: "0.6.0",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -94,7 +94,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "latest",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -114,7 +114,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "latest",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -123,7 +123,7 @@ describe("Deployment Tracking", () => {
                 stage: "prod",
                 timestamp: "2025-11-04T11:00:00Z",
                 imageTag: "0.7.0",
-                endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com/prod",
+                endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -143,7 +143,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "latest",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -159,7 +159,7 @@ describe("Deployment Tracking", () => {
                 stage: "prod",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "0.7.0",
-                endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com/prod",
+                endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
                 deployedBy: "ernest@example.com",
@@ -188,7 +188,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T09:00:00Z",
                 imageTag: "0.6.0",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -197,7 +197,7 @@ describe("Deployment Tracking", () => {
                 stage: "prod",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "0.7.0",
-                endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com/prod",
+                endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -226,7 +226,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "latest",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -235,7 +235,7 @@ describe("Deployment Tracking", () => {
                 stage: "prod",
                 timestamp: "2025-11-04T11:00:00Z",
                 imageTag: "0.7.0",
-                endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com/prod",
+                endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -255,7 +255,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T09:00:00Z",
                 imageTag: "0.6.0",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -264,7 +264,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "latest",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -299,7 +299,7 @@ describe("Deployment Tracking", () => {
                     stage: "dev",
                     timestamp,
                     imageTag: `tag-${index}`,
-                    endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                    endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                     stackName: "BenchlingWebhookStack",
                     region: "us-east-1",
                 };
@@ -323,7 +323,7 @@ describe("Deployment Tracking", () => {
                 stage: "prod",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "0.7.0",
-                endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com/prod",
+                endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -332,7 +332,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T11:00:00Z",
                 imageTag: "latest",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };
@@ -355,7 +355,7 @@ describe("Deployment Tracking", () => {
                 stage: "dev",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "latest",
-                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/dev",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
                 stackName: "BenchlingWebhookStack",
                 region: "us-east-1",
             };

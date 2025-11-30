@@ -3,6 +3,95 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2025-11-28
+
+### BREAKING CHANGES
+
+**REST API → HTTP API v2 migration requires stack recreation.** See [MIGRATION.md](./MIGRATION.md) for upgrade instructions.
+
+**Why this change is required:**
+- REST API Lambda Authorizers **cannot access request body**, breaking HMAC signature verification
+- HTTP API v2 Lambda Authorizers **can access request body** via `event['body']` field
+- Benchling webhook signatures are computed over the entire request body
+- Without body access, Lambda Authorizer cannot verify HMAC signatures → security broken
+
+### Added
+
+- **HTTP API v2 Gateway** - Restored from v0.9.0 architecture
+  - Lambda Authorizer with request body access for HMAC verification
+  - VPC Link connecting directly to Cloud Map service (no NLB needed)
+  - Access logging to `/aws/apigateway/benchling-webhook-http`
+  - Defense-in-depth: Both Lambda Authorizer and FastAPI verify HMAC signatures
+
+### Removed
+
+- **REST API Gateway** - Replaced with HTTP API v2 (body access requirement)
+- **Network Load Balancer** - Eliminated by direct VPC Link → Cloud Map integration
+  - **Cost savings:** -$16.20/month fixed NLB cost
+
+### Changed
+
+- **Lambda Authorizer adapted for HTTP API v2**
+  - Parses HTTP API v2 event format (version 2.0, not 1.0)
+  - Accesses request body via `event['body']` for HMAC verification
+  - Returns HTTP API v2 response format (simple allow/deny, not IAM policy document)
+  - Configured as HTTP API v2 authorizer (not REST API REQUEST authorizer)
+
+- **Endpoint URL format changed** (stage prefix removed from path)
+  - Before: `https://{api-id}.execute-api.{region}.amazonaws.com/prod/webhook`
+  - After: `https://{api-id}.execute-api.{region}.amazonaws.com/webhook`
+  - Update Benchling app webhook URL after migration
+
+- **Architecture simplified** (removed NLB hop)
+  - Before: API Gateway → VPC Link → NLB → ECS
+  - After: API Gateway (v2) → VPC Link → Cloud Map → ECS
+
+### Migration Required
+
+**This is a BREAKING CHANGE. Manual migration required:**
+
+1. **Backup configuration:** `cp ~/.config/benchling-webhook/{profile}/config.json ~/backup-config.json`
+2. **Destroy old stack:** `npx cdk destroy --profile {profile} --context stage={stage}`
+3. **Deploy new stack:** `npm run deploy:{stage} -- --profile {profile} --yes`
+4. **Update Benchling webhook URL** (copy from deployment output)
+5. **Verify:** `npm run test:{stage} -- --profile {profile}`
+
+See [MIGRATION.md](./MIGRATION.md) for detailed upgrade guide.
+
+### Security
+
+- **HMAC verification now works correctly** - Lambda Authorizer can verify Benchling webhook signatures
+- **Defense-in-depth** - Both Lambda (authorization layer) and FastAPI (application layer) verify HMAC
+- **Fail-fast** - Invalid signatures rejected at Lambda layer before reaching ECS
+
+### Cost Impact
+
+- **Fixed costs reduced:** -$16.20/month (NLB removal)
+- **Variable costs unchanged:** Lambda authorizer invocation cost same as before (~$0.20/million)
+- **API Gateway costs unchanged:** HTTP API v2 pricing similar to REST API (~$1.00/million)
+
+**Net monthly savings:** ~$16.20
+
+---
+
+## [0.9.0] - 2025-11-24
+
+### Breaking
+
+- REST API + ALB replaced with HTTP API + VPC Link + Cloud Map service discovery (stack recreation required)
+- Flask container now listens on port 8080; Docker dev/prod host ports updated to 8082/8083
+
+### Added
+
+- Cloud Map namespace (`benchling.local`) registration for the webhook service
+- HTTP API access logs in `/aws/apigateway/benchling-webhook-http`
+- Migration guide for upgrading from 0.8.x (`MIGRATION.md`)
+
+### Changed
+
+- ECS tasks run without an ALB; API Gateway routes directly to service discovery
+- Default deploy outputs reflect the new HTTP API endpoint (no ALB DNS output)
+
 ## [0.8.8]
 
 ### Added

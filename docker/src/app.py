@@ -1,20 +1,24 @@
 import logging
 import os
 import threading
+from typing import Any, Dict
 
 import structlog
 from benchling_api_client.v2.stable.models.app_canvas_update import AppCanvasUpdate
+from benchling_sdk.apps.helpers.webhook_helpers import verify
 from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
 from benchling_sdk.benchling import Benchling
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from fastapi import Depends, FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .canvas import CanvasManager
 from .config import get_config
 from .entry_packager import EntryPackager
 from .payload import Payload
 from .version import __version__
-from .webhook_verification import require_webhook_verification
 
 # Load environment variables
 load_dotenv()
@@ -25,7 +29,7 @@ logging.basicConfig(level=getattr(logging, log_level, logging.INFO))
 
 # Configure structured logging
 # Use human-friendly console output in development, JSON in production
-use_json_logs = os.getenv("FLASK_ENV", "development") == "production"
+use_json_logs = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "development")).lower() == "production"
 
 structlog.configure(
     processors=[
@@ -47,13 +51,140 @@ structlog.configure(
 
 logger = structlog.get_logger(__name__)
 
+# Required webhook headers for HMAC verification
+REQUIRED_WEBHOOK_HEADERS = ("webhook-id", "webhook-signature", "webhook-timestamp")
 
-def create_app():
-    app = Flask(__name__)
+
+class WebhookVerificationError(Exception):
+    """Raised when webhook signature verification fails."""
+
+    def __init__(self, reason: str, message: str):
+        super().__init__(message)
+        self.reason = reason
+        self.message = message
+
+
+async def verify_webhook_signature(request: Request, config) -> None:
+    """Verify Benchling webhook HMAC signature (defense-in-depth layer).
+
+    This function implements webhook signature verification in the FastAPI application
+    as a defense-in-depth security measure. While the Lambda authorizer provides the
+    first line of defense, this application-layer verification:
+
+    1. Guards against authorization bypass scenarios
+    2. Provides detailed logging for security auditing
+    3. Enables graceful degradation if authorizer is disabled
+    4. Allows local testing without Lambda infrastructure
+
+    Args:
+        request: FastAPI request object containing headers and body
+        config: Application configuration containing app_definition_id
+
+    Raises:
+        WebhookVerificationError: If signature verification fails or required headers are missing
+
+    Environment Variables:
+        ENABLE_WEBHOOK_VERIFICATION: Enable/disable verification (default: true)
+    """
+    # Check if verification is enabled
+    if not config.enable_webhook_verification:
+        logger.info(
+            "Webhook verification disabled",
+            path=request.url.path,
+            verification_enabled=False,
+        )
+        return
+
+    # Extract and normalize headers (case-insensitive)
+    headers = {key.lower(): value for key, value in request.headers.items()}
+
+    # Log incoming webhook details for security auditing
+    webhook_id = headers.get("webhook-id", "unknown")
+    logger.info(
+        "Verifying webhook signature",
+        path=request.url.path,
+        webhook_id=webhook_id,
+        has_app_definition_id=bool(config.benchling_app_definition_id),
+        header_keys=list(headers.keys()),
+    )
+
+    # Validate required headers are present
+    missing_headers = [h for h in REQUIRED_WEBHOOK_HEADERS if h not in headers]
+    if missing_headers:
+        error_msg = f"Missing required webhook headers: {', '.join(missing_headers)}"
+        logger.warning(
+            "Webhook verification failed - missing headers",
+            webhook_id=webhook_id,
+            missing_headers=missing_headers,
+            path=request.url.path,
+        )
+        raise WebhookVerificationError("missing_headers", error_msg)
+
+    # Validate app_definition_id is configured
+    if not config.benchling_app_definition_id:
+        error_msg = "app_definition_id not configured in Benchling secret"
+        logger.error(
+            "Webhook verification failed - missing app_definition_id",
+            webhook_id=webhook_id,
+            path=request.url.path,
+        )
+        raise WebhookVerificationError("missing_app_definition_id", error_msg)
+
+    # Read request body (needed for HMAC computation)
+    body = await request.body()
+    body_str = body.decode("utf-8")
+
+    # Log diagnostic information for troubleshooting
+    logger.debug(
+        "Webhook verification details",
+        webhook_id=webhook_id,
+        app_definition_id=config.benchling_app_definition_id,
+        body_length=len(body_str),
+        signature=headers.get("webhook-signature", "")[:20] + "...",  # Log first 20 chars
+        timestamp=headers.get("webhook-timestamp"),
+    )
+
+    # Verify HMAC signature using Benchling SDK
+    try:
+        verify(config.benchling_app_definition_id, body_str, headers)  # type: ignore[arg-type]
+    except Exception as exc:
+        # Log detailed error for security auditing and troubleshooting
+        logger.error(
+            "Webhook signature verification failed",
+            webhook_id=webhook_id,
+            app_definition_id=config.benchling_app_definition_id,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            path=request.url.path,
+            troubleshooting=(
+                f"Ensure the webhook in Benchling is configured under app '{config.benchling_app_definition_id}'. "
+                "Check that this matches the app_definition_id in your AWS Secrets Manager secret."
+            ),
+        )
+        raise WebhookVerificationError(
+            "invalid_signature",
+            f"Webhook signature verification failed: {str(exc)}",
+        ) from exc
+
+    # Log successful verification for security auditing
+    logger.info(
+        "Webhook signature verified successfully",
+        webhook_id=webhook_id,
+        path=request.url.path,
+    )
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="Benchling Webhook", version=__version__)
 
     # Initialize configuration and clients
     try:
         config = get_config()
+
+        # Create a dependency factory for webhook verification that captures config
+        async def verify_webhook_dependency(request: Request) -> None:
+            """FastAPI dependency for webhook signature verification."""
+            await verify_webhook_signature(request, config)
 
         logger.info("Python orchestration enabled")
 
@@ -83,32 +214,23 @@ def create_app():
         )
 
         # Validate role assumption at startup (blocking - fail fast)
-        # Only validate if role_arn is a non-empty string (not Mock object in tests)
         role_arn = getattr(config, "quilt_write_role_arn", None)
         if role_arn and isinstance(role_arn, str):
             logger.info("Validating IAM role assumption at startup")
             try:
                 validation_results = entry_packager.role_manager.validate_roles()
 
-                # Log validation results
                 if validation_results["role"]["configured"]:
                     if validation_results["role"]["valid"]:
-                        logger.info(
-                            "Role validated successfully",
-                            role_arn=role_arn,
-                        )
+                        logger.info("Role validated successfully", role_arn=role_arn)
                     else:
-                        # Role is configured but validation failed - this is critical
                         logger.error(
                             "Role validation failed at startup - container cannot function correctly",
                             role_arn=role_arn,
                             error=validation_results["role"]["error"],
                         )
-                        # Fail container startup to prevent writing to wrong account
                         raise RuntimeError(f"IAM role validation failed: {validation_results['role']['error']}")
-
             except Exception as e:
-                # Role validation failure is critical - crash container
                 logger.error(
                     "Role validation failed at startup - failing container to prevent data misrouting",
                     error=str(e),
@@ -120,77 +242,60 @@ def create_app():
         logger.error("Failed to initialize application", error=str(e))
         raise
 
-    @app.route("/health", methods=["GET"])
-    def health():  # type: ignore[misc]
-        """Application health status.
-
-        Note: If this endpoint returns successfully, the application is properly
-        configured with secrets-only mode. The app cannot start without QuiltStackARN
-        and BenchlingSecret environment variables.
-        """
+    @app.get("/health")
+    async def health() -> Dict[str, Any]:
+        """Application health status."""
         response = {
             "status": "healthy",
             "service": "benchling-webhook",
             "version": __version__,
         }
 
-        return jsonify(response)
+        return response
 
-    @app.route("/health/ready", methods=["GET"])
-    def readiness():  # type: ignore[misc]
+    @app.get("/health/ready")
+    async def readiness():
         """Readiness probe for orchestration."""
         try:
-            # Check Python orchestration components
             if not entry_packager:
                 raise Exception("EntryPackager not initialized")
-            return jsonify(
-                {
-                    "status": "ready",
-                    "orchestration": "python",
-                }
-            )
+            return {
+                "status": "ready",
+                "orchestration": "python",
+            }
         except Exception as e:
             logger.error("Readiness check failed", error=str(e))
-            return jsonify({"status": "not ready", "error": str(e)}), 503
+            return JSONResponse({"status": "not ready", "error": str(e)}, status_code=503)
 
-    @app.route("/health/live", methods=["GET"])
-    def liveness():  # type: ignore[misc]
+    @app.get("/health/live")
+    async def liveness():
         """Liveness probe for orchestration."""
-        return jsonify({"status": "alive"})
+        return {"status": "alive"}
 
-    @app.route("/config", methods=["GET"])
-    def config_status():  # type: ignore[misc]
-        """Display resolved configuration (secrets masked).
-
-        Note: All deployments use secrets-only mode. Configuration is resolved from
-        AWS CloudFormation (QuiltStackARN) and Secrets Manager (BenchlingSecret).
-        """
+    @app.get("/config")
+    async def config_status():
+        """Display resolved configuration (secrets masked)."""
         try:
-            # Get required environment variables (app cannot start without these)
             quilt_stack_arn = os.getenv("QuiltStackARN")
             benchling_secret_name = os.getenv("BenchlingSecret")
 
-            # Mask sensitive values
-            def mask_value(value, show_last=4):
-                """Mask a value, showing only last N characters."""
+            def mask_value(value: str | None, show_last: int = 4):
                 if not value:
                     return None
                 if len(value) <= show_last:
                     return "***"
                 return f"***{value[-show_last:]}"
 
-            def mask_arn(arn):
-                """Mask ARN account ID."""
+            def mask_arn(arn: str | None):
                 if not arn or not arn.startswith("arn:"):
                     return arn
                 parts = arn.split(":")
                 if len(parts) >= 5:
-                    # Mask account ID (5th component)
-                    parts[4] = mask_value(parts[4], 4)
+                    masked = mask_value(parts[4], 4)
+                    parts[4] = masked if masked is not None else "***"
                 return ":".join(parts)
 
-            def mask_queue_url(url):
-                """Mask SQS queue URL account ID."""
+            def mask_queue_url(url: str | None):
                 if not url or not url.startswith("https://sqs."):
                     return url
                 prefix, _, remainder = url.partition("amazonaws.com/")
@@ -208,6 +313,11 @@ def create_app():
                     "region": config.aws_region or os.getenv("AWS_REGION", "not-set"),
                     "quilt_stack_arn": mask_arn(quilt_stack_arn),
                     "benchling_secret_name": benchling_secret_name,
+                },
+                "security": {
+                    "webhook_verification_enabled": config.enable_webhook_verification,
+                    "verification_layers": ["fastapi", "lambda_authorizer"],
+                    "defense_in_depth": True,
                 },
                 "quilt": {
                     "catalog": config.quilt_catalog,
@@ -231,20 +341,18 @@ def create_app():
                 },
             }
 
-            return jsonify(response)
+            return response
 
         except Exception as e:
             logger.error("Config status check failed", error=str(e))
-            return jsonify({"status": "error", "error": str(e)}), 500
+            return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
 
-    @app.route("/event", methods=["POST"])
-    @require_webhook_verification(config)
-    def handle_event():  # type: ignore[misc]
-        """Handle Benchling webhook events."""
+    @app.post("/event")
+    async def handle_event(request: Request, _verified: None = Depends(verify_webhook_dependency)):
+        """Handle Benchling webhook events with HMAC signature verification."""
         try:
             logger.info("Received /event", headers=dict(request.headers))
-            # Parse payload once
-            payload = Payload.from_request(request, benchling)
+            payload = await Payload.from_request(request, benchling)
 
             logger.info(
                 "Event webhook received - parsed",
@@ -254,39 +362,32 @@ def create_app():
                 orchestration="python",
             )
 
-            # Check if this is a canvas event that should have gone to /canvas
             if payload.event_type.startswith("v2.canvas."):
                 logger.warning(
                     "Canvas event received at /event endpoint - should use /canvas",
                     event_type=payload.event_type,
                     canvas_id=payload.canvas_id,
                 )
-                # Handle it anyway by returning canvas blocks
                 canvas_manager = CanvasManager(benchling, config, payload)
                 canvas_response = canvas_manager.get_canvas_response()
 
-                # Start export workflow in background
                 logger.debug("Starting background export workflow from /event", entry_id=payload.entry_id)
                 entry_packager.execute_workflow_async(payload)
 
                 logger.info("Returning canvas response from /event endpoint", canvas_id=payload.canvas_id)
-                return jsonify(canvas_response)
+                return canvas_response
 
-            # Check if this is a supported event type
-            SUPPORTED_EVENT_TYPES = {
+            supported_event_types = {
                 "v2.entry.updated.fields",
                 "v2.entry.created",
             }
-            if payload.event_type not in SUPPORTED_EVENT_TYPES:
+            if payload.event_type not in supported_event_types:
                 logger.info("Event type not processed", event_type=payload.event_type)
-                return jsonify(
-                    {
-                        "status": "ignored",
-                        "message": f"Event type {payload.event_type} not processed",
-                    }
-                )
+                return {
+                    "status": "ignored",
+                    "message": f"Event type {payload.event_type} not processed",
+                }
 
-            # Package entries asynchronously (no canvas response needed)
             logger.debug("Starting background export workflow for entry event", entry_id=payload.entry_id)
             entry_id = entry_packager.execute_workflow_async(payload)
 
@@ -296,111 +397,73 @@ def create_app():
                 event_type=payload.event_type,
             )
 
-            return jsonify(
-                {
-                    "entry_id": entry_id,
-                    "status": "ACCEPTED",
-                    "message": "Workflow started successfully",
-                    "orchestration": "python",
-                }
-            )
+            return {
+                "entry_id": entry_id,
+                "status": "ACCEPTED",
+                "message": "Workflow started successfully",
+                "orchestration": "python",
+            }
 
         except ValueError as e:
             logger.warning("Invalid webhook payload", error=str(e))
-            return jsonify({"error": str(e)}), 400
+            return JSONResponse({"error": str(e)}, status_code=400)
         except Exception as e:
             error_msg = str(e)
-            # Check if it's a Flask/Werkzeug HTTP exception
-            if "400 Bad Request" in error_msg or "415 Unsupported Media Type" in error_msg:
-                logger.warning("Invalid request format", error=error_msg)
-                return jsonify({"error": "No JSON payload provided"}), 400
             logger.error("Webhook processing failed", error=error_msg, exc_info=True)
-            return jsonify({"error": "Internal server error"}), 500
+            return JSONResponse({"error": "Internal server error"}, status_code=500)
 
-    @app.route("/lifecycle", methods=["POST"])
-    @require_webhook_verification(config)
-    def lifecycle():  # type: ignore[misc]
-        """Handle Benchling app lifecycle events."""
+    @app.post("/lifecycle")
+    async def lifecycle(request: Request, _verified: None = Depends(verify_webhook_dependency)):
+        """Handle Benchling app lifecycle events with HMAC signature verification."""
         try:
             logger.info("Received /lifecycle", headers=dict(request.headers))
-            payload_obj = Payload.from_request(request, benchling)
+            payload_obj = await Payload.from_request(request, benchling)
             payload = payload_obj.raw_payload
 
             event_type = payload.get("message", {}).get("type")
             logger.info("Received lifecycle event", event_type=event_type, payload=payload)
 
-            # Handle different lifecycle events
             if event_type == "v2.app.installed":
                 return handle_app_installed(payload)
-            elif event_type == "v2.app.activateRequested":
+            if event_type == "v2.app.activateRequested":
                 return handle_app_activate_requested(payload)
-            elif event_type == "v2.app.deactivated":
+            if event_type == "v2.app.deactivated":
                 return handle_app_deactivated(payload)
-            elif event_type == "v2-beta.app.configuration.updated":
+            if event_type == "v2-beta.app.configuration.updated":
                 return handle_app_configuration_updated(payload)
-            else:
-                logger.warning("Unknown lifecycle event type", event_type=event_type)
-                return jsonify(
-                    {
-                        "status": "ignored",
-                        "message": f"Unknown event type: {event_type}",
-                    }
-                )
+
+            logger.warning("Unknown lifecycle event type", event_type=event_type)
+            return {
+                "status": "ignored",
+                "message": f"Unknown event type: {event_type}",
+            }
 
         except Exception as e:
             logger.error("Lifecycle event processing failed", error=str(e))
-            return jsonify({"error": "Internal server error"}), 500
+            return JSONResponse({"error": "Internal server error"}, status_code=500)
 
     def handle_app_installed(payload):
-        """Handle app installation."""
         logger.info("App installed", installation_id=payload.get("installationId"))
-
-        # You can add installation-specific logic here:
-        # - Store installation details
-        # - Initialize app configuration
-        # - Set up webhooks
-
-        return jsonify({"status": "success", "message": "App installed successfully"})
+        return {"status": "success", "message": "App installed successfully"}
 
     def handle_app_activate_requested(payload):
-        """Handle app activation request."""
         logger.info("App activation requested", installation_id=payload.get("installationId"))
-
-        # Add activation logic here:
-        # - Validate configuration
-        # - Enable features
-        # - Return activation response
-
-        return jsonify({"status": "activated", "message": "App activated successfully"})
+        return {"status": "activated", "message": "App activated successfully"}
 
     def handle_app_deactivated(payload):
-        """Handle app deactivation."""
         logger.info("App deactivated", installation_id=payload.get("installationId"))
-
-        # Add deactivation logic here:
-        # - Clean up resources
-        # - Disable features
-
-        return jsonify({"status": "success", "message": "App deactivated successfully"})
+        return {"status": "success", "message": "App deactivated successfully"}
 
     def handle_app_configuration_updated(payload):
-        """Handle app configuration updates."""
         logger.info("App configuration updated", installation_id=payload.get("installationId"))
+        return {"status": "success", "message": "Configuration updated successfully"}
 
-        # Add configuration update logic here:
-        # - Validate new configuration
-        # - Update app settings
-
-        return jsonify({"status": "success", "message": "Configuration updated successfully"})
-
-    @app.route("/canvas", methods=["POST"])
-    @require_webhook_verification(config)
-    def canvas_initialize():  # type: ignore[misc]
-        """Handle /canvas webhook from Benchling."""
+    @app.post("/canvas")
+    async def canvas_initialize(request: Request, _verified: None = Depends(verify_webhook_dependency)):
+        """Handle /canvas webhook from Benchling with HMAC signature verification."""
         try:
             logger.info("Received /canvas", headers=dict(request.headers))
-            # Parse payload once
-            payload = Payload.from_request(request, benchling)
+            payload = await Payload.from_request(request, benchling)
 
             logger.info(
                 "Canvas webhook received - parsed",
@@ -409,39 +472,32 @@ def create_app():
                 entry_id=payload.entry_id,
             )
 
-            # Check if this is a button interaction (userInteracted event)
             if payload.event_type == "v2.canvas.userInteracted":
-                # Get button_id from payload
                 button_id = payload.raw_payload.get("message", {}).get("buttonId", "")
                 logger.info("Button interaction detected", button_id=button_id)
 
-                # Route to appropriate button handler
                 if button_id.startswith("browse-files-"):
                     return handle_browse_files(payload, button_id, benchling, config)
-                elif button_id.startswith("browse-linked-"):
+                if button_id.startswith("browse-linked-"):
                     return handle_browse_linked(payload, button_id, benchling, config)
-                elif button_id.startswith("next-page-linked-") or button_id.startswith("prev-page-linked-"):
+                if button_id.startswith("next-page-linked-") or button_id.startswith("prev-page-linked-"):
                     return handle_page_navigation_linked(payload, button_id, benchling, config)
-                elif button_id.startswith("next-page-") or button_id.startswith("prev-page-"):
+                if button_id.startswith("next-page-") or button_id.startswith("prev-page-"):
                     return handle_page_navigation(payload, button_id, benchling, config)
-                elif button_id.startswith("back-to-package-"):
+                if button_id.startswith("back-to-package-"):
                     return handle_back_to_main(payload, button_id, benchling, config)
-                elif button_id.startswith("view-metadata-linked-"):
+                if button_id.startswith("view-metadata-linked-"):
                     return handle_view_metadata_linked(payload, button_id, benchling, config)
-                elif button_id.startswith("view-metadata-"):
+                if button_id.startswith("view-metadata-"):
                     return handle_view_metadata(payload, button_id, benchling, config)
-                elif button_id.startswith("update-package-"):
+                if button_id.startswith("update-package-"):
                     return handle_update_package(payload, entry_packager, benchling, config)
-                else:
-                    logger.warning("Unknown button action from /canvas", button_id=button_id)
-                    # Fall through to default canvas initialization
 
-            # Default: Canvas initialization or other events
-            # Start export workflow in background (async)
+                logger.warning("Unknown button action from /canvas", button_id=button_id)
+
             logger.debug("Starting background export workflow", entry_id=payload.entry_id)
             execution_arn = entry_packager.execute_workflow_async(payload)
 
-            # Update canvas asynchronously via PATCH
             canvas_manager = CanvasManager(benchling, config, payload)
             canvas_manager.handle_async()
 
@@ -453,31 +509,27 @@ def create_app():
                 execution_arn=execution_arn,
             )
 
-            # Return 202 Accepted immediately
-            return (
-                jsonify(
-                    {
-                        "status": "ACCEPTED",
-                        "message": "Canvas update initiated",
-                        "execution_arn": execution_arn,
-                    }
-                ),
-                202,
+            return JSONResponse(
+                {
+                    "status": "ACCEPTED",
+                    "message": "Canvas update initiated",
+                    "execution_arn": execution_arn,
+                },
+                status_code=202,
             )
 
         except ValueError as e:
             logger.warning("Invalid canvas payload", error=str(e))
-            return jsonify({"error": str(e)}), 400
+            return JSONResponse({"error": str(e)}, status_code=400)
         except Exception as e:
             logger.error("Canvas webhook failed", error=str(e), exc_info=True)
-            return jsonify({"error": str(e)}), 500
+            return JSONResponse({"error": str(e)}, status_code=500)
 
     def handle_browse_files(payload, button_id, benchling, config):
         """Handle Browse Files button click."""
         from .pagination import parse_button_id
 
         try:
-            # Parse button ID to get page info
             _, entry_id, page_state = parse_button_id(button_id)
 
             page_number = page_state.page_number if page_state else 0
@@ -485,13 +537,11 @@ def create_app():
 
             logger.info("Browse files requested", entry_id=entry_id, page=page_number)
 
-            # Update canvas asynchronously
             canvas_manager = CanvasManager(benchling, config, payload)
 
             def async_update():
                 try:
                     blocks = canvas_manager.get_package_browser_blocks(page_number, page_size)
-                    # Update canvas via PATCH
                     canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
                     benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
                     logger.info("Canvas updated with browser view", canvas_id=payload.canvas_id)
@@ -500,35 +550,21 @@ def create_app():
 
             threading.Thread(target=async_update, daemon=True).start()
 
-            return jsonify({"status": "ACCEPTED", "message": "Loading files..."}), 202
+            return JSONResponse({"status": "ACCEPTED", "message": "Loading files..."}, status_code=202)
 
         except Exception as e:
             logger.error("Browse files failed", error=str(e))
-            return jsonify({"error": str(e)}), 500
+            return JSONResponse({"error": str(e)}, status_code=500)
 
     def handle_browse_linked(payload, button_id, benchling, config):
-        """Handle Browse Linked Package button click.
-
-        Creates a Package Entry Browser for the linked package specified in the button ID.
-        Uses the linked package name instead of deriving from entry_id.
-
-        Args:
-            payload: Webhook payload from Benchling
-            button_id: Button ID in format: browse-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
-            benchling: Benchling service instance
-            config: Application configuration
-
-        Returns:
-            Tuple of (response dict, status code)
-        """
+        """Handle Browse Linked Package button click."""
         from .pagination import parse_browse_linked_button_id
 
-        # Parse button ID to extract package name and pagination
         try:
             entry_id, package_name, page_number, page_size = parse_browse_linked_button_id(button_id)
         except ValueError as e:
             logger.error("Invalid browse-linked button ID", button_id=button_id, error=str(e))
-            return jsonify({"error": "Invalid button ID"}), 400
+            return JSONResponse({"error": "Invalid button ID"}, status_code=400)
 
         logger.info(
             "Browse linked package requested",
@@ -538,11 +574,8 @@ def create_app():
             size=page_size,
         )
 
-        # Create canvas manager for the entry
         canvas_manager = CanvasManager(benchling, config, payload)
 
-        # Generate browser blocks for the linked package
-        # Pass package_name to use the linked package instead of the default package
         try:
             blocks = canvas_manager.get_package_browser_blocks(page_number, page_size, package_name)
         except Exception as e:
@@ -552,10 +585,8 @@ def create_app():
                 package_name=package_name,
                 error=str(e),
             )
-            # Return error blocks if something goes wrong
             blocks = canvas_manager._make_blocks()
 
-        # Update canvas asynchronously in background thread
         def update_canvas_async():
             try:
                 canvas_manager.update_canvas_with_blocks(blocks)  # type: ignore[attr-defined]
@@ -578,8 +609,7 @@ def create_app():
         thread.daemon = True
         thread.start()
 
-        # Return 202 Accepted immediately
-        return jsonify({"status": "processing"}), 202
+        return JSONResponse({"status": "processing"}, status_code=202)
 
     def handle_page_navigation(payload, button_id, benchling, config):
         """Handle Next/Previous page button clicks for primary package."""
@@ -606,21 +636,19 @@ def create_app():
 
             threading.Thread(target=async_update, daemon=True).start()
 
-            return jsonify({"status": "ACCEPTED", "message": f"Loading page {page_number + 1}..."}), 202
+            return JSONResponse(
+                {"status": "ACCEPTED", "message": f"Loading page {page_number + 1}..."}, status_code=202
+            )
 
         except Exception as e:
             logger.error("Page navigation failed", error=str(e))
-            return jsonify({"error": str(e)}), 500
+            return JSONResponse({"error": str(e)}, status_code=500)
 
     def handle_page_navigation_linked(payload, button_id, benchling, config):
-        """Handle Next/Previous page button clicks for linked packages.
-
-        Button ID format: {next|prev}-page-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
-        """
+        """Handle Next/Previous page button clicks for linked packages."""
         from .pagination import parse_browse_linked_button_id
 
         try:
-            # Parse button to extract package name and pagination
             entry_id, package_name, page_number, page_size = parse_browse_linked_button_id(button_id)
 
             logger.info(
@@ -634,7 +662,6 @@ def create_app():
 
             def async_update():
                 try:
-                    # Pass package_name to browse the linked package
                     blocks = canvas_manager.get_package_browser_blocks(page_number, page_size, package_name)
                     canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
                     benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
@@ -649,26 +676,22 @@ def create_app():
 
             threading.Thread(target=async_update, daemon=True).start()
 
-            return jsonify({"status": "ACCEPTED", "message": f"Loading page {page_number + 1}..."}), 202
+            return JSONResponse(
+                {"status": "ACCEPTED", "message": f"Loading page {page_number + 1}..."}, status_code=202
+            )
 
         except Exception as e:
             logger.error("Linked package page navigation failed", error=str(e))
-            return jsonify({"error": str(e)}), 500
+            return JSONResponse({"error": str(e)}, status_code=500)
 
     def handle_back_to_main(payload, button_id, benchling, config):
-        """Handle Back to Package button click.
-
-        Returns to the main package view without triggering background export workflow.
-        This is more efficient than handle_async() which would re-trigger the full
-        canvas initialization including export workflow.
-        """
+        """Handle Back to Package button click."""
         logger.info("Back to package requested", entry_id=payload.entry_id)
 
         canvas_manager = CanvasManager(benchling, config, payload)
 
         def async_update():
             try:
-                # Generate main canvas blocks (package summary)
                 blocks = canvas_manager._make_blocks()
                 canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
                 benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
@@ -678,7 +701,7 @@ def create_app():
 
         threading.Thread(target=async_update, daemon=True).start()
 
-        return jsonify({"status": "ACCEPTED", "message": "Returning to package view..."}), 202
+        return JSONResponse({"status": "ACCEPTED", "message": "Returning to package view..."}, status_code=202)
 
     def handle_view_metadata(payload, button_id, benchling, config):
         """Handle View Metadata button click for primary package."""
@@ -705,21 +728,17 @@ def create_app():
 
             threading.Thread(target=async_update, daemon=True).start()
 
-            return jsonify({"status": "ACCEPTED", "message": "Loading metadata..."}), 202
+            return JSONResponse({"status": "ACCEPTED", "message": "Loading metadata..."}, status_code=202)
 
         except Exception as e:
             logger.error("Metadata view failed", error=str(e))
-            return jsonify({"error": str(e)}), 500
+            return JSONResponse({"error": str(e)}, status_code=500)
 
     def handle_view_metadata_linked(payload, button_id, benchling, config):
-        """Handle View Metadata button click for linked packages.
-
-        Button ID format: view-metadata-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
-        """
+        """Handle View Metadata button click for linked packages."""
         from .pagination import parse_browse_linked_button_id
 
         try:
-            # Parse button to extract package name
             entry_id, package_name, page_number, page_size = parse_browse_linked_button_id(button_id)
 
             logger.info("Metadata view requested for linked package", entry_id=entry_id, package_name=package_name)
@@ -728,7 +747,6 @@ def create_app():
 
             def async_update():
                 try:
-                    # Pass package_name to view metadata for the linked package
                     blocks = canvas_manager.get_metadata_blocks(page_number, page_size, package_name)
                     canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
                     benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
@@ -742,47 +760,76 @@ def create_app():
 
             threading.Thread(target=async_update, daemon=True).start()
 
-            return jsonify({"status": "ACCEPTED", "message": "Loading metadata..."}), 202
+            return JSONResponse({"status": "ACCEPTED", "message": "Loading metadata..."}, status_code=202)
 
         except Exception as e:
             logger.error("Metadata view for linked package failed", error=str(e))
-            return jsonify({"error": str(e)}), 500
+            return JSONResponse({"error": str(e)}, status_code=500)
 
     def handle_update_package(payload, entry_packager, benchling, config):
         """Handle Update Package button click (existing functionality)."""
         logger.info("Update package requested", entry_id=payload.entry_id)
 
-        # Start export workflow in background
         execution_arn = entry_packager.execute_workflow_async(payload)
 
-        # Update canvas asynchronously
         canvas_manager = CanvasManager(benchling, config, payload)
         canvas_manager.handle_async()
 
-        return (
-            jsonify(
-                {
-                    "status": "ACCEPTED",
-                    "message": "Package update started!",
-                    "execution_arn": execution_arn,
-                }
-            ),
-            202,
+        return JSONResponse(
+            {
+                "status": "ACCEPTED",
+                "message": "Package update started!",
+                "execution_arn": execution_arn,
+            },
+            status_code=202,
         )
 
-    @app.errorhandler(404)
-    def not_found(error):  # type: ignore[misc]
-        return jsonify({"error": "Endpoint not found"}), 404
+    @app.exception_handler(WebhookVerificationError)
+    async def webhook_verification_exception_handler(request: Request, exc: WebhookVerificationError):
+        """Handle webhook signature verification failures with 403 Forbidden."""
+        logger.warning(
+            "Webhook verification failed - returning 403",
+            reason=exc.reason,
+            message=exc.message,
+            path=request.url.path,
+        )
+        return JSONResponse(
+            {
+                "error": "Forbidden",
+                "reason": exc.reason,
+                "message": exc.message,
+            },
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
 
-    @app.errorhandler(500)
-    def internal_error(error):  # type: ignore[misc]
-        return jsonify({"error": "Internal server error"}), 500
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            return JSONResponse({"error": "Endpoint not found"}, status_code=exc.status_code)
+        detail = exc.detail if hasattr(exc, "detail") else str(exc)
+        return JSONResponse({"error": detail}, status_code=exc.status_code)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        logger.warning("Request validation failed", errors=exc.errors())
+        return JSONResponse({"error": "Invalid request", "details": exc.errors()}, status_code=400)
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception):
+        logger.error("Unhandled exception", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
     return app
 
 
 if __name__ == "__main__":
-    app = create_app()
-    port = int(os.getenv("PORT", "5000"))
-    debug = os.getenv("FLASK_ENV") == "development"
-    app.run(host="0.0.0.0", port=port, debug=debug)
+    import uvicorn
+
+    port = int(os.getenv("PORT", "8080"))
+    uvicorn.run(
+        "src.app:create_app",
+        host="0.0.0.0",
+        port=port,
+        log_level=log_level.lower(),
+        factory=True,
+    )

@@ -120,8 +120,8 @@ class DockerManager:
             return f"{aws_account_id}.dkr.ecr.{region}.amazonaws.com"
 
         # For local builds, use a default local registry
-        print("WARNING: No AWS credentials found, using localhost:5000 for local testing", file=sys.stderr)
-        return "localhost:5000"
+        print("WARNING: No AWS credentials found, using localhost:8080 for local testing", file=sys.stderr)
+        return "localhost:8080"
 
     def _run_command(self, cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
         """Execute a command with optional dry-run mode."""

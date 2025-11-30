@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * AWS Secrets Manager Integration (v0.7.0)
+ * AWS Secrets Manager Integration
  *
  * Synchronizes configuration to AWS Secrets Manager with:
  * - Mode-aware secret management (integrated vs standalone)

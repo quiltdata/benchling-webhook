@@ -1,0 +1,209 @@
+import * as cdk from "aws-cdk-lib";
+import { Template, Match } from "aws-cdk-lib/assertions";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
+import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
+import { HttpApiGateway } from "../lib/http-api-gateway";
+import { ProfileConfig } from "../lib/types/config";
+
+describe("HttpApiGateway", () => {
+    let stack: cdk.Stack;
+    let vpc: ec2.IVpc;
+    let serviceSecurityGroup: ec2.ISecurityGroup;
+    let networkLoadBalancer: elbv2.INetworkLoadBalancer;
+    let nlbListener: elbv2.INetworkListener;
+    let mockConfig: ProfileConfig;
+
+    beforeEach(() => {
+        const app = new cdk.App();
+        stack = new cdk.Stack(app, "TestStack");
+
+        vpc = new ec2.Vpc(stack, "TestVpc", { maxAzs: 2 });
+        serviceSecurityGroup = new ec2.SecurityGroup(stack, "ServiceSG", {
+            vpc,
+        });
+
+        // Create mock NLB and listener for testing
+        const nlb = new elbv2.NetworkLoadBalancer(stack, "TestNLB", {
+            vpc,
+            internetFacing: false,
+        });
+        networkLoadBalancer = nlb;
+
+        const targetGroup = new elbv2.NetworkTargetGroup(stack, "TestTargetGroup", {
+            vpc,
+            port: 8080,
+            protocol: elbv2.Protocol.TCP,
+            targetType: elbv2.TargetType.IP,
+        });
+
+        nlbListener = nlb.addListener("TestListener", {
+            port: 80,
+            protocol: elbv2.Protocol.TCP,
+            defaultTargetGroups: [targetGroup],
+        });
+
+        mockConfig = {
+            quilt: {
+                stackArn: "arn:aws:cloudformation:us-west-2:987654321098:stack/quilt/def456",
+                catalog: "https://catalog.example.org",
+                database: "test_db",
+                queueUrl: "https://sqs.us-west-2.amazonaws.com/987654321098/test-queue",
+                region: "us-west-2",
+            },
+            benchling: {
+                tenant: "test-tenant",
+                clientId: "client_test",
+                clientSecret: "secret_test",
+                appDefinitionId: "app_test",
+                secretArn: "arn:aws:secretsmanager:us-west-2:987654321098:secret:benchling",
+            },
+            packages: {
+                bucket: "test-packages",
+                prefix: "test",
+                metadataKey: "test_id",
+            },
+            deployment: {
+                region: "us-west-2",
+            },
+            _metadata: {
+                version: "0.7.0",
+                createdAt: "2025-11-04T12:00:00Z",
+                updatedAt: "2025-11-04T12:00:00Z",
+                source: "cli",
+            },
+        };
+    });
+
+    test("creates HTTP API with VPC link and NLB integration", () => {
+        new HttpApiGateway(stack, "TestApiGateway", {
+            vpc,
+            networkLoadBalancer,
+            nlbListener,
+            serviceSecurityGroup,
+            config: mockConfig,
+        });
+
+        const template = Template.fromStack(stack);
+
+        template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+            Name: "BenchlingWebhookHttpAPI",
+            ProtocolType: "HTTP",
+        });
+
+        template.hasResourceProperties("AWS::ApiGatewayV2::VpcLink", {
+            Name: "benchling-webhook-vpclink",
+        });
+
+        template.hasResourceProperties("AWS::ApiGatewayV2::Integration", {
+            IntegrationType: "HTTP_PROXY",
+            ConnectionType: "VPC_LINK",
+        });
+    });
+
+    test("configures routes for webhook and health endpoints", () => {
+        new HttpApiGateway(stack, "TestApiGateway", {
+            vpc,
+            networkLoadBalancer,
+            nlbListener,
+            serviceSecurityGroup,
+            config: mockConfig,
+        });
+
+        const template = Template.fromStack(stack);
+
+        // Check for root path (GET /)
+        template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
+            RouteKey: "GET /",
+        });
+
+        // Check for health check routes
+        template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
+            RouteKey: "GET /health",
+        });
+
+        // Check for webhook routes (event, lifecycle, canvas)
+        template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
+            RouteKey: "POST /event",
+        });
+    });
+
+    test("enables access logs for default stage", () => {
+        new HttpApiGateway(stack, "TestApiGateway", {
+            vpc,
+            networkLoadBalancer,
+            nlbListener,
+            serviceSecurityGroup,
+            config: mockConfig,
+        });
+
+        const template = Template.fromStack(stack);
+
+        template.hasResourceProperties("AWS::Logs::LogGroup", {
+            LogGroupName: "/aws/apigateway/benchling-webhook-http",
+            RetentionInDays: 7,
+        });
+
+        template.hasResourceProperties("AWS::ApiGatewayV2::Stage", {
+            StageName: "$default",
+            AccessLogSettings: Match.objectLike({
+                DestinationArn: {
+                    "Fn::GetAtt": [
+                        Match.stringLikeRegexp("ApiGatewayAccessLogs.*"),
+                        "Arn",
+                    ],
+                },
+            }),
+        });
+    });
+
+    test("does NOT create WAF when webhookAllowList is empty", () => {
+        new HttpApiGateway(stack, "TestApiGateway", {
+            vpc,
+            networkLoadBalancer,
+            nlbListener,
+            serviceSecurityGroup,
+            config: mockConfig,
+        });
+
+        const template = Template.fromStack(stack);
+
+        // WAF resources should NOT exist
+        template.resourceCountIs("AWS::WAFv2::WebACL", 0);
+        template.resourceCountIs("AWS::WAFv2::IPSet", 0);
+        template.resourceCountIs("AWS::WAFv2::WebACLAssociation", 0);
+    });
+
+    test("creates WAF when webhookAllowList is configured", () => {
+        const configWithWaf = {
+            ...mockConfig,
+            security: {
+                webhookAllowList: "192.168.1.0/24,10.0.0.0/8",
+                enableVerification: true,
+            },
+        };
+
+        new HttpApiGateway(stack, "TestApiGateway", {
+            vpc,
+            networkLoadBalancer,
+            nlbListener,
+            serviceSecurityGroup,
+            config: configWithWaf,
+        });
+
+        const template = Template.fromStack(stack);
+
+        // WAF resources should exist
+        template.hasResourceProperties("AWS::WAFv2::WebACL", {
+            Name: "BenchlingWebhookWebACL",
+            Scope: "REGIONAL",
+        });
+
+        template.hasResourceProperties("AWS::WAFv2::IPSet", {
+            Name: "BenchlingWebhookIPSet",
+            Scope: "REGIONAL",
+            Addresses: ["192.168.1.0/24", "10.0.0.0/8"],
+        });
+
+        template.resourceCountIs("AWS::WAFv2::WebACLAssociation", 1);
+    });
+});

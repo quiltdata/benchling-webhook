@@ -2,11 +2,12 @@ services:
   app:
     build: .
     ports:
-      - "5003:5000"
+      - "8083:8080"
     environment:
-      # Flask Configuration
-      - FLASK_ENV=production
+      # Application Configuration
+      - APP_ENV=production
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PORT=8080
 
       # AWS Configuration
       - AWS_REGION=${AWS_REGION:-us-east-2}
@@ -26,7 +27,7 @@ services:
       - ~/.aws:/home/appuser/.aws:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -42,11 +43,12 @@ services:
     build: .
     profiles: ["dev"]
     ports:
-      - "5002:5000"
+      - "8082:8080"
     environment:
-      # Flask Configuration
-      - FLASK_ENV=development
+      # Application Configuration
+      - APP_ENV=development
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+      - PORT=8080
 
       # AWS Configuration
       - AWS_REGION=${AWS_REGION:-us-east-2}
@@ -73,4 +75,4 @@ services:
       - ./src:/app/src
       - ./pyproject.toml:/app/pyproject.toml
       - ./uv.lock:/app/uv.lock
-    command: ["sh", "-c", "uv sync --all-extras --frozen && uv run python -m src.app"]
+    command: ["sh", "-c", "uvicorn src.app:create_app --factory --host 0.0.0.0 --port ${PORT:-8080} --reload"]

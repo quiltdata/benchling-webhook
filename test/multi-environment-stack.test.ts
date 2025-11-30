@@ -35,9 +35,11 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
                 ServiceName: "benchling-webhook-service",
             });
 
-            // Should create API Gateway with prod stage
-            template.hasResourceProperties("AWS::ApiGateway::Stage", {
-                StageName: "prod",
+            // HTTP API v2 uses implicit default stage (no AWS::ApiGatewayV2::Stage resources)
+            // Should create HTTP API v2 (not REST API v1)
+            template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+                Name: "BenchlingWebhookHttpAPI",
+                ProtocolType: "HTTP",
             });
         });
 
@@ -215,7 +217,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             });
         });
 
-        test("creates Application Load Balancer", () => {
+        test("creates Network Load Balancer (v0.9.0 uses NLB)", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -227,13 +229,13 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
-                Name: "benchling-webhook-alb",
-                Scheme: "internet-facing",
-            });
+            // v0.9.0: NLB replaces Cloud Map for reliable health checks
+            template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 1);
+            template.resourceCountIs("AWS::ElasticLoadBalancingV2::TargetGroup", 1);
+            template.resourceCountIs("AWS::ElasticLoadBalancingV2::Listener", 1);
         });
 
-        test("creates API Gateway REST API", () => {
+        test("creates HTTP API v2 for webhooks", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -245,9 +247,22 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ApiGateway::RestApi", {
-                Name: "BenchlingWebhookAPI",
+            // HTTP API v2 (not REST API v1)
+            template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+                Name: "BenchlingWebhookHttpAPI",
+                ProtocolType: "HTTP",
             });
+
+            // Should not create REST API (v1)
+            template.resourceCountIs("AWS::ApiGateway::RestApi", 0);
+
+            // HTTP API v2 creates multiple routes for different paths
+            // Check that webhook routes exist (event, lifecycle, canvas)
+            const routes = template.findResources("AWS::ApiGatewayV2::Route");
+            const eventRoute = Object.values(routes).find((route: any) =>
+                route.Properties?.RouteKey === "POST /event"
+            );
+            expect(eventRoute).toBeDefined();
         });
 
         test("uses hardcoded quiltdata ECR repository", () => {
@@ -446,12 +461,12 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasOutput("ApiGatewayId", {
-                Description: "API Gateway REST API ID",
+            template.hasOutput("WebhookEndpoint", {
+                Description: "Webhook endpoint URL - use this in Benchling app configuration",
             });
         });
 
-        test("exports Load Balancer DNS", () => {
+        test("exports API Gateway log group", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -463,8 +478,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasOutput("LoadBalancerDNS", {
-                Description: "Application Load Balancer DNS name for direct testing",
+            template.hasOutput("ApiGatewayLogGroup", {
+                Description: "CloudWatch log group for API Gateway access logs",
             });
         });
     });
@@ -522,7 +537,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            // Should have at least 2 log groups (API Gateway + ECS)
+            // Should have at least 2 log groups (API Gateway, ECS) - WAF log group only created when allowlist configured
             template.resourceCountIs("AWS::Logs::LogGroup", 2);
         });
     });

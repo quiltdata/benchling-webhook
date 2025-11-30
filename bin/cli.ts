@@ -59,7 +59,7 @@ program
         "Name or ARN of Benchling secret in Secrets Manager",
     )
     .option("--env-file <path>", "Path to .env file", ".env")
-// Multi-environment options (v0.7.0)
+// Multi-environment options
     .option("--profile <name>", "Configuration profile to use (default: default)")
     .option("--stage <name>", "API Gateway stage: dev or prod (default: prod)")
 // Common options
@@ -68,6 +68,7 @@ program
     .option("--region <region>", "AWS region to deploy to")
     .option("--image-tag <tag>", "Docker image tag to deploy (default: latest)")
     .option("--yes", "Skip confirmation prompts")
+    .option("--force", "Force deployment despite legacy architecture warning (DANGEROUS - use with caution)")
     .addHelpText(
         "after",
         `
@@ -91,6 +92,43 @@ For more information: https://github.com/quiltdata/benchling-webhook#deployment
     .action(async (options) => {
         try {
             await deployCommand(options);
+        } catch (error) {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        }
+    });
+
+// Destroy command
+program
+    .command("destroy")
+    .description("Destroy the CDK stack from AWS")
+    .option("--profile <name>", "Configuration profile to use (default: default)")
+    .option("--stage <name>", "API Gateway stage: dev or prod (default: prod)")
+    .option("--region <region>", "AWS region where the stack is deployed")
+    .option("--yes", "Skip confirmation prompts")
+    .option("--keep-tracking", "Keep deployment tracking in profile after destruction")
+    .addHelpText(
+        "after",
+        `
+
+Examples:
+  Destroy production stack with default profile:
+    $ npx @quiltdata/benchling-webhook destroy
+
+  Destroy dev stack with dev profile:
+    $ npx @quiltdata/benchling-webhook destroy \\
+        --profile dev --stage dev
+
+  Destroy without confirmation prompt:
+    $ npx @quiltdata/benchling-webhook destroy --yes
+
+For more information: https://github.com/quiltdata/benchling-webhook#deployment
+`,
+    )
+    .action(async (options) => {
+        try {
+            const { destroyCommand } = await import("./commands/destroy");
+            await destroyCommand(options);
         } catch (error) {
             console.error(chalk.red((error as Error).message));
             process.exit(1);
@@ -324,7 +362,7 @@ program
         }
     });
 
-// Setup profile command (v0.7.0)
+// Setup profile command
 program
     .command("setup-profile <name>")
     .description("Create a new configuration profile with optional inheritance")
