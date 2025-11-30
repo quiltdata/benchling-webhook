@@ -20,7 +20,7 @@ export class HttpApiGateway {
     public readonly api: apigatewayv2.HttpApi;
     public readonly vpcLink: apigatewayv2.VpcLink;
     public readonly logGroup: logs.ILogGroup;
-    public readonly wafWebAcl: WafWebAcl;
+    public readonly wafWebAcl?: WafWebAcl;
 
     constructor(scope: Construct, id: string, props: HttpApiGatewayProps) {
         // Access logs for HTTP API
@@ -98,24 +98,33 @@ export class HttpApiGateway {
             integration,
         });
 
-        // Create WAF Web ACL for IP filtering
-        this.wafWebAcl = new WafWebAcl(scope, "WafWebAcl", {
-            ipAllowList: props.config.security?.webhookAllowList || "",
-        });
+        // Conditionally create WAF Web ACL for IP filtering
+        // Only deploy WAF if webhookAllowList is configured
+        const webhookAllowList = props.config.security?.webhookAllowList || "";
+        if (webhookAllowList) {
+            console.log("WAF IP filtering: ENABLED");
 
-        // Construct HTTP API ARN for WAF association
-        // Format: arn:aws:apigateway:{region}::/apis/{api-id}/stages/{stage-name}
-        const apiArn = cdk.Stack.of(scope).formatArn({
-            service: "apigateway",
-            resource: `/apis/${this.api.apiId}/stages/${this.api.defaultStage?.stageName || "$default"}`,
-            arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
-        });
+            // Create WAF Web ACL
+            this.wafWebAcl = new WafWebAcl(scope, "WafWebAcl", {
+                ipAllowList: webhookAllowList,
+            });
 
-        // Associate WAF with HTTP API
-        new wafv2.CfnWebACLAssociation(scope, "WafAssociation", {
-            resourceArn: apiArn,
-            webAclArn: this.wafWebAcl.webAcl.attrArn,
-        });
+            // Construct HTTP API ARN for WAF association
+            // Format: arn:aws:apigateway:{region}::/apis/{api-id}/stages/{stage-name}
+            const apiArn = cdk.Stack.of(scope).formatArn({
+                service: "apigateway",
+                resource: `/apis/${this.api.apiId}/stages/${this.api.defaultStage?.stageName || "$default"}`,
+                arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
+            });
+
+            // Associate WAF with HTTP API
+            new wafv2.CfnWebACLAssociation(scope, "WafAssociation", {
+                resourceArn: apiArn,
+                webAclArn: this.wafWebAcl.webAcl.attrArn,
+            });
+        } else {
+            console.log("WAF IP filtering: DISABLED (no webhookAllowList configured)");
+        }
 
         // Configure access logging on the default stage
         const stage = this.api.defaultStage?.node.defaultChild as apigatewayv2.CfnStage | undefined;

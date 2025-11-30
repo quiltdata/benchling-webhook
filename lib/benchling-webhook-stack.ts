@@ -276,15 +276,18 @@ export class BenchlingWebhookStack extends cdk.Stack {
             description: "CloudWatch log group for API Gateway access logs",
         });
 
-        new cdk.CfnOutput(this, "WafWebAclArn", {
-            value: this.api.wafWebAcl.webAcl.attrArn,
-            description: "WAF Web ACL ARN for IP filtering",
-        });
+        // Conditionally export WAF outputs only if WAF is enabled
+        if (this.api.wafWebAcl) {
+            new cdk.CfnOutput(this, "WafWebAclArn", {
+                value: this.api.wafWebAcl.webAcl.attrArn,
+                description: "WAF Web ACL ARN for IP filtering",
+            });
 
-        new cdk.CfnOutput(this, "WafLogGroup", {
-            value: this.api.wafWebAcl.logGroup.logGroupName,
-            description: "CloudWatch log group for WAF logs",
-        });
+            new cdk.CfnOutput(this, "WafLogGroup", {
+                value: this.api.wafWebAcl.logGroup.logGroupName,
+                description: "CloudWatch log group for WAF logs",
+            });
+        }
 
         // Export configuration metadata
         new cdk.CfnOutput(this, "ConfigVersion", {
