@@ -35,11 +35,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
                 ServiceName: "benchling-webhook-service",
             });
 
-            // HTTP API v2 uses implicit default stage (no AWS::ApiGatewayV2::Stage resources)
-            // Should create HTTP API v2 (not REST API v1)
-            template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
-                Name: "BenchlingWebhookHttpAPI",
-                ProtocolType: "HTTP",
+            // REST API v1 with resource policy (not HTTP API v2)
+            template.hasResourceProperties("AWS::ApiGateway::RestApi", {
+                Name: "BenchlingWebhookRestAPI",
             });
         });
 
@@ -247,22 +245,21 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            // HTTP API v2 (not REST API v1)
-            template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
-                Name: "BenchlingWebhookHttpAPI",
-                ProtocolType: "HTTP",
+            // REST API v1 (not HTTP API v2)
+            template.hasResourceProperties("AWS::ApiGateway::RestApi", {
+                Name: "BenchlingWebhookRestAPI",
             });
 
-            // Should not create REST API (v1)
-            template.resourceCountIs("AWS::ApiGateway::RestApi", 0);
+            // Should not create HTTP API v2
+            template.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
 
-            // HTTP API v2 creates multiple routes for different paths
-            // Check that webhook routes exist (event, lifecycle, canvas)
-            const routes = template.findResources("AWS::ApiGatewayV2::Route");
-            const eventRoute = Object.values(routes).find((route: any) =>
-                route.Properties?.RouteKey === "POST /event"
+            // REST API v1 creates resources for different paths
+            // Check that webhook resources exist (event, lifecycle, canvas)
+            const resources = template.findResources("AWS::ApiGateway::Resource");
+            const eventResource = Object.values(resources).find((resource: any) =>
+                resource.Properties?.PathPart === "event"
             );
-            expect(eventRoute).toBeDefined();
+            expect(eventResource).toBeDefined();
         });
 
         test("uses hardcoded quiltdata ECR repository", () => {

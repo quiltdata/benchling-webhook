@@ -71,9 +71,8 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 
 - [lib/benchling-webhook-stack.ts](lib/benchling-webhook-stack.ts) - Main orchestration
 - [lib/fargate-service.ts](lib/fargate-service.ts) - ECS Fargate service
-- [lib/http-api-gateway.ts](lib/http-api-gateway.ts) - HTTP API + VPC Link + optional WAF
+- [lib/rest-api-gateway.ts](lib/rest-api-gateway.ts) - REST API v1 + VPC Link + Resource Policy
 - [lib/network-load-balancer.ts](lib/network-load-balancer.ts) - Network Load Balancer with health checks
-- [lib/waf-web-acl.ts](lib/waf-web-acl.ts) - WAF Web ACL for IP filtering (optional)
 - [lib/ecr-repository.ts](lib/ecr-repository.ts) - Docker registry
 - [lib/xdg-config.ts](lib/xdg-config.ts) - XDG configuration management
 - [lib/types/](lib/types/) - TypeScript type definitions
@@ -113,16 +112,16 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 
 ---
 
-## Architecture (v0.9.0)
+## Architecture (v1.0.0)
 
 AWS CDK application deploying auto-scaling webhook processor:
 
 ### Components
 
-- **HTTP API Gateway v2** → Public HTTPS endpoint with CloudWatch logging
-- **Optional WAF** → IP allowlisting (only deployed when `webhookAllowList` configured)
+- **REST API Gateway v1** → Public HTTPS endpoint with CloudWatch logging and resource policy
+- **Resource Policy** → IP allowlisting (free, applied when `webhookAllowList` configured)
 - **VPC Link** → Private connection between API Gateway and VPC
-- **Network Load Balancer** → Internal load balancer with health checks (replaces Cloud Map)
+- **Network Load Balancer** → Internal load balancer with health checks
 - **ECS Fargate** → FastAPI application on port 8080 (auto-scales 2-10 tasks)
 - **S3** → Payload and package storage
 - **SQS** → Quilt package creation queue
@@ -134,9 +133,7 @@ AWS CDK application deploying auto-scaling webhook processor:
 ```text
 Internet
   ↓
-[Optional] AWS WAF (IP filtering, only if webhookAllowList configured)
-  ↓
-HTTP API Gateway v2
+REST API Gateway v1 + Resource Policy (IP filtering)
   ↓
 VPC Link
   ↓
@@ -159,23 +156,24 @@ S3 + SQS → Quilt Package Creation
 - This is the ONLY layer that validates webhook authenticity
 - Invalid signatures return 403 Forbidden
 
-**Optional Network Layer: WAF IP Filtering**
+**Optional Network Layer: Resource Policy IP Filtering**
 
-- Deploy WAF only when `webhookAllowList` is configured
-- Blocks unknown IPs at AWS edge (cost savings)
+- Applied when `webhookAllowList` is configured (free, no additional cost)
+- Blocks unknown IPs at API Gateway edge
 - Does NOT perform authentication (IP ≠ identity)
-- When not configured: No WAF deployed, saves $7/month
+- Health endpoints always exempt from IP filtering
+- When not configured: All IPs allowed
 
-**Why No Lambda Authorizer?**
+**Why REST API v1 instead of HTTP API v2?**
 
-Lambda Authorizers cannot verify HMAC signatures because:
+REST API v1 provides resource policies which:
 
-1. They cannot access the raw request body needed for HMAC computation
-2. HTTP API v2 base64-encodes the body before passing to Lambda
-3. HMAC must be computed over the exact bytes Benchling sent
-4. Base64 encoding changes the bytes, breaking signature verification
+1. Enable free IP filtering (vs $7/month for WAF with HTTP API v2)
+2. Support fine-grained access control per endpoint
+3. Allow health endpoint exemption from IP filtering
+4. Are natively integrated with API Gateway (no separate service)
 
-See [spec/2025-11-26-architecture/10-arch-29.md](spec/2025-11-26-architecture/10-arch-29.md) for detailed architectural analysis.
+See [spec/2025-11-26-architecture/11-arch-30.md](spec/2025-11-26-architecture/11-arch-30.md) for detailed architectural analysis.
 
 ### Cost Analysis
 
@@ -183,30 +181,29 @@ See [spec/2025-11-26-architecture/10-arch-29.md](spec/2025-11-26-architecture/10
 
 | Component | Cost |
 |-----------|------|
-| HTTP API v2 | $0.00 |
+| REST API v1 | $0.00 |
+| Resource Policy | $0.00 |
 | VPC Link | $0.00 |
 | Network Load Balancer | $16.20 |
 | ECS Fargate (2 tasks) | $14.50 |
 | NAT Gateway | $32.40 |
-| **Base Total (No WAF)** | **$63.10** |
-| **Add WAF (Optional)** | **+$7.00** |
-| **Total with WAF** | **$70.10** |
+| **Total** | **$63.10** |
 
 **Variable Costs (per million requests):**
 
 | Component | Cost |
 |-----------|------|
-| HTTP API v2 | ~$1.00 |
-| WAF (if enabled) | ~$0.60 |
+| REST API v1 | ~$3.50 |
+| Resource Policy | $0.00 |
 | ECS Fargate | Included in fixed cost |
-| **Total Variable (No WAF)** | **~$1.01** |
-| **Total Variable (With WAF)** | **~$1.61** |
+| **Total Variable** | **~$3.50** |
 
 **Trade-offs:**
 
-- +$11.81/month vs v0.8.x, but eliminates Lambda complexity and provides lower latency
-- +$16.01/month vs broken Cloud Map architecture, but actually works
-- WAF optional: Deploy only when IP filtering needed
+- -$5.10/month vs v0.9.0 with WAF (eliminates WAF cost)
+- +$2.50/million requests vs HTTP API v2 (REST API is more expensive per request)
+- Resource Policy is free and provides same IP filtering as WAF
+- Break-even point: ~2 million requests/month (most deployments use < 100k/month)
 
 ---
 
@@ -549,21 +546,17 @@ npm run deploy:prod -- \
 
 **CloudWatch Log Groups:**
 
-- `/aws/apigateway/benchling-webhook-http` - API Gateway access logs
+- `/aws/apigateway/benchling-webhook-rest` - API Gateway access logs
 - `/ecs/benchling-webhook` - ECS container logs (FastAPI application with HMAC verification)
-- `/aws/waf/benchling-webhook` - WAF logs (only if IP filtering enabled)
 
 **View logs:**
 
 ```bash
 # API Gateway access logs
-aws logs tail /aws/apigateway/benchling-webhook-http --follow
+aws logs tail /aws/apigateway/benchling-webhook-rest --follow
 
 # ECS application logs (includes HMAC verification)
 aws logs tail /ecs/benchling-webhook --follow
-
-# WAF logs (if IP filtering enabled)
-aws logs tail /aws/waf/benchling-webhook --follow
 
 # All logs (integrated command)
 npx @quiltdata/benchling-webhook logs --profile default
@@ -582,7 +575,7 @@ npx @quiltdata/benchling-webhook logs --profile default
   - API Gateway 4xx/5xx errors
   - NLB healthy/unhealthy targets
   - ECS CPU/memory utilization
-  - WAF blocked requests (if enabled)
+  - Resource policy blocked requests (403 responses)
 
 - **Deployment outputs:** `~/.config/benchling-webhook/{profile}/deployments.json`
 
@@ -601,7 +594,7 @@ npx @quiltdata/benchling-webhook logs --profile default
 | CDK stack drift | Manual AWS changes | Run `cdk diff` preflight; warn on drift detection |
 | Legacy config detected | Upgrading from v0.6.x | Display migration message; see MIGRATION.md |
 | 403 Forbidden (HMAC) | Invalid signature | Check ECS logs for HMAC verification errors; verify Benchling secret |
-| 403 Forbidden (WAF) | IP not in allowlist | Add IP to webhookAllowList or disable WAF temporarily |
+| 403 Forbidden (Resource Policy) | IP not in allowlist | Add IP to webhookAllowList or remove IP filtering |
 | NLB unhealthy targets | ECS health check failing | Check ECS logs and container health status |
 
 ---
@@ -625,21 +618,21 @@ npx @quiltdata/benchling-webhook logs --profile default
 - **Idempotence**: Re-running `npm run setup` updates existing profile
 - **Observability**: Every stage logs explicit diagnostics to CloudWatch
 - **Separation of Concerns**: npm orchestrates, TypeScript/Python implement
-- **Simplicity Over Complexity**: Single authentication layer (FastAPI HMAC), optional network filtering (WAF)
+- **Simplicity Over Complexity**: Single authentication layer (FastAPI HMAC), optional network filtering (Resource Policy)
 
 ---
 
 ## Security
 
 - **HMAC Signature Verification**: Single authentication layer in FastAPI (raw body access required)
-- **Optional WAF IP Filtering**: Block unknown IPs at AWS edge when allowlist configured
+- **Optional Resource Policy IP Filtering**: Block unknown IPs at API Gateway edge (free, no additional cost)
 - **Secrets in AWS Secrets Manager**: Credentials never stored in code
 - **Private Network**: ECS tasks in private subnets, no public IPs
 - **VPC Link**: Encrypted connection between API Gateway and NLB
 - **Container Scanning**: ECR image scanning enabled
 - **Least-Privilege IAM**: Task roles limited to required permissions
 - **TLS 1.2+ Encryption**: All API Gateway endpoints
-- **CloudWatch Logging**: Audit trail for HMAC verification and WAF decisions
+- **CloudWatch Logging**: Audit trail for HMAC verification and resource policy decisions
 
 ---
 
