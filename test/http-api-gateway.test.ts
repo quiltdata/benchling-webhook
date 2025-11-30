@@ -1,7 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
-import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
+import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { HttpApiGateway } from "../lib/http-api-gateway";
 import { ProfileConfig } from "../lib/types/config";
 
@@ -9,7 +9,8 @@ describe("HttpApiGateway", () => {
     let stack: cdk.Stack;
     let vpc: ec2.IVpc;
     let serviceSecurityGroup: ec2.ISecurityGroup;
-    let cloudMapService: servicediscovery.Service;
+    let networkLoadBalancer: elbv2.INetworkLoadBalancer;
+    let nlbListener: elbv2.INetworkListener;
     let mockConfig: ProfileConfig;
 
     beforeEach(() => {
@@ -21,13 +22,24 @@ describe("HttpApiGateway", () => {
             vpc,
         });
 
-        const namespace = new servicediscovery.PrivateDnsNamespace(stack, "Namespace", {
-            name: "benchling.local",
+        // Create mock NLB and listener for testing
+        const nlb = new elbv2.NetworkLoadBalancer(stack, "TestNLB", {
             vpc,
+            internetFacing: false,
+        });
+        networkLoadBalancer = nlb;
+
+        const targetGroup = new elbv2.NetworkTargetGroup(stack, "TestTargetGroup", {
+            vpc,
+            port: 8080,
+            protocol: elbv2.Protocol.TCP,
+            targetType: elbv2.TargetType.IP,
         });
 
-        cloudMapService = namespace.createService("Service", {
-            dnsRecordType: servicediscovery.DnsRecordType.A,
+        nlbListener = nlb.addListener("TestListener", {
+            port: 80,
+            protocol: elbv2.Protocol.TCP,
+            defaultTargetGroups: [targetGroup],
         });
 
         mockConfig = {
@@ -62,10 +74,11 @@ describe("HttpApiGateway", () => {
         };
     });
 
-    test("creates HTTP API with VPC link and service discovery integration", () => {
+    test("creates HTTP API with VPC link and NLB integration", () => {
         new HttpApiGateway(stack, "TestApiGateway", {
             vpc,
-            cloudMapService,
+            networkLoadBalancer,
+            nlbListener,
             serviceSecurityGroup,
             config: mockConfig,
         });
@@ -90,7 +103,8 @@ describe("HttpApiGateway", () => {
     test("configures routes for webhook and health endpoints", () => {
         new HttpApiGateway(stack, "TestApiGateway", {
             vpc,
-            cloudMapService,
+            networkLoadBalancer,
+            nlbListener,
             serviceSecurityGroup,
             config: mockConfig,
         });
@@ -116,7 +130,8 @@ describe("HttpApiGateway", () => {
     test("enables access logs for default stage", () => {
         new HttpApiGateway(stack, "TestApiGateway", {
             vpc,
-            cloudMapService,
+            networkLoadBalancer,
+            nlbListener,
             serviceSecurityGroup,
             config: mockConfig,
         });
@@ -144,7 +159,8 @@ describe("HttpApiGateway", () => {
     test("does NOT create WAF when webhookAllowList is empty", () => {
         new HttpApiGateway(stack, "TestApiGateway", {
             vpc,
-            cloudMapService,
+            networkLoadBalancer,
+            nlbListener,
             serviceSecurityGroup,
             config: mockConfig,
         });
@@ -168,7 +184,8 @@ describe("HttpApiGateway", () => {
 
         new HttpApiGateway(stack, "TestApiGateway", {
             vpc,
-            cloudMapService,
+            networkLoadBalancer,
+            nlbListener,
             serviceSecurityGroup,
             config: configWithWaf,
         });

@@ -2,6 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
+import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { FargateService } from "../lib/fargate-service";
 import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/test-config";
 
@@ -17,6 +18,7 @@ describe("FargateService - Multi-Environment Support", () => {
     let stack: cdk.Stack;
     let vpc: ec2.IVpc;
     let ecrRepository: ecr.IRepository;
+    let targetGroup: elbv2.INetworkTargetGroup;
 
     beforeEach(() => {
         app = new cdk.App();
@@ -38,6 +40,14 @@ describe("FargateService - Multi-Environment Support", () => {
             "TestEcrRepo",
             "benchling-webhook",
         );
+
+        // Create mock target group for NLB integration
+        targetGroup = new elbv2.NetworkTargetGroup(stack, "TestTargetGroup", {
+            vpc,
+            port: 8080,
+            protocol: elbv2.Protocol.TCP,
+            targetType: elbv2.TargetType.IP,
+        });
     });
 
     describe("Single Service (Current Behavior)", () => {
@@ -47,6 +57,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -70,6 +81,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -88,16 +100,17 @@ describe("FargateService - Multi-Environment Support", () => {
             });
         });
 
-        test("creates single target group", () => {
+        test("registers with NLB target group", () => {
             const config = createMockConfig();
-            new FargateService(stack, "TestFargateService", {
+            const service = new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters 
+                // New explicit service parameters
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -106,7 +119,10 @@ describe("FargateService - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.resourceCountIs("AWS::ServiceDiscovery::Service", 1);
+            // v0.9.0: Service attaches to NLB target group, no Cloud Map
+            template.resourceCountIs("AWS::ServiceDiscovery::Service", 0);
+            // Target group should be defined (we created it in the test)
+            template.resourceCountIs("AWS::ElasticLoadBalancingV2::TargetGroup", 1);
         });
     });
 
@@ -117,6 +133,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -151,6 +168,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -186,6 +204,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 imageTag: "v0.6.3",
                 packageBucket: config.packages.bucket,
@@ -213,6 +232,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -246,6 +266,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -285,6 +306,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config: devConfig,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: devConfig.benchling.secretArn!,
                 packageBucket: devConfig.packages.bucket,
                 quiltDatabase: devConfig.quilt.database || "test-database",
@@ -301,6 +323,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config: prodConfig,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: prodConfig.benchling.secretArn!,
                 packageBucket: prodConfig.packages.bucket,
                 quiltDatabase: prodConfig.quilt.database || "test-database",
@@ -325,6 +348,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -357,6 +381,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -384,6 +409,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -414,6 +440,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -446,6 +473,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -482,6 +510,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -516,6 +545,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -552,6 +582,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
@@ -580,6 +611,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 vpc,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",

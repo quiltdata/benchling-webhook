@@ -217,7 +217,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             });
         });
 
-        test("does not create Network Load Balancer (HTTP API v2 uses Cloud Map)", () => {
+        test("creates Network Load Balancer (v0.9.0 uses NLB)", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -229,8 +229,10 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            // HTTP API v2 integrates directly with Cloud Map, no NLB needed
-            template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 0);
+            // v0.9.0: NLB replaces Cloud Map for reliable health checks
+            template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 1);
+            template.resourceCountIs("AWS::ElasticLoadBalancingV2::TargetGroup", 1);
+            template.resourceCountIs("AWS::ElasticLoadBalancingV2::Listener", 1);
         });
 
         test("creates HTTP API v2 for webhooks", () => {
