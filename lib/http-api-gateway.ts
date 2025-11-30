@@ -118,11 +118,10 @@ export class HttpApiGateway {
 
             // Construct HTTP API ARN for WAF association
             // Format: arn:aws:apigateway:{region}::/apis/{api-id}/stages/{stage-name}
-            const apiArn = cdk.Stack.of(scope).formatArn({
-                service: "apigateway",
-                resource: `/apis/${this.api.apiId}/stages/${this.api.defaultStage?.stageName || "$default"}`,
-                arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
-            });
+            // Note: API Gateway ARNs do NOT include account ID (empty :: in the middle)
+            const region = cdk.Stack.of(scope).region;
+            const stageName = this.api.defaultStage?.stageName || "$default";
+            const apiArn = `arn:aws:apigateway:${region}::/apis/${this.api.apiId}/stages/${stageName}`;
 
             // Associate WAF with HTTP API
             new wafv2.CfnWebACLAssociation(scope, "WafAssociation", {
