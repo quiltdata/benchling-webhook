@@ -1,8 +1,8 @@
 import * as cdk from "aws-cdk-lib";
-import { Template, Match } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
-import * as s3 from "aws-cdk-lib/aws-s3";
+import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { FargateService } from "../lib/fargate-service";
 import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/test-config";
 
@@ -17,8 +17,8 @@ describe("FargateService - Multi-Environment Support", () => {
     let app: cdk.App;
     let stack: cdk.Stack;
     let vpc: ec2.IVpc;
-    let bucket: s3.IBucket;
     let ecrRepository: ecr.IRepository;
+    let targetGroup: elbv2.INetworkTargetGroup;
 
     beforeEach(() => {
         app = new cdk.App();
@@ -34,15 +34,20 @@ describe("FargateService - Multi-Environment Support", () => {
             maxAzs: 2,
         });
 
-        // Create S3 bucket
-        bucket = s3.Bucket.fromBucketName(stack, "TestBucket", "test-bucket");
-
         // Create ECR repository
         ecrRepository = ecr.Repository.fromRepositoryName(
             stack,
             "TestEcrRepo",
             "benchling-webhook",
         );
+
+        // Create mock target group for NLB integration
+        targetGroup = new elbv2.NetworkTargetGroup(stack, "TestTargetGroup", {
+            vpc,
+            port: 8080,
+            protocol: elbv2.Protocol.TCP,
+            targetType: elbv2.TargetType.IP,
+        });
     });
 
     describe("Single Service (Current Behavior)", () => {
@@ -50,13 +55,13 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -74,13 +79,13 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -95,17 +100,17 @@ describe("FargateService - Multi-Environment Support", () => {
             });
         });
 
-        test("creates single target group", () => {
+        test("registers with NLB target group", () => {
             const config = createMockConfig();
-            new FargateService(stack, "TestFargateService", {
+            const service = new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -114,11 +119,10 @@ describe("FargateService - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
-                Port: 5000,
-                Protocol: "HTTP",
-                TargetType: "ip",
-            });
+            // v0.9.0: Service attaches to NLB target group, no Cloud Map
+            template.resourceCountIs("AWS::ServiceDiscovery::Service", 0);
+            // Target group should be defined (we created it in the test)
+            template.resourceCountIs("AWS::ElasticLoadBalancingV2::TargetGroup", 1);
         });
     });
 
@@ -127,13 +131,13 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -162,14 +166,14 @@ describe("FargateService - Multi-Environment Support", () => {
 
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -198,15 +202,15 @@ describe("FargateService - Multi-Environment Support", () => {
 
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 imageTag: "v0.6.3",
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -226,13 +230,13 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -260,13 +264,13 @@ describe("FargateService - Multi-Environment Support", () => {
 
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -300,14 +304,14 @@ describe("FargateService - Multi-Environment Support", () => {
             // Create dev service
             const devService = new FargateService(stack, "DevFargateService", {
                 vpc,
-                bucket,
                 config: devConfig,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: devConfig.benchling.secretArn!,
                 packageBucket: devConfig.packages.bucket,
                 quiltDatabase: devConfig.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -317,14 +321,14 @@ describe("FargateService - Multi-Environment Support", () => {
             // Create prod service
             const prodService = new FargateService(stack, "ProdFargateService", {
                 vpc,
-                bucket,
                 config: prodConfig,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: prodConfig.benchling.secretArn!,
                 packageBucket: prodConfig.packages.bucket,
                 quiltDatabase: prodConfig.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -337,19 +341,19 @@ describe("FargateService - Multi-Environment Support", () => {
         });
     });
 
-    describe("Target Group Configuration", () => {
-        test("configures health check path", () => {
+    describe("Service networking", () => {
+        test("allows VPC traffic to container port 8080", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -358,35 +362,15 @@ describe("FargateService - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
-                HealthCheckPath: "/health/ready",
-                HealthCheckIntervalSeconds: 30,
-            });
-        });
-
-        test("uses IP target type for Fargate", () => {
-            const config = createMockConfig();
-            new FargateService(stack, "TestFargateService", {
-                vpc,
-                bucket,
-                config,
-                ecrRepository,
-                benchlingSecret: config.benchling.secretArn!,
-                packageBucket: config.packages.bucket,
-                quiltDatabase: config.quilt.database || "test-database",
-                logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
-                packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
-                athenaUserDatabase: "test-database",
-                quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
-            });
-
-            const template = Template.fromStack(stack);
-
-            template.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
-                TargetType: "ip",
-            });
+            template.hasResourceProperties("AWS::EC2::SecurityGroup", Match.objectLike({
+                SecurityGroupIngress: Match.arrayWith([
+                    Match.objectLike({
+                        FromPort: 8080,
+                        ToPort: 8080,
+                        IpProtocol: "tcp",
+                    }),
+                ]),
+            }));
         });
     });
 
@@ -395,14 +379,14 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -423,14 +407,14 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -454,14 +438,14 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -487,14 +471,14 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -524,13 +508,13 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -559,13 +543,13 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -596,13 +580,13 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -625,13 +609,13 @@ describe("FargateService - Multi-Environment Support", () => {
             const config = createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
-                bucket,
                 config,
                 ecrRepository,
+                targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters (v1.0.0+)
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",

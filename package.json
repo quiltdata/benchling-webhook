@@ -1,6 +1,6 @@
 {
   "name": "@quiltdata/benchling-webhook",
-  "version": "0.8.8",
+  "version": "0.9.0",
   "description": "AWS CDK deployment for Benchling webhook processing using Fargate - Deploy directly with npx",
   "main": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
@@ -21,6 +21,9 @@
     "deploy:dev": "ts-node bin/cli.ts deploy --stage dev --profile dev",
     "deploy:prod": "ts-node bin/cli.ts deploy --stage prod",
     "deploy:notes": "bash scripts/release-notes.sh",
+    "destroy": "ts-node bin/cli.ts destroy",
+    "destroy:dev": "ts-node bin/cli.ts destroy --stage dev --profile dev",
+    "destroy:prod": "ts-node bin/cli.ts destroy --stage prod",
     "launch": "ts-node bin/xdg-launch.ts",
     "dev": "npm run launch -- --mode native --profile dev --verbose",
     "dev:docker": "npm run launch -- --mode docker-dev --profile dev --verbose",
@@ -74,7 +77,6 @@
   "devDependencies": {
     "@eslint/js": "^9.22.0",
     "@types/adm-zip": "^0.5.7",
-    "@types/aws-lambda": "^8.10.156",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
     "@typescript-eslint/eslint-plugin": "^8.26.1",
@@ -94,6 +96,7 @@
   "dependencies": {
     "@aws-sdk/client-cloudformation": "^3.920.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.933.0",
+    "@aws-sdk/client-ec2": "^3.940.0",
     "@aws-sdk/client-ecs": "^3.933.0",
     "@aws-sdk/client-elastic-load-balancing-v2": "^3.932.0",
     "@aws-sdk/client-s3": "^3.758.0",

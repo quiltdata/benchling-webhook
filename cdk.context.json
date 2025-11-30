@@ -105,5 +105,75 @@
         ]
       }
     ]
+  },
+  "availability-zones:account=712023778557:region=us-east-1": [
+    "us-east-1a",
+    "us-east-1b",
+    "us-east-1c",
+    "us-east-1d",
+    "us-east-1e",
+    "us-east-1f"
+  ],
+  "vpc-provider:account=712023778557:filter.vpc-id=vpc-010008ef3cce35c0c:region=us-east-1:returnAsymmetricSubnets=true": {
+    "vpcId": "vpc-010008ef3cce35c0c",
+    "vpcCidrBlock": "10.0.0.0/16",
+    "ownerAccountId": "712023778557",
+    "availabilityZones": [],
+    "subnetGroups": [
+      {
+        "name": "Public",
+        "type": "Public",
+        "subnets": [
+          {
+            "subnetId": "subnet-0f667dc82fa781381",
+            "cidr": "10.0.64.0/19",
+            "availabilityZone": "us-east-1a",
+            "routeTableId": "rtb-0ca5a54de787cc58e"
+          },
+          {
+            "subnetId": "subnet-0e5edea8f1785e300",
+            "cidr": "10.0.192.0/19",
+            "availabilityZone": "us-east-1b",
+            "routeTableId": "rtb-0ca5a54de787cc58e"
+          }
+        ]
+      },
+      {
+        "name": "Private",
+        "type": "Private",
+        "subnets": [
+          {
+            "subnetId": "subnet-09d384be5cc82f4a3",
+            "cidr": "10.0.0.0/18",
+            "availabilityZone": "us-east-1a",
+            "routeTableId": "rtb-080d232514f68bc52"
+          },
+          {
+            "subnetId": "subnet-0c4d8951561fb21ea",
+            "cidr": "10.0.128.0/18",
+            "availabilityZone": "us-east-1b",
+            "routeTableId": "rtb-0dfd542f0456020c9"
+          }
+        ]
+      },
+      {
+        "name": "Isolated",
+        "type": "Isolated",
+        "subnets": [
+          {
+            "subnetId": "subnet-0eafcb74ad4785e1f",
+            "cidr": "10.0.96.0/20",
+            "availabilityZone": "us-east-1a",
+            "routeTableId": "rtb-004ed9f009bde5b58"
+          },
+          {
+            "subnetId": "subnet-0feb0beb00f4f7a8c",
+            "cidr": "10.0.224.0/20",
+            "availabilityZone": "us-east-1b",
+            "routeTableId": "rtb-004ed9f009bde5b58"
+          }
+        ]
+      }
+    ]
   }
 }

@@ -76,8 +76,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
             // Package configuration comes from Secrets Manager, NOT environment variables
 
             // Verify native mode-specific variables
-            expect(envVars.FLASK_ENV).toBe("development");
-            expect(envVars.FLASK_DEBUG).toBe("true");
+            expect(envVars.APP_ENV).toBe("development");
             expect(envVars.LOG_LEVEL).toBe(mockConfig.logging?.level || "DEBUG");
 
             // Verify security configuration
@@ -95,7 +94,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
             });
 
             // Docker production mode should have production settings
-            expect(envVars.FLASK_ENV).toBe("production");
+            expect(envVars.APP_ENV).toBe("production");
             expect(envVars.LOG_LEVEL).toBe(mockConfig.logging?.level || "INFO");
             expect(envVars.FLASK_DEBUG).toBeUndefined();
 
@@ -114,8 +113,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
             });
 
             // Docker dev mode should have development settings
-            expect(envVars.FLASK_ENV).toBe("development");
-            expect(envVars.FLASK_DEBUG).toBe("true");
+            expect(envVars.APP_ENV).toBe("development");
             expect(envVars.LOG_LEVEL).toBe(mockConfig.logging?.level || "DEBUG");
 
             // Webhook verification should be disabled in docker-dev for easier testing
@@ -332,7 +330,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
             const envVars = {
                 QUILT_WEB_HOST: "example.quiltdata.com",
                 AWS_REGION: "us-east-1",
-                FLASK_ENV: "development",
+                APP_ENV: "development",
                 PORT: "5001",
             };
 

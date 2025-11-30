@@ -1,6 +1,7 @@
 import { XDGConfig } from "./xdg-config";
 import { ProfileConfig } from "./types/config";
 import merge from "lodash.merge";
+import packageJson from "../package.json";
 
 /**
  * Configuration metadata
@@ -78,7 +79,7 @@ export class ConfigurationSaver {
         const configWithMetadata: ProfileConfig = {
             ...finalConfig,
             _metadata: {
-                version: metadata.version || "0.7.0",
+                version: metadata.version || packageJson.version,
                 createdAt: finalConfig._metadata?.createdAt || metadata.savedAt,
                 updatedAt: metadata.savedAt,
                 source: source as "wizard" | "manual" | "cli",
@@ -107,13 +108,11 @@ export class ConfigurationSaver {
     }
 
     /**
-     * Get the current version
+     * Get the current version from package.json
      *
      * @returns Version string
      */
     private static getVersion(): string {
-        // For now, return a static version
-        // In production, this would read from package.json
-        return "0.7.0";
+        return packageJson.version;
     }
 }

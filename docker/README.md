@@ -24,11 +24,10 @@ A webhook-driven automation system that bridges Benchling laboratory entries wit
 ### Setup
 
 ```bash
-make install               # Install dependencies
-make check-env             # Create .env from template (if missing)
-# Edit .env with your Benchling/AWS configuration
+make install               # Install Python dependencies with uv
+make check-xdg             # Verify profile-based config exists
 make test-benchling        # Verify Benchling credentials
-make run-local-ngrok       # Launch using ngrok
+make run-native            # Launch FastAPI/uvicorn locally (port 8080)
 ```
 
 ### Configuration
@@ -46,62 +45,45 @@ make run-local-ngrok       # Launch using ngrok
 
 ### Development Workflows
 
-**Local development (no AWS needed):**
+**Native FastAPI (profile-based config):**
 
 ```bash
-make run-local              # Mocked AWS, port 5001
-make test-native             # Test webhooks
+make run-native             # uvicorn on port 8080
+make test-native            # Runs native tests against the server
 ```
 
 **Docker development (requires AWS):**
 
 ```bash
-make run                    # Hot-reload, port 5002
+make run                    # Hot-reload, port 8082
 make test-dev               # Test webhooks
 make logs-dev               # View logs
 ```
 
-**Production deployment:**
+**Docker production (local):**
 
 ```bash
 make build
-make run-prod               # Runs on port 5003
+make run-prod               # Runs on port 8083
 make health                 # Check status
 ```
 
 ### Configure Benchling Webhook
 
-1. Create Benchling app: webhook URL = `http://your-host:5001/event`
+1. Create Benchling app: webhook URL = `http://your-host:8080/event` (adjust if using Docker ports)
 2. Subscribe to: `v2.entry.created`, `v2.entry.updated.fields`
 3. Install app in your workspace
 
 ### Webhook Security
 
-The service supports webhook signature verification using the Benchling SDK to ensure webhooks are authentic:
+Webhook authentication now runs in an API Gateway Lambda Authorizer before requests reach FastAPI:
 
-**Setup:**
+- Signature verification runs in Lambda using the Benchling SDK with `BENCHLING_SECRET_ARN` from Secrets Manager
+- FastAPI receives only pre-authenticated requests; HMAC verification is no longer performed in the app
+- `ENABLE_WEBHOOK_VERIFICATION` / `security.enableVerification` controls whether the authorizer is attached (default: true)
+- Health endpoints remain unauthenticated for readiness probes
 
-1. Get your app definition ID from Benchling app settings (format: `appdef_xxxx`)
-2. Add to `.env`make t:
-
-   ```bash
-   BENCHLING_APP_DEFINITION_ID=appdef_your_id_here
-   ENABLE_WEBHOOK_VERIFICATION=true
-   ```
-
-**Configuration:**
-
-- `ENABLE_WEBHOOK_VERIFICATION=true` (default) - Verifies all webhook signatures
-- `ENABLE_WEBHOOK_VERIFICATION=false` - Disables verification (development only)
-
-**How it works:**
-
-- Uses Benchling SDK's `verify()` helper to validate webhook signatures
-- Checks `webhook-id`, `webhook-timestamp`, and `webhook-signature` headers
-- Returns 401 if verification fails
-- Applied to all webhook endpoints: `/event`, `/lifecycle`, `/canvas`
-
-See [Benchling Webhook Verification Docs](https://docs.benchling.com/docs/webhook-verification) for details.
+See [Benchling Webhook Verification Docs](https://docs.benchling.com/docs/webhook-verification) for header requirements.
 
 ## Documentation
 
@@ -122,11 +104,11 @@ Run `make help` for full command list. Key commands:
 
 **Development:**
 
-- `make run-local` - Local server with mocked AWS (port 5001)
-- `make run-local-verbose` - Local with debug logging (port 5001)
-- `make run-local-ngrok` - Local server + ngrok tunnel (port 5001)
-- `make run` - Docker dev with hot-reload (needs AWS, port 5002)
-- `make run-ngrok` - Docker dev + ngrok tunnel (port 5002)
+- `make run-native` - Native FastAPI server via uvicorn (port 8080)
+- `make run-native-verbose` - Alias for verbose native run
+- `make run-native-ngrok` - Native server + ngrok tunnel (port 8080)
+- `make run` - Docker dev with hot-reload (needs AWS, port 8082)
+- `make run-ngrok` - Docker dev + ngrok tunnel (port 8082)
 
 **Testing:**
 

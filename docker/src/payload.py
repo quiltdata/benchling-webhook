@@ -8,7 +8,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import structlog
-from flask import Request
+from starlette.requests import Request
 
 if TYPE_CHECKING:
     from benchling_sdk.benchling import Benchling
@@ -50,16 +50,16 @@ class Payload:
         )
 
     @classmethod
-    def from_request(
+    async def from_request(
         cls,
         request: Request,
         benchling: Optional["Benchling"] = None,
     ) -> "Payload":
         """
-        Create Payload from Flask Request object.
+        Create Payload from a FastAPI Request object.
 
         Args:
-            request: Flask Request object
+            request: FastAPI Request object
             benchling: Optional Benchling client for canvas resource_id lookup
 
         Returns:
@@ -68,11 +68,20 @@ class Payload:
         Raises:
             ValueError: If payload cannot be parsed from request
         """
-        logger.debug("Creating Payload from Flask request")
-        payload = request.get_json(force=False, silent=False)
+        logger.debug("Creating Payload from request")
+        try:
+            payload = await request.json()
+        except Exception as exc:
+            logger.warning("Failed to parse JSON payload", error=str(exc))
+            raise ValueError("No JSON payload provided in request") from exc
+
         if payload is None:
             raise ValueError("No JSON payload provided in request")
-        logger.debug("Payload parsed from Flask request", payload_keys=list(payload.keys()))
+
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid JSON payload provided in request")
+
+        logger.debug("Payload parsed from request", payload_keys=list(payload.keys()))
         return cls(payload, benchling)
 
     @property
@@ -91,7 +100,6 @@ class Payload:
         Raises:
             ValueError: If entry_id cannot be extracted
         """
-        # Return cached value if available
         if self._cached_entry_id:
             logger.debug("Using cached entry_id", entry_id=self._cached_entry_id)
             return self._cached_entry_id
@@ -107,12 +115,7 @@ class Payload:
             has_canvas_id="canvasId" in self._message,
         )
 
-        # For userInteracted events, button_id contains the entry_id
-        # Supports formats:
-        # - Simple: "etr_123" or "prefix-etr_123"
-        # - With pagination: "action-etr_123-p0-s15"
         if event_type == "v2.canvas.userInteracted" and button_id:
-            # Try to parse using pagination parser first (handles complex button IDs)
             if "-" in button_id:
                 try:
                     from .pagination import parse_button_id
@@ -122,23 +125,19 @@ class Payload:
                     logger.info("Extracted entry_id from button_id", button_id=button_id, entry_id=entry_id)
                     return entry_id
                 except (ValueError, Exception) as e:
-                    # Fallback to simple extraction if parsing fails
                     logger.debug(
                         "Failed to parse button_id with pagination parser, using simple extraction",
                         button_id=button_id,
                         error=str(e),
                     )
-                    # Extract last part after dash (simple prefix format)
                     entry_id = button_id.split("-")[-1]
                     self._cached_entry_id = entry_id
                     logger.info("Extracted entry_id from button_id (simple)", button_id=button_id, entry_id=entry_id)
                     return entry_id
-            # Direct entry_id (no prefix)
             self._cached_entry_id = button_id
             logger.info("Using button_id as entry_id", entry_id=button_id)
             return button_id
 
-        # Standard extraction: resourceId or entryId from message or payload root
         entry_id = self._message.get("resourceId") or self._message.get("entryId") or self._payload.get("resourceId")
 
         if entry_id:
@@ -146,7 +145,6 @@ class Payload:
             logger.info("Extracted entry_id from standard fields", entry_id=entry_id)
             return entry_id
 
-        # If no entry_id but we have canvas_id and Benchling client, get resource_id from canvas
         if not entry_id and self.canvas_id and self._benchling:
             logger.info("No entry_id in payload, fetching resource_id from canvas", canvas_id=self.canvas_id)
             try:
@@ -173,91 +171,46 @@ class Payload:
 
     @property
     def event_id(self) -> str:
-        """
-        Extract or generate event_id.
-
-        Returns:
-            Event ID from payload, or generated UUID if not present
-        """
+        """Extract or generate event_id."""
         return self._message.get("id", str(uuid.uuid4()))
 
     @property
     def canvas_id(self) -> Optional[str]:
-        """
-        Extract canvas_id from payload.
-
-        Returns:
-            Canvas ID if present, None otherwise
-        """
+        """Extract canvas_id from payload."""
         return self._message.get("canvasId")
 
     @property
     def timestamp(self) -> Optional[str]:
-        """
-        Extract timestamp from payload.
-
-        Returns:
-            Timestamp if present, None otherwise
-        """
+        """Extract timestamp from payload."""
         return self._message.get("timestamp")
 
     @property
     def event_type(self) -> str:
-        """
-        Extract event type from payload.
-
-        Returns:
-            Event type string
-        """
+        """Extract event type from payload."""
         return self._message.get("type", "")
 
     @property
     def base_url(self) -> str:
-        """
-        Extract base URL from payload.
-
-        Returns:
-            Base URL for Benchling instance
-        """
+        """Extract base URL from payload."""
         return self._payload.get("baseURL", "")
 
     @property
     def webhook_data(self) -> Dict[str, Any]:
-        """
-        Get the webhook message data.
-
-        Returns:
-            Message portion of the payload
-        """
+        """Get the webhook message data."""
         return self._message
 
     @property
     def raw_payload(self) -> Dict[str, Any]:
-        """
-        Get the raw payload.
-
-        Returns:
-            Complete original payload
-        """
+        """Get the raw payload."""
         return self._payload
 
     @property
     def display_id(self) -> Optional[str]:
-        """
-        Get the display_id if set.
-
-        Returns:
-            Display ID if available, None otherwise
-        """
+        """Get the display_id if set."""
         return self._display_id
 
     def set_display_id(self, display_id: str) -> None:
-        """
-        Set the display_id for package naming.
-
-        Args:
-            display_id: Entry display ID (e.g., "PRT001")
-        """
+        """Set the display_id for package naming."""
         self._display_id = display_id
         logger.info("Display ID set for package naming", display_id=display_id)
 

@@ -2,7 +2,7 @@
 /**
  * XDG Launch: Unified Configuration Bridge
  *
- * Single command to launch Flask application in different modes (native, docker, docker-dev)
+ * Single command to launch FastAPI application in different modes (native, docker, docker-dev)
  * using profile-based XDG configuration as the single source of truth.
  *
  * Eliminates .env files and manual environment variable management.
@@ -180,9 +180,17 @@ function extractSecretName(arn: string): string {
  * @returns Environment variables map
  */
 function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOptions): EnvVars {
+    // Filter out undefined values from process.env and convert to Record<string, string>
+    const filteredProcessEnv: EnvVars = {};
+    for (const [key, value] of Object.entries(process.env)) {
+        if (value !== undefined) {
+            filteredProcessEnv[key] = value;
+        }
+    }
+
     const envVars: EnvVars = {
-        // Preserve existing process.env
-        ...process.env as EnvVars,
+        // Preserve existing process.env (with undefined values filtered out)
+        ...filteredProcessEnv,
 
         // Quilt Services (v0.8.0+ service-specific - NO MORE STACK ARN!)
         QUILT_WEB_HOST: config.quilt.catalog,
@@ -209,8 +217,7 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
 
     // Mode-specific variables
     if (mode === "native" || mode === "docker-dev") {
-        envVars.FLASK_ENV = "development";
-        envVars.FLASK_DEBUG = "true";
+        envVars.APP_ENV = "development";
         envVars.LOG_LEVEL = config.logging?.level || "DEBUG";
 
         // Disable verification in dev mode for easier testing
@@ -219,7 +226,7 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         }
     } else {
         // docker (production)
-        envVars.FLASK_ENV = "production";
+        envVars.APP_ENV = "production";
         envVars.LOG_LEVEL = config.logging?.level || "INFO";
     }
 
@@ -318,6 +325,19 @@ function spawnDockerCompose(
     envVars: EnvVars,
     stdio: "inherit" | "pipe" = "inherit",
 ): ReturnType<typeof spawn> {
+    // Debug: Log key environment variables being passed
+    const keyVars = ["QUILT_WEB_HOST", "ATHENA_USER_DATABASE", "PACKAGER_SQS_URL", "BenchlingSecret"];
+    const debug = process.env.DEBUG_XDG === "true";
+    if (debug) {
+        console.log("DEBUG: Spawning docker-compose with environment:");
+        keyVars.forEach(key => {
+            const value = envVars[key];
+            console.log(`  ${key}=${value ? (key.includes("Secret") ? "***" : value) : "MISSING"}`);
+        });
+        console.log(`DEBUG: cwd=${dockerDir}`);
+        console.log(`DEBUG: command=docker-compose ${args.join(" ")}`);
+    }
+
     return spawn("docker-compose", args, {
         cwd: dockerDir,
         env: envVars,
@@ -345,9 +365,18 @@ async function waitForHealth(url: string, maxAttempts = 30, delayMs = 1000): Pro
             if (response.ok) {
                 console.log(`✅ Server is healthy (attempt ${attempt}/${maxAttempts})\n`);
                 return;
+            } else {
+                // Log non-OK responses for debugging
+                if (process.env.DEBUG_XDG === "true") {
+                    console.log(`DEBUG: Health check attempt ${attempt}: HTTP ${response.status}`);
+                }
             }
-        } catch {
-            // Ignore errors and retry
+        } catch (error) {
+            // Log errors for debugging
+            if (process.env.DEBUG_XDG === "true" && attempt % 5 === 0) {
+                const err = error as Error;
+                console.log(`DEBUG: Health check attempt ${attempt}: ${err.message}`);
+            }
         }
 
         if (attempt < maxAttempts) {
@@ -393,18 +422,18 @@ async function runTests(url: string, profile: string): Promise<number> {
 }
 
 /**
- * Launch Flask application in native mode
+ * Launch FastAPI application in native mode
  *
- * Runs Flask directly on host using uv.
+ * Runs FastAPI directly on host using uv.
  *
  * @param envVars - Environment variables
  * @param options - Launch options
  */
 async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<void> {
-    const port = options.port || 5001;
+    const port = options.port || 8080;
     envVars.PORT = String(port);
 
-    console.log(`🚀 Launching native Flask (port ${port})...`);
+    console.log(`🚀 Launching native FastAPI (port ${port})...`);
 
     if (options.verbose) {
         console.log("\nEnvironment Variables:");
@@ -422,9 +451,9 @@ async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<v
     }
 
     console.log(`Working directory: ${dockerDir}`);
-    console.log("Command: uv run python -m src.app\n");
+    console.log(`Command: uv run uvicorn src.app:create_app --factory --host 0.0.0.0 --port ${port}\n`);
 
-    const proc = spawn("uv", ["run", "python", "-m", "src.app"], {
+    const proc = spawn("uv", ["run", "uvicorn", "src.app:create_app", "--factory", "--host", "0.0.0.0", "--port", String(port)], {
         cwd: dockerDir,
         env: envVars,
         stdio: options.test ? "pipe" : "inherit",
@@ -460,7 +489,7 @@ async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<v
         process.on("SIGTERM", cleanup);
 
         proc.on("error", (error: Error & { code?: string }) => {
-            console.error(`\n❌ Failed to start native Flask: ${error.message}`);
+            console.error(`\n❌ Failed to start native FastAPI: ${error.message}`);
             if (error.code === "ENOENT") {
                 console.error("\nIs \"uv\" installed and in your PATH?");
                 console.error("Install uv: https://docs.astral.sh/uv/getting-started/installation/");
@@ -470,7 +499,7 @@ async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<v
 
         proc.on("exit", (code) => {
             if (code !== 0 && code !== null) {
-                console.error(`\n❌ Native Flask exited with code ${code}`);
+                console.error(`\n❌ Native FastAPI exited with code ${code}`);
             }
             process.exit(code || 0);
         });
@@ -478,7 +507,7 @@ async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<v
 }
 
 /**
- * Launch Flask application in Docker production mode
+ * Launch FastAPI application in Docker production mode
  *
  * Runs production Docker container via docker-compose.
  *
@@ -486,7 +515,7 @@ async function launchNative(envVars: EnvVars, options: LaunchOptions): Promise<v
  * @param options - Launch options
  */
 async function launchDocker(envVars: EnvVars, options: LaunchOptions): Promise<void> {
-    const port = options.port || 5003;
+    const port = options.port || 8083;
     envVars.PORT = String(port);
 
     console.log(`🐳 Launching Docker production (port ${port})...`);
@@ -506,8 +535,32 @@ async function launchDocker(envVars: EnvVars, options: LaunchOptions): Promise<v
     }
 
     console.log(`Working directory: ${dockerDir}`);
-    console.log("Command: docker-compose up app\n");
 
+    // Build first with --pull to ensure base image is current
+    // This forces Docker to check if source files have changed
+    console.log("Building image with latest source changes...");
+    const buildProc = spawnDockerCompose(
+        ["build", "--pull", "app"],
+        dockerDir,
+        envVars,
+        "inherit",
+    );
+
+    // Wait for build to complete
+    await new Promise<void>((resolve, reject) => {
+        buildProc.on("exit", (code) => {
+            if (code === 0) {
+                console.log("\n✅ Build complete, starting container...\n");
+                resolve();
+            } else {
+                reject(new Error(`Build failed with exit code ${code}`));
+            }
+        });
+        buildProc.on("error", reject);
+    });
+
+    // Now start the container
+    console.log("Command: docker-compose up app\n");
     const proc = spawnDockerCompose(
         ["up", "app"],
         dockerDir,
@@ -567,7 +620,7 @@ async function launchDocker(envVars: EnvVars, options: LaunchOptions): Promise<v
 }
 
 /**
- * Launch Flask application in Docker development mode
+ * Launch FastAPI application in Docker development mode
  *
  * Runs Docker container with hot-reload enabled via docker-compose --profile dev.
  *
@@ -575,10 +628,11 @@ async function launchDocker(envVars: EnvVars, options: LaunchOptions): Promise<v
  * @param options - Launch options
  */
 async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promise<void> {
-    const port = options.port || 5002;
-    envVars.PORT = String(port);
+    const hostPort = options.port || 8082;
+    // Note: Container always listens on 8080, hostPort is for the port mapping
+    // Don't set PORT in envVars - let docker-compose.yml handle it
 
-    console.log(`🐳 Launching Docker development (port ${port}, hot-reload enabled)...`);
+    console.log(`🐳 Launching Docker development (port ${hostPort}, hot-reload enabled)...`);
 
     if (options.verbose) {
         console.log("\nEnvironment Variables:");
@@ -595,23 +649,58 @@ async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promis
     }
 
     console.log(`Working directory: ${dockerDir}`);
-    console.log("Command: docker-compose --profile dev up app-dev\n");
 
-    const proc = spawnDockerCompose(
-        ["--profile", "dev", "up", "app-dev"],
+    // Build first with --pull to ensure base image is current
+    // This forces Docker to check if source files have changed
+    console.log("Building image with latest source changes...");
+    const buildProc = spawnDockerCompose(
+        ["--profile", "dev", "build", "--pull", "app-dev"],
         dockerDir,
         envVars,
-        options.test ? "pipe" : "inherit",
+        "inherit",
     );
+
+    // Wait for build to complete
+    await new Promise<void>((resolve, reject) => {
+        buildProc.on("exit", (code) => {
+            if (code === 0) {
+                console.log("\n✅ Build complete, starting container...\n");
+                resolve();
+            } else {
+                reject(new Error(`Build failed with exit code ${code}`));
+            }
+        });
+        buildProc.on("error", reject);
+    });
 
     // If in test mode, run tests after server is healthy
     if (options.test) {
+        // In test mode, use detached mode (-d) to start container in background
+        console.log("Command: docker-compose --profile dev up -d app-dev\n");
+        const startProc = spawnDockerCompose(
+            ["--profile", "dev", "up", "-d", "app-dev"],
+            dockerDir,
+            envVars,
+            "inherit",
+        );
+
+        // Wait for docker-compose to start the container
+        await new Promise<void>((resolve, reject) => {
+            startProc.on("exit", (code) => {
+                if (code === 0) {
+                    resolve();
+                } else {
+                    reject(new Error(`docker-compose up failed with exit code ${code}`));
+                }
+            });
+            startProc.on("error", reject);
+        });
         const dockerCleanup = (): void => {
             spawnDockerCompose(["--profile", "dev", "down"], dockerDir, envVars);
         };
 
         try {
-            const serverUrl = `http://localhost:${port}`;
+            const serverUrl = `http://localhost:${hostPort}`;
             await waitForHealth(serverUrl);
             const exitCode = await runTests(serverUrl, options.profile);
 
@@ -628,7 +717,15 @@ async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promis
             process.exit(1);
         }
     } else {
-        // Non-test mode: run server interactively with graceful shutdown
+        // Non-test mode: run server interactively (foreground)
+        console.log("Command: docker-compose --profile dev up app-dev\n");
+        const proc = spawnDockerCompose(
+            ["--profile", "dev", "up", "app-dev"],
+            dockerDir,
+            envVars,
+            "inherit",
+        );
+
         const cleanup = (): void => {
             console.log("\n\n🛑 Shutting down Docker dev container...");
             spawnDockerCompose(["--profile", "dev", "down"], dockerDir, envVars);

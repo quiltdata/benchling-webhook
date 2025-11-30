@@ -1,10 +1,10 @@
 import * as cdk from "aws-cdk-lib";
-import * as s3 from "aws-cdk-lib/aws-s3";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
-import { AlbApiGateway } from "./alb-api-gateway";
+import { HttpApiGateway } from "./http-api-gateway";
+import { NetworkLoadBalancer } from "./network-load-balancer";
 import { ProfileConfig } from "./types/config";
 import packageJson from "../package.json";
 
@@ -23,9 +23,9 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
-    private readonly bucket: s3.IBucket;
     private readonly fargateService: FargateService;
-    private readonly api: AlbApiGateway;
+    private readonly nlb: NetworkLoadBalancer;
+    private readonly api: HttpApiGateway;
     public readonly webhookEndpoint: string;
 
     constructor(
@@ -48,14 +48,14 @@ export class BenchlingWebhookStack extends cdk.Stack {
             );
         }
 
-        console.log(`Deploying with profile configuration (v${config._metadata.version})`);
+        console.log(`Deploying with profile configuration (v${packageJson.version})`);
         console.log(`  Benchling Tenant: ${config.benchling.tenant}`);
         console.log(`  Region: ${config.deployment.region}`);
 
         // Create CloudFormation parameters for runtime-configurable values
         // These parameters can be updated via CloudFormation stack updates
 
-        // Explicit service parameters (v1.0.0+)
+        // Explicit service parameters
         // These replace runtime resolution from QuiltStackARN
         const packagerQueueUrlParam = new cdk.CfnParameter(this, "PackagerQueueUrl", {
             type: "String",
@@ -148,12 +148,51 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         // Bucket name will be resolved at runtime from CloudFormation outputs
         // For CDK purposes, we use a placeholder for IAM permissions
-        this.bucket = s3.Bucket.fromBucketName(this, "BWBucket", "placeholder-bucket-resolved-at-runtime");
 
-        // Get the default VPC or create a new one
-        const vpc = ec2.Vpc.fromLookup(this, "DefaultVPC", {
-            isDefault: true,
-        });
+        // VPC Configuration (v0.9.0+)
+        // Architecture mirrors ~/GitHub/deployment/t4/template/network.py (network_version=2.0)
+        // - Option 1: Use existing VPC (if vpcId specified in config)
+        // - Option 2: Create new VPC with private subnets and NAT Gateway (production HA setup)
+        const vpc = config.deployment.vpc?.vpcId
+            ? ec2.Vpc.fromLookup(this, "ExistingVPC", {
+                vpcId: config.deployment.vpc.vpcId,
+            })
+            : new ec2.Vpc(this, "BenchlingWebhookVPC", {
+                maxAzs: 2,
+                natGateways: 2, // Mirror production: 1 NAT Gateway per AZ for high availability
+                subnetConfiguration: [
+                    {
+                        name: "Public",
+                        subnetType: ec2.SubnetType.PUBLIC,
+                        cidrMask: 24,
+                    },
+                    {
+                        name: "Private",
+                        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS, // Private + NAT Gateway
+                        cidrMask: 24,
+                    },
+                ],
+            });
+
+        // Validate VPC has private subnets (required for VPC Link and ECS with assignPublicIp: false)
+        if (vpc.privateSubnets.length === 0) {
+            const vpcIdentifier = config.deployment.vpc?.vpcId || "created";
+            throw new Error(
+                `VPC (${vpcIdentifier}) does not have private subnets. ` +
+                    "The v0.9.0 architecture requires private subnets with NAT Gateway for:\n" +
+                    "  - VPC Link to connect API Gateway to ECS tasks\n" +
+                    "  - ECS Fargate tasks with assignPublicIp: false\n\n" +
+                    "If using an existing VPC, ensure it has:\n" +
+                    "  - Private subnets in at least 2 availability zones\n" +
+                    "  - NAT Gateway(s) for outbound internet access\n" +
+                    "  - Proper route tables configured\n\n" +
+                    "Or omit vpc.vpcId from config to auto-create a VPC with the correct configuration.",
+            );
+        }
+
+        console.log(
+            `Using VPC: ${config.deployment.vpc?.vpcId || "auto-created"} (${vpc.privateSubnets.length} private subnets)`,
+        );
 
         // HARDCODED: Always use the quiltdata AWS account for ECR images
         const account = "712023778557";
@@ -162,6 +201,12 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const ecrArn = `arn:aws:ecr:${region}:${account}:repository/${repoName}`;
         const ecrRepo = ecr.Repository.fromRepositoryArn(this, "ExistingEcrRepository", ecrArn);
         const ecrImageUri = `${account}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTagValue}`;
+
+        // Create Network Load Balancer for ECS service
+        // v0.9.0: NLB provides reliable health checks for ECS tasks
+        this.nlb = new NetworkLoadBalancer(this, "NetworkLoadBalancer", {
+            vpc,
+        });
 
         // Create the Fargate service
         // Use imageTag for stackVersion if it looks like a timestamped dev version
@@ -172,13 +217,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // Build Fargate Service props using new config structure
         this.fargateService = new FargateService(this, "FargateService", {
             vpc,
-            bucket: this.bucket,
             config: config,
             ecrRepository: ecrRepo,
+            targetGroup: this.nlb.targetGroup,  // v0.9.0: NLB target group for ECS tasks
             imageTag: imageTagValue,
             stackVersion: stackVersion,
             // Runtime-configurable parameters
-            // New explicit service parameters (v1.0.0+)
+            // New explicit service parameters
             packagerQueueUrl: packagerQueueUrlValue,
             athenaUserDatabase: athenaUserDatabaseValue,
             quiltWebHost: quiltWebHostValue,
@@ -196,14 +241,22 @@ export class BenchlingWebhookStack extends cdk.Stack {
             logLevel: logLevelValue,
         });
 
-        // Create API Gateway that routes to the ALB
-        this.api = new AlbApiGateway(this, "ApiGateway", {
-            loadBalancer: this.fargateService.loadBalancer,
+        // Create HTTP API v2 that routes through VPC Link to the NLB
+        // v0.9.0: NLB integration provides reliable routing to ECS tasks
+        this.api = new HttpApiGateway(this, "HttpApiGateway", {
+            vpc: vpc,
+            networkLoadBalancer: this.nlb.loadBalancer,
+            nlbListener: this.nlb.listener,
+            serviceSecurityGroup: this.fargateService.securityGroup,
             config: config,
         });
 
-        // Store webhook endpoint for easy access
-        this.webhookEndpoint = this.api.api.url;
+        // Store webhook endpoint for easy access (HTTP API v2 default stage)
+        // HTTP API v2 URL is optional, but should always be defined after API creation
+        this.webhookEndpoint = this.api.api.url || "";
+        if (!this.webhookEndpoint) {
+            throw new Error("HTTP API URL was not generated. This should not happen.");
+        }
 
         // Export webhook endpoint as a stack output
         new cdk.CfnOutput(this, "WebhookEndpoint", {
@@ -233,6 +286,30 @@ export class BenchlingWebhookStack extends cdk.Stack {
             value: this.api.logGroup.logGroupName,
             description: "CloudWatch log group for API Gateway access logs",
         });
+
+        // Export NLB information (v0.9.0)
+        new cdk.CfnOutput(this, "NetworkLoadBalancerDns", {
+            value: this.nlb.loadBalancer.loadBalancerDnsName,
+            description: "Network Load Balancer DNS name (internal)",
+        });
+
+        new cdk.CfnOutput(this, "TargetGroupArn", {
+            value: this.nlb.targetGroup.targetGroupArn,
+            description: "NLB Target Group ARN for ECS tasks",
+        });
+
+        // Conditionally export WAF outputs only if WAF is enabled
+        if (this.api.wafWebAcl) {
+            new cdk.CfnOutput(this, "WafWebAclArn", {
+                value: this.api.wafWebAcl.webAcl.attrArn,
+                description: "WAF Web ACL ARN for IP filtering",
+            });
+
+            new cdk.CfnOutput(this, "WafLogGroup", {
+                value: this.api.wafWebAcl.logGroup.logGroupName,
+                description: "CloudWatch log group for WAF logs",
+            });
+        }
 
         // Export configuration metadata
         new cdk.CfnOutput(this, "ConfigVersion", {

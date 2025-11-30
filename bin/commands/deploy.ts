@@ -12,7 +12,7 @@ import {
 import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig } from "../../lib/types/config";
-import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
+import { CloudFormationClient, DescribeStacksCommand, DescribeStackResourcesCommand } from "@aws-sdk/client-cloudformation";
 import { syncSecretsToAWS } from "./sync-secrets";
 import * as fs from "fs";
 import * as path from "path";
@@ -25,6 +25,147 @@ function suggestSetup(profileName: string, message: string): void {
     console.log();
     console.log(chalk.cyan(`  npm run setup -- --profile ${profileName}`));
     console.log();
+}
+
+type StackCheck = {
+    stackExists: boolean;
+    stackStatus?: string;
+    statusCategory: "none" | "in_progress" | "failed" | "rolled_back";
+};
+
+/**
+ * Check if the existing stack is in a problematic state (rollback, failed, etc.)
+ *
+ * Note: v0.8.8+ all use the same architecture (REST API + ALB + VPC Link), so there's
+ * no "legacy architecture" to detect. CloudFormation handles in-place updates seamlessly.
+ */
+async function checkStackStatus(region: string): Promise<StackCheck> {
+    try {
+        const cloudformation = new CloudFormationClient({ region });
+        const stackName = "BenchlingWebhookStack";
+
+        // Check if stack exists
+        const describeCommand = new DescribeStacksCommand({ StackName: stackName });
+        const describeResponse = await cloudformation.send(describeCommand);
+
+        if (!describeResponse.Stacks || describeResponse.Stacks.length === 0) {
+            return {
+                stackExists: false,
+                statusCategory: "none",
+            };
+        }
+
+        const stack = describeResponse.Stacks[0];
+        const stackStatus = stack.StackStatus || "";
+
+        const inProgressStates = [
+            "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS",
+            "UPDATE_ROLLBACK_IN_PROGRESS",
+            "ROLLBACK_IN_PROGRESS",
+        ];
+        const failedStates = ["ROLLBACK_FAILED", "UPDATE_ROLLBACK_FAILED"];
+        const rolledBackStates = ["UPDATE_ROLLBACK_COMPLETE", "ROLLBACK_COMPLETE"];
+
+        const statusCategory = inProgressStates.includes(stackStatus)
+            ? "in_progress"
+            : failedStates.includes(stackStatus)
+                ? "failed"
+                : rolledBackStates.includes(stackStatus)
+                    ? "rolled_back"
+                    : "none";
+
+        return {
+            stackExists: true,
+            stackStatus,
+            statusCategory,
+        };
+    } catch (_error) {
+        // Stack doesn't exist or error checking
+        return {
+            stackExists: false,
+            statusCategory: "none",
+        };
+    }
+}
+
+/**
+ * Detect if existing stack uses legacy REST API Gateway (v0.8.x)
+ * Returns true if REST API detected, indicating need for stack recreation
+ */
+async function detectLegacyRestApi(stackName: string, region: string): Promise<boolean> {
+    const client = new CloudFormationClient({ region });
+    try {
+        const response = await client.send(
+            new DescribeStackResourcesCommand({ StackName: stackName }),
+        );
+        const hasRestApi = response.StackResources?.some(
+            (resource) => resource.ResourceType === "AWS::ApiGateway::RestApi",
+        );
+        return hasRestApi || false;
+    } catch (_error) {
+        // Stack doesn't exist - first deployment
+        return false;
+    }
+}
+
+/**
+ * Prompt user about legacy stack migration
+ * Returns true if user wants to abort deployment
+ * Returns false if user wants to proceed anyway
+ */
+async function promptLegacyMigration(
+    profileName: string,
+    stage: string,
+    yes: boolean,
+): Promise<boolean> {
+    const migrationMessage =
+        `${chalk.red.bold("⚠️  BREAKING CHANGE DETECTED")}\n\n` +
+        `Your existing stack uses ${chalk.yellow("v0.8.x architecture (REST API Gateway)")}.\n` +
+        `v0.9.0 uses ${chalk.green("WAF + HTTP API v2")}.\n\n` +
+        `${chalk.bold("Stack resources that will be REPLACED:")}\n` +
+        "  - API Gateway REST API → HTTP API v2\n" +
+        "  - Network Load Balancer → (removed, direct VPC Link)\n" +
+        "  - Endpoint URL format → (stage removed from path)\n\n" +
+        `${chalk.bold("You must destroy the existing stack before deploying v0.9.0:")}\n\n` +
+        `  ${chalk.cyan(`npx cdk destroy --profile ${profileName} --context stage=${stage}`)}\n\n` +
+        `${chalk.bold("After destruction, redeploy with:")}\n\n` +
+        `  ${chalk.cyan(`npm run deploy:${stage} -- --profile ${profileName} --yes`)}\n\n` +
+        `${chalk.bold("Update your Benchling webhook URL after deployment.")}`;
+
+    console.log();
+    console.log(
+        boxen(migrationMessage, {
+            padding: 1,
+            borderColor: "red",
+            borderStyle: "round",
+        }),
+    );
+    console.log();
+
+    if (yes) {
+        console.log(chalk.yellow("⚠️  --yes flag detected, but migration requires manual intervention."));
+        console.log(chalk.yellow("    Deployment aborted. Run destroy command to proceed with v1.0.0 upgrade."));
+        return true; // Abort deployment
+    }
+
+    const { shouldProceed } = await prompt<{ shouldProceed: boolean }>({
+        type: "confirm",
+        name: "shouldProceed",
+        message: "Continue with deployment anyway? (Stack will likely fail to update)",
+        initial: false,
+    });
+
+    if (shouldProceed) {
+        console.log();
+        console.log(chalk.yellow("⚠️  Proceeding despite legacy architecture warning."));
+        console.log(chalk.yellow("    Deployment may fail due to incompatible resource types."));
+        console.log();
+        return false; // Don't abort, let user try
+    }
+
+    console.log();
+    console.log(chalk.yellow("Deployment aborted. Run destroy command to proceed with v1.0.0 upgrade."));
+    return true; // Abort deployment
 }
 
 /**
@@ -77,6 +218,7 @@ export async function deployCommand(options: {
     imageTag?: string;
     region?: string;
     envFile?: string;
+    force?: boolean;            // Force deployment despite legacy architecture warning
 }): Promise<void> {
     console.log(
         boxen(chalk.bold("Benchling Webhook Deployment"), {
@@ -189,6 +331,7 @@ export async function deploy(
         imageTag: string;
         region?: string;
         envFile?: string;
+        force?: boolean;
     },
 ): Promise<void> {
     const spinner = ora("Validating parameters...").start();
@@ -298,6 +441,87 @@ export async function deploy(
         }
     }
 
+    // Check for rollback or failed state
+    spinner.start("Checking stack status...");
+    const stackCheck = await checkStackStatus(deployRegion);
+
+    const needsAttention = ["in_progress", "failed", "rolled_back"].includes(stackCheck.statusCategory);
+
+    if (needsAttention) {
+        const isActiveRollback = stackCheck.statusCategory === "in_progress";
+        const borderColor = isActiveRollback ? "red" : "yellow";
+        const title = isActiveRollback ? "Stack is rolling back" : "Stack in problematic state";
+
+        spinner[isActiveRollback ? "fail" : "warn"]("Stack state may block update");
+        console.log();
+        console.log(
+            boxen(
+                `${chalk.red.bold(title)}\n\n` +
+                `${chalk.bold("Stack status:")} ${stackCheck.stackStatus}\n\n` +
+                `${chalk.bold("Options:")}\n` +
+                (isActiveRollback
+                    ? "  1) Wait/abort (recommended while rollback is in progress)\n  2) Destroy and redeploy if stuck\n  3) Proceed anyway (likely to fail)\n"
+                    : "  1) Proceed with deploy\n  2) Destroy and redeploy clean\n  3) Abort\n"),
+                { padding: 1, borderColor, borderStyle: "round" },
+            ),
+        );
+        console.log();
+
+        const { proceedChoice } = await prompt<{ proceedChoice: string }>([
+            {
+                type: "select",
+                name: "proceedChoice",
+                message: "How would you like to proceed?",
+                choices: isActiveRollback
+                    ? [
+                        { name: "abort", message: "Abort / wait for rollback to finish (recommended)" },
+                        { name: "destroy", message: "Destroy existing stack then redeploy clean" },
+                        { name: "proceed", message: "Proceed anyway (likely to fail while rollback active)" },
+                    ]
+                    : [
+                        { name: "proceed", message: "Proceed with deployment" },
+                        { name: "destroy", message: "Destroy existing stack then redeploy clean" },
+                        { name: "abort", message: "Abort now" },
+                    ],
+                initial: isActiveRollback ? 0 : 0,
+            },
+        ]);
+
+        if (proceedChoice === "destroy") {
+            console.log();
+            console.log(chalk.bold("Run destroy then redeploy:"));
+            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook destroy --profile ${options.profileName} --stage ${options.stage}`));
+            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook deploy --profile ${options.profileName} --stage ${options.stage}`));
+            console.log();
+            process.exit(1);
+        }
+
+        if (proceedChoice === "abort") {
+            console.log(chalk.yellow("Aborting by user choice."));
+            process.exit(1);
+        }
+
+        spinner.warn("Proceeding despite stack state; deployment may fail.");
+    } else {
+        spinner.succeed("Stack status OK - ready for deployment");
+    }
+
+    // Check for legacy REST API architecture (v0.8.x)
+    if (stackCheck.stackExists && !options.force) {
+        spinner.start("Checking for legacy architecture...");
+        const hasLegacyRestApi = await detectLegacyRestApi("BenchlingWebhookStack", deployRegion);
+
+        if (hasLegacyRestApi) {
+            spinner.fail("Legacy REST API Gateway detected (v0.8.x)");
+            const shouldAbort = await promptLegacyMigration(options.profileName, options.stage, options.yes || false);
+            if (shouldAbort) {
+                process.exit(1);
+            }
+        } else {
+            spinner.succeed("No legacy architecture detected");
+        }
+    }
+
     // Load Quilt configuration from config.quilt.*
     spinner.start("Loading Quilt configuration...");
 
@@ -398,7 +622,7 @@ export async function deploy(
         // Build CloudFormation parameters
         // Parameter names must match the CfnParameter IDs in BenchlingWebhookStack
         const parameters = [
-            // Explicit service parameters (v1.0.0+)
+            // Explicit service parameters
             `PackagerQueueUrl=${services.packagerQueueUrl}`,
             `AthenaUserDatabase=${services.athenaUserDatabase}`,
             `QuiltWebHost=${services.quiltWebHost}`,
@@ -461,6 +685,8 @@ export async function deploy(
                 CDK_DEFAULT_REGION: deployRegion,
                 QUILT_STACK_ARN: stackArn,
                 BENCHLING_SECRET: benchlingSecret,
+                // Pass VPC configuration if specified in profile
+                ...(config.deployment.vpc?.vpcId && { VPC_ID: config.deployment.vpc.vpcId }),
             },
         });
 
@@ -482,6 +708,8 @@ export async function deploy(
                 const stack = response.Stacks[0];
                 const endpointOutput = stack.Outputs?.find((o) => o.OutputKey === "WebhookEndpoint");
                 const webhookUrl = endpointOutput?.OutputValue || "";
+                const authorizerArn = stack.Outputs?.find((o) => o.OutputKey === "AuthorizerFunctionArn")?.OutputValue;
+                const authorizerLogGroup = stack.Outputs?.find((o) => o.OutputKey === "AuthorizerLogGroup")?.OutputValue;
 
                 if (webhookUrl) {
                     // Remove trailing slash to avoid double slashes in test URLs
@@ -497,6 +725,8 @@ export async function deploy(
                         stackName: stackName,
                         region: deployRegion,
                         deployedBy: process.env.USER || process.env.USERNAME,
+                        authorizerArn,
+                        authorizerLogGroup,
                     });
 
                     console.log(`✅ Recorded deployment to profile '${options.profileName}' stage '${options.stage}'`);

@@ -53,7 +53,7 @@ export type ProfileName = string;
  *   },
  *   "integratedStack": true,
  *   "_metadata": {
- *     "version": "0.7.0",
+ *     "version": "0.9.0",
  *     "createdAt": "2025-11-04T10:00:00Z",
  *     "updatedAt": "2025-11-04T10:00:00Z",
  *     "source": "wizard"
@@ -124,7 +124,7 @@ export interface ProfileConfig {
  * Configuration for Quilt data catalog integration, including service endpoints
  * and SQS queue for package creation.
  *
- * **Breaking Change (v1.0.0)**: `stackArn` is used at deployment time only to resolve services.
+ * **Breaking Change (v0.9.0)**: `stackArn` is used at deployment time only to resolve services.
  * Services are passed as explicit environment variables to the container.
  * No runtime CloudFormation API calls are made.
  *
@@ -140,7 +140,7 @@ export interface QuiltConfig {
      * The resolved services are then passed as explicit environment variables to the container.
      *
      * **Deployment usage only** - not passed to container runtime.
-     * **Breaking Change (v1.0.0)**: No longer passed as environment variable or CloudFormation parameter.
+     * **Breaking Change (v0.9.0)**: No longer passed as environment variable or CloudFormation parameter.
      *
      * @example "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-stack/..."
      */
@@ -382,12 +382,50 @@ export interface DeploymentConfig {
      * @default "latest"
      */
     imageTag?: string;
+
+    /**
+     * VPC configuration for ECS deployment
+     * If not specified, a new VPC will be created with private subnets and NAT Gateway
+     *
+     * @example { vpcId: "vpc-0123456789abcdef0" }
+     */
+    vpc?: VpcConfig;
+}
+
+/**
+ * VPC Configuration
+ *
+ * Configures VPC for ECS deployment. Supports both existing VPC (by ID) and auto-creation.
+ */
+export interface VpcConfig {
+    /**
+     * Existing VPC ID to use (optional)
+     *
+     * If specified, the VPC must have:
+     * - Private subnets with NAT Gateway for outbound internet access
+     * - Proper routing for ECS tasks
+     *
+     * If not specified, a new VPC will be created matching the Quilt production architecture:
+     * - 2 Availability Zones
+     * - Public subnets (for NAT Gateways)
+     * - Private subnets with NAT Gateway (for ECS tasks)
+     *
+     * @example "vpc-0123456789abcdef0"
+     */
+    vpcId?: string;
+
+    /**
+     * Whether to create a new VPC if vpcId is not specified
+     *
+     * @default true
+     */
+    createIfMissing?: boolean;
 }
 
 /**
  * Logging Configuration
  *
- * Python logging level for Flask application.
+ * Python logging level for FastAPI application.
  */
 export interface LoggingConfig {
     /**
@@ -558,6 +596,16 @@ export interface DeploymentRecord {
     commit?: string;
 
     /**
+     * ARN of the Lambda authorizer function (v0.9.1+)
+     */
+    authorizerArn?: string;
+
+    /**
+     * CloudWatch log group for Lambda authorizer (v0.9.1+)
+     */
+    authorizerLogGroup?: string;
+
+    /**
      * Additional metadata (extensible)
      */
     [key: string]: string | undefined;
@@ -650,7 +698,7 @@ export interface ProfileOptions {
 export const ProfileConfigSchema = {
     $schema: "http://json-schema.org/draft-07/schema#",
     title: "ProfileConfig",
-    description: "Benchling Webhook Profile Configuration (v0.7.0)",
+    description: "Benchling Webhook Profile Configuration",
     type: "object",
     required: ["quilt", "benchling", "packages", "deployment", "_metadata"],
     properties: {

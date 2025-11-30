@@ -1,5 +1,5 @@
 /**
- * Integration tests for Legacy Configuration Detection (v0.7.0)
+ * Integration tests for Legacy Configuration Detection
  *
  * Tests detection and error messages for v0.6.x configuration files.
  *

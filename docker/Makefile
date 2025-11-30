@@ -19,9 +19,9 @@ PROFILE_DIR = $(XDG_CONFIG)/$(PROFILE)
 LOG_LEVEL ?= INFO
 
 # Port configuration
-PORT_NATIVE := 5001
-PORT_DOCKER_DEV := 5002
-PORT_DOCKER_PROD := 5003
+PORT_NATIVE := 8080
+PORT_DOCKER_DEV := 8082
+PORT_DOCKER_PROD := 8083
 
 # UV command with dev group (for linting and testing)
 UVDEV = uv run --group dev
@@ -44,7 +44,7 @@ help:
 	@echo "  run / run-dev         - Docker dev with hot-reload (port $(PORT_DOCKER_DEV))"
 	@echo "  run-prod              - Docker production mode (port $(PORT_DOCKER_PROD))"
 	@echo "  run-ngrok             - Docker dev + ngrok tunnel (requires NGROK_DOMAIN env var)"
-	@echo "  run-native            - Native Flask with dev profile (port $(PORT_NATIVE))"
+	@echo "  run-native            - Native FastAPI with dev profile (port $(PORT_NATIVE))"
 	@echo "  run-native-verbose    - Alias for run-native (always verbose)"
 	@echo "  run-native-ngrok      - Native server + ngrok tunnel (requires NGROK_DOMAIN env var)"
 	@echo "  run-ecr               - Pull and run image from ECR (port $(PORT_DOCKER_PROD))"
@@ -52,7 +52,7 @@ help:
 	@echo "Testing (xdg-launch-based tests marked with *):"
 	@echo "  test                  - Run all tests (unit + integration + docker)"
 	@echo "  test-unit             - Run unit tests (pytest)"
-	@echo "  test-native *         - Test native Flask (uses xdg-launch)"
+	@echo "  test-native *         - Test native FastAPI (uses xdg-launch)"
 	@echo "  test-dev              - Test webhooks against docker dev (port $(PORT_DOCKER_DEV))"
 	@echo "  test-docker-dev *     - Test local docker dev (uses xdg-launch)"
 	@echo "  test-docker-prod *    - Test local docker prod (uses xdg-launch)"
@@ -80,7 +80,7 @@ help:
 	@echo "  Add DRY_RUN=1 for dry run: make push-local DRY_RUN=1"
 	@echo ""
 	@echo "Infrastructure:"
-	@echo "  ngrok                 - Expose server via ngrok (auto-cleanup, use PORT=5002 SLEEP=10)"
+	@echo "  ngrok                 - Expose server via ngrok (auto-cleanup, use PORT=8082 SLEEP=10)"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  clean                 - Remove containers and images"
@@ -163,11 +163,11 @@ run-prod: check-xdg
 	@echo "Starting production server..."
 	cd .. && npm run dev:prod
 
-# Native Flask server (uses xdg-launch via npm)
+# Native FastAPI server (uses xdg-launch via npm)
 run-native: check-xdg
 	cd .. && npm run launch -- --mode native --profile $(PROFILE) --verbose
 
-# Native Flask server with verbose logging (alias for backward compatibility)
+# Native FastAPI server with verbose logging (alias for backward compatibility)
 run-native-verbose: run-native
 
 # Native server + ngrok tunnel
@@ -199,7 +199,7 @@ run-ecr: check-xdg docker-ecr-login
 	docker pull $$ECR_IMAGE; \
 	echo "Starting container from ECR image..."; \
 	docker run -d --name benchling-ecr-test \
-		-p $(PORT_DOCKER_PROD):5000 \
+		-p $(PORT_DOCKER_PROD):8080 \
 		-v ~/.aws:/home/appuser/.aws:ro \
 		$$ECR_IMAGE; \
 	echo "✅ Container started on port $(PORT_DOCKER_PROD)"; \
@@ -440,7 +440,7 @@ ngrok: check-ngrok
 # Smart kill: stop Docker containers and kill native Python processes
 kill:
 	@echo "Stopping servers..."
-	@pkill -f "python scripts/run_native.py" 2>/dev/null && echo "✅ Killed native Flask server" || echo "ℹ️  No native Flask server running"
+	@pkill -f "uvicorn src.app:create_app" 2>/dev/null && echo "✅ Killed native FastAPI server" || echo "ℹ️  No native FastAPI server running"
 	@docker-compose --profile dev down 2>/dev/null && echo "✅ Stopped Docker containers" || echo "ℹ️  No Docker containers running"
 	@echo "✅ Done"
 
