@@ -215,7 +215,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             });
         });
 
-        test("creates Network Load Balancer (v0.9.0 uses NLB)", () => {
+        test("creates Network Load Balancer (uses NLB)", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -227,7 +227,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            // v0.9.0: NLB replaces Cloud Map for reliable health checks
+            // NLB replaces Cloud Map for reliable health checks
             template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 1);
             template.resourceCountIs("AWS::ElasticLoadBalancingV2::TargetGroup", 1);
             template.resourceCountIs("AWS::ElasticLoadBalancingV2::Listener", 1);

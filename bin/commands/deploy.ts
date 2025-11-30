@@ -429,9 +429,6 @@ export async function deploy(
         spinner.succeed("Stack status OK - ready for deployment");
     }
 
-    // Legacy detection removed in v1.0.0
-    // v1.0.0 uses REST API v1 with resource policies (no breaking changes from v0.9.0)
-
     // Load Quilt configuration from config.quilt.*
     spinner.start("Loading Quilt configuration...");
 

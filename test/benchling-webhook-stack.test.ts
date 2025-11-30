@@ -152,14 +152,14 @@ describe("BenchlingWebhookStack", () => {
         template.resourceCountIs("AWS::ApiGateway::VpcLink", 1);
         // Should not have HTTP API v2 VpcLink
         template.resourceCountIs("AWS::ApiGatewayV2::VpcLink", 0);
-        // v0.9.0+: NLB replaces Cloud Map for reliable health checks
+        // NLB replaces Cloud Map for reliable health checks
         template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 1);
         template.resourceCountIs("AWS::ElasticLoadBalancingV2::TargetGroup", 1);
         template.resourceCountIs("AWS::ElasticLoadBalancingV2::Listener", 1);
     });
 
-    test("does not create Cloud Map service (v0.9.0 uses NLB)", () => {
-        // v0.9.0: NLB replaces Cloud Map for ECS service discovery
+    test("does not create Cloud Map service (uses NLB)", () => {
+        // NLB replaces Cloud Map for ECS service discovery
         template.resourceCountIs("AWS::ServiceDiscovery::PrivateDnsNamespace", 0);
         template.resourceCountIs("AWS::ServiceDiscovery::Service", 0);
     });
