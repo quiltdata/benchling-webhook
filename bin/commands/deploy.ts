@@ -698,6 +698,11 @@ export async function deploy(
                 BENCHLING_SECRET: benchlingSecret,
                 // Pass VPC configuration if specified in profile
                 ...(config.deployment.vpc?.vpcId && { VPC_ID: config.deployment.vpc.vpcId }),
+                // Pass security configuration
+                WEBHOOK_ALLOW_LIST: config.security?.webhookAllowList || "",
+                ENABLE_WEBHOOK_VERIFICATION: config.security?.enableVerification !== false ? "true" : "false",
+                // Pass logging configuration
+                LOG_LEVEL: config.logging?.level || "INFO",
             },
         });
 
