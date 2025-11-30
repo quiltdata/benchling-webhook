@@ -149,7 +149,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // Bucket name will be resolved at runtime from CloudFormation outputs
         // For CDK purposes, we use a placeholder for IAM permissions
 
-        // VPC Configuration (v0.9.0+)
+        // VPC Configuration
         // Architecture mirrors ~/GitHub/deployment/t4/template/network.py (network_version=2.0)
         // - Option 1: Use existing VPC (if vpcId specified in config)
         // - Option 2: Create new VPC with private subnets and NAT Gateway (production HA setup)
@@ -179,7 +179,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             const vpcIdentifier = config.deployment.vpc?.vpcId || "created";
             throw new Error(
                 `VPC (${vpcIdentifier}) does not have private subnets. ` +
-                    "The v0.9.0 architecture requires private subnets with NAT Gateway for:\n" +
+                    "The architecture requires private subnets with NAT Gateway for:\n" +
                     "  - VPC Link to connect API Gateway to ECS tasks\n" +
                     "  - ECS Fargate tasks with assignPublicIp: false\n\n" +
                     "If using an existing VPC, ensure it has:\n" +
@@ -203,7 +203,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const ecrImageUri = `${account}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTagValue}`;
 
         // Create Network Load Balancer for ECS service
-        // v0.9.0: NLB provides reliable health checks for ECS tasks
+        // NLB provides reliable health checks for ECS tasks
         this.nlb = new NetworkLoadBalancer(this, "NetworkLoadBalancer", {
             vpc,
         });
@@ -219,7 +219,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             vpc,
             config: config,
             ecrRepository: ecrRepo,
-            targetGroup: this.nlb.targetGroup,  // v0.9.0: NLB target group for ECS tasks
+            targetGroup: this.nlb.targetGroup,  // NLB target group for ECS tasks
             imageTag: imageTagValue,
             stackVersion: stackVersion,
             // Runtime-configurable parameters
@@ -301,7 +301,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             description: "API Gateway deployment stage",
         });
 
-        // Export NLB information (v0.9.0)
+        // Export NLB information
         new cdk.CfnOutput(this, "NetworkLoadBalancerDns", {
             value: this.nlb.loadBalancer.loadBalancerDnsName,
             description: "Network Load Balancer DNS name (internal)",

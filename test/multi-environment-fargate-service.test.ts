@@ -119,7 +119,7 @@ describe("FargateService - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            // v0.9.0: Service attaches to NLB target group, no Cloud Map
+            // Service attaches to NLB target group, no Cloud Map
             template.resourceCountIs("AWS::ServiceDiscovery::Service", 0);
             // Target group should be defined (we created it in the test)
             template.resourceCountIs("AWS::ElasticLoadBalancingV2::TargetGroup", 1);

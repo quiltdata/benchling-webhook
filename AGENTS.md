@@ -200,7 +200,7 @@ See [spec/2025-11-26-architecture/11-arch-30.md](spec/2025-11-26-architecture/11
 
 **Trade-offs:**
 
-- -$5.10/month vs v0.9.0 with WAF (eliminates WAF cost)
+- -$5.10/month vs previous WAF-based architecture (eliminates WAF cost)
 - +$2.50/million requests vs HTTP API v2 (REST API is more expensive per request)
 - Resource Policy is free and provides same IP filtering as WAF
 - Break-even point: ~2 million requests/month (most deployments use < 100k/month)
