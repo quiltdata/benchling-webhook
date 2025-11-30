@@ -593,6 +593,17 @@ export async function deploy(
     console.log(`    ${chalk.bold("Image Tag:")}               ${options.imageTag}`);
     console.log(`    ${chalk.bold("Full Image URI:")}          ${ecrImageUri}`);
     console.log();
+    console.log(chalk.bold("  Security Settings:"));
+    const verificationEnabled = config.security?.enableVerification !== false;
+    console.log(
+        `    ${chalk.bold("Webhook Verification:")}    ${verificationEnabled ? chalk.green("ENABLED") : chalk.red("DISABLED")}`,
+    );
+    if (config.security?.webhookAllowList) {
+        console.log(`    ${chalk.bold("WAF IP Filtering:")}        ${chalk.green("ENABLED")}`);
+    } else {
+        console.log(`    ${chalk.bold("WAF IP Filtering:")}        ${chalk.gray("DISABLED")}`);
+    }
+    console.log();
     console.log(chalk.dim("  ℹ️  Configuration loaded from profile - single source of truth"));
     console.log(chalk.gray("─".repeat(80)));
     console.log();
@@ -608,7 +619,7 @@ export async function deploy(
 
         if (!response.proceed) {
             console.log(chalk.yellow("Deployment cancelled"));
-            process.exit(0);
+            process.exit(1);
         }
         console.log();
     }

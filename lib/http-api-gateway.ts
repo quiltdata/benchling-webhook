@@ -47,6 +47,8 @@ export class HttpApiGateway {
 
         // Network Load Balancer integration via VPC Link
         // v0.9.0: Replaced Cloud Map with NLB for reliable routing
+        // Note: Omitting timeout to use default behavior, which may allow established
+        // connections to exceed the integration timeout for subsequent requests
         const integration = new apigatewayv2Integrations.HttpNlbIntegration(
             "NlbIntegration",
             props.nlbListener,
