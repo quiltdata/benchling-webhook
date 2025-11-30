@@ -79,7 +79,7 @@ export class WafWebAcl extends Construct {
             defaultAction: defaultActionConfig,
             description:
                 "WAF for Benchling webhook IP filtering with automatic discovery mode. " +
-                `Mode: ${mode} (${isDiscoveryMode ? "empty allowlist - all traffic allowed" : `${ipAllowList.length} IPs configured`})`,
+                `Mode: ${mode} - ${isDiscoveryMode ? "empty allowlist, all traffic allowed" : `${ipAllowList.length} IPs configured`}`,
             rules: [
                 // Rule 1: Health check exception (Priority 10)
                 // Always allow health check endpoints regardless of IP
