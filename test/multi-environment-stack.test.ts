@@ -535,8 +535,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            // Should have at least 3 log groups (API Gateway, ECS, Lambda authorizer)
-            template.resourceCountIs("AWS::Logs::LogGroup", 3);
+            // Should have at least 2 log groups (API Gateway, ECS) - WAF log group only created when allowlist configured
+            template.resourceCountIs("AWS::Logs::LogGroup", 2);
         });
     });
 });
