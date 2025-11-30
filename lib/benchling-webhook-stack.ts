@@ -4,6 +4,7 @@ import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
 import { HttpApiGateway } from "./http-api-gateway";
+import { NetworkLoadBalancer } from "./network-load-balancer";
 import { ProfileConfig } from "./types/config";
 import packageJson from "../package.json";
 
@@ -23,6 +24,7 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
 
 export class BenchlingWebhookStack extends cdk.Stack {
     private readonly fargateService: FargateService;
+    private readonly nlb: NetworkLoadBalancer;
     private readonly api: HttpApiGateway;
     public readonly webhookEndpoint: string;
 
@@ -200,6 +202,12 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const ecrRepo = ecr.Repository.fromRepositoryArn(this, "ExistingEcrRepository", ecrArn);
         const ecrImageUri = `${account}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTagValue}`;
 
+        // Create Network Load Balancer for ECS service
+        // v0.9.0: NLB provides reliable health checks for ECS tasks
+        this.nlb = new NetworkLoadBalancer(this, "NetworkLoadBalancer", {
+            vpc,
+        });
+
         // Create the Fargate service
         // Use imageTag for stackVersion if it looks like a timestamped dev version
         // (e.g., "0.7.0-20251104T000139Z"), otherwise use package.json version
@@ -211,6 +219,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             vpc,
             config: config,
             ecrRepository: ecrRepo,
+            targetGroup: this.nlb.targetGroup,  // v0.9.0: NLB target group for ECS tasks
             imageTag: imageTagValue,
             stackVersion: stackVersion,
             // Runtime-configurable parameters
@@ -232,11 +241,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
             logLevel: logLevelValue,
         });
 
-        // Create HTTP API v2 that routes through VPC Link to the service
+        // Create HTTP API v2 that routes through VPC Link to the NLB
+        // v0.9.0: NLB integration provides reliable routing to ECS tasks
         this.api = new HttpApiGateway(this, "HttpApiGateway", {
             vpc: vpc,
-            cloudMapService: this.fargateService.cloudMapService,
-            serviceSecurityGroup: this.fargateService.service.connections.securityGroups[0],
+            networkLoadBalancer: this.nlb.loadBalancer,
+            nlbListener: this.nlb.listener,
+            serviceSecurityGroup: this.fargateService.securityGroup,
             config: config,
         });
 
@@ -274,6 +285,17 @@ export class BenchlingWebhookStack extends cdk.Stack {
         new cdk.CfnOutput(this, "ApiGatewayLogGroup", {
             value: this.api.logGroup.logGroupName,
             description: "CloudWatch log group for API Gateway access logs",
+        });
+
+        // Export NLB information (v0.9.0)
+        new cdk.CfnOutput(this, "NetworkLoadBalancerDns", {
+            value: this.nlb.loadBalancer.loadBalancerDnsName,
+            description: "Network Load Balancer DNS name (internal)",
+        });
+
+        new cdk.CfnOutput(this, "TargetGroupArn", {
+            value: this.nlb.targetGroup.targetGroupArn,
+            description: "NLB Target Group ARN for ECS tasks",
         });
 
         // Conditionally export WAF outputs only if WAF is enabled

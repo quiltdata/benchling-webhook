@@ -3,7 +3,7 @@ import * as apigatewayv2 from "aws-cdk-lib/aws-apigatewayv2";
 import * as apigatewayv2Integrations from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import * as wafv2 from "aws-cdk-lib/aws-wafv2";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
-import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
+import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import { ProfileConfig } from "./types/config";
@@ -11,7 +11,8 @@ import { WafWebAcl } from "./waf-web-acl";
 
 export interface HttpApiGatewayProps {
     readonly vpc: ec2.IVpc;
-    readonly cloudMapService: servicediscovery.IService;
+    readonly networkLoadBalancer: elbv2.INetworkLoadBalancer;  // v0.9.0: NLB instead of Cloud Map
+    readonly nlbListener: elbv2.INetworkListener;  // v0.9.0: NLB listener for integration
     readonly serviceSecurityGroup: ec2.ISecurityGroup;
     readonly config: ProfileConfig;
 }
@@ -30,7 +31,8 @@ export class HttpApiGateway {
             removalPolicy: cdk.RemovalPolicy.DESTROY,
         });
 
-        // VPC Link for private integration with Cloud Map service
+        // VPC Link for private integration with Network Load Balancer
+        // v0.9.0: NLB provides reliable health checks for ECS tasks
         this.vpcLink = new apigatewayv2.VpcLink(scope, "VpcLink", {
             vpc: props.vpc,
             securityGroups: [props.serviceSecurityGroup],
@@ -40,14 +42,17 @@ export class HttpApiGateway {
         // Create HTTP API v2
         this.api = new apigatewayv2.HttpApi(scope, "BenchlingWebhookHttpAPI", {
             apiName: "BenchlingWebhookHttpAPI",
-            description: "HTTP API for Benchling webhook integration (v0.9.0+ with WAF)",
+            description: "HTTP API for Benchling webhook integration (v0.9.0+ with NLB and optional WAF)",
         });
 
-        // Service Discovery integration via VPC Link
-        const integration = new apigatewayv2Integrations.HttpServiceDiscoveryIntegration(
-            "CloudMapIntegration",
-            props.cloudMapService,
-            { vpcLink: this.vpcLink },
+        // Network Load Balancer integration via VPC Link
+        // v0.9.0: Replaced Cloud Map with NLB for reliable routing
+        const integration = new apigatewayv2Integrations.HttpNlbIntegration(
+            "NlbIntegration",
+            props.nlbListener,
+            {
+                vpcLink: this.vpcLink,
+            },
         );
 
         // Webhook routes - HMAC verification handled by FastAPI application

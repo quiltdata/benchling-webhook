@@ -2,7 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as ecs from "aws-cdk-lib/aws-ecs";
-import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
+import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
@@ -22,6 +22,7 @@ export interface FargateServiceProps {
     readonly vpc: ec2.IVpc;
     readonly config: ProfileConfig;
     readonly ecrRepository: ecr.IRepository;
+    readonly targetGroup: elbv2.INetworkTargetGroup;  // NEW: NLB target group for v0.9.0
     readonly imageTag?: string;
     readonly stackVersion?: string;
 
@@ -49,9 +50,9 @@ export interface FargateServiceProps {
 
 export class FargateService extends Construct {
     public readonly service: ecs.FargateService;
-    public readonly cloudMapService: servicediscovery.IService;
     public readonly cluster: ecs.Cluster;
     public readonly logGroup: logs.ILogGroup;
+    public readonly securityGroup: ec2.ISecurityGroup;
 
     /**
      * Extract secret name from Secrets Manager ARN
@@ -348,58 +349,39 @@ export class FargateService extends Construct {
         });
 
         // Create Security Group for Fargate tasks
-        const fargateSecurityGroup = new ec2.SecurityGroup(this, "FargateSecurityGroup", {
+        this.securityGroup = new ec2.SecurityGroup(this, "FargateSecurityGroup", {
             vpc: props.vpc,
             description: "Security group for Benchling webhook Fargate tasks",
             allowAllOutbound: true,
         });
 
-        // Allow VPC traffic to reach the service on 8080 (for VPC Link)
-        fargateSecurityGroup.addIngressRule(
+        // Allow traffic from NLB to reach the service on 8080
+        this.securityGroup.addIngressRule(
             ec2.Peer.ipv4(props.vpc.vpcCidrBlock),
             ec2.Port.tcp(8080),
             "Allow VPC traffic to service",
         );
 
-        // Create Fargate Service with Cloud Map integration
-        // Configure Cloud Map to track ECS task health instead of custom HTTP health checks
-        // Set failureThreshold to 1 to rely on ECS task health status propagation
+        // Create Fargate Service with NLB target group integration
+        // v0.9.0: Replaced Cloud Map with NLB for reliable health checks
         this.service = new ecs.FargateService(this, "Service", {
             cluster: this.cluster,
             taskDefinition: taskDefinition,
             desiredCount: 2,
             serviceName: "benchling-webhook-service",
             assignPublicIp: false,
-            securityGroups: [fargateSecurityGroup],
+            securityGroups: [this.securityGroup],
             healthCheckGracePeriod: cdk.Duration.seconds(60),
             minHealthyPercent: 50,
             maxHealthyPercent: 200,
             circuitBreaker: {
                 rollback: true,
             },
-            cloudMapOptions: {
-                name: "benchling-webhook",
-                cloudMapNamespace: new servicediscovery.PrivateDnsNamespace(this, "ServiceDiscoveryNamespace", {
-                    name: "benchling.local",
-                    vpc: props.vpc,
-                    description: "Service discovery namespace for Benchling webhook",
-                }),
-                dnsRecordType: servicediscovery.DnsRecordType.A,
-                dnsTtl: cdk.Duration.seconds(10),
-                container,
-                containerPort: 8080,
-                // NOTE: Cloud Map health checks with ECS are problematic
-                // CDK automatically adds HealthCheckCustomConfig with failureThreshold=1, but
-                // ECS does NOT automatically update custom health status. This causes all
-                // instances to remain UNHEALTHY, blocking API Gateway VPC Link routing.
-                //
-                // WORKAROUND: Rely on ECS container health checks to replace unhealthy tasks.
-                // API Gateway should route to all registered Cloud Map instances.
-                // Reduced TTL (10s) ensures DNS updates propagate quickly when tasks change.
-            },
         });
 
-        this.cloudMapService = this.service.cloudMapService!;
+        // Register ECS service with NLB target group
+        // The NLB will perform HTTP health checks on /health endpoint
+        this.service.attachToNetworkTargetGroup(props.targetGroup);
 
         // Configure auto-scaling
         const scaling = this.service.autoScaleTaskCount({
