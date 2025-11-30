@@ -385,13 +385,17 @@ export class FargateService extends Construct {
                     description: "Service discovery namespace for Benchling webhook",
                 }),
                 dnsRecordType: servicediscovery.DnsRecordType.A,
-                dnsTtl: cdk.Duration.seconds(30),
+                dnsTtl: cdk.Duration.seconds(10),
                 container,
                 containerPort: 8080,
-                // NOTE: Do NOT set failureThreshold here
-                // Setting failureThreshold creates a custom health check that requires manual
-                // UpdateInstanceCustomHealthStatus API calls. Without it, ECS automatically
-                // manages instance registration/deregistration based on container health checks.
+                // NOTE: Cloud Map health checks with ECS are problematic
+                // CDK automatically adds HealthCheckCustomConfig with failureThreshold=1, but
+                // ECS does NOT automatically update custom health status. This causes all
+                // instances to remain UNHEALTHY, blocking API Gateway VPC Link routing.
+                //
+                // WORKAROUND: Rely on ECS container health checks to replace unhealthy tasks.
+                // API Gateway should route to all registered Cloud Map instances.
+                // Reduced TTL (10s) ensures DNS updates propagate quickly when tasks change.
             },
         });
 
