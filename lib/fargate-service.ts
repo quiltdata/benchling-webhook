@@ -388,10 +388,10 @@ export class FargateService extends Construct {
                 dnsTtl: cdk.Duration.seconds(30),
                 container,
                 containerPort: 8080,
-                // Set failureThreshold to 1 to make Cloud Map rely on ECS task health
-                // This prevents "AWS_INIT_HEALTH_STATUS: UNHEALTHY" by ensuring Cloud Map
-                // instances track ECS container health checks rather than custom HTTP checks
-                failureThreshold: 1,
+                // NOTE: Do NOT set failureThreshold here
+                // Setting failureThreshold creates a custom health check that requires manual
+                // UpdateInstanceCustomHealthStatus API calls. Without it, ECS automatically
+                // manages instance registration/deregistration based on container health checks.
             },
         });
 
