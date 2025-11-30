@@ -30,14 +30,15 @@ function suggestSetup(profileName: string, message: string): void {
 type StackCheck = {
     stackExists: boolean;
     stackStatus?: string;
-    statusCategory: "none" | "in_progress" | "failed" | "rolled_back";
+    statusCategory: "none" | "in_progress" | "failed";
 };
 
 /**
- * Check if the existing stack is in a problematic state (rollback, failed, etc.)
+ * Check if the existing stack is in a problematic state (active rollback, failed, etc.)
  *
- * Note: v0.8.8+ all use the same architecture (REST API + ALB + VPC Link), so there's
- * no "legacy architecture" to detect. CloudFormation handles in-place updates seamlessly.
+ * Note: UPDATE_ROLLBACK_COMPLETE and ROLLBACK_COMPLETE are safe states - the stack
+ * successfully rolled back and is ready for new updates. Only active rollbacks
+ * (in progress) and truly failed states require user attention.
  */
 async function checkStackStatus(region: string): Promise<StackCheck> {
     try {
@@ -64,15 +65,14 @@ async function checkStackStatus(region: string): Promise<StackCheck> {
             "ROLLBACK_IN_PROGRESS",
         ];
         const failedStates = ["ROLLBACK_FAILED", "UPDATE_ROLLBACK_FAILED"];
-        const rolledBackStates = ["UPDATE_ROLLBACK_COMPLETE", "ROLLBACK_COMPLETE"];
+        // Note: UPDATE_ROLLBACK_COMPLETE and ROLLBACK_COMPLETE are SAFE states
+        // The stack successfully rolled back and is ready for new updates
 
         const statusCategory = inProgressStates.includes(stackStatus)
             ? "in_progress"
             : failedStates.includes(stackStatus)
                 ? "failed"
-                : rolledBackStates.includes(stackStatus)
-                    ? "rolled_back"
-                    : "none";
+                : "none";
 
         return {
             stackExists: true,
@@ -593,6 +593,17 @@ export async function deploy(
     console.log(`    ${chalk.bold("Image Tag:")}               ${options.imageTag}`);
     console.log(`    ${chalk.bold("Full Image URI:")}          ${ecrImageUri}`);
     console.log();
+    console.log(chalk.bold("  Security Settings:"));
+    const verificationEnabled = config.security?.enableVerification !== false;
+    console.log(
+        `    ${chalk.bold("Webhook Verification:")}    ${verificationEnabled ? chalk.green("ENABLED") : chalk.red("DISABLED")}`,
+    );
+    if (config.security?.webhookAllowList) {
+        console.log(`    ${chalk.bold("WAF IP Filtering:")}        ${chalk.green("ENABLED")}`);
+    } else {
+        console.log(`    ${chalk.bold("WAF IP Filtering:")}        ${chalk.gray("DISABLED")}`);
+    }
+    console.log();
     console.log(chalk.dim("  ℹ️  Configuration loaded from profile - single source of truth"));
     console.log(chalk.gray("─".repeat(80)));
     console.log();
@@ -608,7 +619,7 @@ export async function deploy(
 
         if (!response.proceed) {
             console.log(chalk.yellow("Deployment cancelled"));
-            process.exit(0);
+            process.exit(1);
         }
         console.log();
     }
