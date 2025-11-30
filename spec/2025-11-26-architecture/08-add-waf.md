@@ -1,4 +1,4 @@
-# Add WAF for IP Filtering (v1.0.0)
+# Add WAF for IP Filtering (v0.9.0)
 
 **Date**: 2025-11-28
 **Status**: Required
@@ -639,7 +639,7 @@ aws wafv2 disassociate-web-acl \
 
 ## Architecture Diagram
 
-### Final Architecture (v1.0.0)
+### Final Architecture (v0.9.0)
 
 ```
 Internet

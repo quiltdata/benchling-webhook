@@ -1,4 +1,4 @@
-# Restore HTTP Gateway with Lambda Authorizer (v1.0.0)
+# Restore HTTP Gateway with Lambda Authorizer (v0.9.0)
 
 **Date**: 2025-11-28
 **Status**: Required
@@ -219,7 +219,7 @@ this.api = new HttpApiGateway(this, "HttpApiGateway", {
 
 ### 6. Detect and Handle Legacy 0.8.0 Stacks
 
-**Problem:** v0.8.0 used REST API Gateway. Upgrading to v1.0.0 HTTP API v2 requires stack destruction (cannot update in-place).
+**Problem:** v0.8.0 used REST API Gateway. Upgrading to v0.9.0 HTTP API v2 requires stack destruction (cannot update in-place).
 
 **Detection Logic:**
 When deploying, check if existing stack uses REST API:
@@ -232,7 +232,7 @@ When deploying, check if existing stack uses REST API:
 ⚠️  BREAKING CHANGE DETECTED
 
 Your existing stack uses v0.8.x architecture (REST API Gateway).
-v1.0.0 uses HTTP API v2 (required for Lambda Authorizer body access).
+v0.9.0 uses HTTP API v2 (required for Lambda Authorizer body access).
 
 Technical reason: REST API Lambda Authorizers cannot access request body,
 breaking HMAC signature verification. HTTP API v2 provides body access.
@@ -242,7 +242,7 @@ Stack resources that will be REPLACED:
   - Network Load Balancer → (removed, direct VPC Link)
   - Endpoint URL format → (stage removed from path)
 
-You must destroy the existing stack before deploying v1.0.0:
+You must destroy the existing stack before deploying v0.9.0:
 
   npx cdk destroy --profile {profile} --context stage={stage}
 
@@ -258,7 +258,7 @@ Continue with deployment? (y/N)
 **Safeguard:**
 If user declines, abort deployment with error:
 ```
-Deployment aborted. Run destroy command to proceed with v1.0.0 upgrade.
+Deployment aborted. Run destroy command to proceed with v0.9.0 upgrade.
 ```
 
 ### 7. Migration from 0.8.0 Workflow
@@ -414,7 +414,7 @@ Internet
 ### Migration Tests:
 - Deploy v0.8.0 stack → Detect legacy architecture
 - User prompted to destroy → Aborts if declined
-- Destroy → Deploy v1.0.0 → Verify new endpoint works
+- Destroy → Deploy v0.9.0 → Verify new endpoint works
 - Update Benchling URL → Test webhook flow
 
 ---
@@ -424,7 +424,7 @@ Internet
 ### Files to Update:
 
 1. **MIGRATION.md** (create if missing)
-   - v0.8.0 → v1.0.0 upgrade guide
+   - v0.8.0 → v0.9.0 upgrade guide
    - Stack destruction instructions
    - Endpoint URL update instructions
    - Explanation of HTTP API v2 requirement (body access for HMAC)
