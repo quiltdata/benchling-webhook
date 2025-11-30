@@ -104,17 +104,13 @@ export async function runStackQuery(
             ? chalk.dim(`✓ Athena Results Bucket Policy: ${athenaResultsBucketPolicy}`)
             : chalk.yellow("⚠ Athena Results Bucket Policy: NOT FOUND"));
 
-        // Iceberg resources are optional (recent addition to Quilt stacks)
-        if (icebergDatabase) {
-            console.log(chalk.green(`✓ Iceberg Database: ${icebergDatabase}`));
-        } else {
-            console.log(chalk.dim("  Iceberg Database: Not available (optional)"));
-        }
-        if (icebergWorkgroup) {
-            console.log(chalk.green(`✓ Iceberg Workgroup: ${icebergWorkgroup}`));
-        } else {
-            console.log(chalk.dim("  Iceberg Workgroup: Not available (optional)"));
-        }
+        // Iceberg resources are optional (recent addition to Quilt stacks) - keep dimmed
+        console.log(icebergDatabase
+            ? chalk.dim(`✓ Iceberg Database: ${icebergDatabase}`)
+            : chalk.dim("  Iceberg Database: Not available (optional)"));
+        console.log(icebergWorkgroup
+            ? chalk.dim(`✓ Iceberg Workgroup: ${icebergWorkgroup}`)
+            : chalk.dim("  Iceberg Workgroup: Not available (optional)"));
 
         // IAM role ARNs are logged by inferQuiltConfig, so no need to log again here
 
@@ -155,12 +151,10 @@ export async function runStackQuery(
                 };
 
                 if (discoveredVpc.isValid) {
-                    console.log(chalk.green(`✓ VPC: ${discoveredVpc.vpcId}`));
-                    if (discoveredVpc.name) {
-                        console.log(chalk.dim(`  Name: ${discoveredVpc.name}`));
-                    }
-                    console.log(chalk.dim(`  CIDR: ${discoveredVpc.cidrBlock}`));
-                    console.log(chalk.dim(`  Private subnets: ${privateSubnets.length} across ${azs.size} AZs`));
+                    const vpcDisplay = discoveredVpc.name
+                        ? `${discoveredVpc.name} (${discoveredVpc.vpcId})`
+                        : discoveredVpc.vpcId;
+                    console.log(chalk.dim(`✓ VPC: ${vpcDisplay} - ${privateSubnets.length} private subnets in ${azs.size} AZs`));
                 } else {
                     console.log(chalk.yellow(`⚠ VPC: ${discoveredVpc.vpcId} (does not meet requirements)`));
                     discoveredVpc.validationErrors.forEach((err) => {

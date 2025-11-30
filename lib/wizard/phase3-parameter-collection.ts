@@ -31,9 +31,68 @@ export async function runParameterCollection(
     const { stackQuery, existingConfig, yes = false } = input;
 
     // =========================================================================
+    // VPC Configuration (FIRST - most important infrastructure decision)
+    // =========================================================================
+    console.log(chalk.cyan("VPC Configuration:"));
+
+    let vpcId: string | undefined;
+
+    // Use VPC discovered in Phase 2 (Stack Query)
+    const discoveredVpc = stackQuery.discoveredVpc;
+
+    if (discoveredVpc && discoveredVpc.isValid) {
+        // Report discovered VPC
+        const vpcDescription = discoveredVpc.name
+            ? `${discoveredVpc.name} (${discoveredVpc.vpcId})`
+            : discoveredVpc.vpcId;
+        console.log(`  VPC: ${vpcDescription} - ${discoveredVpc.privateSubnetCount} private subnets in ${discoveredVpc.availabilityZoneCount} AZs`);
+
+        // Warn about potential connectivity issues
+        console.log(chalk.yellow("  ⚠ Warning: This VPC may block Benchling webhook access"));
+        console.log(chalk.dim("    Security groups may not allow inbound connections from Benchling"));
+
+        if (yes) {
+            // In non-interactive mode, check if there's an existing VPC preference
+            if (existingConfig?.deployment?.vpc?.vpcId) {
+                vpcId = existingConfig.deployment.vpc.vpcId;
+                console.log(chalk.dim(`  Using VPC: ${vpcId} (from existing config)`));
+            } else {
+                // Default to creating new VPC in non-interactive mode (safer default)
+                vpcId = undefined;
+                console.log(chalk.dim("  Will create new standalone VPC (recommended, safer default)"));
+            }
+        } else {
+            // Interactive mode - ask if they want to create standalone VPC
+            // Default to YES (create new VPC) unless existing config uses this VPC
+            const defaultCreateStandalone = existingConfig?.deployment?.vpc?.vpcId !== discoveredVpc.vpcId;
+
+            const { createStandaloneVpc } = await inquirer.prompt([
+                {
+                    type: "confirm",
+                    name: "createStandaloneVpc",
+                    message: "Create standalone VPC? (No = use existing VPC from stack)",
+                    default: defaultCreateStandalone,
+                },
+            ]);
+
+            vpcId = createStandaloneVpc ? undefined : discoveredVpc.vpcId;
+
+            if (vpcId) {
+                console.log(chalk.dim(`  Using existing VPC: ${vpcId}`));
+            } else {
+                console.log(chalk.dim("  Will create new standalone VPC (2 AZs, private subnets, NAT Gateways)"));
+            }
+        }
+    } else {
+        // No valid VPC discovered - will auto-create
+        console.log("  VPC: Will create new standalone VPC (2 AZs, private subnets, NAT Gateways)");
+        vpcId = undefined;
+    }
+
+    // =========================================================================
     // Benchling Configuration
     // =========================================================================
-    console.log(chalk.cyan("Benchling Configuration:"));
+    console.log("\n" + chalk.cyan("Benchling Configuration:"));
 
     // Tenant
     let tenant: string;
@@ -338,63 +397,6 @@ export async function runParameterCollection(
 
     console.log(`  Region: ${region} (from stack)`);
     console.log(`  Account: ${account} (from stack)`);
-
-    // =========================================================================
-    // VPC Configuration
-    // =========================================================================
-    let vpcId: string | undefined;
-
-    // Use VPC discovered in Phase 2 (Stack Query)
-    const discoveredVpc = stackQuery.discoveredVpc;
-
-    if (discoveredVpc && discoveredVpc.isValid) {
-        // Report discovered VPC
-        const vpcDescription = discoveredVpc.name
-            ? `${discoveredVpc.name} (${discoveredVpc.vpcId})`
-            : discoveredVpc.vpcId;
-        console.log(`  VPC: ${vpcDescription} - ${discoveredVpc.privateSubnetCount} private subnets in ${discoveredVpc.availabilityZoneCount} AZs`);
-
-        // Warn about potential connectivity issues
-        console.log(chalk.yellow("  ⚠ Warning: This VPC may block Benchling webhook access"));
-        console.log(chalk.dim("    Security groups may not allow inbound connections from Benchling"));
-
-        if (yes) {
-            // In non-interactive mode, check if there's an existing VPC preference
-            if (existingConfig?.deployment?.vpc?.vpcId) {
-                vpcId = existingConfig.deployment.vpc.vpcId;
-                console.log(chalk.dim(`  Using VPC: ${vpcId} (from existing config)`));
-            } else {
-                // Default to creating new VPC in non-interactive mode (safer default)
-                vpcId = undefined;
-                console.log(chalk.dim("  Will auto-create new VPC (recommended, safer default)"));
-            }
-        } else {
-            // Interactive mode - simple yes/no question
-            // Default to NO (create new VPC) unless existing config uses this VPC
-            const defaultUseExisting = existingConfig?.deployment?.vpc?.vpcId === discoveredVpc.vpcId;
-
-            const { useExistingVpc } = await inquirer.prompt([
-                {
-                    type: "confirm",
-                    name: "useExistingVpc",
-                    message: "Use this VPC? (No = create new isolated VPC)",
-                    default: defaultUseExisting,
-                },
-            ]);
-
-            vpcId = useExistingVpc ? discoveredVpc.vpcId : undefined;
-
-            if (vpcId) {
-                console.log(chalk.dim(`  Using existing VPC: ${vpcId}`));
-            } else {
-                console.log(chalk.dim("  Will auto-create new VPC (2 AZs, private subnets, NAT Gateways)"));
-            }
-        }
-    } else {
-        // No valid VPC discovered - will auto-create
-        console.log("  VPC: Will auto-create (2 AZs, private subnets, NAT Gateways)");
-        vpcId = undefined;
-    }
 
     // =========================================================================
     // Optional Configuration
