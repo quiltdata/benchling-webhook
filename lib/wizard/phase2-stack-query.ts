@@ -43,7 +43,7 @@ export async function runStackQuery(
 ): Promise<StackQueryResult> {
     const { awsProfile, awsRegion } = options;
 
-    console.log(`Querying CloudFormation stack for catalog: ${catalogDns}...\n`);
+    console.log(`Fetching catalog configuration for: ${catalogDns}...`);
 
     try {
         // Use inferQuiltConfig with the confirmed catalog - this will skip quilt3 check
@@ -86,6 +86,14 @@ export async function runStackQuery(
         const readRoleArn = inferenceResult.readRoleArn;
         const writeRoleArn = inferenceResult.writeRoleArn;
 
+        // Show IAM roles (these are logged by inferQuiltConfig)
+        if (readRoleArn) {
+            console.log(chalk.dim(`✓ T4BucketReadRole discovered: ${readRoleArn}`));
+        }
+        if (writeRoleArn) {
+            console.log(chalk.dim(`✓ T4BucketWriteRole: ${writeRoleArn}`));
+        }
+
         // Log what we found
         console.log(chalk.green("✓ Stack query succeeded\n"));
         console.log(chalk.dim(`✓ Stack ARN: ${stackArn}`));
@@ -104,17 +112,13 @@ export async function runStackQuery(
             ? chalk.dim(`✓ Athena Results Bucket Policy: ${athenaResultsBucketPolicy}`)
             : chalk.yellow("⚠ Athena Results Bucket Policy: NOT FOUND"));
 
-        // Iceberg resources are optional (recent addition to Quilt stacks)
-        if (icebergDatabase) {
-            console.log(chalk.green(`✓ Iceberg Database: ${icebergDatabase}`));
-        } else {
-            console.log(chalk.dim("  Iceberg Database: Not available (optional)"));
-        }
-        if (icebergWorkgroup) {
-            console.log(chalk.green(`✓ Iceberg Workgroup: ${icebergWorkgroup}`));
-        } else {
-            console.log(chalk.dim("  Iceberg Workgroup: Not available (optional)"));
-        }
+        // Iceberg resources are optional (recent addition to Quilt stacks) - keep dimmed
+        console.log(icebergDatabase
+            ? chalk.dim(`✓ Iceberg Database: ${icebergDatabase}`)
+            : chalk.dim("  Iceberg Database: Not available (optional)"));
+        console.log(icebergWorkgroup
+            ? chalk.dim(`✓ Iceberg Workgroup: ${icebergWorkgroup}`)
+            : chalk.dim("  Iceberg Workgroup: Not available (optional)"));
 
         // IAM role ARNs are logged by inferQuiltConfig, so no need to log again here
 
@@ -155,12 +159,10 @@ export async function runStackQuery(
                 };
 
                 if (discoveredVpc.isValid) {
-                    console.log(chalk.green(`✓ VPC: ${discoveredVpc.vpcId}`));
-                    if (discoveredVpc.name) {
-                        console.log(chalk.dim(`  Name: ${discoveredVpc.name}`));
-                    }
-                    console.log(chalk.dim(`  CIDR: ${discoveredVpc.cidrBlock}`));
-                    console.log(chalk.dim(`  Private subnets: ${privateSubnets.length} across ${azs.size} AZs`));
+                    const vpcDisplay = discoveredVpc.name
+                        ? `${discoveredVpc.name} (${discoveredVpc.vpcId})`
+                        : discoveredVpc.vpcId;
+                    console.log(chalk.dim(`✓ VPC: ${vpcDisplay} - ${privateSubnets.length} private subnets in ${azs.size} AZs`));
                 } else {
                     console.log(chalk.yellow(`⚠ VPC: ${discoveredVpc.vpcId} (does not meet requirements)`));
                     discoveredVpc.validationErrors.forEach((err) => {

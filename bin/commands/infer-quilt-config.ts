@@ -247,6 +247,7 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
 
                     // EXACT MATCH ONLY - QuiltWebHost must exactly equal the target catalog
                     if (normalizedStackUrl === normalizedTargetUrl) {
+                        // Show "Found:" message to complete the search
                         console.log(`\nFound: ${stackInfo.stackName}`);
                         // Warn if stack is in a problematic state
                         if (stackStatus && !["CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_ROLLBACK_COMPLETE"].includes(stackStatus)) {
@@ -328,8 +329,7 @@ export async function inferQuiltConfig(options: {
     let quilt3Config: QuiltCliConfig | null = null;
 
     if (catalogDns) {
-        // Use the provided catalog DNS - skip quilt3 check
-        console.log(`Using provided catalog: ${catalogDns}`);
+        // Use the provided catalog DNS - skip quilt3 check (no console output - caller handles this)
         const catalogUrl = catalogDns.startsWith("http") ? catalogDns : `https://${catalogDns}`;
         result.catalog = catalogUrl;
         result.source = "provided";
@@ -352,14 +352,13 @@ export async function inferQuiltConfig(options: {
 
     if (quilt3Config?.catalogUrl && !searchRegion) {
         try {
-            console.log(`\nFetching catalog configuration from ${quilt3Config.catalogUrl}...`);
             const configUrl = quilt3Config.catalogUrl.replace(/\/$/, "") + "/config.json";
             const catalogConfig = (await fetchJson(configUrl)) as { region?: string; stackName?: string; [key: string]: unknown };
 
             if (catalogConfig.region) {
                 searchRegion = catalogConfig.region;
                 result.region = searchRegion;
-                console.log(`✓ Found catalog region: ${searchRegion}`);
+                console.log(`✓ Found catalog region: ${searchRegion}\n`);
             } else {
                 // FAIL FAST: config.json must have region field for exact catalog matching
                 throw new Error(
@@ -381,11 +380,11 @@ export async function inferQuiltConfig(options: {
     }
 
     // Step 2: Search for CloudFormation stacks
-    console.log("\nSearching for Quilt CloudFormation stacks...");
-
     // Use the region from config.json if available, otherwise use provided region or default
     const regionToSearch = searchRegion || "us-east-1";
-    console.log(`Searching in region: ${regionToSearch}`);
+
+    // Show search message
+    console.log(`Searching for Quilt CloudFormation stacks in region: ${regionToSearch}`);
 
     // Pass the target catalog so we can stop early if we find it
     const stacks = await findQuiltStacks(regionToSearch, profile, result.catalog);
@@ -402,7 +401,10 @@ export async function inferQuiltConfig(options: {
         return result;
     }
 
-    console.log(`Found ${stacks.length} Quilt stack(s):\n`);
+    // Only show count if catalog was NOT explicitly provided
+    if (!catalogDns) {
+        console.log(`Found ${stacks.length} Quilt stack(s):\n`);
+    }
 
     let selectedStack: QuiltStackInfo;
 
@@ -415,7 +417,10 @@ export async function inferQuiltConfig(options: {
         const matchingStack = stacks.find((s) => s.catalogUrl && normalizeUrl(s.catalogUrl) === targetUrl);
         if (matchingStack) {
             selectedStack = matchingStack;
-            console.log(`Using stack: ${selectedStack.stackName}`);
+            // Only log if catalog was NOT explicitly provided
+            if (!catalogDns) {
+                console.log(`Using stack: ${selectedStack.stackName}`);
+            }
 
             // If --yes not passed, interactive mode, and catalog was NOT explicitly provided, verify the catalog name before using it
             if (!yes && interactive && !catalogDns) {

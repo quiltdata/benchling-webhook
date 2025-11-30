@@ -71,8 +71,9 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 
 - [lib/benchling-webhook-stack.ts](lib/benchling-webhook-stack.ts) - Main orchestration
 - [lib/fargate-service.ts](lib/fargate-service.ts) - ECS Fargate service
-- [lib/http-api-gateway.ts](lib/http-api-gateway.ts) - HTTP API + VPC Link routing
-- [lib/lambda-authorizer.ts](lib/lambda-authorizer.ts) - HMAC signature verification
+- [lib/http-api-gateway.ts](lib/http-api-gateway.ts) - HTTP API + VPC Link + optional WAF
+- [lib/network-load-balancer.ts](lib/network-load-balancer.ts) - Network Load Balancer with health checks
+- [lib/waf-web-acl.ts](lib/waf-web-acl.ts) - WAF Web ACL for IP filtering (optional)
 - [lib/ecr-repository.ts](lib/ecr-repository.ts) - Docker registry
 - [lib/xdg-config.ts](lib/xdg-config.ts) - XDG configuration management
 - [lib/types/](lib/types/) - TypeScript type definitions
@@ -112,129 +113,100 @@ gh run download <run-id> --dir ./artifacts               # Download run artifact
 
 ---
 
-## Architecture (v1.0.0)
+## Architecture (v0.9.0)
 
-AWS CDK application deploying auto-scaling webhook processor with defense-in-depth security:
+AWS CDK application deploying auto-scaling webhook processor:
 
 ### Components
 
-- **API Gateway (HTTP API v2)** → HTTPS webhook routing with Lambda Authorizer
-- **Lambda Authorizer** → HMAC signature verification (first line of defense)
-- **VPC Link + Cloud Map** → Private service discovery to tasks
-- **Fargate (ECS)** → FastAPI app on port 8080 (auto-scales 2-10 tasks, second line of defense)
+- **HTTP API Gateway v2** → Public HTTPS endpoint with CloudWatch logging
+- **Optional WAF** → IP allowlisting (only deployed when `webhookAllowList` configured)
+- **VPC Link** → Private connection between API Gateway and VPC
+- **Network Load Balancer** → Internal load balancer with health checks (replaces Cloud Map)
+- **ECS Fargate** → FastAPI application on port 8080 (auto-scales 2-10 tasks)
 - **S3** → Payload and package storage
 - **SQS** → Quilt package creation queue
 - **Secrets Manager** → Benchling OAuth credentials
-- **CloudWatch** → Logging and monitoring
+- **CloudWatch** → Centralized logging and monitoring
 
 ### Flow Diagram
 
-```
-Benchling
-   |
-   | HTTPS POST (webhook)
-   v
-API Gateway (HTTP API v2)
-   |
-   | Extract headers + body
-   v
-Lambda Authorizer
-   |
-   | Verify HMAC(secret, body) == signature
-   | - ✅ Valid → Allow request
-   | - ❌ Invalid → 403 Forbidden (reject before ECS)
-   v
+```text
+Internet
+  ↓
+[Optional] AWS WAF (IP filtering, only if webhookAllowList configured)
+  ↓
+HTTP API Gateway v2
+  ↓
 VPC Link
-   |
-   | Private network connection
-   v
-Cloud Map (benchling.local)
-   |
-   | Service discovery
-   v
-ECS Fargate Tasks (FastAPI)
-   |
-   | Re-verify HMAC (defense-in-depth)
-   | Process webhook payload
-   v
+  ↓
+Network Load Balancer (internal)
+  ↓
+ECS Fargate Tasks (FastAPI on port 8080)
+  |
+  | HMAC signature verification
+  | Process webhook payload
+  ↓
 S3 + SQS → Quilt Package Creation
 ```
 
-### Defense-in-Depth Security
+### Security Model
 
-**Two layers of HMAC verification:**
+**Single Authentication Layer: FastAPI HMAC Verification**
 
-1. **Lambda Authorizer** (Authorization Layer)
-   - Verifies HMAC signature before request reaches ECS
-   - Rejects invalid signatures with 403 Forbidden
-   - Prevents unauthorized requests from consuming ECS resources
-   - Logs all authorization attempts to CloudWatch
+- All webhook requests MUST have valid HMAC signatures computed over raw request body
+- FastAPI uses Benchling SDK to verify signatures against secret from Secrets Manager
+- This is the ONLY layer that validates webhook authenticity
+- Invalid signatures return 403 Forbidden
 
-2. **FastAPI Application** (Application Layer)
-   - Re-verifies HMAC signature in application code
-   - Guards against authorization bypass scenarios
-   - Provides detailed logging for security auditing
-   - Enables graceful degradation if authorizer is disabled
+**Optional Network Layer: WAF IP Filtering**
 
-**Why both layers?**
-- **Fail-fast**: Lambda rejects bad requests early (cost optimization)
-- **Defense-in-depth**: Application validates independently (security best practice)
-- **Auditability**: Two layers of logging for security events
-- **Flexibility**: Application verification can be toggled via `ENABLE_WEBHOOK_VERIFICATION`
+- Deploy WAF only when `webhookAllowList` is configured
+- Blocks unknown IPs at AWS edge (cost savings)
+- Does NOT perform authentication (IP ≠ identity)
+- When not configured: No WAF deployed, saves $7/month
 
-### HTTP API v2 Requirement
+**Why No Lambda Authorizer?**
 
-**Why HTTP API v2 instead of REST API?**
+Lambda Authorizers cannot verify HMAC signatures because:
 
-- **REST API Lambda Authorizers cannot access request body** → HMAC verification impossible
-- **HTTP API v2 Lambda Authorizers can access request body** via `event['body']` field
-- Benchling HMAC signatures are computed over entire request body
-- Without body access, signature verification is broken
+1. They cannot access the raw request body needed for HMAC computation
+2. HTTP API v2 base64-encodes the body before passing to Lambda
+3. HMAC must be computed over the exact bytes Benchling sent
+4. Base64 encoding changes the bytes, breaking signature verification
 
-### Architecture Evolution
-
-**v0.8.x (REST API + NLB):**
-```
-Benchling → REST API → VPC Link → NLB → ECS
-```
-- Problem: REST API authorizers cannot access body
-- Result: HMAC verification broken
-
-**v0.9.0 (HTTP API, no authorizer):**
-```
-Benchling → HTTP API v2 → VPC Link → Cloud Map → ECS
-```
-- Removed NLB (cost savings)
-- No Lambda Authorizer (all verification in FastAPI)
-
-**v1.0.0 (HTTP API + Lambda Authorizer):**
-```
-Benchling → HTTP API v2 → Lambda Authorizer → VPC Link → Cloud Map → ECS
-```
-- HTTP API v2 provides body access to Lambda
-- Defense-in-depth: Both Lambda and FastAPI verify HMAC
-- No NLB needed (direct VPC Link → Cloud Map)
+See [spec/2025-11-26-architecture/10-arch-29.md](spec/2025-11-26-architecture/10-arch-29.md) for detailed architectural analysis.
 
 ### Cost Analysis
 
-**Monthly Fixed Costs:**
+**Monthly Fixed Costs (us-east-1):**
 
-| Component | v0.8.x | v1.0.0 | Savings |
-|-----------|--------|--------|---------|
-| Network Load Balancer | $16.20 | $0.00 | -$16.20 |
-| VPC Link | $0.00 | $0.00 | $0.00 |
-| **Total Fixed** | **$16.20** | **$0.00** | **-$16.20** |
+| Component | Cost |
+|-----------|------|
+| HTTP API v2 | $0.00 |
+| VPC Link | $0.00 |
+| Network Load Balancer | $16.20 |
+| ECS Fargate (2 tasks) | $14.50 |
+| NAT Gateway | $32.40 |
+| **Base Total (No WAF)** | **$63.10** |
+| **Add WAF (Optional)** | **+$7.00** |
+| **Total with WAF** | **$70.10** |
 
 **Variable Costs (per million requests):**
 
 | Component | Cost |
 |-----------|------|
 | HTTP API v2 | ~$1.00 |
-| Lambda Authorizer | ~$0.20 |
-| ECS Fargate | ~$40.00 (varies by task size/count) |
-| **Total Variable** | **~$41.20** |
+| WAF (if enabled) | ~$0.60 |
+| ECS Fargate | Included in fixed cost |
+| **Total Variable (No WAF)** | **~$1.01** |
+| **Total Variable (With WAF)** | **~$1.61** |
 
-**Net Monthly Savings:** ~$16.20 (from NLB removal)
+**Trade-offs:**
+
+- +$11.81/month vs v0.8.x, but eliminates Lambda complexity and provides lower latency
+- +$16.01/month vs broken Cloud Map architecture, but actually works
+- WAF optional: Deploy only when IP filtering needed
 
 ---
 
@@ -578,8 +550,8 @@ npm run deploy:prod -- \
 **CloudWatch Log Groups:**
 
 - `/aws/apigateway/benchling-webhook-http` - API Gateway access logs
-- `/aws/lambda/BenchlingWebhookAuthorizer` - Lambda Authorizer logs (HMAC verification)
-- `/ecs/benchling-webhook` - ECS container logs (FastAPI application)
+- `/ecs/benchling-webhook` - ECS container logs (FastAPI application with HMAC verification)
+- `/aws/waf/benchling-webhook` - WAF logs (only if IP filtering enabled)
 
 **View logs:**
 
@@ -587,11 +559,11 @@ npm run deploy:prod -- \
 # API Gateway access logs
 aws logs tail /aws/apigateway/benchling-webhook-http --follow
 
-# Lambda Authorizer logs (authorization events)
-aws logs tail /aws/lambda/BenchlingWebhookAuthorizer --follow
-
-# ECS application logs
+# ECS application logs (includes HMAC verification)
 aws logs tail /ecs/benchling-webhook --follow
+
+# WAF logs (if IP filtering enabled)
+aws logs tail /aws/waf/benchling-webhook --follow
 
 # All logs (integrated command)
 npx @quiltdata/benchling-webhook logs --profile default
@@ -601,14 +573,16 @@ npx @quiltdata/benchling-webhook logs --profile default
 
 - `/health` - General health
 - `/health/ready` - Readiness probe
+- `/health/live` - Liveness probe
 
 ### Metrics
 
 - **CloudWatch Metrics:**
   - ECS tasks running/desired
   - API Gateway 4xx/5xx errors
-  - Lambda Authorizer invocations/errors
+  - NLB healthy/unhealthy targets
   - ECS CPU/memory utilization
+  - WAF blocked requests (if enabled)
 
 - **Deployment outputs:** `~/.config/benchling-webhook/{profile}/deployments.json`
 
@@ -626,8 +600,9 @@ npx @quiltdata/benchling-webhook logs --profile default
 | Secrets not synced | Secrets Manager unreachable | Validate IAM permissions; retry sync with backoff |
 | CDK stack drift | Manual AWS changes | Run `cdk diff` preflight; warn on drift detection |
 | Legacy config detected | Upgrading from v0.6.x | Display migration message; see MIGRATION.md |
-| Lambda auth failures | Invalid HMAC signatures | Check CloudWatch logs for `/aws/lambda/BenchlingWebhookAuthorizer` |
-| 403 Forbidden | Signature verification failed | Verify Benchling secret matches deployed secret |
+| 403 Forbidden (HMAC) | Invalid signature | Check ECS logs for HMAC verification errors; verify Benchling secret |
+| 403 Forbidden (WAF) | IP not in allowlist | Add IP to webhookAllowList or disable WAF temporarily |
+| NLB unhealthy targets | ECS health check failing | Check ECS logs and container health status |
 
 ---
 
@@ -650,20 +625,21 @@ npx @quiltdata/benchling-webhook logs --profile default
 - **Idempotence**: Re-running `npm run setup` updates existing profile
 - **Observability**: Every stage logs explicit diagnostics to CloudWatch
 - **Separation of Concerns**: npm orchestrates, TypeScript/Python implement
-- **Defense-in-Depth**: Multiple layers of security (Lambda + FastAPI verification)
+- **Simplicity Over Complexity**: Single authentication layer (FastAPI HMAC), optional network filtering (WAF)
 
 ---
 
 ## Security
 
-- **HMAC Signature Verification**: Two-layer verification (Lambda Authorizer + FastAPI)
+- **HMAC Signature Verification**: Single authentication layer in FastAPI (raw body access required)
+- **Optional WAF IP Filtering**: Block unknown IPs at AWS edge when allowlist configured
 - **Secrets in AWS Secrets Manager**: Credentials never stored in code
 - **Private Network**: ECS tasks in private subnets, no public IPs
-- **VPC Link**: Encrypted connection between API Gateway and ECS
+- **VPC Link**: Encrypted connection between API Gateway and NLB
 - **Container Scanning**: ECR image scanning enabled
 - **Least-Privilege IAM**: Task roles limited to required permissions
 - **TLS 1.2+ Encryption**: All API Gateway endpoints
-- **CloudWatch Logging**: Audit trail for all authorization events
+- **CloudWatch Logging**: Audit trail for HMAC verification and WAF decisions
 
 ---
 

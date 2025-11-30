@@ -65,69 +65,66 @@ If the App Canvas is not already part of your standard notebook template, Benchl
 
 ![App Canvas - Insert](imgs/benchling-insert.png)
 
-## Architecture (v1.0.0)
+## Architecture (v0.9.0)
 
-AWS CDK application with defense-in-depth security:
+AWS CDK application with simple, reliable webhook processing:
 
-```
+```text
 Benchling Webhook
         |
         | HTTPS POST
         v
+[Optional] AWS WAF
+        | (IP filtering)
+        v
 API Gateway (HTTP API v2)
         |
-        | Extract headers + body
         v
-Lambda Authorizer ←─────────────┐
-        |                        │
-        | Verify HMAC signature  │ Defense-in-Depth:
-        | - Valid → Allow        │ Both Lambda and
-        | - Invalid → 403        │ FastAPI verify
-        v                        │ HMAC signatures
-VPC Link                         │
-        |                        │
-        v                        │
-Cloud Map (benchling.local)      │
-        |                        │
-        v                        │
-ECS Fargate (FastAPI)   ─────────┘
+VPC Link
         |
-        | Re-verify HMAC
-        | Process webhook
+        v
+Network Load Balancer
+        | (internal)
+        v
+ECS Fargate (FastAPI)
+        |
+        | HMAC signature verification
+        | Process webhook payload
         v
 S3 + SQS → Quilt Package
 ```
 
 ### Components
 
-- **API Gateway (HTTP API v2)** - HTTPS webhook routing with Lambda Authorizer integration
-- **Lambda Authorizer** - HMAC signature verification (first line of defense, logs to CloudWatch)
-- **VPC Link + Cloud Map** - Private service discovery to ECS tasks
-- **ECS Fargate** - FastAPI application (auto-scales 2-10 tasks, second line of defense)
+- **HTTP API Gateway v2** - Public HTTPS endpoint with CloudWatch logging
+- **Optional WAF** - IP allowlisting at AWS edge (only when configured)
+- **VPC Link** - Private connection between API Gateway and VPC
+- **Network Load Balancer** - Internal load balancer with health checks
+- **ECS Fargate** - FastAPI application (auto-scales 2-10 tasks) with HMAC verification
 - **S3** - Payload and package storage
 - **SQS** - Quilt package creation queue
 - **Secrets Manager** - Benchling OAuth credentials
-- **CloudWatch** - Logging and monitoring for all components
+- **CloudWatch** - Centralized logging and monitoring
 
 ### Security Features
 
-**Defense-in-Depth HMAC Verification:**
+**Single Authentication Layer:**
 
-1. **Lambda Authorizer Layer** - Verifies webhook signatures before request reaches ECS, rejecting invalid requests with 403 Forbidden
-2. **Application Layer** - FastAPI re-verifies signatures for defense-in-depth protection
+- **FastAPI HMAC Verification** - All webhook requests verified against Benchling secret
+- Signatures computed over raw request body (Lambda Authorizers cannot access raw body)
+- Invalid signatures return 403 Forbidden
 
-**Why HTTP API v2?**
+**Optional Network Filtering:**
 
-- REST API Lambda Authorizers cannot access request body (HMAC verification impossible)
-- HTTP API v2 Lambda Authorizers can access body via `event['body']` field
-- Benchling HMAC signatures are computed over entire request body
-- HTTP API v2 is the only architecture that supports proper webhook signature verification
+- **AWS WAF** - Deploy only when IP allowlist configured
+- Blocks unknown IPs at edge, reducing API Gateway costs
+- IP filtering does NOT replace authentication
 
-**Additional Security:**
+**Infrastructure Security:**
 
 - Private network (ECS in private subnets, no public IPs)
 - TLS 1.2+ encryption on all API Gateway endpoints
-- CloudWatch audit trail for all authorization events
+- CloudWatch audit trail for HMAC verification and WAF decisions
 - Least-privilege IAM roles
 
 ## Installation
@@ -191,14 +188,14 @@ If you run into problems, contact [Quilt Support](support@quilt.bio)
 ### CloudWatch Logs
 
 - `/aws/apigateway/benchling-webhook-http` - API Gateway access logs
-- `/aws/lambda/BenchlingWebhookAuthorizer` - Lambda Authorizer logs (HMAC verification)
-- `/ecs/benchling-webhook` - ECS container logs (application logs)
+- `/ecs/benchling-webhook` - ECS container logs (includes HMAC verification)
+- `/aws/waf/benchling-webhook` - WAF logs (only if IP filtering enabled)
 
 ### View Logs
 
 ```bash
 # Via AWS CLI
-aws logs tail /aws/lambda/BenchlingWebhookAuthorizer --follow
+aws logs tail /aws/apigateway/benchling-webhook-http --follow
 aws logs tail /ecs/benchling-webhook --follow
 
 # Via NPX (all logs combined)
@@ -219,14 +216,11 @@ npx @quiltdata/benchling-webhook@latest logs [--profile <name>]
 
 # Show all available commands
 npx @quiltdata/benchling-webhook@latest --help
-
-# Validate Lambda authorizer bundle locally (offline-friendly)
-npm run test:lambda-bundle
 ```
 
-## Upgrading from v0.8.x or v0.9.0
+## Upgrading from v0.8.x
 
-Version 1.0.0 introduces HTTP API v2 with Lambda Authorizer for proper HMAC signature verification. **This is a breaking change that requires stack recreation.**
+Version 0.9.0 introduces Network Load Balancer architecture with simplified security model. **This is a breaking change that requires stack recreation.**
 
 See [MIGRATION.md](./MIGRATION.md) for detailed upgrade instructions.
 
