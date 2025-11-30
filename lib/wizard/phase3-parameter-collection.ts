@@ -49,7 +49,6 @@ export async function runParameterCollection(
 
         // Warn about potential connectivity issues
         console.log(chalk.yellow("  ⚠ Warning: This VPC may block Benchling webhook access"));
-        console.log(chalk.dim("    Security groups may not allow inbound connections from Benchling"));
 
         if (yes) {
             // In non-interactive mode, check if there's an existing VPC preference

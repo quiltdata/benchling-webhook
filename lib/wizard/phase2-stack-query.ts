@@ -43,7 +43,7 @@ export async function runStackQuery(
 ): Promise<StackQueryResult> {
     const { awsProfile, awsRegion } = options;
 
-    console.log(`Querying CloudFormation stack for catalog: ${catalogDns}...\n`);
+    console.log(`Fetching catalog configuration for: ${catalogDns}...`);
 
     try {
         // Use inferQuiltConfig with the confirmed catalog - this will skip quilt3 check
@@ -85,6 +85,14 @@ export async function runStackQuery(
         const athenaResultsBucketPolicy = inferenceResult.athenaResultsBucketPolicy;
         const readRoleArn = inferenceResult.readRoleArn;
         const writeRoleArn = inferenceResult.writeRoleArn;
+
+        // Show IAM roles (these are logged by inferQuiltConfig)
+        if (readRoleArn) {
+            console.log(chalk.dim(`✓ T4BucketReadRole discovered: ${readRoleArn}`));
+        }
+        if (writeRoleArn) {
+            console.log(chalk.dim(`✓ T4BucketWriteRole: ${writeRoleArn}`));
+        }
 
         // Log what we found
         console.log(chalk.green("✓ Stack query succeeded\n"));
