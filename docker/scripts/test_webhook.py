@@ -167,8 +167,21 @@ def test_health_endpoints(server_url="http://localhost:5001"):
     for endpoint in endpoints:
         try:
             response = requests.get(f"{server_url}{endpoint}", timeout=5)
-            print(f"✅ {endpoint}: {response.status_code} - {response.json()}")
-            results.append((endpoint, True))
+
+            # Validate status code: /health/ready can be 503 (not ready), others should be 200
+            expected_codes = [200] if endpoint != "/health/ready" else [200, 503]
+            is_success = response.status_code in expected_codes
+
+            status_icon = "✅" if is_success else "❌"
+
+            # Try to parse JSON response
+            try:
+                response_data = response.json()
+                print(f"{status_icon} {endpoint}: {response.status_code} - {response_data}")
+            except json.JSONDecodeError:
+                print(f"{status_icon} {endpoint}: {response.status_code} - {response.text}")
+
+            results.append((endpoint, is_success))
         except Exception as e:
             print(f"❌ {endpoint}: {e}")
             results.append((endpoint, False))
