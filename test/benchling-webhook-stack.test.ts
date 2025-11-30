@@ -44,7 +44,7 @@ describe("BenchlingWebhookStack", () => {
     });
 
     test("creates CloudWatch log groups", () => {
-        template.resourceCountIs("AWS::Logs::LogGroup", 3); // API Gateway, container logs, Lambda authorizer
+        template.resourceCountIs("AWS::Logs::LogGroup", 2); // API Gateway, container logs (no WAF log group without allowlist)
     });
 
     test("creates API Gateway with correct configuration", () => {
@@ -72,25 +72,48 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
-    test("creates WAF Web ACL for IP filtering", () => {
+    test("does NOT create WAF when webhookAllowList is empty", () => {
+        // Verify no WAF resources are created (default config has empty allowlist)
+        template.resourceCountIs("AWS::WAFv2::WebACL", 0);
+        template.resourceCountIs("AWS::WAFv2::IPSet", 0);
+        template.resourceCountIs("AWS::WAFv2::WebACLAssociation", 0);
+    });
+
+    test("creates WAF Web ACL when webhookAllowList is configured", () => {
+        const app = new cdk.App();
+        const configWithWaf = createMockConfig({
+            security: {
+                webhookAllowList: "192.168.1.0/24,10.0.0.0/8",
+                enableVerification: true,
+            },
+        });
+        const stack = new BenchlingWebhookStack(app, "TestStackWithWaf", {
+            config: configWithWaf,
+            env: {
+                account: "123456789012",
+                region: "us-east-1",
+            },
+        });
+        const wafTemplate = Template.fromStack(stack);
+
         // Verify WAF Web ACL is created
-        template.hasResourceProperties("AWS::WAFv2::WebACL", {
+        wafTemplate.hasResourceProperties("AWS::WAFv2::WebACL", {
             Name: "BenchlingWebhookWebACL",
             Scope: "REGIONAL",
         });
 
         // Verify IP Set is created
-        template.hasResourceProperties("AWS::WAFv2::IPSet", {
+        wafTemplate.hasResourceProperties("AWS::WAFv2::IPSet", {
             Name: "BenchlingWebhookIPSet",
             Scope: "REGIONAL",
             IPAddressVersion: "IPV4",
         });
 
         // Verify WAF is associated with HTTP API
-        template.hasResourceProperties("AWS::WAFv2::WebACLAssociation", {});
+        wafTemplate.hasResourceProperties("AWS::WAFv2::WebACLAssociation", {});
 
         // Verify WAF outputs
-        template.hasOutput("WafWebAclArn", Match.objectLike({
+        wafTemplate.hasOutput("WafWebAclArn", Match.objectLike({
             Value: {
                 "Fn::GetAtt": [
                     Match.stringLikeRegexp(".*WebACL.*"),
@@ -99,7 +122,7 @@ describe("BenchlingWebhookStack", () => {
             },
         }));
 
-        template.hasOutput("WafLogGroup", Match.objectLike({
+        wafTemplate.hasOutput("WafLogGroup", Match.objectLike({
             Value: {
                 Ref: Match.stringLikeRegexp(".*WafLogGroup.*"),
             },

@@ -140,4 +140,53 @@ describe("HttpApiGateway", () => {
             }),
         });
     });
+
+    test("does NOT create WAF when webhookAllowList is empty", () => {
+        new HttpApiGateway(stack, "TestApiGateway", {
+            vpc,
+            cloudMapService,
+            serviceSecurityGroup,
+            config: mockConfig,
+        });
+
+        const template = Template.fromStack(stack);
+
+        // WAF resources should NOT exist
+        template.resourceCountIs("AWS::WAFv2::WebACL", 0);
+        template.resourceCountIs("AWS::WAFv2::IPSet", 0);
+        template.resourceCountIs("AWS::WAFv2::WebACLAssociation", 0);
+    });
+
+    test("creates WAF when webhookAllowList is configured", () => {
+        const configWithWaf = {
+            ...mockConfig,
+            security: {
+                webhookAllowList: "192.168.1.0/24,10.0.0.0/8",
+                enableVerification: true,
+            },
+        };
+
+        new HttpApiGateway(stack, "TestApiGateway", {
+            vpc,
+            cloudMapService,
+            serviceSecurityGroup,
+            config: configWithWaf,
+        });
+
+        const template = Template.fromStack(stack);
+
+        // WAF resources should exist
+        template.hasResourceProperties("AWS::WAFv2::WebACL", {
+            Name: "BenchlingWebhookWebACL",
+            Scope: "REGIONAL",
+        });
+
+        template.hasResourceProperties("AWS::WAFv2::IPSet", {
+            Name: "BenchlingWebhookIPSet",
+            Scope: "REGIONAL",
+            Addresses: ["192.168.1.0/24", "10.0.0.0/8"],
+        });
+
+        template.resourceCountIs("AWS::WAFv2::WebACLAssociation", 1);
+    });
 });
