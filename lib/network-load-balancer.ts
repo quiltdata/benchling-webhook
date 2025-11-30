@@ -34,7 +34,6 @@ export class NetworkLoadBalancer extends Construct {
         this.loadBalancer = new elbv2.NetworkLoadBalancer(this, "LoadBalancer", {
             vpc: props.vpc,
             internetFacing: false,
-            loadBalancerName: "benchling-webhook-nlb",
             vpcSubnets: {
                 subnets: props.vpc.privateSubnets,
             },
@@ -48,7 +47,6 @@ export class NetworkLoadBalancer extends Construct {
             port: 8080,
             protocol: elbv2.Protocol.TCP,
             targetType: elbv2.TargetType.IP, // Required for Fargate
-            targetGroupName: "benchling-webhook-tg",
             deregistrationDelay: cdk.Duration.seconds(30), // Quick deregistration
 
             // HTTP health checks for application health

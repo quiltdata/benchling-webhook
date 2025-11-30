@@ -36,7 +36,6 @@ export class HttpApiGateway {
         this.vpcLink = new apigatewayv2.VpcLink(scope, "VpcLink", {
             vpc: props.vpc,
             securityGroups: [props.serviceSecurityGroup],
-            vpcLinkName: "benchling-webhook-vpclink",
         });
 
         // Create HTTP API v2
@@ -47,13 +46,14 @@ export class HttpApiGateway {
 
         // Network Load Balancer integration via VPC Link
         // v0.9.0: Replaced Cloud Map with NLB for reliable routing
-        // Note: Omitting timeout to use default behavior, which may allow established
-        // connections to exceed the integration timeout for subsequent requests
+        // Set timeout to 29 seconds (maximum for HTTP API) to handle slow JWKS fetches
+        // on cold starts. The Benchling SDK caches JWKS after first fetch.
         const integration = new apigatewayv2Integrations.HttpNlbIntegration(
             "NlbIntegration",
             props.nlbListener,
             {
                 vpcLink: this.vpcLink,
+                timeout: cdk.Duration.seconds(29),
             },
         );
 
