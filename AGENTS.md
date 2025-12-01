@@ -147,6 +147,46 @@ ECS Fargate Tasks (FastAPI on port 8080)
 S3 + SQS → Quilt Package Creation
 ```
 
+### Request Path Handling (Flexible Routes)
+
+**Problem:** REST API v1 with HTTP_PROXY integration forwards the complete request path including the stage prefix to FastAPI (e.g., `GET /prod/health` → `GET /prod/health`), but NLB health checks use direct paths without stage prefixes (e.g., `GET /health`).
+
+**Solution:** FastAPI supports both path styles simultaneously using duplicate route definitions (Option A from [spec/2025-11-26-architecture/13-fastapi-flexible-routes.md](spec/2025-11-26-architecture/13-fastapi-flexible-routes.md)):
+
+```python
+# Direct paths (for NLB health checks)
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+
+# Stage-prefixed paths (for API Gateway)
+@app.get("/{stage}/health")
+async def health_with_stage(stage: str):
+    return {"status": "healthy"}
+```
+
+**Path examples:**
+- API Gateway request: `GET /prod/health` → Matches `/{stage}/health` route
+- NLB health check: `GET /health` → Matches `/health` route
+- Both return identical responses
+
+**Benefits:**
+- Maintains NLB cost efficiency ($16/month vs $23/month for ALB)
+- No middleware complexity or path rewriting
+- Explicit route matching easy to debug
+- Works with any stage name dynamically
+- Future migration to ALB requires minimal changes
+
+**Supported endpoints:**
+- Health: `/health`, `/{stage}/health`
+- Readiness: `/health/ready`, `/{stage}/health/ready`
+- Liveness: `/health/live`, `/{stage}/health/live`
+- Webhooks: `/event`, `/{stage}/event`
+- Lifecycle: `/lifecycle`, `/{stage}/lifecycle`
+- Canvas: `/canvas`, `/{stage}/canvas`
+
+See [docker/tests/test_flexible_routes.py](docker/tests/test_flexible_routes.py) for comprehensive test coverage.
+
 ### Security Model
 
 **Single Authentication Layer: FastAPI HMAC Verification**
@@ -619,6 +659,7 @@ npx @quiltdata/benchling-webhook logs --profile default
 - **Observability**: Every stage logs explicit diagnostics to CloudWatch
 - **Separation of Concerns**: npm orchestrates, TypeScript/Python implement
 - **Simplicity Over Complexity**: Single authentication layer (FastAPI HMAC), optional network filtering (Resource Policy)
+- **Flexible Route Handling**: Support both direct and stage-prefixed paths for maximum compatibility
 
 ---
 
