@@ -501,9 +501,7 @@ def create_app() -> FastAPI:
         return await _handle_lifecycle_impl(request, _verified)
 
     @app.post("/{stage}/lifecycle")
-    async def lifecycle_with_stage(
-        stage: str, request: Request, _verified: None = Depends(verify_webhook_dependency)
-    ):
+    async def lifecycle_with_stage(stage: str, request: Request, _verified: None = Depends(verify_webhook_dependency)):
         """Handle Benchling app lifecycle events with HMAC signature verification - stage-prefixed path."""
         return await _handle_lifecycle_impl(request, _verified)
 
