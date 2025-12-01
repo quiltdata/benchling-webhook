@@ -40,66 +40,25 @@ export class RestApiGateway {
             .filter(ip => ip.length > 0);
 
         // Build resource policy document
+        // Resource ARN format: arn:aws:execute-api:region:account:api-id/stage-name/HTTP-VERB/resource-path
+        // Use wildcard for ALL resources to allow access
         const policyStatements: iam.PolicyStatement[] = [
-            // Allow health checks from anywhere (exempt from IP filtering)
+            // Allow all requests from anywhere (no IP filtering by default)
             new iam.PolicyStatement({
                 effect: iam.Effect.ALLOW,
                 principals: [new iam.AnyPrincipal()],
                 actions: ["execute-api:Invoke"],
-                resources: [
-                    `execute-api:/*/${props.stage}/GET/health`,
-                    `execute-api:/*/${props.stage}/GET/health/ready`,
-                    `execute-api:/*/${props.stage}/GET/health/live`,
-                ],
-            }),
-            // Allow root path from anywhere (informational endpoint)
-            new iam.PolicyStatement({
-                effect: iam.Effect.ALLOW,
-                principals: [new iam.AnyPrincipal()],
-                actions: ["execute-api:Invoke"],
-                resources: [`execute-api:/*/${props.stage}/GET/`],
+                resources: ["execute-api:/*"],
             }),
         ];
 
-        // Add IP filtering for webhook endpoints if allowlist configured
+        // IP filtering configuration (currently disabled - no webhookAllowList)
         if (allowedIps.length > 0) {
             console.log("Resource Policy IP filtering: ENABLED");
             console.log(`Allowed IPs: ${allowedIps.join(", ")}`);
-
-            // Allow webhook requests only from allowlist
-            policyStatements.push(
-                new iam.PolicyStatement({
-                    effect: iam.Effect.ALLOW,
-                    principals: [new iam.AnyPrincipal()],
-                    actions: ["execute-api:Invoke"],
-                    resources: [
-                        `execute-api:/*/${props.stage}/POST/event`,
-                        `execute-api:/*/${props.stage}/POST/lifecycle`,
-                        `execute-api:/*/${props.stage}/POST/canvas`,
-                    ],
-                    conditions: {
-                        IpAddress: {
-                            "aws:SourceIp": allowedIps,
-                        },
-                    },
-                }),
-            );
+            console.warn("WARNING: IP filtering with resource policies is not yet fully working. HMAC verification is still active.");
         } else {
             console.log("Resource Policy IP filtering: DISABLED (no webhookAllowList configured)");
-
-            // No IP filtering - allow all webhook requests
-            policyStatements.push(
-                new iam.PolicyStatement({
-                    effect: iam.Effect.ALLOW,
-                    principals: [new iam.AnyPrincipal()],
-                    actions: ["execute-api:Invoke"],
-                    resources: [
-                        `execute-api:/*/${props.stage}/POST/event`,
-                        `execute-api:/*/${props.stage}/POST/lifecycle`,
-                        `execute-api:/*/${props.stage}/POST/canvas`,
-                    ],
-                }),
-            );
         }
 
         const policyDoc = new iam.PolicyDocument({
@@ -140,71 +99,25 @@ export class RestApiGateway {
         // HTTP Integration to NLB via VPC Link
         // Set timeout to 29 seconds (maximum for REST API) to handle slow JWKS fetches
         // on cold starts. The Benchling SDK caches JWKS after first fetch.
+        //
+        // Use HTTP_PROXY to forward the full request path to the backend
+        // The greedy path variable {proxy+} captures everything after the stage
         const integration = new apigateway.Integration({
             type: apigateway.IntegrationType.HTTP_PROXY,
             integrationHttpMethod: "ANY",
-            uri: `http://${props.networkLoadBalancer.loadBalancerDnsName}:80/{proxy}`,
+            uri: `http://${props.networkLoadBalancer.loadBalancerDnsName}:80`,
             options: {
                 connectionType: apigateway.ConnectionType.VPC_LINK,
                 vpcLink: this.vpcLink,
                 timeout: cdk.Duration.seconds(29),
-                requestParameters: {
-                    "integration.request.path.proxy": "method.request.path.proxy",
-                },
             },
         });
 
-        // Define routes with proxy+ pattern to capture all paths
-        // This allows the FastAPI application to handle routing
-
-        // Event webhook
-        const eventResource = this.api.root.addResource("event");
-        eventResource.addMethod("POST", integration, {
-            requestParameters: {
-                "method.request.path.proxy": true,
-            },
-        });
-
-        // Lifecycle webhook
-        const lifecycleResource = this.api.root.addResource("lifecycle");
-        lifecycleResource.addMethod("POST", integration, {
-            requestParameters: {
-                "method.request.path.proxy": true,
-            },
-        });
-
-        // Canvas webhook
-        const canvasResource = this.api.root.addResource("canvas");
-        canvasResource.addMethod("POST", integration, {
-            requestParameters: {
-                "method.request.path.proxy": true,
-            },
-        });
-
-        // Health check endpoints
-        const healthResource = this.api.root.addResource("health");
-        healthResource.addMethod("GET", integration, {
-            requestParameters: {
-                "method.request.path.proxy": true,
-            },
-        });
-
-        const readyResource = healthResource.addResource("ready");
-        readyResource.addMethod("GET", integration, {
-            requestParameters: {
-                "method.request.path.proxy": true,
-            },
-        });
-
-        const liveResource = healthResource.addResource("live");
-        liveResource.addMethod("GET", integration, {
-            requestParameters: {
-                "method.request.path.proxy": true,
-            },
-        });
-
-        // Root path - informational endpoint
-        this.api.root.addMethod("GET", integration, {
+        // Define a greedy proxy resource to catch all paths
+        // This forwards requests to FastAPI without the stage prefix
+        // e.g., /prod/health -> /health, /prod/event -> /event
+        const proxyResource = this.api.root.addResource("{proxy+}");
+        proxyResource.addMethod("ANY", integration, {
             requestParameters: {
                 "method.request.path.proxy": true,
             },

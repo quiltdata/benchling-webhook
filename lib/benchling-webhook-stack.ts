@@ -256,8 +256,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
         });
 
         // Store webhook endpoint for easy access (REST API v1 with stage)
-        // REST API URL includes the stage in the path
-        this.webhookEndpoint = `${this.api.api.url}${stage}/`;
+        // REST API URL already includes the stage in the path (e.g., https://xxx.execute-api.region.amazonaws.com/stage/)
+        this.webhookEndpoint = this.api.api.url;
         if (!this.api.api.url) {
             throw new Error("REST API URL was not generated. This should not happen.");
         }
