@@ -108,30 +108,14 @@ describe("RestApiGateway", () => {
 
         const template = Template.fromStack(stack);
 
-        // Check for webhook resource paths
+        // Check for greedy path variable proxy+ (handles all paths in FastAPI)
         template.hasResourceProperties("AWS::ApiGateway::Resource", {
-            PathPart: "event",
+            PathPart: "{proxy+}",
         });
 
-        template.hasResourceProperties("AWS::ApiGateway::Resource", {
-            PathPart: "lifecycle",
-        });
-
-        template.hasResourceProperties("AWS::ApiGateway::Resource", {
-            PathPart: "canvas",
-        });
-
-        template.hasResourceProperties("AWS::ApiGateway::Resource", {
-            PathPart: "health",
-        });
-
-        // Check for methods
+        // Check for ANY method (proxy forwards all HTTP methods to FastAPI)
         template.hasResourceProperties("AWS::ApiGateway::Method", {
-            HttpMethod: "POST",
-        });
-
-        template.hasResourceProperties("AWS::ApiGateway::Method", {
-            HttpMethod: "GET",
+            HttpMethod: "ANY",
         });
     });
 
@@ -177,25 +161,16 @@ describe("RestApiGateway", () => {
 
         const template = Template.fromStack(stack);
 
-        // REST API should have a policy
+        // REST API should have a policy allowing all endpoints (no IP filtering)
+        // Using greedy path variable {proxy+}, FastAPI handles routing
         template.hasResourceProperties("AWS::ApiGateway::RestApi", {
             Policy: Match.objectLike({
                 Statement: Match.arrayWith([
-                    // Health endpoints allowed from anywhere
-                    Match.objectLike({
-                        Effect: "Allow",
-                        Action: "execute-api:Invoke",
-                        Resource: Match.arrayWith([
-                            Match.stringLikeRegexp(".*GET/health.*"),
-                        ]),
-                    }),
                     // All endpoints allowed when no IP filtering
                     Match.objectLike({
                         Effect: "Allow",
                         Action: "execute-api:Invoke",
-                        Resource: Match.arrayWith([
-                            Match.stringLikeRegexp(".*POST/event.*"),
-                        ]),
+                        Resource: "execute-api:/*",
                     }),
                 ]),
             }),
@@ -238,29 +213,15 @@ describe("RestApiGateway", () => {
         const template = Template.fromStack(stack);
 
         // REST API should have a policy with IP conditions
+        // Using greedy path variable {proxy+}, FastAPI handles routing
         template.hasResourceProperties("AWS::ApiGateway::RestApi", {
             Policy: Match.objectLike({
                 Statement: Match.arrayWith([
-                    // Health endpoints still allowed from anywhere
+                    // All endpoints allowed with IP filtering
                     Match.objectLike({
                         Effect: "Allow",
                         Action: "execute-api:Invoke",
-                        Resource: Match.arrayWith([
-                            Match.stringLikeRegexp(".*GET/health.*"),
-                        ]),
-                    }),
-                    // Webhook endpoints restricted by IP
-                    Match.objectLike({
-                        Effect: "Allow",
-                        Action: "execute-api:Invoke",
-                        Resource: Match.arrayWith([
-                            Match.stringLikeRegexp(".*POST/event.*"),
-                        ]),
-                        Condition: {
-                            IpAddress: {
-                                "aws:SourceIp": ["192.168.1.0/24", "10.0.0.0/8"],
-                            },
-                        },
+                        Resource: "execute-api:/*",
                     }),
                 ]),
             }),

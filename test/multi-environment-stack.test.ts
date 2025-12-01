@@ -253,13 +253,13 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             // Should not create HTTP API v2
             template.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
 
-            // REST API v1 creates resources for different paths
-            // Check that webhook resources exist (event, lifecycle, canvas)
+            // REST API v1 uses greedy path variable {proxy+} for all paths
+            // FastAPI handles routing internally for event, lifecycle, canvas, health
             const resources = template.findResources("AWS::ApiGateway::Resource");
-            const eventResource = Object.values(resources).find((resource: any) =>
-                resource.Properties?.PathPart === "event"
+            const proxyResource = Object.values(resources).find((resource: any) =>
+                resource.Properties?.PathPart === "{proxy+}"
             );
-            expect(eventResource).toBeDefined();
+            expect(proxyResource).toBeDefined();
         });
 
         test("uses hardcoded quiltdata ECR repository", () => {

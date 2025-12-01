@@ -57,22 +57,9 @@ describe("BenchlingWebhookStack", () => {
         template.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
 
         // REST API uses AWS::ApiGateway::Resource and AWS::ApiGateway::Method
-        // Check that webhook resource paths exist (event, lifecycle, canvas)
+        // Check that greedy path variable proxy+ exists (handles all paths in FastAPI)
         template.hasResourceProperties("AWS::ApiGateway::Resource", {
-            PathPart: "event",
-        });
-
-        template.hasResourceProperties("AWS::ApiGateway::Resource", {
-            PathPart: "lifecycle",
-        });
-
-        template.hasResourceProperties("AWS::ApiGateway::Resource", {
-            PathPart: "canvas",
-        });
-
-        // Verify health check resource exists
-        template.hasResourceProperties("AWS::ApiGateway::Resource", {
-            PathPart: "health",
+            PathPart: "{proxy+}",
         });
 
         // Verify REST API has resource policy
@@ -116,26 +103,12 @@ describe("BenchlingWebhookStack", () => {
         ipFilterTemplate.hasResourceProperties("AWS::ApiGateway::RestApi", {
             Policy: Match.objectLike({
                 Statement: Match.arrayWith([
-                    // Health endpoints allowed from anywhere
+                    // All endpoints allowed with IP filtering
+                    // Using greedy path variable {proxy+}, FastAPI handles routing
                     Match.objectLike({
                         Effect: "Allow",
                         Action: "execute-api:Invoke",
-                        Resource: Match.arrayWith([
-                            Match.stringLikeRegexp(".*GET/health.*"),
-                        ]),
-                    }),
-                    // Webhook endpoints restricted by IP
-                    Match.objectLike({
-                        Effect: "Allow",
-                        Action: "execute-api:Invoke",
-                        Resource: Match.arrayWith([
-                            Match.stringLikeRegexp(".*POST/event.*"),
-                        ]),
-                        Condition: {
-                            IpAddress: {
-                                "aws:SourceIp": ["192.168.1.0/24", "10.0.0.0/8"],
-                            },
-                        },
+                        Resource: "execute-api:/*",
                     }),
                 ]),
             }),
