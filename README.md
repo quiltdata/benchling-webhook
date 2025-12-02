@@ -74,11 +74,8 @@ Benchling Webhook
         |
         | HTTPS POST
         v
-[Optional] AWS WAF
-        | (IP filtering)
-        v
-API Gateway (HTTP API v2)
-        |
+REST API Gateway v1 + Resource Policy
+        | (optional IP filtering)
         v
 VPC Link
         |
@@ -96,8 +93,8 @@ S3 + SQS → Quilt Package
 
 ### Components
 
-- **HTTP API Gateway v2** - Public HTTPS endpoint with CloudWatch logging
-- **Optional WAF** - IP allowlisting at AWS edge (only when configured)
+- **REST API Gateway v1** - Public HTTPS endpoint with CloudWatch logging and resource policies
+- **Resource Policy** - Free IP allowlisting (applied when `webhookAllowList` configured)
 - **VPC Link** - Private connection between API Gateway and VPC
 - **Network Load Balancer** - Internal load balancer with health checks
 - **ECS Fargate** - FastAPI application (auto-scales 2-10 tasks) with HMAC verification
@@ -106,25 +103,41 @@ S3 + SQS → Quilt Package
 - **Secrets Manager** - Benchling OAuth credentials
 - **CloudWatch** - Centralized logging and monitoring
 
+### Cost Analysis
+
+**Monthly Fixed Costs (us-east-1):**
+
+- REST API v1: $0.00
+- Resource Policy: $0.00 (free)
+- VPC Link: $0.00
+- Network Load Balancer: $16.20
+- ECS Fargate (2 tasks): $14.50
+- NAT Gateway: $32.40
+- **Total: $63.10/month**
+
+**Variable Costs:** ~$3.50 per million requests
+
 ### Security Features
 
 **Single Authentication Layer:**
 
 - **FastAPI HMAC Verification** - All webhook requests verified against Benchling secret
-- Signatures computed over raw request body (Lambda Authorizers cannot access raw body)
+- Signatures computed over raw request body
 - Invalid signatures return 403 Forbidden
 
 **Optional Network Filtering:**
 
-- **AWS WAF** - Deploy only when IP allowlist configured
-- Blocks unknown IPs at edge, reducing API Gateway costs
-- IP filtering does NOT replace authentication
+- **Resource Policy IP Filtering** - Free alternative to AWS WAF ($7/month saved)
+- Blocks unknown IPs at API Gateway edge
+- Health endpoints always exempt from IP filtering
+- IP filtering does NOT replace authentication (it's defense-in-depth)
 
 **Infrastructure Security:**
 
 - Private network (ECS in private subnets, no public IPs)
+- VPC Link encrypted connection between API Gateway and NLB
 - TLS 1.2+ encryption on all API Gateway endpoints
-- CloudWatch audit trail for HMAC verification and WAF decisions
+- CloudWatch audit trail for HMAC verification and resource policy decisions
 - Least-privilege IAM roles
 
 ## Installation
@@ -170,7 +183,7 @@ The wizard will guide you through:
 
 Add the webhook URL (displayed after setup) to your [Benchling app settings](https://docs.benchling.com/docs/getting-started-benchling-apps#installing-your-app).
 
-**Important**: The endpoint URL format is `https://{api-id}.execute-api.{region}.amazonaws.com/webhook` (no stage prefix in path).
+**Important**: The endpoint URL format is `https://{api-id}.execute-api.{region}.amazonaws.com/{stage}/webhook` (includes stage prefix like `/prod/webhook` or `/dev/webhook`).
 
 ### 4. Test Integration
 
@@ -187,15 +200,16 @@ If you run into problems, contact [Quilt Support](support@quilt.bio)
 
 ### CloudWatch Logs
 
-- `/aws/apigateway/benchling-webhook-http` - API Gateway access logs
+- `/aws/apigateway/benchling-webhook-rest` - API Gateway access logs
 - `/ecs/benchling-webhook` - ECS container logs (includes HMAC verification)
-- `/aws/waf/benchling-webhook` - WAF logs (only if IP filtering enabled)
+
+**Note**: Resource Policy filtering happens at the API Gateway edge and is visible in access logs (403 responses for blocked IPs).
 
 ### View Logs
 
 ```bash
 # Via AWS CLI
-aws logs tail /aws/apigateway/benchling-webhook-http --follow
+aws logs tail /aws/apigateway/benchling-webhook-rest --follow
 aws logs tail /ecs/benchling-webhook --follow
 
 # Via NPX (all logs combined)
@@ -218,11 +232,13 @@ npx @quiltdata/benchling-webhook@latest logs [--profile <name>]
 npx @quiltdata/benchling-webhook@latest --help
 ```
 
-## Upgrading from v0.8.x
+## Upgrading
 
-The current version uses Network Load Balancer architecture with simplified security model. **Upgrading from v0.8.x is a breaking change that requires stack recreation.**
+### From v1.0.0 (HTTP API v2 + Lambda Authorizer)
 
-See [MIGRATION.md](./MIGRATION.md) for detailed upgrade instructions.
+Version 0.8.9+ uses REST API v1 + Resource Policy architecture instead of HTTP API v2. This is a **breaking change that requires stack recreation**.
+
+**Why the change?** REST API v1 + Resource Policy saves $5.10/month by eliminating AWS WAF costs while maintaining the same security model.
 
 **Quick migration:**
 
@@ -236,11 +252,13 @@ npx cdk destroy --profile {profile} --context stage={stage}
 # 3. Deploy new stack
 npm run deploy:{stage} -- --profile {profile} --yes
 
-# 4. Update webhook URL in Benchling app settings
+# 4. Update webhook URL in Benchling (now includes stage prefix: /prod/webhook)
 
 # 5. Test
 npm run test:{stage} -- --profile {profile}
 ```
+
+See [MIGRATION.md](./MIGRATION.md) for detailed upgrade instructions.
 
 ## License
 
