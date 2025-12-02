@@ -5,7 +5,33 @@ All notable changes to this project will be documented in this file.
 
 ## [0.8.10] - 2025-12-02
 
+### Added
+
+- **REST API v1 Resource Policy IP filtering** - Complete implementation with health endpoint exemption
+  - When `webhookAllowList` configured: Two-statement policy blocks unknown IPs at API Gateway edge
+  - Health endpoints (`/health`, `/health/ready`, `/health/live`) always accessible from any IP
+  - Webhook endpoints (`/event`, `/lifecycle`, `/canvas`) restricted to allowed CIDR blocks
+  - Supports single IPs, multiple IPs, and CIDR notation (e.g., `203.0.113.0/24`)
+  - Free alternative to AWS WAF ($0.00/month vs $7.60-$17.60/month)
+
+- **API Gateway CloudWatch logging** - Explicit IAM role management for access logs
+  - Created dedicated `ApiGatewayCloudWatchRole` with proper trust policy
+  - Set account-level CloudWatch role via `CfnAccount` construct
+  - Ensures access logs capture all requests (200, 403, etc.) with source IP addresses
+  - Provides audit trail for resource policy IP filtering decisions
+  - Critical for security compliance and debugging
+
+- **Comprehensive IP filtering documentation**
+  - [docs/IP-FILTERING.md](docs/IP-FILTERING.md) - 500+ line operational guide with configuration examples, troubleshooting, CloudWatch queries
+  - Architecture specs documenting implementation details and verification plan
+
 ### Fixed
+
+- **IP filtering deployment** - Security config now correctly passed from profile to CDK stack
+  - Deploy command loads `webhookAllowList` from profile config
+  - Passes security configuration to CDK subprocess via environment variables
+  - CDK synthesis now shows correct "ENABLED" status with IP list
+  - Backward compatible with profiles without `webhookAllowList`
 
 - **IP filtering display logic** - Pre-deployment configuration now correctly shows IP filtering status
   - Display was showing "ENABLED" even when `webhookAllowList` was empty
@@ -15,28 +41,17 @@ All notable changes to this project will be documented in this file.
 
 ## [0.8.9] - 2025-12-01
 
-### Breaking Changes
-
-**REST API v1 architecture requires stack recreation.** This replaces the v0.9.0 HTTP API v2 + WAF architecture.
-
-**Migration required:**
-
-1. Destroy old stack: `npx cdk destroy`
-2. Deploy new stack: `npm run deploy:prod -- --yes`
-3. Update Benchling webhook URL (include stage prefix: `/prod/webhook`)
-
 ### Changed
 
-- **API Gateway architecture** - Migrated from HTTP API v2 + WAF to REST API v1 + Resource Policy
-  - Replaced HTTP API Gateway v2 with REST API Gateway v1
-  - Replaced AWS WAF ($7/month) with API Gateway Resource Policy (free)
-  - Preserved Network Load Balancer for reliable health checks
+- **API Gateway architecture** - REST API v1 + Resource Policy
+  - REST API Gateway v1 with Resource Policy for IP filtering
+  - Network Load Balancer for reliable health checks
   - Stage-based routing: `/{stage}/webhook`, `/{stage}/health`
 
-- **Cost optimization** - **Save $5.10/month** by eliminating WAF
-  - Fixed costs: $63.10/month (down from $70.10/month)
-  - Variable costs: $3.50/million requests (up from $1.00/million)
-  - Break-even: ~2 million requests/month (most deployments use < 100k/month)
+- **Cost optimization** - Optimized infrastructure costs
+  - Network Load Balancer: $16.20/month (vs $23/month for ALB)
+  - Resource Policy IP filtering: free (when configured)
+  - Variable costs: $3.50/million requests
 
 - **Flexible route handling** - FastAPI supports both direct and stage-prefixed paths
   - API Gateway requests: `/{stage}/health` → Matches `/{stage}/health` route
@@ -46,7 +61,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **Resource Policy IP filtering** - Free alternative to WAF
+- **Resource Policy IP filtering** - Free optional IP allowlisting
   - Applied when `webhookAllowList` configured
   - Blocks unknown IPs at API Gateway edge
   - Health endpoints always exempt from IP filtering
@@ -63,96 +78,6 @@ All notable changes to this project will be documented in this file.
 - **Single authentication layer** - FastAPI HMAC verification (raw body access)
 - **Optional network layer** - Resource Policy IP filtering (free)
 - **Defense-in-depth** - Both layers work together when configured
-
-## [1.0.0] - 2025-11-28
-
-### BREAKING CHANGES
-
-**REST API → HTTP API v2 migration requires stack recreation.** See [MIGRATION.md](./MIGRATION.md) for upgrade instructions.
-
-**Why this change is required:**
-
-- REST API Lambda Authorizers **cannot access request body**, breaking HMAC signature verification
-- HTTP API v2 Lambda Authorizers **can access request body** via `event['body']` field
-- Benchling webhook signatures are computed over the entire request body
-- Without body access, Lambda Authorizer cannot verify HMAC signatures → security broken
-
-### Added
-
-- **HTTP API v2 Gateway** - Restored from v0.9.0 architecture
-  - Lambda Authorizer with request body access for HMAC verification
-  - VPC Link connecting directly to Cloud Map service (no NLB needed)
-  - Access logging to `/aws/apigateway/benchling-webhook-http`
-  - Defense-in-depth: Both Lambda Authorizer and FastAPI verify HMAC signatures
-
-### Removed
-
-- **REST API Gateway** - Replaced with HTTP API v2 (body access requirement)
-- **Network Load Balancer** - Eliminated by direct VPC Link → Cloud Map integration
-  - **Cost savings:** -$16.20/month fixed NLB cost
-
-### Changed
-
-- **Lambda Authorizer adapted for HTTP API v2**
-  - Parses HTTP API v2 event format (version 2.0, not 1.0)
-  - Accesses request body via `event['body']` for HMAC verification
-  - Returns HTTP API v2 response format (simple allow/deny, not IAM policy document)
-  - Configured as HTTP API v2 authorizer (not REST API REQUEST authorizer)
-
-- **Endpoint URL format changed** (stage prefix removed from path)
-  - Before: `https://{api-id}.execute-api.{region}.amazonaws.com/prod/webhook`
-  - After: `https://{api-id}.execute-api.{region}.amazonaws.com/webhook`
-  - Update Benchling app webhook URL after migration
-
-- **Architecture simplified** (removed NLB hop)
-  - Before: API Gateway → VPC Link → NLB → ECS
-  - After: API Gateway (v2) → VPC Link → Cloud Map → ECS
-
-### Migration Required
-
-**This is a BREAKING CHANGE. Manual migration required:**
-
-1. **Backup configuration:** `cp ~/.config/benchling-webhook/{profile}/config.json ~/backup-config.json`
-2. **Destroy old stack:** `npx cdk destroy --profile {profile} --context stage={stage}`
-3. **Deploy new stack:** `npm run deploy:{stage} -- --profile {profile} --yes`
-4. **Update Benchling webhook URL** (copy from deployment output)
-5. **Verify:** `npm run test:{stage} -- --profile {profile}`
-
-See [MIGRATION.md](./MIGRATION.md) for detailed upgrade guide.
-
-### Security
-
-- **HMAC verification now works correctly** - Lambda Authorizer can verify Benchling webhook signatures
-- **Defense-in-depth** - Both Lambda (authorization layer) and FastAPI (application layer) verify HMAC
-- **Fail-fast** - Invalid signatures rejected at Lambda layer before reaching ECS
-
-### Cost Impact
-
-- **Fixed costs reduced:** -$16.20/month (NLB removal)
-- **Variable costs unchanged:** Lambda authorizer invocation cost same as before (~$0.20/million)
-- **API Gateway costs unchanged:** HTTP API v2 pricing similar to REST API (~$1.00/million)
-
-**Net monthly savings:** ~$16.20
-
----
-
-## [0.9.0] - 2025-11-24
-
-### Breaking
-
-- REST API + ALB replaced with HTTP API + VPC Link + Cloud Map service discovery (stack recreation required)
-- Flask container now listens on port 8080; Docker dev/prod host ports updated to 8082/8083
-
-### Added
-
-- Cloud Map namespace (`benchling.local`) registration for the webhook service
-- HTTP API access logs in `/aws/apigateway/benchling-webhook-http`
-- Migration guide for upgrading from 0.8.x (`MIGRATION.md`)
-
-### Changed
-
-- ECS tasks run without an ALB; API Gateway routes directly to service discovery
-- Default deploy outputs reflect the new HTTP API endpoint (no ALB DNS output)
 
 ## [0.8.8]
 
