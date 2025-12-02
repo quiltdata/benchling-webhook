@@ -100,22 +100,29 @@ export class RestApiGateway {
         // Set timeout to 29 seconds (maximum for REST API) to handle slow JWKS fetches
         // on cold starts. The Benchling SDK caches JWKS after first fetch.
         //
-        // Use HTTP_PROXY to forward the full request path to the backend
-        // The greedy path variable {proxy+} captures everything after the stage
+        // Simple HTTP_PROXY integration that forwards ALL requests with complete paths
+        // API Gateway Request: GET https://api-id.execute-api.region.amazonaws.com/prod/health
+        // Forwarded to NLB: GET http://nlb:80/prod/health
+        //
+        // FastAPI implements flexible routes:
+        //   - Stage-prefixed: /{stage}/health, /{stage}/event (matches API Gateway requests)
+        //   - Direct paths: /health (matches NLB health checks)
         const integration = new apigateway.Integration({
             type: apigateway.IntegrationType.HTTP_PROXY,
             integrationHttpMethod: "ANY",
-            uri: `http://${props.networkLoadBalancer.loadBalancerDnsName}:80`,
+            uri: `http://${props.networkLoadBalancer.loadBalancerDnsName}:80/{proxy}`,
             options: {
                 connectionType: apigateway.ConnectionType.VPC_LINK,
                 vpcLink: this.vpcLink,
                 timeout: cdk.Duration.seconds(29),
+                requestParameters: {
+                    "integration.request.path.proxy": "method.request.path.proxy",
+                },
             },
         });
 
-        // Define a greedy proxy resource to catch all paths
-        // This forwards requests to FastAPI without the stage prefix
-        // e.g., /prod/health -> /health, /prod/event -> /event
+        // Greedy proxy that captures the COMPLETE path including stage
+        // API Gateway doesn't strip the stage when using root-level {proxy+}
         const proxyResource = this.api.root.addResource("{proxy+}");
         proxyResource.addMethod("ANY", integration, {
             requestParameters: {
