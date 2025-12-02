@@ -32,6 +32,28 @@ export class RestApiGateway {
             removalPolicy: cdk.RemovalPolicy.DESTROY,
         });
 
+        // Create IAM role for API Gateway to push logs to CloudWatch
+        // This role is required for REST API access logging to work
+        const cloudWatchRole = new iam.Role(scope, "ApiGatewayCloudWatchRole", {
+            assumedBy: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+            managedPolicies: [
+                iam.ManagedPolicy.fromAwsManagedPolicyName(
+                    "service-role/AmazonAPIGatewayPushToCloudWatchLogs",
+                ),
+            ],
+            description: "IAM role for API Gateway to push access logs to CloudWatch",
+        });
+
+        // Set account-level CloudWatch role (required for REST API logging)
+        // Note: This is a one-time account-level setting shared across all REST APIs
+        // Without this, API Gateway silently fails to write access logs
+        const cfnAccount = new apigateway.CfnAccount(scope, "ApiGatewayAccount", {
+            cloudWatchRoleArn: cloudWatchRole.roleArn,
+        });
+
+        // Ensure role is created before setting account config
+        cfnAccount.node.addDependency(cloudWatchRole);
+
         // Parse IP allowlist from config
         const webhookAllowList = props.config.security?.webhookAllowList || "";
         const allowedIps = webhookAllowList
@@ -105,7 +127,7 @@ export class RestApiGateway {
 
             console.log("Resource Policy IP filtering: ENABLED");
             console.log(`Allowed IPs: ${allowedIps.join(", ")}`);
-            console.log(`Health endpoints exempt from IP filtering (always accessible)`);
+            console.log("Health endpoints exempt from IP filtering (always accessible)");
             console.log(`Created ${policyStatements.length} resource policy statements`);
             console.log("  - Statement 1: Health endpoints (no IP restriction)");
             console.log("  - Statement 2: Webhook endpoints (IP restricted)");
