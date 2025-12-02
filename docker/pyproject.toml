@@ -23,7 +23,7 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi==0.123.0",
+    "fastapi==0.123.5",
     "uvicorn[standard]==0.38.0",
     "boto3==1.42.0",
     "dataclasses-json>=0.5.2,<0.6.0",
