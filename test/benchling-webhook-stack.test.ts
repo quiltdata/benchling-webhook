@@ -99,20 +99,34 @@ describe("BenchlingWebhookStack", () => {
         });
         const ipFilterTemplate = Template.fromStack(stack);
 
-        // Verify resource policy is created with IP conditions
-        ipFilterTemplate.hasResourceProperties("AWS::ApiGateway::RestApi", {
-            Policy: Match.objectLike({
-                Statement: Match.arrayWith([
-                    // All endpoints allowed with IP filtering
-                    // Using greedy path variable {proxy+}, FastAPI handles routing
-                    Match.objectLike({
-                        Effect: "Allow",
-                        Action: "execute-api:Invoke",
-                        Resource: "execute-api:/*",
-                    }),
-                ]),
-            }),
-        });
+        // Verify resource policy is created with TWO statements
+        // Statement 1: Health endpoints with no IP conditions
+        // Statement 2: Webhook endpoints with IP conditions
+        const restApiTemplate = ipFilterTemplate.findResources("AWS::ApiGateway::RestApi");
+        const restApi = Object.values(restApiTemplate)[0];
+        const statements = restApi.Properties.Policy.Statement;
+
+        expect(statements).toHaveLength(2);
+
+        // Verify health statement has no IP conditions
+        const healthStatement = statements.find((stmt: any) =>
+            stmt.Resource && Array.isArray(stmt.Resource) &&
+            stmt.Resource.some((r: string) => r.includes("GET/health"))
+        );
+        expect(healthStatement).toBeDefined();
+        expect(healthStatement.Condition).toBeUndefined();
+
+        // Verify webhook statement has IP conditions
+        const webhookStatement = statements.find((stmt: any) =>
+            stmt.Resource && Array.isArray(stmt.Resource) &&
+            stmt.Resource.some((r: string) => r.includes("POST/event"))
+        );
+        expect(webhookStatement).toBeDefined();
+        expect(webhookStatement.Condition).toBeDefined();
+        expect(webhookStatement.Condition.IpAddress["aws:SourceIp"]).toEqual([
+            "192.168.1.0/24",
+            "10.0.0.0/8",
+        ]);
 
         // Verify NO WAF resources are created (replaced by resource policy)
         ipFilterTemplate.resourceCountIs("AWS::WAFv2::WebACL", 0);
