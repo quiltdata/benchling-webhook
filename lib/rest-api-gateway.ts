@@ -32,6 +32,28 @@ export class RestApiGateway {
             removalPolicy: cdk.RemovalPolicy.DESTROY,
         });
 
+        // Create IAM role for API Gateway to push logs to CloudWatch
+        // This role is required for REST API access logging to work
+        const cloudWatchRole = new iam.Role(scope, "ApiGatewayCloudWatchRole", {
+            assumedBy: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+            managedPolicies: [
+                iam.ManagedPolicy.fromAwsManagedPolicyName(
+                    "service-role/AmazonAPIGatewayPushToCloudWatchLogs",
+                ),
+            ],
+            description: "IAM role for API Gateway to push access logs to CloudWatch",
+        });
+
+        // Set account-level CloudWatch role (required for REST API logging)
+        // Note: This is a one-time account-level setting shared across all REST APIs
+        // Without this, API Gateway silently fails to write access logs
+        const cfnAccount = new apigateway.CfnAccount(scope, "ApiGatewayAccount", {
+            cloudWatchRoleArn: cloudWatchRole.roleArn,
+        });
+
+        // Ensure role is created before setting account config
+        cfnAccount.node.addDependency(cloudWatchRole);
+
         // Parse IP allowlist from config
         const webhookAllowList = props.config.security?.webhookAllowList || "";
         const allowedIps = webhookAllowList
@@ -39,26 +61,76 @@ export class RestApiGateway {
             .map(ip => ip.trim())
             .filter(ip => ip.length > 0);
 
-        // Build resource policy document
-        // Resource ARN format: arn:aws:execute-api:region:account:api-id/stage-name/HTTP-VERB/resource-path
-        // Use wildcard for ALL resources to allow access
-        const policyStatements: iam.PolicyStatement[] = [
-            // Allow all requests from anywhere (no IP filtering by default)
-            new iam.PolicyStatement({
-                effect: iam.Effect.ALLOW,
-                principals: [new iam.AnyPrincipal()],
-                actions: ["execute-api:Invoke"],
-                resources: ["execute-api:/*"],
-            }),
-        ];
+        // Build resource policy document with IP filtering
+        // Resource ARN format: execute-api:/*/<stage>/<method>/<path>
+        // When no allowlist: Single statement allowing all IPs
+        // When allowlist configured: Two statements (health exempt, webhooks restricted)
+        const policyStatements: iam.PolicyStatement[] = [];
 
-        // IP filtering configuration (currently disabled - no webhookAllowList)
-        if (allowedIps.length > 0) {
+        if (allowedIps.length === 0) {
+            // No IP filtering - allow all requests from anywhere
+            policyStatements.push(
+                new iam.PolicyStatement({
+                    effect: iam.Effect.ALLOW,
+                    principals: [new iam.AnyPrincipal()],
+                    actions: ["execute-api:Invoke"],
+                    resources: ["execute-api:/*"],
+                }),
+            );
+            console.log("Resource Policy IP filtering: DISABLED (no webhookAllowList configured)");
+            console.log("All endpoints accessible from any IP");
+        } else {
+            // IP filtering enabled - create two statements
+
+            // Statement 1: Health endpoints always accessible (no IP restriction)
+            policyStatements.push(
+                new iam.PolicyStatement({
+                    effect: iam.Effect.ALLOW,
+                    principals: [new iam.AnyPrincipal()],
+                    actions: ["execute-api:Invoke"],
+                    resources: [
+                        // Health check endpoints are always accessible
+                        "execute-api:/*/GET/health",
+                        "execute-api:/*/GET/health/ready",
+                        "execute-api:/*/GET/health/live",
+                        // Stage-prefixed health endpoints
+                        "execute-api:/*/GET/*/health",
+                        "execute-api:/*/GET/*/health/ready",
+                        "execute-api:/*/GET/*/health/live",
+                    ],
+                }),
+            );
+
+            // Statement 2: Webhook endpoints with IP restrictions
+            policyStatements.push(
+                new iam.PolicyStatement({
+                    effect: iam.Effect.ALLOW,
+                    principals: [new iam.AnyPrincipal()],
+                    actions: ["execute-api:Invoke"],
+                    resources: [
+                        // Webhook endpoints
+                        "execute-api:/*/POST/event",
+                        "execute-api:/*/POST/lifecycle",
+                        "execute-api:/*/POST/canvas",
+                        // Stage-prefixed webhook endpoints
+                        "execute-api:/*/POST/*/event",
+                        "execute-api:/*/POST/*/lifecycle",
+                        "execute-api:/*/POST/*/canvas",
+                    ],
+                    conditions: {
+                        IpAddress: {
+                            "aws:SourceIp": allowedIps,
+                        },
+                    },
+                }),
+            );
+
             console.log("Resource Policy IP filtering: ENABLED");
             console.log(`Allowed IPs: ${allowedIps.join(", ")}`);
-            console.warn("WARNING: IP filtering with resource policies is not yet fully working. HMAC verification is still active.");
-        } else {
-            console.log("Resource Policy IP filtering: DISABLED (no webhookAllowList configured)");
+            console.log("Health endpoints exempt from IP filtering (always accessible)");
+            console.log(`Created ${policyStatements.length} resource policy statements`);
+            console.log("  - Statement 1: Health endpoints (no IP restriction)");
+            console.log("  - Statement 2: Webhook endpoints (IP restricted)");
         }
 
         const policyDoc = new iam.PolicyDocument({

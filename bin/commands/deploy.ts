@@ -505,8 +505,17 @@ export async function deploy(
     console.log(
         `    ${chalk.bold("Webhook Verification:")}    ${verificationEnabled ? chalk.green("ENABLED") : chalk.red("DISABLED")}`,
     );
-    if (config.security?.webhookAllowList) {
+
+    // Parse and validate webhook allowlist (same logic as rest-api-gateway.ts)
+    const webhookAllowList = config.security?.webhookAllowList || "";
+    const allowedIps = webhookAllowList
+        .split(",")
+        .map(ip => ip.trim())
+        .filter(ip => ip.length > 0);
+
+    if (allowedIps.length > 0) {
         console.log(`    ${chalk.bold("IP Filtering:")}            ${chalk.green("ENABLED (Resource Policy)")}`);
+        console.log(`    ${chalk.dim(`                                 Allowed IPs: ${allowedIps.join(", ")}`)}`);
     } else {
         console.log(`    ${chalk.bold("IP Filtering:")}            ${chalk.gray("DISABLED")}`);
     }
@@ -621,6 +630,14 @@ export async function deploy(
             if (config.deployment.vpc.vpcCidrBlock) {
                 env.VPC_CIDR_BLOCK = config.deployment.vpc.vpcCidrBlock;
             }
+        }
+
+        // Pass security configuration if specified in profile
+        if (config.security?.webhookAllowList) {
+            env.WEBHOOK_ALLOW_LIST = config.security.webhookAllowList;
+        }
+        if (config.security?.enableVerification !== undefined) {
+            env.ENABLE_WEBHOOK_VERIFICATION = config.security.enableVerification.toString();
         }
 
         execSync(cdkCommand, {
