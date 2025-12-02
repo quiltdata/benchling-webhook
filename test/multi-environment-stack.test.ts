@@ -35,11 +35,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
                 ServiceName: "benchling-webhook-service",
             });
 
-            // HTTP API v2 uses implicit default stage (no AWS::ApiGatewayV2::Stage resources)
-            // Should create HTTP API v2 (not REST API v1)
-            template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
-                Name: "BenchlingWebhookHttpAPI",
-                ProtocolType: "HTTP",
+            // REST API v1 with resource policy (not HTTP API v2)
+            template.hasResourceProperties("AWS::ApiGateway::RestApi", {
+                Name: "BenchlingWebhookRestAPI",
             });
         });
 
@@ -217,7 +215,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             });
         });
 
-        test("creates Network Load Balancer (v0.9.0 uses NLB)", () => {
+        test("creates Network Load Balancer (uses NLB)", () => {
             const config = createMockConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
@@ -229,7 +227,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            // v0.9.0: NLB replaces Cloud Map for reliable health checks
+            // NLB replaces Cloud Map for reliable health checks
             template.resourceCountIs("AWS::ElasticLoadBalancingV2::LoadBalancer", 1);
             template.resourceCountIs("AWS::ElasticLoadBalancingV2::TargetGroup", 1);
             template.resourceCountIs("AWS::ElasticLoadBalancingV2::Listener", 1);
@@ -247,22 +245,21 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            // HTTP API v2 (not REST API v1)
-            template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
-                Name: "BenchlingWebhookHttpAPI",
-                ProtocolType: "HTTP",
+            // REST API v1 (not HTTP API v2)
+            template.hasResourceProperties("AWS::ApiGateway::RestApi", {
+                Name: "BenchlingWebhookRestAPI",
             });
 
-            // Should not create REST API (v1)
-            template.resourceCountIs("AWS::ApiGateway::RestApi", 0);
+            // Should not create HTTP API v2
+            template.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
 
-            // HTTP API v2 creates multiple routes for different paths
-            // Check that webhook routes exist (event, lifecycle, canvas)
-            const routes = template.findResources("AWS::ApiGatewayV2::Route");
-            const eventRoute = Object.values(routes).find((route: any) =>
-                route.Properties?.RouteKey === "POST /event"
+            // REST API v1 uses greedy path variable {proxy+} for all paths
+            // FastAPI handles routing internally for event, lifecycle, canvas, health
+            const resources = template.findResources("AWS::ApiGateway::Resource");
+            const proxyResource = Object.values(resources).find((resource: any) =>
+                resource.Properties?.PathPart === "{proxy+}"
             );
-            expect(eventRoute).toBeDefined();
+            expect(proxyResource).toBeDefined();
         });
 
         test("uses hardcoded quiltdata ECR repository", () => {

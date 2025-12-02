@@ -14,7 +14,6 @@ import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-clo
  * cleans up the deployment tracking from the profile.
  *
  * @module commands/destroy
- * @version 0.9.0
  */
 export async function destroyCommand(options: {
     yes?: boolean;

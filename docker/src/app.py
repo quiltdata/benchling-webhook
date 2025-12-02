@@ -242,20 +242,38 @@ def create_app() -> FastAPI:
         logger.error("Failed to initialize application", error=str(e))
         raise
 
-    @app.get("/health")
-    async def health() -> Dict[str, Any]:
-        """Application health status."""
-        response = {
+    # ============================================================================
+    # Health Endpoints - Support both direct paths and stage-prefixed paths
+    # ============================================================================
+    # Direct paths (for NLB health checks)
+    # Stage-prefixed paths (for API Gateway requests via HTTP_PROXY)
+    #
+    # This dual-path approach maintains compatibility with:
+    # 1. Direct health checks from NLB (no prefix)
+    # 2. API Gateway requests with stage prefix (e.g., /prod/health)
+    # 3. Future migration flexibility
+    # ============================================================================
+
+    async def _health_impl() -> Dict[str, Any]:
+        """Shared health check implementation."""
+        return {
             "status": "healthy",
             "service": "benchling-webhook",
             "version": __version__,
         }
 
-        return response
+    @app.get("/health")
+    async def health() -> Dict[str, Any]:
+        """Application health status - direct path."""
+        return await _health_impl()
 
-    @app.get("/health/ready")
-    async def readiness():
-        """Readiness probe for orchestration."""
+    @app.get("/{stage}/health")
+    async def health_with_stage(stage: str) -> Dict[str, Any]:
+        """Application health status - stage-prefixed path."""
+        return await _health_impl()
+
+    async def _readiness_impl():
+        """Shared readiness probe implementation."""
         try:
             if not entry_packager:
                 raise Exception("EntryPackager not initialized")
@@ -267,10 +285,29 @@ def create_app() -> FastAPI:
             logger.error("Readiness check failed", error=str(e))
             return JSONResponse({"status": "not ready", "error": str(e)}, status_code=503)
 
+    @app.get("/health/ready")
+    async def readiness():
+        """Readiness probe for orchestration - direct path."""
+        return await _readiness_impl()
+
+    @app.get("/{stage}/health/ready")
+    async def readiness_with_stage(stage: str):
+        """Readiness probe for orchestration - stage-prefixed path."""
+        return await _readiness_impl()
+
+    async def _liveness_impl():
+        """Shared liveness probe implementation."""
+        return {"status": "alive"}
+
     @app.get("/health/live")
     async def liveness():
-        """Liveness probe for orchestration."""
-        return {"status": "alive"}
+        """Liveness probe for orchestration - direct path."""
+        return await _liveness_impl()
+
+    @app.get("/{stage}/health/live")
+    async def liveness_with_stage(stage: str):
+        """Liveness probe for orchestration - stage-prefixed path."""
+        return await _liveness_impl()
 
     @app.get("/config")
     async def config_status():
@@ -347,9 +384,14 @@ def create_app() -> FastAPI:
             logger.error("Config status check failed", error=str(e))
             return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
 
-    @app.post("/event")
-    async def handle_event(request: Request, _verified: None = Depends(verify_webhook_dependency)):
-        """Handle Benchling webhook events with HMAC signature verification."""
+    # ============================================================================
+    # Webhook Endpoints - Support both direct paths and stage-prefixed paths
+    # ============================================================================
+    # These endpoints require HMAC signature verification for security
+    # ============================================================================
+
+    async def _handle_event_impl(request: Request, _verified: None = None):
+        """Shared event webhook handling implementation."""
         try:
             logger.info("Received /event", headers=dict(request.headers))
             payload = await Payload.from_request(request, benchling)
@@ -412,9 +454,20 @@ def create_app() -> FastAPI:
             logger.error("Webhook processing failed", error=error_msg, exc_info=True)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
 
-    @app.post("/lifecycle")
-    async def lifecycle(request: Request, _verified: None = Depends(verify_webhook_dependency)):
-        """Handle Benchling app lifecycle events with HMAC signature verification."""
+    @app.post("/event")
+    async def handle_event(request: Request, _verified: None = Depends(verify_webhook_dependency)):
+        """Handle Benchling webhook events with HMAC signature verification - direct path."""
+        return await _handle_event_impl(request, _verified)
+
+    @app.post("/{stage}/event")
+    async def handle_event_with_stage(
+        stage: str, request: Request, _verified: None = Depends(verify_webhook_dependency)
+    ):
+        """Handle Benchling webhook events with HMAC signature verification - stage-prefixed path."""
+        return await _handle_event_impl(request, _verified)
+
+    async def _handle_lifecycle_impl(request: Request, _verified: None = None):
+        """Shared lifecycle event handling implementation."""
         try:
             logger.info("Received /lifecycle", headers=dict(request.headers))
             payload_obj = await Payload.from_request(request, benchling)
@@ -442,6 +495,16 @@ def create_app() -> FastAPI:
             logger.error("Lifecycle event processing failed", error=str(e))
             return JSONResponse({"error": "Internal server error"}, status_code=500)
 
+    @app.post("/lifecycle")
+    async def lifecycle(request: Request, _verified: None = Depends(verify_webhook_dependency)):
+        """Handle Benchling app lifecycle events with HMAC signature verification - direct path."""
+        return await _handle_lifecycle_impl(request, _verified)
+
+    @app.post("/{stage}/lifecycle")
+    async def lifecycle_with_stage(stage: str, request: Request, _verified: None = Depends(verify_webhook_dependency)):
+        """Handle Benchling app lifecycle events with HMAC signature verification - stage-prefixed path."""
+        return await _handle_lifecycle_impl(request, _verified)
+
     def handle_app_installed(payload):
         logger.info("App installed", installation_id=payload.get("installationId"))
         return {"status": "success", "message": "App installed successfully"}
@@ -458,9 +521,8 @@ def create_app() -> FastAPI:
         logger.info("App configuration updated", installation_id=payload.get("installationId"))
         return {"status": "success", "message": "Configuration updated successfully"}
 
-    @app.post("/canvas")
-    async def canvas_initialize(request: Request, _verified: None = Depends(verify_webhook_dependency)):
-        """Handle /canvas webhook from Benchling with HMAC signature verification."""
+    async def _handle_canvas_impl(request: Request, _verified: None = None):
+        """Shared canvas webhook handling implementation."""
         try:
             logger.info("Received /canvas", headers=dict(request.headers))
             payload = await Payload.from_request(request, benchling)
@@ -524,6 +586,18 @@ def create_app() -> FastAPI:
         except Exception as e:
             logger.error("Canvas webhook failed", error=str(e), exc_info=True)
             return JSONResponse({"error": str(e)}, status_code=500)
+
+    @app.post("/canvas")
+    async def canvas_initialize(request: Request, _verified: None = Depends(verify_webhook_dependency)):
+        """Handle /canvas webhook from Benchling with HMAC signature verification - direct path."""
+        return await _handle_canvas_impl(request, _verified)
+
+    @app.post("/{stage}/canvas")
+    async def canvas_initialize_with_stage(
+        stage: str, request: Request, _verified: None = Depends(verify_webhook_dependency)
+    ):
+        """Handle /canvas webhook from Benchling with HMAC signature verification - stage-prefixed path."""
+        return await _handle_canvas_impl(request, _verified)
 
     def handle_browse_files(payload, button_id, benchling, config):
         """Handle Browse Files button click."""
