@@ -40,6 +40,12 @@ export interface DiscoveredVpcInfo {
     isValid: boolean;
     /** Validation error messages */
     validationErrors: string[];
+    /** Actual private subnet IDs for CDK VPC construction */
+    privateSubnetIds: string[];
+    /** Actual public subnet IDs for CDK VPC construction */
+    publicSubnetIds: string[];
+    /** Availability zones for the subnets */
+    availabilityZones: string[];
 }
 
 /**
@@ -125,6 +131,9 @@ export interface ParameterCollectionResult {
         account: string;
         vpc?: {
             vpcId?: string;
+            privateSubnetIds?: string[];
+            publicSubnetIds?: string[];
+            availabilityZones?: string[];
         };
     };
     logging: {

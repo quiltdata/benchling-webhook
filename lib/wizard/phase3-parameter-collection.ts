@@ -455,7 +455,12 @@ export async function runParameterCollection(
         deployment: {
             region,
             account,
-            vpc: vpcId ? { vpcId } : undefined,
+            vpc: vpcId && discoveredVpc ? {
+                vpcId,
+                privateSubnetIds: discoveredVpc.privateSubnetIds,
+                publicSubnetIds: discoveredVpc.publicSubnetIds,
+                availabilityZones: discoveredVpc.availabilityZones,
+            } : undefined,
         },
         logging: {
             level: logLevel,

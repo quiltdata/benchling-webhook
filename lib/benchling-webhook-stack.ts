@@ -153,9 +153,48 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // Architecture mirrors ~/GitHub/deployment/t4/template/network.py (network_version=2.0)
         // - Option 1: Use existing VPC (if vpcId specified in config)
         // - Option 2: Create new VPC with private subnets and NAT Gateway (production HA setup)
+
+        // Validate VPC configuration if using existing VPC
+        if (config.deployment.vpc?.vpcId) {
+            // Using explicit VPC config - validate we have subnet IDs
+            const privateSubnetIds = config.deployment.vpc.privateSubnetIds || [];
+            const azs = config.deployment.vpc.availabilityZones || [];
+
+            if (privateSubnetIds.length < 2) {
+                throw new Error(
+                    `VPC (${config.deployment.vpc.vpcId}) configuration is invalid.\n` +
+                    `Found ${privateSubnetIds.length} private subnet(s), need ≥2.\n\n` +
+                    `This usually means:\n` +
+                    `  1. VPC discovery failed during setup wizard\n` +
+                    `  2. Configuration was manually edited and is incomplete\n` +
+                    `  3. You're using an old config format (pre-v1.0)\n\n` +
+                    `Solution: Re-run setup wizard to re-discover VPC resources:\n` +
+                    `  npm run setup\n\n` +
+                    `Or create a new VPC by removing vpc.vpcId from config.`,
+                );
+            }
+
+            if (azs.length < 2) {
+                throw new Error(
+                    `VPC (${config.deployment.vpc.vpcId}) subnets must span ≥2 availability zones.\n` +
+                    `Found ${azs.length} AZ(s).\n\n` +
+                    `Solution: Re-run setup wizard or create a new VPC.`,
+                );
+            }
+
+            console.log(`Using existing VPC: ${config.deployment.vpc.vpcId}`);
+            console.log(`  Private subnets: ${privateSubnetIds.join(", ")}`);
+            console.log(`  Availability zones: ${azs.join(", ")}`);
+        } else {
+            console.log("Creating new VPC with private subnets and NAT Gateway");
+        }
+
         const vpc = config.deployment.vpc?.vpcId
-            ? ec2.Vpc.fromLookup(this, "ExistingVPC", {
+            ? ec2.Vpc.fromVpcAttributes(this, "ExistingVPC", {
                 vpcId: config.deployment.vpc.vpcId,
+                availabilityZones: config.deployment.vpc.availabilityZones || [],
+                privateSubnetIds: config.deployment.vpc.privateSubnetIds || [],
+                publicSubnetIds: config.deployment.vpc.publicSubnetIds || [],
             })
             : new ec2.Vpc(this, "BenchlingWebhookVPC", {
                 maxAzs: 2,
@@ -174,25 +213,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 ],
             });
 
-        // Validate VPC has private subnets (required for VPC Link and ECS with assignPublicIp: false)
+        // Double-check after VPC construction (should never fail)
         if (vpc.privateSubnets.length === 0) {
-            const vpcIdentifier = config.deployment.vpc?.vpcId || "created";
             throw new Error(
-                `VPC (${vpcIdentifier}) does not have private subnets. ` +
-                    "The architecture requires private subnets with NAT Gateway for:\n" +
-                    "  - VPC Link to connect API Gateway to ECS tasks\n" +
-                    "  - ECS Fargate tasks with assignPublicIp: false\n\n" +
-                    "If using an existing VPC, ensure it has:\n" +
-                    "  - Private subnets in at least 2 availability zones\n" +
-                    "  - NAT Gateway(s) for outbound internet access\n" +
-                    "  - Proper route tables configured\n\n" +
-                    "Or omit vpc.vpcId from config to auto-create a VPC with the correct configuration.",
+                `Internal error: VPC has no private subnets. ` +
+                `This should never happen - please report as a bug.`,
             );
         }
-
-        console.log(
-            `Using VPC: ${config.deployment.vpc?.vpcId || "auto-created"} (${vpc.privateSubnets.length} private subnets)`,
-        );
 
         // HARDCODED: Always use the quiltdata AWS account for ECR images
         const account = "712023778557";

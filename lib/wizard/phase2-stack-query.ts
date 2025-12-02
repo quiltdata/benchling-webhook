@@ -146,7 +146,8 @@ export async function runStackQuery(
 
             if (discoveredVpc) {
                 const privateSubnets = discoveredVpc.subnets.filter((s) => !s.isPublic);
-                const azs = new Set(privateSubnets.map((s) => s.availabilityZone));
+                const publicSubnets = discoveredVpc.subnets.filter((s) => s.isPublic);
+                const azs = new Set(discoveredVpc.subnets.map((s) => s.availabilityZone));
 
                 discoveredVpcInfo = {
                     vpcId: discoveredVpc.vpcId,
@@ -156,6 +157,10 @@ export async function runStackQuery(
                     availabilityZoneCount: azs.size,
                     isValid: discoveredVpc.isValid,
                     validationErrors: discoveredVpc.validationErrors,
+                    // NEW: Include actual subnet IDs for CDK
+                    privateSubnetIds: privateSubnets.map(s => s.subnetId),
+                    publicSubnetIds: publicSubnets.map(s => s.subnetId),
+                    availabilityZones: Array.from(azs),
                 };
 
                 if (discoveredVpc.isValid) {
