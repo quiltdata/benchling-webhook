@@ -65,7 +65,7 @@ If the App Canvas is not already part of your standard notebook template, Benchl
 
 ![App Canvas - Insert](imgs/benchling-insert.png)
 
-## Architecture (v0.9.0)
+## Architecture
 
 AWS CDK application with simple, reliable webhook processing:
 
@@ -220,7 +220,7 @@ npx @quiltdata/benchling-webhook@latest --help
 
 ## Upgrading from v0.8.x
 
-Version 0.9.0 introduces Network Load Balancer architecture with simplified security model. **This is a breaking change that requires stack recreation.**
+The current version uses Network Load Balancer architecture with simplified security model. **Upgrading from v0.8.x is a breaking change that requires stack recreation.**
 
 See [MIGRATION.md](./MIGRATION.md) for detailed upgrade instructions.
 

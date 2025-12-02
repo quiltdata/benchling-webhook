@@ -363,7 +363,7 @@ export class FargateService extends Construct {
         );
 
         // Create Fargate Service with NLB target group integration
-        // v0.9.0: Replaced Cloud Map with NLB for reliable health checks
+        // Replaced Cloud Map with NLB for reliable health checks
         this.service = new ecs.FargateService(this, "Service", {
             cluster: this.cluster,
             taskDefinition: taskDefinition,

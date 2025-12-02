@@ -216,7 +216,7 @@ export async function setupProfileCommand(
 
         // If VPC ID was provided, show a warning about requirements
         if (vpcId) {
-            console.log(chalk.yellow("\n⚠️  VPC Requirements (v0.9.0):"));
+            console.log(chalk.yellow("\n⚠️  VPC Requirements:"));
             console.log(chalk.dim("  - Must have private subnets in at least 2 availability zones"));
             console.log(chalk.dim("  - Private subnets must have NAT Gateway for outbound internet"));
             console.log(chalk.dim("  - VPC Link requires proper routing configuration"));

@@ -10,7 +10,7 @@
 import chalk from "chalk";
 import { inferQuiltConfig } from "../../bin/commands/infer-quilt-config";
 import { StackQueryResult, DiscoveredVpcInfo } from "./types";
-import { discoverVpcFromStack } from "../../scripts/discover-vpc";
+import { discoverVpcFromStack, DiscoveredSubnet } from "../../scripts/discover-vpc";
 
 /**
  * Phase 2 options
@@ -146,7 +146,30 @@ export async function runStackQuery(
 
             if (discoveredVpc) {
                 const privateSubnets = discoveredVpc.subnets.filter((s) => !s.isPublic);
-                const azs = new Set(privateSubnets.map((s) => s.availabilityZone));
+                const publicSubnets = discoveredVpc.subnets.filter((s) => s.isPublic);
+                const azs = new Set(discoveredVpc.subnets.map((s) => s.availabilityZone));
+
+                // Deduplicate subnets - select one subnet per AZ for NLB compatibility
+                // AWS NLB requires exactly one subnet per availability zone
+                const privateSubnetsByAz = new Map<string, DiscoveredSubnet>();
+                const publicSubnetsByAz = new Map<string, DiscoveredSubnet>();
+
+                for (const subnet of privateSubnets) {
+                    if (!privateSubnetsByAz.has(subnet.availabilityZone)) {
+                        privateSubnetsByAz.set(subnet.availabilityZone, subnet);
+                    }
+                }
+
+                for (const subnet of publicSubnets) {
+                    if (!publicSubnetsByAz.has(subnet.availabilityZone)) {
+                        publicSubnetsByAz.set(subnet.availabilityZone, subnet);
+                    }
+                }
+
+                // Extract deduplicated subnet IDs and AZs
+                const deduplicatedPrivateSubnets = Array.from(privateSubnetsByAz.values());
+                const deduplicatedPublicSubnets = Array.from(publicSubnetsByAz.values());
+                const deduplicatedAzs = Array.from(privateSubnetsByAz.keys());
 
                 discoveredVpcInfo = {
                     vpcId: discoveredVpc.vpcId,
@@ -156,6 +179,10 @@ export async function runStackQuery(
                     availabilityZoneCount: azs.size,
                     isValid: discoveredVpc.isValid,
                     validationErrors: discoveredVpc.validationErrors,
+                    // Use deduplicated subnets - exactly one per AZ for NLB compatibility
+                    privateSubnetIds: deduplicatedPrivateSubnets.map(s => s.subnetId),
+                    publicSubnetIds: deduplicatedPublicSubnets.map(s => s.subnetId),
+                    availabilityZones: deduplicatedAzs,
                 };
 
                 if (discoveredVpc.isValid) {

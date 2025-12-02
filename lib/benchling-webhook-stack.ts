@@ -3,7 +3,7 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
-import { HttpApiGateway } from "./http-api-gateway";
+import { RestApiGateway } from "./rest-api-gateway";
 import { NetworkLoadBalancer } from "./network-load-balancer";
 import { ProfileConfig } from "./types/config";
 import packageJson from "../package.json";
@@ -25,7 +25,7 @@ export interface BenchlingWebhookStackProps extends cdk.StackProps {
 export class BenchlingWebhookStack extends cdk.Stack {
     private readonly fargateService: FargateService;
     private readonly nlb: NetworkLoadBalancer;
-    private readonly api: HttpApiGateway;
+    private readonly api: RestApiGateway;
     public readonly webhookEndpoint: string;
 
     constructor(
@@ -149,13 +149,53 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // Bucket name will be resolved at runtime from CloudFormation outputs
         // For CDK purposes, we use a placeholder for IAM permissions
 
-        // VPC Configuration (v0.9.0+)
+        // VPC Configuration
         // Architecture mirrors ~/GitHub/deployment/t4/template/network.py (network_version=2.0)
         // - Option 1: Use existing VPC (if vpcId specified in config)
         // - Option 2: Create new VPC with private subnets and NAT Gateway (production HA setup)
+
+        // Validate VPC configuration if using existing VPC
+        if (config.deployment.vpc?.vpcId) {
+            // Using explicit VPC config - validate we have subnet IDs
+            const privateSubnetIds = config.deployment.vpc.privateSubnetIds || [];
+            const azs = config.deployment.vpc.availabilityZones || [];
+
+            if (privateSubnetIds.length < 2) {
+                throw new Error(
+                    `VPC (${config.deployment.vpc.vpcId}) configuration is invalid.\n` +
+                    `Found ${privateSubnetIds.length} private subnet(s), need ≥2.\n\n` +
+                    "This usually means:\n" +
+                    "  1. VPC discovery failed during setup wizard\n" +
+                    "  2. Configuration was manually edited and is incomplete\n" +
+                    "  3. You're using an old config format (pre-v1.0)\n\n" +
+                    "Solution: Re-run setup wizard to re-discover VPC resources:\n" +
+                    "  npm run setup\n\n" +
+                    "Or create a new VPC by removing vpc.vpcId from config.",
+                );
+            }
+
+            if (azs.length < 2) {
+                throw new Error(
+                    `VPC (${config.deployment.vpc.vpcId}) subnets must span ≥2 availability zones.\n` +
+                    `Found ${azs.length} AZ(s).\n\n` +
+                    "Solution: Re-run setup wizard or create a new VPC.",
+                );
+            }
+
+            console.log(`Using existing VPC: ${config.deployment.vpc.vpcId}`);
+            console.log(`  Private subnets: ${privateSubnetIds.join(", ")}`);
+            console.log(`  Availability zones: ${azs.join(", ")}`);
+        } else {
+            console.log("Creating new VPC with private subnets and NAT Gateway");
+        }
+
         const vpc = config.deployment.vpc?.vpcId
-            ? ec2.Vpc.fromLookup(this, "ExistingVPC", {
+            ? ec2.Vpc.fromVpcAttributes(this, "ExistingVPC", {
                 vpcId: config.deployment.vpc.vpcId,
+                availabilityZones: config.deployment.vpc.availabilityZones || [],
+                privateSubnetIds: config.deployment.vpc.privateSubnetIds || [],
+                publicSubnetIds: config.deployment.vpc.publicSubnetIds || [],
+                vpcCidrBlock: config.deployment.vpc.vpcCidrBlock,
             })
             : new ec2.Vpc(this, "BenchlingWebhookVPC", {
                 maxAzs: 2,
@@ -174,25 +214,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 ],
             });
 
-        // Validate VPC has private subnets (required for VPC Link and ECS with assignPublicIp: false)
+        // Double-check after VPC construction (should never fail)
         if (vpc.privateSubnets.length === 0) {
-            const vpcIdentifier = config.deployment.vpc?.vpcId || "created";
             throw new Error(
-                `VPC (${vpcIdentifier}) does not have private subnets. ` +
-                    "The v0.9.0 architecture requires private subnets with NAT Gateway for:\n" +
-                    "  - VPC Link to connect API Gateway to ECS tasks\n" +
-                    "  - ECS Fargate tasks with assignPublicIp: false\n\n" +
-                    "If using an existing VPC, ensure it has:\n" +
-                    "  - Private subnets in at least 2 availability zones\n" +
-                    "  - NAT Gateway(s) for outbound internet access\n" +
-                    "  - Proper route tables configured\n\n" +
-                    "Or omit vpc.vpcId from config to auto-create a VPC with the correct configuration.",
+                "Internal error: VPC has no private subnets. " +
+                "This should never happen - please report as a bug.",
             );
         }
-
-        console.log(
-            `Using VPC: ${config.deployment.vpc?.vpcId || "auto-created"} (${vpc.privateSubnets.length} private subnets)`,
-        );
 
         // HARDCODED: Always use the quiltdata AWS account for ECR images
         const account = "712023778557";
@@ -203,7 +231,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const ecrImageUri = `${account}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTagValue}`;
 
         // Create Network Load Balancer for ECS service
-        // v0.9.0: NLB provides reliable health checks for ECS tasks
+        // NLB provides reliable health checks for ECS tasks
         this.nlb = new NetworkLoadBalancer(this, "NetworkLoadBalancer", {
             vpc,
         });
@@ -219,7 +247,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             vpc,
             config: config,
             ecrRepository: ecrRepo,
-            targetGroup: this.nlb.targetGroup,  // v0.9.0: NLB target group for ECS tasks
+            targetGroup: this.nlb.targetGroup,  // NLB target group for ECS tasks
             imageTag: imageTagValue,
             stackVersion: stackVersion,
             // Runtime-configurable parameters
@@ -241,21 +269,25 @@ export class BenchlingWebhookStack extends cdk.Stack {
             logLevel: logLevelValue,
         });
 
-        // Create HTTP API v2 that routes through VPC Link to the NLB
-        // v0.9.0: NLB integration provides reliable routing to ECS tasks
-        this.api = new HttpApiGateway(this, "HttpApiGateway", {
+        // Get stage from environment or default to prod
+        const stage = process.env.STAGE || "prod";
+
+        // Create REST API v1 that routes through VPC Link to the NLB
+        // v1.0.0: REST API with resource policy replaces HTTP API v2 + WAF
+        this.api = new RestApiGateway(this, "RestApiGateway", {
             vpc: vpc,
             networkLoadBalancer: this.nlb.loadBalancer,
             nlbListener: this.nlb.listener,
             serviceSecurityGroup: this.fargateService.securityGroup,
             config: config,
+            stage: stage,
         });
 
-        // Store webhook endpoint for easy access (HTTP API v2 default stage)
-        // HTTP API v2 URL is optional, but should always be defined after API creation
-        this.webhookEndpoint = this.api.api.url || "";
-        if (!this.webhookEndpoint) {
-            throw new Error("HTTP API URL was not generated. This should not happen.");
+        // Store webhook endpoint for easy access (REST API v1 with stage)
+        // REST API URL already includes the stage in the path (e.g., https://xxx.execute-api.region.amazonaws.com/stage/)
+        this.webhookEndpoint = this.api.api.url;
+        if (!this.api.api.url) {
+            throw new Error("REST API URL was not generated. This should not happen.");
         }
 
         // Export webhook endpoint as a stack output
@@ -283,11 +315,21 @@ export class BenchlingWebhookStack extends cdk.Stack {
         });
 
         new cdk.CfnOutput(this, "ApiGatewayLogGroup", {
-            value: this.api.logGroup.logGroupName,
+            value: "/aws/apigateway/benchling-webhook-rest",
             description: "CloudWatch log group for API Gateway access logs",
         });
 
-        // Export NLB information (v0.9.0)
+        new cdk.CfnOutput(this, "ApiType", {
+            value: "REST API v1",
+            description: "API Gateway type",
+        });
+
+        new cdk.CfnOutput(this, "ApiStage", {
+            value: stage,
+            description: "API Gateway deployment stage",
+        });
+
+        // Export NLB information
         new cdk.CfnOutput(this, "NetworkLoadBalancerDns", {
             value: this.nlb.loadBalancer.loadBalancerDnsName,
             description: "Network Load Balancer DNS name (internal)",
@@ -297,19 +339,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             value: this.nlb.targetGroup.targetGroupArn,
             description: "NLB Target Group ARN for ECS tasks",
         });
-
-        // Conditionally export WAF outputs only if WAF is enabled
-        if (this.api.wafWebAcl) {
-            new cdk.CfnOutput(this, "WafWebAclArn", {
-                value: this.api.wafWebAcl.webAcl.attrArn,
-                description: "WAF Web ACL ARN for IP filtering",
-            });
-
-            new cdk.CfnOutput(this, "WafLogGroup", {
-                value: this.api.wafWebAcl.logGroup.logGroupName,
-                description: "CloudWatch log group for WAF logs",
-            });
-        }
 
         // Export configuration metadata
         new cdk.CfnOutput(this, "ConfigVersion", {

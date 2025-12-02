@@ -550,14 +550,12 @@ export async function inferQuiltConfig(options: {
     // Read role is still discovered for informational purposes but not configured
     if (selectedStack.readRoleArn) {
         console.log(`✓ T4BucketReadRole discovered: ${selectedStack.readRoleArn}`);
-        console.log("  (Read role discovered but not configured - write role used for all operations)");
     } else {
         console.log(chalk.yellow("⚠ T4BucketReadRole: NOT FOUND (valid Quilt stack resource)"));
     }
     if (selectedStack.writeRoleArn) {
         result.writeRoleArn = selectedStack.writeRoleArn;
         console.log(`✓ T4BucketWriteRole: ${selectedStack.writeRoleArn}`);
-        console.log("  (Write role will be used for all S3 operations)");
     } else {
         console.log(chalk.yellow("⚠ T4BucketWriteRole: NOT FOUND (optional - will use task role for S3 access)"));
     }

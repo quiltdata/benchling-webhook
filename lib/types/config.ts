@@ -415,6 +415,41 @@ export interface VpcConfig {
     vpcId?: string;
 
     /**
+     * Private subnet IDs for ECS tasks and NLB
+     * Required when vpcId is specified
+     * Must have ≥2 subnets in different AZs
+     *
+     * Discovered by scripts/discover-vpc.ts during setup wizard.
+     * Subnets are classified as private by analyzing route tables
+     * for NAT Gateway routes (not IGW routes).
+     *
+     * @example ["subnet-0aaa", "subnet-0bbb"]
+     */
+    privateSubnetIds?: string[];
+
+    /**
+     * Public subnet IDs (optional)
+     * Only needed if creating resources that require public subnets
+     * @example ["subnet-0ccc", "subnet-0ddd"]
+     */
+    publicSubnetIds?: string[];
+
+    /**
+     * Availability zones for the subnets
+     * Must match the order and count of privateSubnetIds
+     * @example ["us-east-1a", "us-east-1b"]
+     */
+    availabilityZones?: string[];
+
+    /**
+     * VPC CIDR block
+     * Required when vpcId is specified for CDK synthesis
+     * Discovered by scripts/discover-vpc.ts during setup wizard
+     * @example "10.0.0.0/16"
+     */
+    vpcCidrBlock?: string;
+
+    /**
      * Whether to create a new VPC if vpcId is not specified
      *
      * @default true
@@ -443,9 +478,11 @@ export interface LoggingConfig {
  */
 export interface SecurityConfig {
     /**
-     * Comma-separated list of allowed IP addresses/CIDR blocks
+     * Comma-separated list of allowed IP addresses/CIDR blocks for webhook endpoints
      *
-     * Empty string means no IP filtering.
+     * v1.0.0+: Enforced via REST API Gateway resource policy (free).
+     * Empty string means no IP filtering (all IPs allowed).
+     * Health endpoints are always accessible from any IP.
      *
      * @example "192.168.1.0/24,10.0.0.0/8"
      * @default ""
@@ -453,7 +490,7 @@ export interface SecurityConfig {
     webhookAllowList?: string;
 
     /**
-     * Enable webhook signature verification
+     * Enable webhook signature verification in FastAPI application
      *
      * @default true
      */
