@@ -595,17 +595,34 @@ export async function deploy(
         const appArg = appPath ? `--app "${appPath}"` : "";
         const cdkCommand = `npx cdk deploy ${appArg} --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
 
+        // Build environment variables for CDK synthesis
+        const env: Record<string, string> = {
+            ...process.env,
+            CDK_DEFAULT_ACCOUNT: deployAccount,
+            CDK_DEFAULT_REGION: deployRegion,
+            QUILT_STACK_ARN: stackArn,
+            BENCHLING_SECRET: benchlingSecret,
+        };
+
+        // Pass VPC configuration if specified in profile
+        if (config.deployment.vpc?.vpcId) {
+            env.VPC_ID = config.deployment.vpc.vpcId;
+
+            // Serialize subnet arrays as JSON for environment variables
+            if (config.deployment.vpc.privateSubnetIds) {
+                env.VPC_PRIVATE_SUBNET_IDS = JSON.stringify(config.deployment.vpc.privateSubnetIds);
+            }
+            if (config.deployment.vpc.publicSubnetIds) {
+                env.VPC_PUBLIC_SUBNET_IDS = JSON.stringify(config.deployment.vpc.publicSubnetIds);
+            }
+            if (config.deployment.vpc.availabilityZones) {
+                env.VPC_AVAILABILITY_ZONES = JSON.stringify(config.deployment.vpc.availabilityZones);
+            }
+        }
+
         execSync(cdkCommand, {
             stdio: "inherit",
-            env: {
-                ...process.env,
-                CDK_DEFAULT_ACCOUNT: deployAccount,
-                CDK_DEFAULT_REGION: deployRegion,
-                QUILT_STACK_ARN: stackArn,
-                BENCHLING_SECRET: benchlingSecret,
-                // Pass VPC configuration if specified in profile
-                ...(config.deployment.vpc?.vpcId && { VPC_ID: config.deployment.vpc.vpcId }),
-            },
+            env,
         });
 
         console.log();

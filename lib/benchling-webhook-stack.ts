@@ -164,13 +164,13 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 throw new Error(
                     `VPC (${config.deployment.vpc.vpcId}) configuration is invalid.\n` +
                     `Found ${privateSubnetIds.length} private subnet(s), need ≥2.\n\n` +
-                    `This usually means:\n` +
-                    `  1. VPC discovery failed during setup wizard\n` +
-                    `  2. Configuration was manually edited and is incomplete\n` +
-                    `  3. You're using an old config format (pre-v1.0)\n\n` +
-                    `Solution: Re-run setup wizard to re-discover VPC resources:\n` +
-                    `  npm run setup\n\n` +
-                    `Or create a new VPC by removing vpc.vpcId from config.`,
+                    "This usually means:\n" +
+                    "  1. VPC discovery failed during setup wizard\n" +
+                    "  2. Configuration was manually edited and is incomplete\n" +
+                    "  3. You're using an old config format (pre-v1.0)\n\n" +
+                    "Solution: Re-run setup wizard to re-discover VPC resources:\n" +
+                    "  npm run setup\n\n" +
+                    "Or create a new VPC by removing vpc.vpcId from config.",
                 );
             }
 
@@ -178,7 +178,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 throw new Error(
                     `VPC (${config.deployment.vpc.vpcId}) subnets must span ≥2 availability zones.\n` +
                     `Found ${azs.length} AZ(s).\n\n` +
-                    `Solution: Re-run setup wizard or create a new VPC.`,
+                    "Solution: Re-run setup wizard or create a new VPC.",
                 );
             }
 
@@ -216,8 +216,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // Double-check after VPC construction (should never fail)
         if (vpc.privateSubnets.length === 0) {
             throw new Error(
-                `Internal error: VPC has no private subnets. ` +
-                `This should never happen - please report as a bug.`,
+                "Internal error: VPC has no private subnets. " +
+                "This should never happen - please report as a bug.",
             );
         }
 

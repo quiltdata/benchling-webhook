@@ -184,6 +184,16 @@ if (require.main === module) {
             ...(process.env.VPC_ID && {
                 vpc: {
                     vpcId: process.env.VPC_ID,
+                    // Parse subnet arrays from JSON-encoded environment variables
+                    ...(process.env.VPC_PRIVATE_SUBNET_IDS && {
+                        privateSubnetIds: JSON.parse(process.env.VPC_PRIVATE_SUBNET_IDS),
+                    }),
+                    ...(process.env.VPC_PUBLIC_SUBNET_IDS && {
+                        publicSubnetIds: JSON.parse(process.env.VPC_PUBLIC_SUBNET_IDS),
+                    }),
+                    ...(process.env.VPC_AVAILABILITY_ZONES && {
+                        availabilityZones: JSON.parse(process.env.VPC_AVAILABILITY_ZONES),
+                    }),
                 },
             }),
         },
