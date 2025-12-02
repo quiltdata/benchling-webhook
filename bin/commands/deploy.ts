@@ -632,6 +632,14 @@ export async function deploy(
             }
         }
 
+        // Pass security configuration if specified in profile
+        if (config.security?.webhookAllowList) {
+            env.WEBHOOK_ALLOW_LIST = config.security.webhookAllowList;
+        }
+        if (config.security?.enableVerification !== undefined) {
+            env.ENABLE_WEBHOOK_VERIFICATION = config.security.enableVerification.toString();
+        }
+
         execSync(cdkCommand, {
             stdio: "inherit",
             env,
