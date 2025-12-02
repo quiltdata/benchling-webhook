@@ -575,14 +575,91 @@ ec2.Vpc.fromVpcAttributes(this, "ExistingVPC", {
 
 ---
 
+## f) Additional Issue: Multiple Subnets Per AZ
+
+### Problem
+
+After implementing explicit subnet IDs, deployment failed with:
+
+```text
+A load balancer cannot be attached to multiple subnets in the same Availability Zone
+```
+
+**Root Cause:** VPC discovery captured all 4 private subnets, but they only spanned 2 AZs:
+
+- 4 private subnets discovered
+- Only 2 unique AZs (us-east-1a, us-east-1b)
+- This means multiple subnets exist in the same AZ
+
+**AWS Requirement:** Network Load Balancers require **exactly one subnet per availability zone**.
+
+### Solution: Subnet Deduplication
+
+Modified [lib/wizard/phase2-stack-query.ts](../lib/wizard/phase2-stack-query.ts) to deduplicate subnets by selecting one subnet per AZ:
+
+```typescript
+// Deduplicate subnets - select one subnet per AZ for NLB compatibility
+// AWS NLB requires exactly one subnet per availability zone
+const privateSubnetsByAz = new Map<string, DiscoveredSubnet>();
+const publicSubnetsByAz = new Map<string, DiscoveredSubnet>();
+
+for (const subnet of privateSubnets) {
+    if (!privateSubnetsByAz.has(subnet.availabilityZone)) {
+        privateSubnetsByAz.set(subnet.availabilityZone, subnet);
+    }
+}
+
+for (const subnet of publicSubnets) {
+    if (!publicSubnetsByAz.has(subnet.availabilityZone)) {
+        publicSubnetsByAz.set(subnet.availabilityZone, subnet);
+    }
+}
+
+// Extract deduplicated subnet IDs and AZs
+const deduplicatedPrivateSubnets = Array.from(privateSubnetsByAz.values());
+const deduplicatedPublicSubnets = Array.from(publicSubnetsByAz.values());
+const deduplicatedAzs = Array.from(privateSubnetsByAz.keys());
+```
+
+**Selection Strategy:** Uses first subnet encountered per AZ. This is deterministic and simple. Could be enhanced later to:
+
+- Select subnet with most available IPs
+- Select subnet with specific name pattern
+- Allow user to choose preferred subnet per AZ
+
+### CDK Warning Suppression
+
+Using `Vpc.fromVpcAttributes()` without route table IDs generates warnings:
+
+```text
+[Warning] No routeTableId was provided to the subnet 'subnet-xxx'
+```
+
+**Solution:** Added acknowledgement to [cdk.json](../cdk.json):
+
+```json
+{
+  "context": {
+    "@aws-cdk/aws-ec2:noSubnetRouteTableId": true,
+    ...
+  }
+}
+```
+
+These warnings are expected when importing existing VPCs not created by CDK. Since we don't access route tables in our stack, it's safe to suppress them.
+
+---
+
 ## Implementation Checklist
 
-- [ ] Update `VpcConfig` interface in [lib/types/config.ts](../lib/types/config.ts)
-- [ ] Update `DiscoveredVpcInfo` interface in [lib/wizard/types.ts](../lib/wizard/types.ts)
-- [ ] Modify [lib/wizard/phase2-stack-query.ts](../lib/wizard/phase2-stack-query.ts) to extract subnet IDs
-- [ ] Update wizard phases to store subnet IDs in config
-- [ ] Replace `Vpc.fromLookup()` with `Vpc.fromVpcAttributes()` in [lib/benchling-webhook-stack.ts](../lib/benchling-webhook-stack.ts)
-- [ ] Add validation for missing subnet IDs with helpful error messages
+- [x] Update `VpcConfig` interface in [lib/types/config.ts](../lib/types/config.ts)
+- [x] Update `DiscoveredVpcInfo` interface in [lib/wizard/types.ts](../lib/wizard/types.ts)
+- [x] Modify [lib/wizard/phase2-stack-query.ts](../lib/wizard/phase2-stack-query.ts) to extract subnet IDs
+- [x] Add subnet deduplication logic (one subnet per AZ) in [lib/wizard/phase2-stack-query.ts](../lib/wizard/phase2-stack-query.ts)
+- [x] Update wizard phases to store subnet IDs in config
+- [x] Replace `Vpc.fromLookup()` with `Vpc.fromVpcAttributes()` in [lib/benchling-webhook-stack.ts](../lib/benchling-webhook-stack.ts)
+- [x] Add validation for missing subnet IDs with helpful error messages
+- [x] Suppress CDK route table warnings in [cdk.json](../cdk.json)
 - [ ] Test with existing Quilt VPC (the currently failing case)
 - [ ] Test with new VPC creation
 - [ ] Test backward compatibility (configs without subnet IDs)
