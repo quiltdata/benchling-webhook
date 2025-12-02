@@ -442,6 +442,14 @@ export interface VpcConfig {
     availabilityZones?: string[];
 
     /**
+     * VPC CIDR block
+     * Required when vpcId is specified for CDK synthesis
+     * Discovered by scripts/discover-vpc.ts during setup wizard
+     * @example "10.0.0.0/16"
+     */
+    vpcCidrBlock?: string;
+
+    /**
      * Whether to create a new VPC if vpcId is not specified
      *
      * @default true

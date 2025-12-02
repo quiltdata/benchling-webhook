@@ -618,6 +618,9 @@ export async function deploy(
             if (config.deployment.vpc.availabilityZones) {
                 env.VPC_AVAILABILITY_ZONES = JSON.stringify(config.deployment.vpc.availabilityZones);
             }
+            if (config.deployment.vpc.vpcCidrBlock) {
+                env.VPC_CIDR_BLOCK = config.deployment.vpc.vpcCidrBlock;
+            }
         }
 
         execSync(cdkCommand, {

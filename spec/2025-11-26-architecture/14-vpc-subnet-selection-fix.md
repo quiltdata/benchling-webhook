@@ -221,6 +221,14 @@ export interface VpcConfig {
     availabilityZones?: string[];
 
     /**
+     * VPC CIDR block
+     * Required when vpcId is specified for CDK synthesis
+     * Discovered by scripts/discover-vpc.ts during setup wizard
+     * @example "10.0.0.0/16"
+     */
+    vpcCidrBlock?: string;
+
+    /**
      * Whether to create a new VPC if vpcId is not specified
      * @default true
      */
@@ -301,6 +309,7 @@ config.deployment.vpc = {
     privateSubnetIds: discoveredVpcInfo.privateSubnetIds,
     publicSubnetIds: discoveredVpcInfo.publicSubnetIds,
     availabilityZones: discoveredVpcInfo.availabilityZones,
+    vpcCidrBlock: discoveredVpcInfo.cidrBlock,
 };
 ```
 
@@ -321,6 +330,7 @@ const vpc = config.deployment.vpc?.vpcId
         availabilityZones: config.deployment.vpc.availabilityZones || [],
         privateSubnetIds: config.deployment.vpc.privateSubnetIds || [],
         publicSubnetIds: config.deployment.vpc.publicSubnetIds,  // Optional
+        vpcCidrBlock: config.deployment.vpc.vpcCidrBlock,  // Required by CDK
     })
     : new ec2.Vpc(this, "BenchlingWebhookVPC", { ... });
 ```
@@ -405,16 +415,95 @@ if (vpc.privateSubnets.length === 0) {
     "vpc": {
       "vpcId": "vpc-0123456789abcdef0",
       "privateSubnetIds": ["subnet-aaa", "subnet-bbb"],
-      "availabilityZones": ["us-east-1a", "us-east-1b"]
+      "availabilityZones": ["us-east-1a", "us-east-1b"],
+      "vpcCidrBlock": "10.0.0.0/16"
     }
   }
 }
 ```
 
 **New installations:**
-- Wizard always populates subnet IDs
+- Wizard always populates subnet IDs and CIDR block
 - Works immediately with existing VPCs
 - No manual intervention needed
+
+---
+
+## e) Additional Issue: VPC CIDR Block Required
+
+### Problem
+After implementing explicit subnet IDs, deployment still failed with:
+```
+ValidationError: Cannot perform this operation: 'vpcCidrBlock' was not supplied when creating this VPC
+```
+
+The CDK `Vpc.fromVpcAttributes()` method requires the `vpcCidrBlock` parameter for proper VPC synthesis.
+
+### Solution
+Add `vpcCidrBlock` to the VPC configuration:
+
+1. **VpcConfig Type** - Add `vpcCidrBlock?: string` field
+2. **VPC Discovery** - Already captures CIDR block from EC2 API
+3. **Wizard Storage** - Store `vpcCidrBlock: discoveredVpcInfo.cidrBlock`
+4. **Environment Variables** - Pass `VPC_CIDR_BLOCK` env var
+5. **CDK Stack** - Include `vpcCidrBlock` in `Vpc.fromVpcAttributes()`
+
+### Changes
+
+**lib/types/config.ts:**
+```typescript
+export interface VpcConfig {
+    vpcId?: string;
+    privateSubnetIds?: string[];
+    publicSubnetIds?: string[];
+    availabilityZones?: string[];
+    vpcCidrBlock?: string;  // NEW: Required for CDK synthesis
+}
+```
+
+**lib/wizard/phase3-parameter-collection.ts:**
+```typescript
+vpc: vpcId && discoveredVpc ? {
+    vpcId,
+    privateSubnetIds: discoveredVpc.privateSubnetIds,
+    publicSubnetIds: discoveredVpc.publicSubnetIds,
+    availabilityZones: discoveredVpc.availabilityZones,
+    vpcCidrBlock: discoveredVpc.cidrBlock,  // NEW
+} : undefined,
+```
+
+**bin/commands/deploy.ts:**
+```typescript
+if (config.deployment.vpc?.vpcId) {
+    env.VPC_ID = config.deployment.vpc.vpcId;
+    // ... other env vars ...
+    if (config.deployment.vpc.vpcCidrBlock) {
+        env.VPC_CIDR_BLOCK = config.deployment.vpc.vpcCidrBlock;
+    }
+}
+```
+
+**bin/benchling-webhook.ts:**
+```typescript
+vpc: {
+    vpcId: process.env.VPC_ID,
+    // ... other fields ...
+    ...(process.env.VPC_CIDR_BLOCK && {
+        vpcCidrBlock: process.env.VPC_CIDR_BLOCK,
+    }),
+}
+```
+
+**lib/benchling-webhook-stack.ts:**
+```typescript
+ec2.Vpc.fromVpcAttributes(this, "ExistingVPC", {
+    vpcId: config.deployment.vpc.vpcId,
+    availabilityZones: config.deployment.vpc.availabilityZones || [],
+    privateSubnetIds: config.deployment.vpc.privateSubnetIds || [],
+    publicSubnetIds: config.deployment.vpc.publicSubnetIds || [],
+    vpcCidrBlock: config.deployment.vpc.vpcCidrBlock,  // NEW: Required by CDK
+})
+```
 
 ---
 

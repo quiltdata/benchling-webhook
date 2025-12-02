@@ -194,6 +194,9 @@ if (require.main === module) {
                     ...(process.env.VPC_AVAILABILITY_ZONES && {
                         availabilityZones: JSON.parse(process.env.VPC_AVAILABILITY_ZONES),
                     }),
+                    ...(process.env.VPC_CIDR_BLOCK && {
+                        vpcCidrBlock: process.env.VPC_CIDR_BLOCK,
+                    }),
                 },
             }),
         },

@@ -460,6 +460,7 @@ export async function runParameterCollection(
                 privateSubnetIds: discoveredVpc.privateSubnetIds,
                 publicSubnetIds: discoveredVpc.publicSubnetIds,
                 availabilityZones: discoveredVpc.availabilityZones,
+                vpcCidrBlock: discoveredVpc.cidrBlock,
             } : undefined,
         },
         logging: {

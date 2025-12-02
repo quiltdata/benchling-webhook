@@ -134,6 +134,7 @@ export interface ParameterCollectionResult {
             privateSubnetIds?: string[];
             publicSubnetIds?: string[];
             availabilityZones?: string[];
+            vpcCidrBlock?: string;
         };
     };
     logging: {

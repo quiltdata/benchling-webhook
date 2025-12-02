@@ -195,6 +195,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
                 availabilityZones: config.deployment.vpc.availabilityZones || [],
                 privateSubnetIds: config.deployment.vpc.privateSubnetIds || [],
                 publicSubnetIds: config.deployment.vpc.publicSubnetIds || [],
+                vpcCidrBlock: config.deployment.vpc.vpcCidrBlock,
             })
             : new ec2.Vpc(this, "BenchlingWebhookVPC", {
                 maxAzs: 2,
