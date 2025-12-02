@@ -3,6 +3,67 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.10] - 2025-12-02
+
+### Fixed
+
+- **IP filtering display logic** - Pre-deployment configuration now correctly shows IP filtering status
+  - Display was showing "ENABLED" even when `webhookAllowList` was empty
+  - Updated to match actual deployment behavior from `rest-api-gateway.ts`
+  - Parses webhook allowlist to show accurate status
+  - Displays list of allowed IPs when filtering is enabled
+
+## [0.8.9] - 2025-12-01
+
+### Breaking Changes
+
+**REST API v1 architecture requires stack recreation.** This replaces the v0.9.0 HTTP API v2 + WAF architecture.
+
+**Migration required:**
+
+1. Destroy old stack: `npx cdk destroy`
+2. Deploy new stack: `npm run deploy:prod -- --yes`
+3. Update Benchling webhook URL (include stage prefix: `/prod/webhook`)
+
+### Changed
+
+- **API Gateway architecture** - Migrated from HTTP API v2 + WAF to REST API v1 + Resource Policy
+  - Replaced HTTP API Gateway v2 with REST API Gateway v1
+  - Replaced AWS WAF ($7/month) with API Gateway Resource Policy (free)
+  - Preserved Network Load Balancer for reliable health checks
+  - Stage-based routing: `/{stage}/webhook`, `/{stage}/health`
+
+- **Cost optimization** - **Save $5.10/month** by eliminating WAF
+  - Fixed costs: $63.10/month (down from $70.10/month)
+  - Variable costs: $3.50/million requests (up from $1.00/million)
+  - Break-even: ~2 million requests/month (most deployments use < 100k/month)
+
+- **Flexible route handling** - FastAPI supports both direct and stage-prefixed paths
+  - API Gateway requests: `/{stage}/health` → Matches `/{stage}/health` route
+  - NLB health checks: `/health` → Matches `/health` route
+  - No middleware complexity or path rewriting needed
+  - See spec/2025-11-26-architecture/13-fastapi-flexible-routes.md
+
+### Added
+
+- **Resource Policy IP filtering** - Free alternative to WAF
+  - Applied when `webhookAllowList` configured
+  - Blocks unknown IPs at API Gateway edge
+  - Health endpoints always exempt from IP filtering
+  - See spec/2025-11-26-architecture/12-rest-nlb.md
+
+- **VPC subnet selection** - Explicit subnet selection for VPC reuse
+  - New `vpcSubnetIds` config option for specifying subnets
+  - Environment variables: `VPC_SUBNET_1_ID`, `VPC_SUBNET_2_ID`, `VPC_SUBNET_3_ID`
+  - Wizard warns about VPC connectivity and defaults to new VPC
+  - See spec/2025-11-26-architecture/14-vpc-subnet-selection-fix.md
+
+### Security
+
+- **Single authentication layer** - FastAPI HMAC verification (raw body access)
+- **Optional network layer** - Resource Policy IP filtering (free)
+- **Defense-in-depth** - Both layers work together when configured
+
 ## [1.0.0] - 2025-11-28
 
 ### BREAKING CHANGES
@@ -10,6 +71,7 @@ All notable changes to this project will be documented in this file.
 **REST API → HTTP API v2 migration requires stack recreation.** See [MIGRATION.md](./MIGRATION.md) for upgrade instructions.
 
 **Why this change is required:**
+
 - REST API Lambda Authorizers **cannot access request body**, breaking HMAC signature verification
 - HTTP API v2 Lambda Authorizers **can access request body** via `event['body']` field
 - Benchling webhook signatures are computed over the entire request body
@@ -292,6 +354,7 @@ Existing configurations work unchanged. Read role ARN ignored if present. See [s
 
 - **Deploy validation** - Deploy command now verifies secrets instead of force-updating them on every deployment
 - **Cleaner codebase** - Removed legacy mode detection and config_version field (no longer needed)
+
 ## [0.7.3] - 2025-11-06
 
 ### Added
