@@ -97,6 +97,7 @@ export interface ParameterCollectionInput {
     stackQuery: StackQueryResult;
     existingConfig?: ProfileConfig | null; // Existing config to use as defaults
     yes?: boolean;
+    profile?: string; // Profile name for display in commands
     // CLI overrides
     benchlingTenant?: string;
     benchlingClientId?: string;
