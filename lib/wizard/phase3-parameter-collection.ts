@@ -76,6 +76,37 @@ export async function runParameterCollection(
 
             vpcId = createStandaloneVpc ? undefined : discoveredVpc.vpcId;
 
+            // Check if VPC selection changed from existing configuration
+            const existingVpcId = existingConfig?.deployment?.vpc?.vpcId;
+            const vpcChanged = existingVpcId && existingVpcId !== vpcId;
+
+            if (vpcChanged) {
+                // CRITICAL WARNING: Changing VPC requires stack destruction
+                console.log("\n" + chalk.red.bold("⚠️  IMPORTANT: VPC CONFIGURATION CHANGED"));
+                console.log(chalk.yellow(`   Previous VPC: ${existingVpcId}`));
+                console.log(chalk.yellow(`   New VPC:      ${vpcId || "new standalone VPC"}`));
+                console.log("");
+                console.log(chalk.red("   Changing VPC requires destroying and redeploying the stack."));
+                console.log(chalk.yellow("   You will likely need to run:"));
+                console.log(chalk.cyan("     npx @quiltdata/benchling-webhook destroy"));
+                console.log(chalk.cyan("     npx @quiltdata/benchling-webhook deploy"));
+                console.log("");
+
+                const { confirmVpcChange } = await inquirer.prompt([
+                    {
+                        type: "confirm",
+                        name: "confirmVpcChange",
+                        message: "Do you understand that changing VPC requires stack destruction and redeployment?",
+                        default: false,
+                    },
+                ]);
+
+                if (!confirmVpcChange) {
+                    console.log(chalk.yellow("\nSetup cancelled. VPC configuration not changed.\n"));
+                    process.exit(0);
+                }
+            }
+
             if (vpcId) {
                 console.log(chalk.dim(`  Using existing VPC: ${vpcId}`));
             } else {
