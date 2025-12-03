@@ -75,7 +75,7 @@ wheels = [
 
 [[package]]
 name = "benchling-quilt-integration"
-version = "0.8.10"
+version = "0.8.11"
 source = { editable = "." }
 dependencies = [
     { name = "benchling-sdk" },
