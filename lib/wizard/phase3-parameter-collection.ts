@@ -28,7 +28,7 @@ import { ParameterCollectionInput, ParameterCollectionResult } from "./types";
 export async function runParameterCollection(
     input: ParameterCollectionInput,
 ): Promise<ParameterCollectionResult> {
-    const { stackQuery, existingConfig, yes = false } = input;
+    const { stackQuery, existingConfig, yes = false, profile = "default" } = input;
 
     // =========================================================================
     // VPC Configuration (FIRST - most important infrastructure decision)
@@ -82,14 +82,17 @@ export async function runParameterCollection(
 
             if (vpcChanged) {
                 // CRITICAL WARNING: Changing VPC requires stack destruction
+                // Use actual profile name for commands (omit --profile flag if default)
+                const profileFlag = profile !== "default" ? ` --profile ${profile}` : "";
+
                 console.log("\n" + chalk.red.bold("⚠️  IMPORTANT: VPC CONFIGURATION CHANGED"));
                 console.log(chalk.yellow(`   Previous VPC: ${existingVpcId}`));
                 console.log(chalk.yellow(`   New VPC:      ${vpcId || "new standalone VPC"}`));
                 console.log("");
                 console.log(chalk.red("   Changing VPC requires destroying and redeploying the stack."));
                 console.log(chalk.yellow("   You will likely need to run:"));
-                console.log(chalk.cyan("     npx @quiltdata/benchling-webhook destroy"));
-                console.log(chalk.cyan("     npx @quiltdata/benchling-webhook deploy"));
+                console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook destroy${profileFlag}`));
+                console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook deploy${profileFlag}`));
                 console.log("");
 
                 const { confirmVpcChange } = await inquirer.prompt([
