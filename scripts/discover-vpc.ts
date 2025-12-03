@@ -267,35 +267,36 @@ export async function discoverVpcFromStack(
  * Validates VPC meets architecture requirements
  *
  * Requirements:
- * - Must have ≥2 private subnets in different AZs
- * - Private subnets must have NAT Gateway for outbound access
+ * - Must have ≥2 private subnets WITH NAT Gateway in different AZs
+ * - Private subnets must have NAT Gateway for outbound access (excludes "intra" subnets)
  *
  * @param vpc - Discovered VPC to validate
  */
 function validateVpc(vpc: DiscoveredVpc): void {
     const errors: string[] = [];
 
-    // Check private subnets
-    const privateSubnets = vpc.subnets.filter((s) => !s.isPublic);
+    // Check private subnets with NAT Gateway (excludes "intra" subnets)
+    // Private subnets: !isPublic && hasNatGateway (for ECS outbound access)
+    // Intra subnets: !isPublic && !hasNatGateway (isolated, should be excluded)
+    const privateSubnets = vpc.subnets.filter((s) => !s.isPublic && s.hasNatGateway);
+    const intraSubnets = vpc.subnets.filter((s) => !s.isPublic && !s.hasNatGateway);
+
     if (privateSubnets.length < 2) {
         errors.push(
-            `Insufficient private subnets (found ${privateSubnets.length}, need ≥2)`,
+            `Insufficient private subnets with NAT Gateway (found ${privateSubnets.length}, need ≥2)`,
         );
+        if (intraSubnets.length > 0) {
+            errors.push(
+                `Note: Found ${intraSubnets.length} isolated "intra" subnet(s) without NAT Gateway - these cannot be used for ECS tasks`,
+            );
+        }
     }
 
     // Check AZ distribution
     const azs = new Set(privateSubnets.map((s) => s.availabilityZone));
     if (azs.size < 2) {
         errors.push(
-            `Private subnets span only ${azs.size} AZ(s) (need ≥2 for high availability)`,
-        );
-    }
-
-    // Check NAT Gateway
-    const hasNat = vpc.subnets.some((s) => s.hasNatGateway);
-    if (!hasNat) {
-        errors.push(
-            "No NAT Gateway configured (required for ECS outbound access)",
+            `Private subnets with NAT span only ${azs.size} AZ(s) (need ≥2 for high availability)`,
         );
     }
 
