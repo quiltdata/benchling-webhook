@@ -12,8 +12,7 @@
       "home": "/app/.venv",
       "module": "src.unit_app",
       "callable": "app",
-      "working_directory": "/app",
-      "user": "appuser"
+      "working_directory": "/app"
     }
   }
 }

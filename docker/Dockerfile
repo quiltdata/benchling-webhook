@@ -98,11 +98,12 @@ ARG TARGETARCH
 # Install minimal runtime dependencies
 # - python3.11: Python runtime (no -devel headers)
 # - shadow-utils: Provides useradd/groupadd for creating non-root user
+# - NGINX Unit: ASGI server (x86_64 only; ARM64 uses uvicorn with DISABLE_NGINX)
 RUN dnf install -y \
     python3.11 \
     shadow-utils \
-    && ARCH_FOR_UNIT="${TARGETARCH:-$(uname -m)}" && \
-    if [ "${ARCH_FOR_UNIT}" = "amd64" ] || [ "${ARCH_FOR_UNIT}" = "x86_64" ]; then \
+    && ARCH_FOR_UNIT="${TARGETARCH:-$(uname -m)}" \
+    && if [ "${ARCH_FOR_UNIT}" = "amd64" ] || [ "${ARCH_FOR_UNIT}" = "x86_64" ]; then \
         echo "Installing NGINX Unit for ${ARCH_FOR_UNIT}..." && \
         printf '%s\n' \
           '[unit]' \
@@ -113,9 +114,11 @@ RUN dnf install -y \
           'enabled=1' \
           > /etc/yum.repos.d/unit.repo \
         && dnf install -y unit unit-python311 \
-        && rm -f /etc/yum.repos.d/unit.repo; \
+        && rm -f /etc/yum.repos.d/unit.repo \
+        && echo "✅ NGINX Unit installed successfully"; \
     else \
-        echo "Skipping NGINX Unit install for architecture ${ARCH_FOR_UNIT} (amd64 only)"; \
+        echo "⚠️ NGINX Unit not available for ${ARCH_FOR_UNIT}" && \
+        echo "   Container will use uvicorn (set DISABLE_NGINX=true or Unit will be disabled automatically)"; \
     fi \
     && dnf clean all
 
@@ -172,8 +175,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
     UNIT_STATE_DIR="/app/unit" \
     UNIT_CONFIG_TEMPLATE="/app/unit-config.json" \
     UNIT_CONFIG_PATH="/app/unit/runtime-unit-config.json" \
-    UNIT_CONTROL_SOCKET="/app/unit/control.sock" \
-    USE_UNIT="auto"
+    UNIT_CONTROL_SOCKET="/app/unit/control.sock"
 
 # Expose application port
 # Uses PORT env var for consistency with app.py
