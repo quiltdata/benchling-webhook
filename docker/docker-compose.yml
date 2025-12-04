@@ -65,6 +65,9 @@ services:
       # Benchling Configuration (credentials from Secrets Manager)
       - BenchlingSecret=${BenchlingSecret}
 
+      # Runtime Configuration (disable NGINX Unit for dev hot-reload)
+      - DISABLE_NGINX=true
+
       # Security Configuration (dev mode - disable verification for testing)
       - ENABLE_WEBHOOK_VERIFICATION=${ENABLE_WEBHOOK_VERIFICATION:-false}
 
