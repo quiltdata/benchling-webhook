@@ -452,6 +452,9 @@ export async function runParameterCollection(
         console.log(`  Webhook Allow List: ${webhookAllowList || "(none)"} (from ${input.webhookAllowList !== undefined ? "CLI" : existingConfig?.security?.webhookAllowList ? "existing config" : "default"})`);
     } else {
         // Always show prompts with defaults from existing config
+        const existingAllowList = existingConfig?.security?.webhookAllowList;
+        const hasExistingAllowList = existingAllowList && existingAllowList.length > 0;
+
         const optionalAnswers = await inquirer.prompt([
             {
                 type: "list",
@@ -463,12 +466,17 @@ export async function runParameterCollection(
             {
                 type: "input",
                 name: "webhookAllowList",
-                message: "Webhook IP allowlist (comma-separated, empty for none):",
-                default: existingConfig?.security?.webhookAllowList || "",
+                message: hasExistingAllowList
+                    ? `Webhook IP allowlist (currently: ${existingAllowList}, enter 'none' to clear):`
+                    : "Webhook IP allowlist (comma-separated, empty for none):",
+                default: existingAllowList || "",
             },
         ]);
         logLevel = optionalAnswers.logLevel;
-        webhookAllowList = optionalAnswers.webhookAllowList;
+        // Handle 'none' keyword to explicitly clear the allowlist
+        webhookAllowList = optionalAnswers.webhookAllowList.trim().toLowerCase() === "none"
+            ? ""
+            : optionalAnswers.webhookAllowList;
     }
 
     console.log(""); // Empty line for spacing
