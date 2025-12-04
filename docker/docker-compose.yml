@@ -25,6 +25,7 @@ services:
       - BenchlingSecret=${BenchlingSecret}
     volumes:
       - ~/.aws:/home/appuser/.aws:ro
+    command: ["gunicorn", "src.app:create_app", "--factory", "-k", "uvicorn.workers.UvicornWorker", "--workers", "2", "--bind", "0.0.0.0:8080"]
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -64,9 +65,6 @@ services:
 
       # Benchling Configuration (credentials from Secrets Manager)
       - BenchlingSecret=${BenchlingSecret}
-
-      # Runtime Configuration (disable NGINX Unit for dev hot-reload)
-      - DISABLE_NGINX=true
 
       # Security Configuration (dev mode - disable verification for testing)
       - ENABLE_WEBHOOK_VERIFICATION=${ENABLE_WEBHOOK_VERIFICATION:-false}

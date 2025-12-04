@@ -98,28 +98,9 @@ ARG TARGETARCH
 # Install minimal runtime dependencies
 # - python3.11: Python runtime (no -devel headers)
 # - shadow-utils: Provides useradd/groupadd for creating non-root user
-# - NGINX Unit: ASGI server (x86_64 only; ARM64 uses uvicorn with DISABLE_NGINX)
 RUN dnf install -y \
     python3.11 \
     shadow-utils \
-    && ARCH_FOR_UNIT="${TARGETARCH:-$(uname -m)}" \
-    && if [ "${ARCH_FOR_UNIT}" = "amd64" ] || [ "${ARCH_FOR_UNIT}" = "x86_64" ]; then \
-        echo "Installing NGINX Unit for ${ARCH_FOR_UNIT}..." && \
-        printf '%s\n' \
-          '[unit]' \
-          'name=unit repo' \
-          'baseurl=https://packages.nginx.org/unit/amzn/2023/$basearch/' \
-          'gpgkey=https://unit.nginx.org/keys/nginx-keyring.gpg' \
-          'gpgcheck=1' \
-          'enabled=1' \
-          > /etc/yum.repos.d/unit.repo \
-        && dnf install -y unit unit-python311 \
-        && rm -f /etc/yum.repos.d/unit.repo \
-        && echo "✅ NGINX Unit installed successfully"; \
-    else \
-        echo "⚠️ NGINX Unit not available for ${ARCH_FOR_UNIT}" && \
-        echo "   Container will use uvicorn (set DISABLE_NGINX=true or Unit will be disabled automatically)"; \
-    fi \
     && dnf clean all
 
 # Create non-root user for security (principle of least privilege)
@@ -127,7 +108,7 @@ RUN dnf install -y \
 # - appuser: Consistent with existing deployment configuration
 RUN groupadd -r appuser && \
     useradd -r -g appuser -u 1000 appuser && \
-    mkdir -p /app /home/appuser /app/unit
+    mkdir -p /app /home/appuser
 
 # Set working directory
 WORKDIR /app
@@ -139,13 +120,10 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
 COPY --from=builder /app/pyproject.toml /app/
-COPY unit-config.json /app/unit-config.json
-COPY start-unit.sh /app/start-unit.sh
 
 # Set ownership for non-root user
 # Ensures appuser can read application files
-RUN chown -R appuser:appuser /app /home/appuser && \
-    chmod +x /app/start-unit.sh
+RUN chown -R appuser:appuser /app /home/appuser
 
 # Switch to non-root user
 # All subsequent commands and container runtime use this user
@@ -171,11 +149,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PORT="8080" \
     PYTHONUNBUFFERED="1" \
     UV_NO_CACHE="1" \
-    UV_CACHE_DIR="/tmp/.uv-cache" \
-    UNIT_STATE_DIR="/app/unit" \
-    UNIT_CONFIG_TEMPLATE="/app/unit-config.json" \
-    UNIT_CONFIG_PATH="/app/unit/runtime-unit-config.json" \
-    UNIT_CONTROL_SOCKET="/app/unit/control.sock"
+    UV_CACHE_DIR="/tmp/.uv-cache"
 
 # Expose application port
 # Uses PORT env var for consistency with app.py
@@ -191,5 +165,5 @@ EXPOSE ${PORT}
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Start application with NGINX Unit (falls back to uvicorn if unavailable/disabled)
-CMD ["/app/start-unit.sh"]
+# Start application with Gunicorn + Uvicorn workers
+CMD ["gunicorn", "src.app:create_app", "--factory", "-k", "uvicorn.workers.UvicornWorker", "--workers", "4", "--bind", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-"]
