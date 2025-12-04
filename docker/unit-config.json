@@ -1,0 +1,19 @@
+{
+  "listeners": {
+    "*:__PORT__": {
+      "pass": "applications/benchling-webhook"
+    }
+  },
+  "applications": {
+    "benchling-webhook": {
+      "type": "python",
+      "protocol": "asgi",
+      "path": "/app",
+      "home": "/app/.venv",
+      "module": "src.unit_app",
+      "callable": "app",
+      "working_directory": "/app",
+      "user": "appuser"
+    }
+  }
+}
