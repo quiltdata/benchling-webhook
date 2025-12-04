@@ -3,6 +3,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2025-12-04
+
+### Fixed
+
+- **Gunicorn factory function syntax** - Changed `src.app:create_app --factory` to `src.app:create_app()` in Dockerfile and docker-compose.yml (Gunicorn doesn't support `--factory` flag)
+- **Test mode HMAC verification** - Added `ENABLE_WEBHOOK_VERIFICATION=false` when `--test` flag used, enabling local webhook testing without signatures
+- **docker-compose environment** - Added `ENABLE_WEBHOOK_VERIFICATION` and `BENCHLING_TEST_MODE` to production service configuration
+
 ## [0.9.0] - 2025-12-03
 
 ### Breaking Through: In-Stack VPC Support
