@@ -331,7 +331,7 @@ describe("VPC Discovery", () => {
             expect(result).not.toBeNull();
             expect(result?.isValid).toBe(false);
             expect(result?.validationErrors.some((err) =>
-                err.includes("No NAT Gateway configured")
+                err.includes("Insufficient private subnets with NAT Gateway")
             )).toBe(true);
         });
 

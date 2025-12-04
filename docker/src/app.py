@@ -1,11 +1,12 @@
 import logging
 import os
 import threading
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
+import httpx
 import structlog
 from benchling_api_client.v2.stable.models.app_canvas_update import AppCanvasUpdate
-from benchling_sdk.apps.helpers.webhook_helpers import verify
+from benchling_sdk.apps.helpers.webhook_helpers import jwks_by_app_definition, verify
 from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
 from benchling_sdk.benchling import Benchling
 from dotenv import load_dotenv
@@ -64,7 +65,7 @@ class WebhookVerificationError(Exception):
         self.message = message
 
 
-async def verify_webhook_signature(request: Request, config) -> None:
+async def verify_webhook_signature(request: Request, config, jwks_fetcher: Callable[[str], Any]) -> None:
     """Verify Benchling webhook HMAC signature (defense-in-depth layer).
 
     This function implements webhook signature verification in the FastAPI application
@@ -79,6 +80,7 @@ async def verify_webhook_signature(request: Request, config) -> None:
     Args:
         request: FastAPI request object containing headers and body
         config: Application configuration containing app_definition_id
+        jwks_fetcher: Function to fetch JWKS keys (supports connection pooling)
 
     Raises:
         WebhookVerificationError: If signature verification fails or required headers are missing
@@ -144,9 +146,9 @@ async def verify_webhook_signature(request: Request, config) -> None:
         timestamp=headers.get("webhook-timestamp"),
     )
 
-    # Verify HMAC signature using Benchling SDK
+    # Verify HMAC signature using Benchling SDK with custom JWKS fetcher
     try:
-        verify(config.benchling_app_definition_id, body_str, headers)  # type: ignore[arg-type]
+        verify(config.benchling_app_definition_id, body_str, headers, jwk_function=jwks_fetcher)  # type: ignore[arg-type]
     except Exception as exc:
         # Log detailed error for security auditing and troubleshooting
         logger.error(
@@ -181,10 +183,50 @@ def create_app() -> FastAPI:
     try:
         config = get_config()
 
-        # Create a dependency factory for webhook verification that captures config
+        # Create persistent HTTP client with connection pooling for JWKS fetches
+        jwks_http_client = httpx.Client(
+            timeout=httpx.Timeout(30.0, connect=5.0),
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+        )
+        logger.info(
+            "Persistent HTTP client created for JWKS fetching",
+            max_keepalive=10,
+            max_connections=20,
+            connect_timeout=5.0,
+            total_timeout=30.0,
+        )
+
+        # Cache JWKS keys to avoid fetching on every webhook request
+        # The Benchling SDK's verify() function calls the jwk_function on EVERY call
+        # without any caching, which causes 40-second delays in VPC environments
+        jwks_cache: Dict[str, Any] = {}
+
+        def jwks_fetcher_with_caching(app_definition_id: str) -> Any:
+            """Fetch JWKS keys with caching to prevent repeated slow network calls."""
+            if app_definition_id not in jwks_cache:
+                logger.info(
+                    "Fetching JWKS keys for app (first time or cache miss)",
+                    app_definition_id=app_definition_id,
+                )
+                jwks_cache[app_definition_id] = jwks_by_app_definition(
+                    app_definition_id, httpx_client=jwks_http_client
+                )
+                logger.info(
+                    "JWKS keys cached successfully",
+                    app_definition_id=app_definition_id,
+                    cache_size=len(jwks_cache),
+                )
+            else:
+                logger.debug(
+                    "Using cached JWKS keys",
+                    app_definition_id=app_definition_id,
+                )
+            return jwks_cache[app_definition_id]
+
+        # Create a dependency factory for webhook verification that captures config and JWKS fetcher
         async def verify_webhook_dependency(request: Request) -> None:
             """FastAPI dependency for webhook signature verification."""
-            await verify_webhook_signature(request, config)
+            await verify_webhook_signature(request, config, jwks_fetcher_with_caching)
 
         logger.info("Python orchestration enabled")
 

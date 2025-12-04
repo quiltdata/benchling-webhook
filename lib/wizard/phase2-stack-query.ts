@@ -145,9 +145,12 @@ export async function runStackQuery(
             });
 
             if (discoveredVpc) {
-                const privateSubnets = discoveredVpc.subnets.filter((s) => !s.isPublic);
+                // Filter for private subnets with NAT Gateway (NOT intra subnets)
+                // Private subnets: !isPublic && hasNatGateway (for ECS outbound access)
+                // Intra subnets: !isPublic && !hasNatGateway (isolated, no internet)
+                const privateSubnets = discoveredVpc.subnets.filter((s) => !s.isPublic && s.hasNatGateway);
                 const publicSubnets = discoveredVpc.subnets.filter((s) => s.isPublic);
-                const azs = new Set(discoveredVpc.subnets.map((s) => s.availabilityZone));
+                const azs = new Set(privateSubnets.map((s) => s.availabilityZone));
 
                 // Deduplicate subnets - select one subnet per AZ for NLB compatibility
                 // AWS NLB requires exactly one subnet per availability zone
