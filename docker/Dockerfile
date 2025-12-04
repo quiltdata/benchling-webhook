@@ -166,4 +166,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
 # Start application with Gunicorn + Uvicorn workers
-CMD ["gunicorn", "src.app:create_app", "--factory", "-k", "uvicorn.workers.UvicornWorker", "--workers", "4", "--bind", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-"]
+# Note: Use 'src.app:create_app()' with parentheses to call the factory function
+CMD ["gunicorn", "src.app:create_app()", "-k", "uvicorn.workers.UvicornWorker", "--workers", "4", "--bind", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-"]
