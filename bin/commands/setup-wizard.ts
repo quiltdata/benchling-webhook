@@ -255,6 +255,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         stackQuery,
         existingConfig,
         yes,
+        profile,
         benchlingTenant: options.benchlingTenant,
         benchlingClientId: options.benchlingClientId,
         benchlingClientSecret: options.benchlingClientSecret,

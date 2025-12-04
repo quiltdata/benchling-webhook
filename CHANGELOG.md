@@ -3,6 +3,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2025-12-03
+
+### Breaking Through: In-Stack VPC Support
+
+- **JWKS caching eliminates cold start timeouts** - Root cause fix for VPC deployment failures (#227)
+- **80-100x faster webhook processing** - Subsequent requests use cache (<100ms vs 40-80s per request)
+- **HTTP connection pooling** - Reduces initial JWKS fetch from 80s → 40s
+- **Migration required** - Existing deployments must destroy and redeploy stack to apply fix
+
+### VPC Safety Features
+
+- **VPC change detection** - Wizard displays critical warning when VPC/subnet selection changes
+- **Intra-subnet filtering** - Excludes subnets without NAT Gateway to prevent connectivity issues
+- **Profile-aware warnings** - VPC change warnings include profile name in preservation commands
+
+### UX Improvements
+
+- **Webhook allowlist 'none' keyword** - Explicitly disable IP filtering with clearer prompts
+- **Better validation feedback** - More actionable guidance for configuration changes
+
 ## [0.8.10] - 2025-12-02
 
 ### Added
