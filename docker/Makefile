@@ -28,7 +28,7 @@ UVDEV = uv run --group dev
 
 .PHONY: help build test clean install lint ngrok kill \
         check-xdg check-ngrok run-native run-native-verbose run-dev run run-native-ngrok run-ecr \
-        test test-unit test-integration test-dev test-docker-dev test-docker-prod test-deployed-dev test-deployed-dev-direct test-deployed-prod test-ecr test-native test-benchling test-query \
+        test test-unit test-no-secret test-integration test-dev test-docker-dev test-docker-prod test-deployed-dev test-deployed-dev-direct test-deployed-prod test-ecr test-native test-benchling test-query \
         health-native health-dev health logs-dev logs
 
 # Default target
@@ -52,6 +52,7 @@ help:
 	@echo "Testing (xdg-launch-based tests marked with *):"
 	@echo "  test                  - Run all tests (unit + integration + docker)"
 	@echo "  test-unit             - Run unit tests (pytest)"
+	@echo "  test-no-secret        - Verify degraded startup without Benchling secrets"
 	@echo "  test-native *         - Test native FastAPI (uses xdg-launch)"
 	@echo "  test-dev              - Test webhooks against docker dev (port $(PORT_DOCKER_DEV))"
 	@echo "  test-docker-dev *     - Test local docker dev (uses xdg-launch)"
@@ -216,6 +217,9 @@ test-all: lint test-unit test-dev test-integration
 # Run unit tests with pytest
 test-unit:
 	$(UVDEV) pytest -v
+
+test-no-secret:
+	$(UVDEV) pytest -v tests/test_degraded_startup.py
 
 # Run integration tests with execution monitoring (requires real Benchling credentials)
 test-integration: test-benchling
