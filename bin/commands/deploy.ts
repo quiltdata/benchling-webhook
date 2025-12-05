@@ -493,6 +493,14 @@ export async function deploy(
     console.log(chalk.bold("  Stack Parameters:"));
     console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)} ${chalk.dim("(deployment-time resolution only)")}`);
     console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
+
+    // Show whether this is an integrated Quilt stack
+    const isIntegrated = config.integratedStack === true;
+    if (isIntegrated) {
+        console.log(`    ${chalk.bold("Stack Integration:")}       ${chalk.green("✓ INTEGRATED")} ${chalk.dim("(BenchlingSecret from Quilt stack)")}`);
+    } else {
+        console.log(`    ${chalk.bold("Stack Integration:")}       ${chalk.yellow("STANDALONE")} ${chalk.dim("(separate BenchlingSecret)")}`);
+    }
     console.log();
     console.log(chalk.bold("  Container Image:"));
     console.log(`    ${chalk.bold("ECR Account:")}             ${ecrAccount}`);
