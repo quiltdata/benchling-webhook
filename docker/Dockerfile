@@ -23,7 +23,9 @@
 # ============================================================================
 # BASE STAGE: Shared base image for both builder and runtime stages
 # ============================================================================
+ARG TARGETARCH
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023.9.20251117.1@sha256:f5ca6cafc706233c641ad838e738047389943afd3585cb1df7eedfc4d9b1799d AS base
+ARG TARGETARCH
 
 # ============================================================================
 # BUILDER STAGE: Compile dependencies and create virtual environment
@@ -39,17 +41,17 @@ FROM base AS builder
 # If not provided, version.py will fall back to pyproject.toml
 ARG VERSION
 
-# Install Python 3.13 and build dependencies
-# - python3.13: Python interpreter
-# - python3.13-devel: Headers needed for compiling native extensions
-# - python3.13-pip: Package installer for Python
+# Install Python 3.11 and build dependencies
+# - python3.11: Python interpreter
+# - python3.11-devel: Headers needed for compiling native extensions
+# - python3.11-pip: Package installer for Python
 # - gcc: C compiler for native extensions (e.g., cryptography, lxml)
 # - make: Build automation tool
 # - tar, gzip: Required by uv installer script
 RUN dnf install -y \
-    python3.13 \
-    python3.13-devel \
-    python3.13-pip \
+    python3.11 \
+    python3.11-devel \
+    python3.11-pip \
     gcc \
     make \
     tar \
@@ -74,7 +76,7 @@ COPY pyproject.toml uv.lock ./
 # - --frozen: Use lockfile without updating (reproducible builds)
 # - --no-dev: Exclude development dependencies (pytest, black, etc.)
 # Creates .venv directory with all production dependencies
-RUN $HOME/.local/bin/uv sync --frozen --no-dev
+RUN $HOME/.local/bin/uv sync --frozen --no-dev --python python3.11
 
 # Copy application source code
 # Placed after dependency installation for optimal layer caching
@@ -91,12 +93,13 @@ COPY src/ ./src/
 #
 FROM base
 
+ARG TARGETARCH
+
 # Install minimal runtime dependencies
-# - python3.13: Python runtime (no -devel headers)
+# - python3.11: Python runtime (no -devel headers)
 # - shadow-utils: Provides useradd/groupadd for creating non-root user
-# Note: curl-minimal is already present in base image and sufficient for HEALTHCHECK
 RUN dnf install -y \
-    python3.13 \
+    python3.11 \
     shadow-utils \
     && dnf clean all
 
@@ -136,6 +139,7 @@ ARG VERSION
 # - APP_ENV: Application environment indicator (influences logging format)
 # - BUILD_VERSION: Git tag version from CI (overrides pyproject.toml version)
 # - PORT: Application port (default 8080)
+# - PYTHONUNBUFFERED: Flush logs immediately (required for container logging)
 # - UV_NO_CACHE: Disable UV cache to prevent read-only filesystem errors
 # - UV_CACHE_DIR: Set cache to /tmp (writable) as fallback if UV is invoked
 ENV PATH="/app/.venv/bin:$PATH" \
@@ -143,6 +147,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
     APP_ENV="production" \
     BUILD_VERSION="${VERSION}" \
     PORT="8080" \
+    PYTHONUNBUFFERED="1" \
     UV_NO_CACHE="1" \
     UV_CACHE_DIR="/tmp/.uv-cache"
 
@@ -160,6 +165,14 @@ EXPOSE ${PORT}
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Start application with uvicorn (ASGI factory)
-# Virtual environment is activated via PATH, so uvicorn finds all dependencies
-CMD ["sh", "-c", "uvicorn src.app:create_app --factory --host 0.0.0.0 --port ${PORT:-8080}"]
+# Start application with Gunicorn + Uvicorn workers
+# Note: Use 'src.app:create_app()' with parentheses to call the factory function
+# Architecture:
+# - --preload: Load app before forking workers (enables JWKS cache sharing)
+# - --workers 2: Reduced from 4 (shared cache eliminates need for more workers)
+# Timeout Configuration:
+# - --timeout 60: Worker timeout (allows JWKS fetch in VPC to complete)
+# - --graceful-timeout 30: Graceful shutdown period for workers
+# - --keep-alive 75: Keep connections alive to avoid recreation overhead
+# - --log-level info: Log worker lifecycle events for debugging
+CMD ["gunicorn", "src.app:create_app()", "--preload", "-k", "uvicorn.workers.UvicornWorker", "--workers", "2", "--bind", "0.0.0.0:8080", "--timeout", "60", "--graceful-timeout", "30", "--keep-alive", "75", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-"]

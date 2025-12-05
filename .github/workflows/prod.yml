@@ -120,11 +120,54 @@ jobs:
         env:
           AWS_REGION: us-east-1
 
+      - name: Validate application startup
+        working-directory: docker
+        run: |
+          echo "Validating application starts successfully..."
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:${{ needs.build-and-push.outputs.git_sha }}"
+
+          # Pull the image
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
+          docker pull ${IMAGE_URI}
+
+          # Run container with minimal config to test startup
+          CONTAINER_ID=$(docker run -d \
+            -e PORT=8080 \
+            -e PACKAGER_SQS_URL=https://sqs.us-east-1.amazonaws.com/000000000000/test-queue \
+            -e QUILT_WEB_HOST=https://example.quiltdata.com \
+            -e ATHENA_USER_DATABASE=test_db \
+            -e BenchlingSecret=test-secret \
+            ${IMAGE_URI})
+
+          # Wait up to 30 seconds for container to start
+          echo "Waiting for container to start..."
+          for i in $(seq 1 30); do
+            sleep 1
+            if docker logs ${CONTAINER_ID} 2>&1 | grep -q "Booting worker with pid"; then
+              echo "✅ Gunicorn started successfully"
+              docker logs ${CONTAINER_ID}
+              docker stop ${CONTAINER_ID} >/dev/null 2>&1 || true
+              docker rm ${CONTAINER_ID} >/dev/null 2>&1 || true
+              exit 0
+            fi
+          done
+
+          echo "❌ Gunicorn did not start within 30 seconds"
+          echo "Container logs:"
+          docker logs ${CONTAINER_ID}
+          docker stop ${CONTAINER_ID} >/dev/null 2>&1 || true
+          docker rm ${CONTAINER_ID} >/dev/null 2>&1 || true
+          exit 1
+        env:
+          AWS_REGION: us-east-1
+
       - name: Validation summary
         run: |
           echo "## Validation Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ Image architecture validated: linux/amd64" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Application starts successfully" >> $GITHUB_STEP_SUMMARY
           echo "✅ Latest tag verified" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**SHA Image:**" >> $GITHUB_STEP_SUMMARY
