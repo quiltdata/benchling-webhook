@@ -167,4 +167,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Start application with Gunicorn + Uvicorn workers
 # Note: Use 'src.app:create_app()' with parentheses to call the factory function
-CMD ["gunicorn", "src.app:create_app()", "-k", "uvicorn.workers.UvicornWorker", "--workers", "4", "--bind", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-"]
+# Timeout Configuration:
+# - --timeout 60: Worker timeout (allows JWKS fetch in VPC to complete)
+# - --graceful-timeout 30: Graceful shutdown period for workers
+# - --keep-alive 75: Keep connections alive to avoid recreation overhead
+# - --log-level info: Log worker lifecycle events for debugging
+CMD ["gunicorn", "src.app:create_app()", "-k", "uvicorn.workers.UvicornWorker", "--workers", "4", "--bind", "0.0.0.0:8080", "--timeout", "60", "--graceful-timeout", "30", "--keep-alive", "75", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-"]
