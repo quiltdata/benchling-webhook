@@ -7,29 +7,35 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **Degraded startup testing** - Real Docker container test for missing secrets scenario (#288)
-  - `make test-no-secret` launches actual Docker container with empty `BenchlingSecret`
-  - Verifies container starts successfully without crashing
-  - Tests health endpoints return 200 with degraded mode warnings
-  - Tests webhook endpoints return 503 with actionable error messages
-  - Tests config endpoint reports degraded state correctly
-  - Automatic cleanup after test completes
+- **Degraded startup mode** - Application starts successfully without Benchling secrets (#288)
+  - Container no longer crashes when AWS Secrets Manager secret is missing/unavailable
+  - Health endpoints return 200 with "degraded" mode indicator
+  - Webhook endpoints return 503 with actionable error messages explaining missing secrets
+  - Config endpoint reports degraded state with clear diagnostic information
+  - Enables safer deployments and better operational visibility
 
-- **xdg-launch `--no-secret` flag** - Manual degraded startup testing support
-  - `npm run launch -- --mode native --no-secret` tests degraded behavior
-  - Sets `BenchlingSecret=""` to simulate missing AWS Secrets Manager secret
-  - Disables webhook verification in no-secret mode
-  - Useful for development and debugging
+- **Degraded startup testing** - Real Docker container tests verify resilient behavior
+  - `make test-no-secret` launches actual container with empty `BenchlingSecret`
+  - Tests health stays healthy, webhooks return proper 503 errors
+  - `npm run launch -- --mode native --no-secret` for manual testing
+  - Ensures production deployments handle missing secrets gracefully
+
+- **BenchlingSecret auto-discovery** - Setup wizard finds secrets from CloudFormation
+  - Automatically discovers BenchlingSecret ARN from Quilt stack resources
+  - Works for both integrated and standalone deployments
+  - Reduces manual configuration errors
+
+- **Integrated stack indicators** - Deploy shows INTEGRATED vs STANDALONE status
+  - Clear deployment plan message showing stack integration type
+  - Prevents accidental standalone deployment of integrated stacks
+  - Better visibility into deployment architecture
 
 ### Fixed
 
-- **Setup wizard** - Correct parameter name and centralize as constant
-  - Fixed `secretName` parameter handling in setup wizard
-  - Centralized `BENCHLING_SECRET_NAME` constant for consistency
-
-- **Deployment** - Exit early for integrated stacks, prevent standalone deployment
-  - Prevents accidental standalone deployment of integrated Quilt stacks
-  - Shows integrated stack status in deployment plan
+- **CloudFormation parameter name** - Corrected from `BenchlingIntegration` to `BenchlingWebhook`
+  - Fixes "Could not determine BenchlingIntegration status" errors
+  - Centralized parameter name constant to prevent drift
+  - Now fails loudly with clear error if parameter cannot be detected
 
 ## [0.9.1] - 2025-12-04
 
