@@ -18,6 +18,7 @@ import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
 import { isQueueUrl } from "../../lib/utils/sqs";
 import { fetchJson, getStackResources, extractQuiltResources } from "../../lib/utils/stack-inference";
+import { CFN_PARAMS } from "../../lib/types/config";
 
 /**
  * Quilt CLI configuration
@@ -198,7 +199,7 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     const key = param.ParameterKey || "";
                     const value = param.ParameterValue || "";
 
-                    if (key === "BenchlingIntegration") {
+                    if (key === CFN_PARAMS.BENCHLING_WEBHOOK) {
                         stackInfo.benchlingIntegrationEnabled = value === "Enabled";
                     }
                 }
