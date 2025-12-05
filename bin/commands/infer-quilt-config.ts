@@ -208,28 +208,10 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     const resources = await getStackResources(region, stack.StackName);
                     const discovered = extractQuiltResources(resources, stackInfo.account, region);
 
-                    // Destructure discovered resources and assign to stackInfo
-                    const {
-                        athenaUserWorkgroup,
-                        athenaUserPolicy,
-                        icebergWorkgroup,
-                        icebergDatabase,
-                        athenaResultsBucket,
-                        athenaResultsBucketPolicy,
-                        readRoleArn,
-                        writeRoleArn,
-                    } = discovered;
-
-                    Object.assign(stackInfo, {
-                        athenaUserWorkgroup,
-                        athenaUserPolicy,
-                        icebergWorkgroup,
-                        icebergDatabase,
-                        athenaResultsBucket,
-                        athenaResultsBucketPolicy,
-                        readRoleArn,
-                        writeRoleArn,
-                    });
+                    // Merge discovered resources into stackInfo
+                    // Use spread operator to automatically include all discovered fields
+                    // This is more maintainable - no need to manually list each field
+                    Object.assign(stackInfo, discovered);
                 } catch (error) {
                     // FAIL LOUDLY - show the error with full stack trace
                     console.error(chalk.red(`[ERROR] Failed to query stack resources: ${(error as Error).message}`));
