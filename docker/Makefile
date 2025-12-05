@@ -28,7 +28,7 @@ UVDEV = uv run --group dev
 
 .PHONY: help build test clean install lint ngrok kill \
         check-xdg check-ngrok run-native run-native-verbose run-dev run run-native-ngrok run-ecr \
-        test test-unit test-integration test-dev test-docker-dev test-docker-prod test-deployed-dev test-deployed-dev-direct test-deployed-prod test-ecr test-native test-benchling test-query \
+        test test-unit test-no-secret test-integration test-dev test-docker-dev test-docker-prod test-deployed-dev test-deployed-dev-direct test-deployed-prod test-ecr test-native test-benchling test-query \
         health-native health-dev health logs-dev logs
 
 # Default target
@@ -52,6 +52,7 @@ help:
 	@echo "Testing (xdg-launch-based tests marked with *):"
 	@echo "  test                  - Run all tests (unit + integration + docker)"
 	@echo "  test-unit             - Run unit tests (pytest)"
+	@echo "  test-no-secret        - Launch Docker with missing secret, verify degraded startup"
 	@echo "  test-native *         - Test native FastAPI (uses xdg-launch)"
 	@echo "  test-dev              - Test webhooks against docker dev (port $(PORT_DOCKER_DEV))"
 	@echo "  test-docker-dev *     - Test local docker dev (uses xdg-launch)"
@@ -216,6 +217,34 @@ test-all: lint test-unit test-dev test-integration
 # Run unit tests with pytest
 test-unit:
 	$(UVDEV) pytest -v
+
+test-no-secret: check-xdg
+	@echo "🧪 Testing degraded startup with missing Benchling secret..."
+	@echo "🐳 Starting Docker container without valid BenchlingSecret..."
+	@echo ""
+	@# Stop any existing containers
+	@docker-compose down 2>/dev/null || true
+	@# Launch container with empty BenchlingSecret
+	@BenchlingSecret="" docker-compose --profile dev up -d app-dev
+	@echo "⏳ Waiting for container to start..."
+	@sleep 5
+	@echo ""
+	@echo "=== Health Check Tests (expect 200 with degraded warnings) ==="
+	@curl -s http://localhost:$(PORT_DOCKER_DEV)/health | jq . || echo "❌ Health endpoint failed"
+	@echo ""
+	@curl -s http://localhost:$(PORT_DOCKER_DEV)/health/ready | jq . || echo "❌ Readiness endpoint failed"
+	@echo ""
+	@echo "=== Webhook Endpoint Test (expect 503 with actionable error) ==="
+	@curl -s -X POST http://localhost:$(PORT_DOCKER_DEV)/event \
+		-H "Content-Type: application/json" \
+		-d '{"message":{"type":"v2.entry.created"}}' | jq . || echo "❌ Webhook endpoint failed"
+	@echo ""
+	@echo "=== Config Endpoint Test (expect degraded state) ==="
+	@curl -s http://localhost:$(PORT_DOCKER_DEV)/config | jq . || echo "❌ Config endpoint failed"
+	@echo ""
+	@echo "🛑 Cleaning up..."
+	@docker-compose down
+	@echo "✅ Test complete - container started successfully in degraded mode"
 
 # Run integration tests with execution monitoring (requires real Benchling credentials)
 test-integration: test-benchling

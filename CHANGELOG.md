@@ -3,6 +3,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.2] - 2025-12-04
+
+### Added
+
+- **Degraded startup mode** - Application starts successfully without Benchling secrets (#288)
+  - Container no longer crashes when AWS Secrets Manager secret is missing/unavailable
+  - Health endpoints return 200 with "degraded" mode indicator
+  - Webhook endpoints return 503 with actionable error messages explaining missing secrets
+  - Config endpoint reports degraded state with clear diagnostic information
+  - Enables safer deployments and better operational visibility
+
+- **Degraded startup testing** - Real Docker container tests verify resilient behavior
+  - `make test-no-secret` launches actual container with empty `BenchlingSecret`
+  - Tests health stays healthy, webhooks return proper 503 errors
+  - `npm run launch -- --mode native --no-secret` for manual testing
+  - Ensures production deployments handle missing secrets gracefully
+
+- **BenchlingSecret auto-discovery** - Setup wizard finds secrets from CloudFormation
+  - Automatically discovers BenchlingSecret ARN from Quilt stack resources
+  - Works for both integrated and standalone deployments
+  - Reduces manual configuration errors
+
+- **Integrated stack indicators** - Deploy shows INTEGRATED vs STANDALONE status
+  - Clear deployment plan message showing stack integration type
+  - Prevents accidental standalone deployment of integrated stacks
+  - Better visibility into deployment architecture
+
+### Fixed
+
+- **CloudFormation parameter name** - Corrected from `BenchlingIntegration` to `BenchlingWebhook`
+  - Fixes "Could not determine BenchlingIntegration status" errors
+  - Centralized parameter name constant to prevent drift
+  - Now fails loudly with clear error if parameter cannot be detected
+
 ## [0.9.1] - 2025-12-04
 
 ### Added

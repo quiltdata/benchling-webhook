@@ -31,6 +31,7 @@ interface LaunchOptions {
     port?: number;
     verbose: boolean;
     test: boolean;
+    noSecret: boolean;
 }
 
 /**
@@ -50,6 +51,7 @@ function parseArguments(argv: string[]): LaunchOptions {
         profile: "default",
         verbose: false,
         test: false,
+        noSecret: false,
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -72,6 +74,8 @@ function parseArguments(argv: string[]): LaunchOptions {
             options.verbose = true;
         } else if (arg === "--test") {
             options.test = true;
+        } else if (arg === "--no-secret") {
+            options.noSecret = true;
         } else if (arg === "--help" || arg === "-h") {
             printUsage();
             process.exit(0);
@@ -102,6 +106,7 @@ Options:
   --port <number>       Override default port
   --verbose             Enable verbose logging
   --test                Run in test mode
+  --no-secret           Test degraded startup (empty BenchlingSecret)
   --help, -h            Show this help message
 
 Examples:
@@ -233,6 +238,12 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
     // Test mode flag - disable webhook verification for local testing
     if (options.test) {
         envVars.BENCHLING_TEST_MODE = "true";
+        envVars.ENABLE_WEBHOOK_VERIFICATION = "false";
+    }
+
+    // No-secret mode - test degraded startup behavior
+    if (options.noSecret) {
+        envVars.BenchlingSecret = "";
         envVars.ENABLE_WEBHOOK_VERIFICATION = "false";
     }
 
