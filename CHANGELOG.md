@@ -5,11 +5,15 @@ All notable changes to this project will be documented in this file.
 
 ## [0.9.1] - 2025-12-04
 
-### Fixed
+### Added
 
-- **Gunicorn factory function syntax** - Changed `src.app:create_app --factory` to `src.app:create_app()` in Dockerfile and docker-compose.yml (Gunicorn doesn't support `--factory` flag)
-- **Test mode HMAC verification** - Added `ENABLE_WEBHOOK_VERIFICATION=false` when `--test` flag used, enabling local webhook testing without signatures
-- **docker-compose environment** - Added `ENABLE_WEBHOOK_VERIFICATION` and `BENCHLING_TEST_MODE` to production service configuration
+- **Production ASGI server** - Migrated to Gunicorn with Uvicorn workers for production deployment
+  - Replaces development-only Uvicorn with production-grade multi-worker server
+  - 4 workers for parallel request handling
+  - Automatic worker restart on failures
+  - Better reliability and performance in production
+  - JWKS cache pre-warming on startup (eliminates cold start delays)
+  - Graceful shutdown and zero-downtime deployment support
 
 ## [0.9.0] - 2025-12-03
 
