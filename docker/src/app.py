@@ -223,6 +223,28 @@ def create_app() -> FastAPI:
                 )
             return jwks_cache[app_definition_id]
 
+        # Pre-warm JWKS cache during app initialization (for Gunicorn --preload)
+        # With --preload, the app is loaded once before forking workers, so this cache
+        # is shared across all worker processes via copy-on-write semantics
+        if config.benchling_app_definition_id:
+            logger.info(
+                "Pre-warming JWKS cache",
+                app_definition_id=config.benchling_app_definition_id,
+            )
+            try:
+                jwks_fetcher_with_caching(config.benchling_app_definition_id)
+                logger.info(
+                    "JWKS cache pre-warmed successfully",
+                    app_definition_id=config.benchling_app_definition_id,
+                )
+            except Exception as exc:
+                logger.error(
+                    "Failed to pre-warm JWKS cache - workers will fetch on first request",
+                    app_definition_id=config.benchling_app_definition_id,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+
         # Create a dependency factory for webhook verification that captures config and JWKS fetcher
         async def verify_webhook_dependency(request: Request) -> None:
             """FastAPI dependency for webhook signature verification."""
