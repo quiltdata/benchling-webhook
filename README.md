@@ -83,8 +83,9 @@ VPC Link
 Network Load Balancer
         | (internal)
         v
-ECS Fargate (FastAPI)
+ECS Fargate (Gunicorn + FastAPI)
         |
+        | Multi-worker ASGI server
         | HMAC signature verification
         | Process webhook payload
         |
@@ -100,7 +101,7 @@ S3 + SQS → Quilt Package
 - **Resource Policy** - Free IP allowlisting (applied when `webhookAllowList` configured)
 - **VPC Link** - Private connection between API Gateway and VPC
 - **Network Load Balancer** - Internal load balancer with health checks
-- **ECS Fargate** - FastAPI application (auto-scales 2-10 tasks) with HMAC verification
+- **ECS Fargate** - Gunicorn + FastAPI application (4 workers, auto-scales 2-10 tasks) with HMAC verification
 - **NAT Gateway** - Enables ECS tasks to access external services (Benchling API, ECR, Secrets Manager)
 - **S3** - Payload and package storage
 - **SQS** - Quilt package creation queue

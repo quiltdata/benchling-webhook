@@ -230,9 +230,10 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         envVars.LOG_LEVEL = config.logging?.level || "INFO";
     }
 
-    // Test mode flag
+    // Test mode flag - disable webhook verification for local testing
     if (options.test) {
         envVars.BENCHLING_TEST_MODE = "true";
+        envVars.ENABLE_WEBHOOK_VERIFICATION = "false";
     }
 
     return envVars;

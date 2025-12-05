@@ -23,8 +23,15 @@ services:
 
       # Benchling Configuration (credentials from Secrets Manager)
       - BenchlingSecret=${BenchlingSecret}
+
+      # Security Configuration
+      - ENABLE_WEBHOOK_VERIFICATION=${ENABLE_WEBHOOK_VERIFICATION:-true}
+
+      # Test Mode
+      - BENCHLING_TEST_MODE=${BENCHLING_TEST_MODE:-false}
     volumes:
       - ~/.aws:/home/appuser/.aws:ro
+    command: ["gunicorn", "src.app:create_app()", "-k", "uvicorn.workers.UvicornWorker", "--workers", "2", "--bind", "0.0.0.0:8080"]
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]

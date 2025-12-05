@@ -30,6 +30,11 @@ make test-benchling        # Verify Benchling credentials
 make run-native            # Launch FastAPI/uvicorn locally (port 8080)
 ```
 
+### Runtime
+
+- Production Docker image serves FastAPI via NGINX Unit (ASGI) for hardened process management.
+- Native/dev flows still use uvicorn; arm64 builds fall back to uvicorn automatically if Unit packages are unavailable.
+
 ### Configuration
 
 1. Go to `https://TENANT.benchling.com/developer/apps`

@@ -3,6 +3,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2025-12-04
+
+### Added
+
+- **Production ASGI server** - Migrated to Gunicorn with Uvicorn workers for production deployment
+  - Replaces development-only Uvicorn with production-grade multi-worker server
+  - 4 workers for parallel request handling
+  - Automatic worker restart on failures
+  - Better reliability and performance in production
+  - JWKS cache pre-warming on startup (eliminates cold start delays)
+  - Graceful shutdown and zero-downtime deployment support
+
 ## [0.9.0] - 2025-12-03
 
 ### Breaking Through: In-Stack VPC Support

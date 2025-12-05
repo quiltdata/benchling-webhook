@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "benchling-quilt-integration"
-version = "0.9.0"
+version = "0.9.1"
 description = "Benchling-Quilt Integration Webhook Service"
 license = {text = "Apache-2.0"}
 authors = [
@@ -25,6 +25,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi==0.123.5",
     "uvicorn[standard]==0.38.0",
+    "gunicorn==23.0.0",
     "boto3==1.42.2",
     "dataclasses-json>=0.5.2,<0.6.0",
     "python-dotenv==1.2.1",
