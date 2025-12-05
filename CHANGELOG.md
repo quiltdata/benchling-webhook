@@ -3,17 +3,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.9.1] - 2025-12-04
+## [0.9.2] - 2025-12-04
 
 ### Added
-
-- **Production ASGI server** - Migrated to Gunicorn with Uvicorn workers for production deployment
-  - Replaces development-only Uvicorn with production-grade multi-worker server
-  - 4 workers for parallel request handling
-  - Automatic worker restart on failures
-  - Better reliability and performance in production
-  - JWKS cache pre-warming on startup (eliminates cold start delays)
-  - Graceful shutdown and zero-downtime deployment support
 
 - **Degraded startup testing** - Real Docker container test for missing secrets scenario (#288)
   - `make test-no-secret` launches actual Docker container with empty `BenchlingSecret`
@@ -28,6 +20,28 @@ All notable changes to this project will be documented in this file.
   - Sets `BenchlingSecret=""` to simulate missing AWS Secrets Manager secret
   - Disables webhook verification in no-secret mode
   - Useful for development and debugging
+
+### Fixed
+
+- **Setup wizard** - Correct parameter name and centralize as constant
+  - Fixed `secretName` parameter handling in setup wizard
+  - Centralized `BENCHLING_SECRET_NAME` constant for consistency
+
+- **Deployment** - Exit early for integrated stacks, prevent standalone deployment
+  - Prevents accidental standalone deployment of integrated Quilt stacks
+  - Shows integrated stack status in deployment plan
+
+## [0.9.1] - 2025-12-04
+
+### Added
+
+- **Production ASGI server** - Migrated to Gunicorn with Uvicorn workers for production deployment
+  - Replaces development-only Uvicorn with production-grade multi-worker server
+  - 4 workers for parallel request handling
+  - Automatic worker restart on failures
+  - Better reliability and performance in production
+  - JWKS cache pre-warming on startup (eliminates cold start delays)
+  - Graceful shutdown and zero-downtime deployment support
 
 ## [0.9.0] - 2025-12-03
 
