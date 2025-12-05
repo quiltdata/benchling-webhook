@@ -58,6 +58,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 profile: "default",
                 verbose: false,
                 test: false,
+                noSecret: false,
             });
 
             // Verify required Quilt service variables
@@ -91,6 +92,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 profile: "default",
                 verbose: false,
                 test: false,
+                noSecret: false,
             });
 
             // Docker production mode should have production settings
@@ -110,6 +112,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 profile: "default",
                 verbose: false,
                 test: false,
+                noSecret: false,
             });
 
             // Docker dev mode should have development settings
@@ -126,6 +129,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 profile: "default",
                 verbose: false,
                 test: true,
+                noSecret: false,
             });
 
             expect(envVars.BENCHLING_TEST_MODE).toBe("true");
@@ -137,6 +141,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 profile: "default",
                 verbose: false,
                 test: false,
+                noSecret: false,
             });
 
             // Iceberg resources are optional
@@ -158,6 +163,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 profile: "default",
                 verbose: false,
                 test: false,
+                noSecret: false,
             });
 
             // Athena user workgroup should default to "primary"
@@ -181,6 +187,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 profile: "default",
                 verbose: false,
                 test: false,
+                noSecret: false,
             });
 
             expect(envVars.PATH).toBe(originalPath);
@@ -194,6 +201,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 profile: "default",
                 verbose: false,
                 test: false,
+                noSecret: false,
             });
 
             // Should not throw
@@ -215,6 +223,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 profile: "default",
                 verbose: false,
                 test: false,
+                noSecret: false,
             });
 
             // Replace with invalid URL
@@ -232,6 +241,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 profile: "default",
                 verbose: false,
                 test: false,
+                noSecret: false,
             });
 
             // BenchlingSecret should always be present
@@ -617,6 +627,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 profile: "default",
                 verbose: false,
                 test: false,
+                noSecret: false,
             });
 
             // 2. Validate configuration
@@ -641,6 +652,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
                 profile: "default",
                 verbose: false,
                 test: false,
+                noSecret: false,
             };
 
             const result1 = buildEnvVars(mockConfig, "docker", options);

@@ -69,6 +69,7 @@ export interface StackResourceMap {
  * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
  * - T4BucketReadRole (AWS::IAM::Role)
  * - T4BucketWriteRole (AWS::IAM::Role)
+ * - BenchlingSecret (AWS::SecretsManager::Secret)
  */
 export interface DiscoveredQuiltResources {
     athenaUserWorkgroup?: string;
@@ -79,6 +80,7 @@ export interface DiscoveredQuiltResources {
     athenaResultsBucketPolicy?: string;
     readRoleArn?: string;
     writeRoleArn?: string;
+    benchlingSecretArn?: string;
 }
 
 /**
@@ -157,7 +159,7 @@ export function toRoleArn(roleNameOrArn: string, account: string): string {
 }
 
 /**
- * Extract Athena workgroups, IAM policies, Glue databases, S3 buckets, and IAM roles from stack resources
+ * Extract Athena workgroups, IAM policies, Glue databases, S3 buckets, IAM roles, and Secrets Manager secrets from stack resources
  *
  * Target resources:
  * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
@@ -168,16 +170,17 @@ export function toRoleArn(roleNameOrArn: string, account: string): string {
  * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
  * - T4BucketReadRole (AWS::IAM::Role)
  * - T4BucketWriteRole (AWS::IAM::Role)
+ * - BenchlingSecret (AWS::SecretsManager::Secret)
  *
  * @param resources Stack resource map from getStackResources
  * @param account Optional AWS account ID for converting role names to ARNs
- * @param region Optional AWS region (currently unused but reserved for future use)
+ * @param region Optional AWS region for constructing Secrets Manager ARNs
  * @returns Discovered Quilt resources
  */
 export function extractQuiltResources(
     resources: StackResourceMap,
     account?: string,
-    _region?: string,
+    region?: string,
 ): DiscoveredQuiltResources {
     // Map logical resource IDs to discovered resource properties
     const resourceMapping: Record<string, keyof DiscoveredQuiltResources> = {
@@ -189,6 +192,7 @@ export function extractQuiltResources(
         UserAthenaResultsBucketPolicy: "athenaResultsBucketPolicy",
         T4BucketReadRole: "readRoleArn",
         T4BucketWriteRole: "writeRoleArn",
+        BenchlingSecret: "benchlingSecretArn",
     };
 
     const discovered: DiscoveredQuiltResources = {};
@@ -209,6 +213,19 @@ export function extractQuiltResources(
                 } else {
                     // Log warning if we can't convert - need account ID
                     console.warn(`Warning: Cannot convert role name to ARN for ${logicalId}: ${physicalId} (missing account ID)`);
+                }
+            } else if (propertyName === "benchlingSecretArn") {
+                // For Secrets Manager secrets, convert secret name to ARN if needed
+                if (physicalId.startsWith("arn:aws:secretsmanager:")) {
+                    // Already a full ARN
+                    discovered[propertyName] = physicalId;
+                } else if (account && region) {
+                    // Convert secret name to ARN using account ID and region
+                    // ARN format: arn:aws:secretsmanager:region:account:secret:secret-name
+                    discovered[propertyName] = `arn:aws:secretsmanager:${region}:${account}:secret:${physicalId}`;
+                } else {
+                    // Log warning if we can't convert - need account ID and region
+                    console.warn(`Warning: Cannot convert secret name to ARN for ${logicalId}: ${physicalId} (missing account ID or region)`);
                 }
             } else {
                 discovered[propertyName] = physicalId;

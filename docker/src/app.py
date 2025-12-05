@@ -16,9 +16,10 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .canvas import CanvasManager
-from .config import get_config
+from .config import Config, get_config
 from .entry_packager import EntryPackager
 from .payload import Payload
+from .secrets_manager import SecretsManagerError
 from .version import __version__
 
 # Load environment variables
@@ -179,9 +180,85 @@ async def verify_webhook_signature(request: Request, config, jwks_fetcher: Calla
 def create_app() -> FastAPI:
     app = FastAPI(title="Benchling Webhook", version=__version__)
 
-    # Initialize configuration and clients
-    try:
-        config = get_config()
+    config: Config | None = None
+    benchling: Benchling | None = None
+    entry_packager: EntryPackager | None = None
+    startup_problem: Dict[str, Any] | None = None
+    jwks_http_client: httpx.Client | None = None
+
+    def record_startup_problem(exc: Exception, stage: str) -> None:
+        """Capture initialization issues without failing health checks."""
+        nonlocal startup_problem
+
+        full_message = str(exc).strip()
+        summary = full_message.split("\n", 1)[0]
+        suggestion = getattr(exc, "suggestion", "") if hasattr(exc, "suggestion") else ""
+
+        startup_problem = {
+            "stage": stage,
+            "message": summary,
+            "details": full_message,
+            "suggestion": suggestion,
+            "error_type": type(exc).__name__,
+        }
+
+        logger.warning(
+            "Running in degraded mode - Benchling secrets unavailable",
+            stage=stage,
+            message=summary,
+            suggestion=suggestion or "Set BenchlingSecret and ensure the secret exists before enabling webhooks",
+            error_type=type(exc).__name__,
+        )
+
+    def build_secret_unavailable_body(status_value: str = "unavailable") -> Dict[str, Any]:
+        """Consistent error payload for missing/unavailable Benchling secrets."""
+        default_action = (
+            "Set BenchlingSecret and ensure the Benchling secret exists in AWS Secrets Manager, then redeploy."
+        )
+        message = "Benchling secret unavailable"
+        details = ""
+        suggestion = ""
+
+        if startup_problem:
+            message = startup_problem.get("message", message)
+            details = startup_problem.get("details", "")
+            suggestion = startup_problem.get("suggestion", "")
+
+        body: Dict[str, Any] = {
+            "status": status_value,
+            "error": "benchling_secret_unavailable",
+            "message": message,
+            "action": suggestion or default_action,
+        }
+
+        if details and details != message:
+            body["details"] = details
+
+        return body
+
+    def _unavailable_jwks_fetcher(app_definition_id: str) -> Any:  # pragma: no cover - safety fallback
+        raise RuntimeError("JWKS fetcher unavailable in degraded mode")
+
+    jwks_fetcher_with_caching: Callable[[str], Any] = _unavailable_jwks_fetcher
+
+    def _initialize_runtime() -> None:
+        """Initialize configuration and clients, recording secret-related failures."""
+        nonlocal config, benchling, entry_packager, jwks_fetcher_with_caching, jwks_http_client
+
+        try:
+            config = get_config()
+        except SecretsManagerError as exc:
+            record_startup_problem(exc, "config")
+            return
+        except ValueError as exc:
+            if "BenchlingSecret" in str(exc):
+                record_startup_problem(exc, "config")
+                return
+            logger.error("Failed to initialize application", error=str(exc))
+            raise
+        except Exception as exc:
+            logger.error("Failed to initialize application", error=str(exc))
+            raise
 
         # Create persistent HTTP client with connection pooling for JWKS fetches
         jwks_http_client = httpx.Client(
@@ -201,7 +278,7 @@ def create_app() -> FastAPI:
         # without any caching, which causes 40-second delays in VPC environments
         jwks_cache: Dict[str, Any] = {}
 
-        def jwks_fetcher_with_caching(app_definition_id: str) -> Any:
+        def _jwks_fetcher_with_caching(app_definition_id: str) -> Any:
             """Fetch JWKS keys with caching to prevent repeated slow network calls."""
             if app_definition_id not in jwks_cache:
                 logger.info(
@@ -222,6 +299,8 @@ def create_app() -> FastAPI:
                     app_definition_id=app_definition_id,
                 )
             return jwks_cache[app_definition_id]
+
+        jwks_fetcher_with_caching = _jwks_fetcher_with_caching
 
         # Pre-warm JWKS cache during app initialization (for Gunicorn --preload)
         # With --preload, the app is loaded once before forking workers, so this cache
@@ -244,11 +323,6 @@ def create_app() -> FastAPI:
                     error=str(exc),
                     error_type=type(exc).__name__,
                 )
-
-        # Create a dependency factory for webhook verification that captures config and JWKS fetcher
-        async def verify_webhook_dependency(request: Request) -> None:
-            """FastAPI dependency for webhook signature verification."""
-            await verify_webhook_signature(request, config, jwks_fetcher_with_caching)
 
         logger.info("Python orchestration enabled")
 
@@ -294,17 +368,29 @@ def create_app() -> FastAPI:
                             error=validation_results["role"]["error"],
                         )
                         raise RuntimeError(f"IAM role validation failed: {validation_results['role']['error']}")
-            except Exception as e:
+            except Exception as exc:
                 logger.error(
                     "Role validation failed at startup - failing container to prevent data misrouting",
-                    error=str(e),
-                    error_type=type(e).__name__,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
                 )
                 raise
 
-    except Exception as e:
-        logger.error("Failed to initialize application", error=str(e))
-        raise
+    _initialize_runtime()
+
+    # Create a dependency factory for webhook verification that captures config and JWKS fetcher
+    async def verify_webhook_dependency(request: Request) -> None:
+        """FastAPI dependency for webhook signature verification."""
+        if startup_problem:
+            logger.warning(
+                "Skipping webhook verification - running without Benchling secrets",
+                reason=startup_problem.get("message") if startup_problem else "unknown",
+                path=request.url.path,
+            )
+            return
+        await verify_webhook_signature(request, config, jwks_fetcher_with_caching)
+
+    app.state.startup_problem = startup_problem
 
     # ============================================================================
     # Health Endpoints - Support both direct paths and stage-prefixed paths
@@ -320,11 +406,15 @@ def create_app() -> FastAPI:
 
     async def _health_impl() -> Dict[str, Any]:
         """Shared health check implementation."""
-        return {
+        response: Dict[str, Any] = {
             "status": "healthy",
             "service": "benchling-webhook",
             "version": __version__,
         }
+        if startup_problem:
+            response["mode"] = "degraded"
+            response["warning"] = startup_problem.get("message")
+        return response
 
     @app.get("/health")
     async def health() -> Dict[str, Any]:
@@ -338,6 +428,16 @@ def create_app() -> FastAPI:
 
     async def _readiness_impl():
         """Shared readiness probe implementation."""
+        if startup_problem:
+            logger.warning(
+                "Readiness probe reporting degraded state",
+                reason=startup_problem.get("message"),
+                error_type=startup_problem.get("error_type") if startup_problem else None,
+            )
+            degraded = build_secret_unavailable_body(status_value="degraded")
+            degraded["orchestration"] = "python"
+            degraded["mode"] = "degraded"
+            return degraded
         try:
             if not entry_packager:
                 raise Exception("EntryPackager not initialized")
@@ -379,6 +479,40 @@ def create_app() -> FastAPI:
         try:
             quilt_stack_arn = os.getenv("QuiltStackARN")
             benchling_secret_name = os.getenv("BenchlingSecret")
+
+            if startup_problem or not config:
+                degraded = build_secret_unavailable_body(status_value="degraded")
+                degraded["aws"] = {
+                    "region": os.getenv("AWS_REGION", "not-set"),
+                    "quilt_stack_arn": None,
+                    "benchling_secret_name": benchling_secret_name,
+                }
+                degraded["security"] = {
+                    "webhook_verification_enabled": False,
+                    "verification_layers": ["fastapi", "lambda_authorizer"],
+                    "defense_in_depth": True,
+                }
+                degraded["quilt"] = {
+                    "catalog": None,
+                    "database": None,
+                    "bucket": None,
+                    "queue_url": None,
+                }
+                degraded["benchling"] = {
+                    "tenant": None,
+                    "client_id": None,
+                    "has_client_secret": False,
+                    "has_app_definition_id": False,
+                }
+                degraded["parameters"] = {
+                    "pkg_prefix": None,
+                    "pkg_key": None,
+                    "user_bucket": None,
+                    "log_level": os.getenv("LOG_LEVEL", "INFO"),
+                    "webhook_allow_list": "",
+                    "enable_webhook_verification": False,
+                }
+                return degraded
 
             def mask_value(value: str | None, show_last: int = 4):
                 if not value:
@@ -454,9 +588,27 @@ def create_app() -> FastAPI:
     # These endpoints require HMAC signature verification for security
     # ============================================================================
 
+    def _runtime_guard_response(path: str):
+        """Return 503 response when startup is degraded (e.g., missing secrets)."""
+        if not startup_problem:
+            return None
+        logger.warning(
+            "Rejecting request - Benchling secrets unavailable",
+            path=path,
+            reason=startup_problem.get("message"),
+            error_type=startup_problem.get("error_type") if startup_problem else None,
+        )
+        return JSONResponse(build_secret_unavailable_body(), status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
+
     async def _handle_event_impl(request: Request, _verified: None = None):
         """Shared event webhook handling implementation."""
         try:
+            blocked_response = _runtime_guard_response(request.url.path)
+            if blocked_response:
+                return blocked_response
+
+            assert benchling is not None and entry_packager is not None and config is not None
+
             logger.info("Received /event", headers=dict(request.headers))
             payload = await Payload.from_request(request, benchling)
 
@@ -533,6 +685,12 @@ def create_app() -> FastAPI:
     async def _handle_lifecycle_impl(request: Request, _verified: None = None):
         """Shared lifecycle event handling implementation."""
         try:
+            blocked_response = _runtime_guard_response(request.url.path)
+            if blocked_response:
+                return blocked_response
+
+            assert benchling is not None and entry_packager is not None and config is not None
+
             logger.info("Received /lifecycle", headers=dict(request.headers))
             payload_obj = await Payload.from_request(request, benchling)
             payload = payload_obj.raw_payload
@@ -588,6 +746,12 @@ def create_app() -> FastAPI:
     async def _handle_canvas_impl(request: Request, _verified: None = None):
         """Shared canvas webhook handling implementation."""
         try:
+            blocked_response = _runtime_guard_response(request.url.path)
+            if blocked_response:
+                return blocked_response
+
+            assert benchling is not None and entry_packager is not None and config is not None
+
             logger.info("Received /canvas", headers=dict(request.headers))
             payload = await Payload.from_request(request, benchling)
 

@@ -162,6 +162,26 @@ describe("Stack Resource Discovery - Integration", () => {
             }
         });
 
+        it("should extract BenchlingSecret if present", () => {
+            if (skipTests) {
+                console.log("    Skipping - no profile configured");
+                return;
+            }
+            // Extract account from stackArn for ARN construction
+            const accountMatch = stackArn.match(/:(\d{12}):/);
+            const account = accountMatch ? accountMatch[1] : undefined;
+
+            const discovered = extractQuiltResources(resources, account, region);
+
+            if (discovered.benchlingSecretArn) {
+                console.log(`    Found BenchlingSecret: ${discovered.benchlingSecretArn}`);
+                expect(typeof discovered.benchlingSecretArn).toBe("string");
+                expect(discovered.benchlingSecretArn.length).toBeGreaterThan(0);
+                // Should be a valid Secrets Manager ARN
+                expect(discovered.benchlingSecretArn).toMatch(/^arn:aws:secretsmanager:/);
+            }
+        });
+
         it("should handle missing resources gracefully", () => {
             if (skipTests) {
                 console.log("    Skipping - no profile configured");
@@ -177,6 +197,7 @@ describe("Stack Resource Discovery - Integration", () => {
             expect(discovered.icebergDatabase).toBeUndefined();
             expect(discovered.athenaResultsBucket).toBeUndefined();
             expect(discovered.athenaResultsBucketPolicy).toBeUndefined();
+            expect(discovered.benchlingSecretArn).toBeUndefined();
         });
     });
 
@@ -195,7 +216,10 @@ describe("Stack Resource Discovery - Integration", () => {
         it.skip("should discover all resources in one call", async () => {
             // Simulate what setup wizard does
             const resources = await getStackResources(region, stackName);
-            const discovered = extractQuiltResources(resources);
+            // Extract account from stackArn for ARN construction
+            const accountMatch = stackArn.match(/:(\d{12}):/);
+            const account = accountMatch ? accountMatch[1] : undefined;
+            const discovered = extractQuiltResources(resources, account, region);
 
             // Should not throw
             expect(discovered).toBeDefined();
@@ -208,8 +232,9 @@ describe("Stack Resource Discovery - Integration", () => {
             if (discovered.icebergDatabase) discoveredCount++;
             if (discovered.athenaResultsBucket) discoveredCount++;
             if (discovered.athenaResultsBucketPolicy) discoveredCount++;
+            if (discovered.benchlingSecretArn) discoveredCount++;
 
-            console.log(`    Discovered ${discoveredCount}/6 target resources`);
+            console.log(`    Discovered ${discoveredCount}/7 target resources`);
 
             // At least one resource should be found (depends on stack configuration)
             // This is informational, not a hard requirement

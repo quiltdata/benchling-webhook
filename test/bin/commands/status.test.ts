@@ -133,7 +133,7 @@ describe("statusCommand", () => {
                     StackStatus: "UPDATE_COMPLETE",
                     Parameters: [
                         {
-                            ParameterKey: "BenchlingIntegration",
+                            ParameterKey: "BenchlingWebhook",
                             ParameterValue: "Enabled",
                         },
                     ],
@@ -233,7 +233,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "UPDATE_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -256,7 +256,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "CREATE_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     CreationTime: new Date(),
                 }],
             });
@@ -276,7 +276,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "UPDATE_IN_PROGRESS",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -300,7 +300,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "CREATE_IN_PROGRESS",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     CreationTime: new Date(),
                 }],
             });
@@ -321,7 +321,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "UPDATE_FAILED",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -344,7 +344,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "ROLLBACK_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -367,7 +367,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "UPDATE_ROLLBACK_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -390,7 +390,7 @@ describe("statusCommand", () => {
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "UPDATE_COMPLETE",
                     Parameters: [
-                        { ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" },
+                        { ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" },
                     ],
                     LastUpdatedTime: new Date(),
                 }],
@@ -415,7 +415,7 @@ describe("statusCommand", () => {
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "UPDATE_COMPLETE",
                     Parameters: [
-                        { ParameterKey: "BenchlingIntegration", ParameterValue: "Disabled" },
+                        { ParameterKey: "BenchlingWebhook", ParameterValue: "Disabled" },
                     ],
                     LastUpdatedTime: new Date(),
                 }],
@@ -461,7 +461,7 @@ describe("statusCommand", () => {
                     StackStatus: "UPDATE_COMPLETE",
                     Parameters: [
                         { ParameterKey: "OtherParam1", ParameterValue: "Value1" },
-                        { ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" },
+                        { ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" },
                         { ParameterKey: "OtherParam2", ParameterValue: "Value2" },
                     ],
                     LastUpdatedTime: new Date(),
@@ -485,7 +485,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "UPDATE_IN_PROGRESS",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -510,7 +510,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "UPDATE_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -531,7 +531,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "UPDATE_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Disabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Disabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -555,7 +555,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "UPDATE_FAILED",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -579,7 +579,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "ROLLBACK_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: new Date(),
                 }],
             });
@@ -749,7 +749,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "UPDATE_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     LastUpdatedTime: lastUpdated,
                     CreationTime: new Date("2025-11-01T10:00:00Z"),
                 }],
@@ -775,7 +775,7 @@ describe("statusCommand", () => {
                 Stacks: [{
                     StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                     StackStatus: "CREATE_COMPLETE",
-                    Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                    Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                     CreationTime: creationTime,
                 }],
             });
@@ -1091,7 +1091,7 @@ describe("Health Check Functions", () => {
                         Stacks: [{
                             StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });
@@ -1145,7 +1145,7 @@ describe("Health Check Functions", () => {
                         Stacks: [{
                             StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });
@@ -1178,7 +1178,7 @@ describe("Health Check Functions", () => {
                         Stacks: [{
                             StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });
@@ -1239,7 +1239,7 @@ describe("Health Check Functions", () => {
                         Stacks: [{
                             StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });
@@ -1298,7 +1298,7 @@ describe("Health Check Functions", () => {
                         Stacks: [{
                             StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });
@@ -1333,7 +1333,7 @@ describe("Health Check Functions", () => {
                         Stacks: [{
                             StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                             Outputs: [
                                 { OutputKey: "BenchlingSecretArn", OutputValue: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-secret" },
@@ -1370,7 +1370,7 @@ describe("Health Check Functions", () => {
                         Stacks: [{
                             StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                             Outputs: [
                                 { OutputKey: "BenchlingSecretArn", OutputValue: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-secret" },
@@ -1415,7 +1415,7 @@ describe("Health Check Functions", () => {
                         Stacks: [{
                             StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });
@@ -1456,7 +1456,7 @@ describe("Health Check Functions", () => {
                         Stacks: [{
                             StackId: "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc-123",
                             StackStatus: "UPDATE_COMPLETE",
-                            Parameters: [{ ParameterKey: "BenchlingIntegration", ParameterValue: "Enabled" }],
+                            Parameters: [{ ParameterKey: "BenchlingWebhook", ParameterValue: "Enabled" }],
                             LastUpdatedTime: new Date(),
                         }],
                     });

@@ -9,7 +9,7 @@
 
 import chalk from "chalk";
 import inquirer from "inquirer";
-import { ProfileConfig } from "../types/config";
+import { ProfileConfig, CFN_PARAMS } from "../types/config";
 import { syncSecretsToAWS } from "../../bin/commands/sync-secrets";
 import { IntegratedModeInput, IntegratedModeResult } from "./types";
 import packageJson from "../../package.json";
@@ -152,8 +152,14 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
     let integrationStatusUpdated = false;
 
     if (benchlingIntegrationEnabled === undefined) {
-        console.log(chalk.yellow("⚠️  Could not determine BenchlingIntegration status"));
-        console.log(chalk.dim("   You may need to enable it manually in CloudFormation\n"));
+        console.error(chalk.red("\n❌ CRITICAL ERROR: Cannot determine BenchlingIntegration parameter status\n"));
+        console.error(chalk.yellow("This could mean:"));
+        console.error(chalk.yellow("  1. The Quilt stack does not support BenchlingIntegration parameter"));
+        console.error(chalk.yellow("  2. Insufficient permissions to read CloudFormation parameters"));
+        console.error(chalk.yellow("  3. The stack query failed to detect the parameter\n"));
+        console.error(chalk.red("Integrated setup requires this parameter to enable webhook processing."));
+        console.error(chalk.red("Cannot continue with integrated setup.\n"));
+        throw new Error("BenchlingIntegration parameter status unknown - integrated setup failed");
     } else if (benchlingIntegrationEnabled) {
         console.log(chalk.green("✓ BenchlingIntegration is already Enabled\n"));
     } else {
@@ -180,7 +186,7 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
             const updateResult = await updateStackParameter({
                 stackArn: stackQuery.stackArn,
                 region: config.deployment.region,
-                parameterKey: "BenchlingIntegration",
+                parameterKey: CFN_PARAMS.BENCHLING_WEBHOOK,
                 parameterValue: "Enabled",
                 awsProfile,
             });

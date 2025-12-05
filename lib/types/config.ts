@@ -9,6 +9,21 @@
  */
 
 /**
+ * CloudFormation Parameter Names
+ *
+ * These constants define the parameter names used in CloudFormation stacks.
+ * Centralizing these prevents magic string duplication across the codebase.
+ */
+export const CFN_PARAMS = {
+    /**
+     * BenchlingWebhook parameter in Quilt CloudFormation stack
+     * Controls whether the Quilt stack processes Benchling webhook events
+     * Valid values: "Enabled" | "Disabled"
+     */
+    BENCHLING_WEBHOOK: "BenchlingWebhook",
+} as const;
+
+/**
  * Configuration profile identifier
  * Profiles allow multiple named configurations (e.g., "default", "dev", "prod")
  *

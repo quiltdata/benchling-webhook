@@ -17,6 +17,7 @@ import { SecretsManagerClient, DescribeSecretCommand } from "@aws-sdk/client-sec
 import { fromIni } from "@aws-sdk/credential-providers";
 import { XDGConfig } from "../../lib/xdg-config";
 import type { XDGBase } from "../../lib/xdg-base";
+import { CFN_PARAMS } from "../../lib/types/config";
 
 export interface StatusCommandOptions {
     /** Configuration profile name */
@@ -231,10 +232,10 @@ async function getStackStatus(
             throw new Error(`Stack not found: ${stackName}\n\n${helpText}`);
         }
 
-        // Extract BenchlingIntegration parameter (ONLY for integrated mode)
+        // Extract BenchlingWebhook parameter (ONLY for integrated mode)
         let benchlingIntegrationEnabled: boolean | undefined;
         if (mode === "integrated") {
-            const param = stack.Parameters?.find((p) => p.ParameterKey === "BenchlingIntegration");
+            const param = stack.Parameters?.find((p) => p.ParameterKey === CFN_PARAMS.BENCHLING_WEBHOOK);
             benchlingIntegrationEnabled = param?.ParameterValue === "Enabled";
         }
 
