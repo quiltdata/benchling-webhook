@@ -134,6 +134,7 @@ jobs:
           # Run container with minimal config to test startup
           CONTAINER_ID=$(docker run -d \
             -e PORT=8080 \
+            -e AWS_REGION=us-east-1 \
             -e PACKAGER_SQS_URL=https://sqs.us-east-1.amazonaws.com/000000000000/test-queue \
             -e QUILT_WEB_HOST=https://example.quiltdata.com \
             -e ATHENA_USER_DATABASE=test_db \
