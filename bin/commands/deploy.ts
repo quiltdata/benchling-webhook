@@ -257,6 +257,26 @@ export async function deploy(
         force?: boolean;
     },
 ): Promise<void> {
+    // Check if this is an integrated stack - NO deployment allowed
+    if (config.integratedStack === true) {
+        console.log();
+        console.log(boxen(
+            chalk.yellow.bold("⚠️  Integrated Stack Mode") + "\n\n" +
+            chalk.dim("The webhook handler is already deployed as part of the Quilt stack.\n") +
+            chalk.dim("No separate deployment is needed or allowed.\n\n") +
+            chalk.cyan("To update credentials, run:\n") +
+            chalk.cyan(`  npm run setup -- --profile ${options.profileName}`),
+            {
+                padding: 1,
+                margin: 1,
+                borderStyle: "round",
+                borderColor: "yellow",
+            },
+        ));
+        console.log();
+        process.exit(0);
+    }
+
     const spinner = ora("Validating parameters...").start();
 
     // Parse stack ARN to extract region/account
@@ -493,14 +513,6 @@ export async function deploy(
     console.log(chalk.bold("  Stack Parameters:"));
     console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)} ${chalk.dim("(deployment-time resolution only)")}`);
     console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
-
-    // Show whether this is an integrated Quilt stack
-    const isIntegrated = config.integratedStack === true;
-    if (isIntegrated) {
-        console.log(`    ${chalk.bold("Stack Integration:")}       ${chalk.green("✓ INTEGRATED")} ${chalk.dim("(BenchlingSecret from Quilt stack)")}`);
-    } else {
-        console.log(`    ${chalk.bold("Stack Integration:")}       ${chalk.yellow("STANDALONE")} ${chalk.dim("(separate BenchlingSecret)")}`);
-    }
     console.log();
     console.log(chalk.bold("  Container Image:"));
     console.log(`    ${chalk.bold("ECR Account:")}             ${ecrAccount}`);
