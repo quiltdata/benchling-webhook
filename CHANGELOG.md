@@ -15,6 +15,20 @@ All notable changes to this project will be documented in this file.
   - JWKS cache pre-warming on startup (eliminates cold start delays)
   - Graceful shutdown and zero-downtime deployment support
 
+- **Degraded startup testing** - Real Docker container test for missing secrets scenario (#288)
+  - `make test-no-secret` launches actual Docker container with empty `BenchlingSecret`
+  - Verifies container starts successfully without crashing
+  - Tests health endpoints return 200 with degraded mode warnings
+  - Tests webhook endpoints return 503 with actionable error messages
+  - Tests config endpoint reports degraded state correctly
+  - Automatic cleanup after test completes
+
+- **xdg-launch `--no-secret` flag** - Manual degraded startup testing support
+  - `npm run launch -- --mode native --no-secret` tests degraded behavior
+  - Sets `BenchlingSecret=""` to simulate missing AWS Secrets Manager secret
+  - Disables webhook verification in no-secret mode
+  - Useful for development and debugging
+
 ## [0.9.0] - 2025-12-03
 
 ### Breaking Through: In-Stack VPC Support
