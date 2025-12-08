@@ -304,7 +304,7 @@ program
                 console.error(chalk.red(`Profile does not exist: ${profile}`));
                 console.log();
                 console.log(chalk.yellow("To create a profile, run:"));
-                console.log(chalk.cyan("  npx @quiltdata/benchling-webhook"));
+                console.log(chalk.cyan("  npx @quiltdata/benchling-webhook@latest"));
                 process.exit(1);
             }
 
