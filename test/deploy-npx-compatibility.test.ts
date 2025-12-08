@@ -55,8 +55,8 @@ describe("Deploy Command NPX Compatibility", () => {
         const deployPath = join(__dirname, "../bin/commands/deploy.ts");
         const deploySource = readFileSync(deployPath, "utf-8");
 
-        // Error messages should suggest NPX commands, not npm scripts
-        expect(deploySource).toMatch(/npx\s+@quiltdata\/benchling-webhook\s+setup/);
+        // Error messages should suggest NPX commands with @latest, not npm scripts
+        expect(deploySource).toMatch(/npx\s+@quiltdata\/benchling-webhook@latest\s+setup/);
 
         // Should NOT suggest npm run commands for secret syncing
         const lines = deploySource.split("\n");
