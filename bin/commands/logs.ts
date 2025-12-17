@@ -266,10 +266,17 @@ async function fetchLogsFromGroup(
         const response = await logsClient.send(command);
         let events = response.events || [];
 
+        // Sort by timestamp descending (most recent first) BEFORE filtering
+        // This ensures we filter from the most recent logs, not oldest
+        events.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
         // Filter out health checks unless explicitly requested
         if (!includeHealth) {
             events = events.filter((event) => !isHealthCheck(event.message || ""));
         }
+
+        // Limit to the requested number of entries
+        events = events.slice(0, limit);
 
         return events;
     } catch (error) {
@@ -479,7 +486,7 @@ async function fetchAllLogs(
                 }
             }
 
-            // Fetch logs from this group
+            // Fetch logs from this group (already sorted and limited)
             const entries = await fetchLogsFromGroup(
                 logGroupName,
                 region,
@@ -489,11 +496,6 @@ async function fetchAllLogs(
                 filterPattern,
                 awsProfile,
             );
-
-            // Sort by timestamp descending (most recent first) and limit
-            const sortedEntries = entries
-                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-                .slice(0, limit);
 
             // Create friendly display name
             let displayName: string;
@@ -524,7 +526,7 @@ async function fetchAllLogs(
             result.push({
                 name: logGroupName,
                 displayName,
-                entries: sortedEntries,
+                entries,
             });
         }
 
@@ -560,7 +562,7 @@ async function fetchAllLogs(
             displayName = logType;
         }
 
-        // Fetch logs from this group
+        // Fetch logs from this group (already sorted and limited)
         const entries = await fetchLogsFromGroup(
             logGroupName,
             region,
@@ -571,15 +573,10 @@ async function fetchAllLogs(
             awsProfile,
         );
 
-        // Sort by timestamp descending (most recent first) and limit
-        const sortedEntries = entries
-            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-            .slice(0, limit);
-
         result.push({
             name: logGroupName,
             displayName,
-            entries: sortedEntries,
+            entries,
         });
     }
 
