@@ -57,12 +57,15 @@ export interface LogGroupInfo {
 function getDeploymentInfo(
     profile: string,
     configStorage: XDGBase,
-): { region: string; stackName: string; integratedMode: boolean; quiltStackName?: string; webhookEndpoint?: string } | null {
+): { region: string; stackName: string; integratedMode: boolean; quiltStackName?: string; webhookEndpoint?: string; catalogDns?: string } | null {
     try {
         const config = configStorage.readProfile(profile);
         if (config.deployment?.region) {
             const region = config.deployment.region;
             const integratedMode = config.integratedStack || false;
+
+            // Get catalog DNS from config
+            const catalogDns = config.quilt?.catalog;
 
             // Try to get webhook endpoint from deployment tracking
             let webhookEndpoint: string | undefined;
@@ -85,6 +88,7 @@ function getDeploymentInfo(
                         integratedMode: true,
                         quiltStackName: match[1],
                         webhookEndpoint,
+                        catalogDns,
                     };
                 }
             }
@@ -95,6 +99,7 @@ function getDeploymentInfo(
                 stackName: STACK_NAME,
                 integratedMode: false,
                 webhookEndpoint,
+                catalogDns,
             };
         }
     } catch (error) {
@@ -214,6 +219,7 @@ function displayLogs(
     since: string,
     limit: number,
     webhookEndpoint?: string,
+    catalogDns?: string,
     expanded?: boolean,
 ): void {
     const timeStr = formatLocalDateTime(new Date());
@@ -222,9 +228,14 @@ function displayLogs(
     console.log(chalk.bold(`\nLogs for Profile: ${profile} @ ${timeStr} (${timezone})\n`));
     console.log(chalk.dim("─".repeat(80)));
 
-    // Show webhook URL prominently at the top
+    // Show catalog DNS and webhook URL prominently at the top
+    if (catalogDns) {
+        console.log(`${chalk.bold("Catalog DNS:")} ${chalk.cyan(catalogDns)}`);
+    }
     if (webhookEndpoint) {
         console.log(`${chalk.bold("Webhook URL:")} ${chalk.cyan(webhookEndpoint)}`);
+    }
+    if (catalogDns || webhookEndpoint) {
         console.log(chalk.dim("─".repeat(80)));
     }
 
@@ -442,7 +453,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
             return { success: false, error: errorMsg };
         }
 
-        const { region, integratedMode, quiltStackName, webhookEndpoint } = deploymentInfo;
+        const { region, integratedMode, quiltStackName, webhookEndpoint, catalogDns } = deploymentInfo;
 
         // For integrated mode, use Quilt stack name; for standalone use BenchlingWebhookStack
         const stackName = integratedMode && quiltStackName ? quiltStackName : STACK_NAME;
@@ -537,7 +548,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
             }
 
             // Display logs
-            displayLogs(logGroups, profile, region, currentSince, limit, webhookEndpoint, wasExpanded);
+            displayLogs(logGroups, profile, region, currentSince, limit, webhookEndpoint, catalogDns, wasExpanded);
 
             result.logGroups = logGroups;
 

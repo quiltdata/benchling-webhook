@@ -787,9 +787,14 @@ function displayStatusResult(
     console.log(chalk.bold(`\nStack Status for Profile: ${profile} ${modeLabel}${lastUpdatedStr}\n`));
     console.log(chalk.dim("─".repeat(80)));
 
-    // Show webhook URL prominently at the top
+    // Show catalog DNS and webhook URL prominently at the top
+    if (quiltConfig?.catalog) {
+        console.log(`${chalk.bold("Catalog DNS:")} ${chalk.cyan(quiltConfig.catalog)}`);
+    }
     if (result.stackOutputs?.webhookEndpoint) {
         console.log(`${chalk.bold("Webhook URL:")} ${chalk.cyan(result.stackOutputs.webhookEndpoint)}`);
+    }
+    if (quiltConfig?.catalog || result.stackOutputs?.webhookEndpoint) {
         console.log(chalk.dim("─".repeat(80)));
     }
 
