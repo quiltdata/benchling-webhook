@@ -3,6 +3,30 @@
 
 All notable changes to this project will be documented in this file, one line per user-visible change.
 
+## [0.9.5] - 2025-12-17
+
+### Fixed
+
+- **Container startup without secrets** - Application now starts successfully and passes health checks even when AWS credentials are unavailable (#302)
+  - Fixes CI validation failure where production Docker image couldn't start without valid AWS Secrets Manager access
+  - Container starts in degraded mode with clear warnings in logs
+  - Health endpoint returns `status: "healthy"` with `mode: "degraded"` indicator
+  - Readiness endpoint returns `status: "degraded"` with actionable error messages
+  - Enables CI/CD testing without requiring AWS credentials in test environment
+  - Automatically recovers when secrets become available (no restart needed)
+
+### Added
+
+- **Local CI testing** - `npm run test:minimal` reproduces exact CI environment locally
+  - Mirrors GitHub Actions validation step for local debugging
+  - Tests container startup with minimal config and no valid secrets
+  - Validates Gunicorn starts and health checks pass in degraded mode
+  - Script: [scripts/test-minimal.sh](scripts/test-minimal.sh)
+
+## [0.9.4] - 2025-12-16
+
+Re-released due to failed tag
+
 ## [0.9.3] - 2025-12-16
 
 ### Added

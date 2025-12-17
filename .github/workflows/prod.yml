@@ -123,7 +123,9 @@ jobs:
       - name: Validate application startup
         working-directory: docker
         run: |
-          echo "Validating application starts successfully..."
+          echo "Validating application starts successfully in degraded mode..."
+          echo "(This mirrors 'npm run test:minimal' for local testing)"
+          echo ""
           AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:${{ needs.build-and-push.outputs.git_sha }}"
 
@@ -131,8 +133,10 @@ jobs:
           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
           docker pull ${IMAGE_URI}
 
-          # Run container with minimal config to test startup
+          # Run container with minimal config to test startup (no valid secrets)
+          # The application should start in degraded mode with health checks passing
           CONTAINER_ID=$(docker run -d \
+            -p 8080:8080 \
             -e PORT=8080 \
             -e AWS_REGION=us-east-1 \
             -e PACKAGER_SQS_URL=https://sqs.us-east-1.amazonaws.com/000000000000/test-queue \
@@ -142,12 +146,33 @@ jobs:
             ${IMAGE_URI})
 
           # Wait up to 30 seconds for container to start
-          echo "Waiting for container to start..."
+          echo "Waiting for Gunicorn to start..."
           for i in $(seq 1 30); do
             sleep 1
             if docker logs ${CONTAINER_ID} 2>&1 | grep -q "Booting worker with pid"; then
               echo "✅ Gunicorn started successfully"
+              echo ""
+              echo "Container logs:"
               docker logs ${CONTAINER_ID}
+              echo ""
+
+              # Verify health endpoints work in degraded mode
+              echo "Testing health endpoints..."
+              if curl -f -s http://localhost:8080/health >/dev/null; then
+                echo "✅ Health endpoint responds"
+                HEALTH_STATUS=$(curl -s http://localhost:8080/health | jq -r '.status')
+                if [ "$HEALTH_STATUS" = "healthy" ]; then
+                  echo "✅ Health check passed (degraded mode expected)"
+                else
+                  echo "⚠️  Unexpected health status: $HEALTH_STATUS"
+                fi
+              else
+                echo "❌ Health endpoint failed"
+                docker stop ${CONTAINER_ID} >/dev/null 2>&1 || true
+                docker rm ${CONTAINER_ID} >/dev/null 2>&1 || true
+                exit 1
+              fi
+
               docker stop ${CONTAINER_ID} >/dev/null 2>&1 || true
               docker rm ${CONTAINER_ID} >/dev/null 2>&1 || true
               exit 0
@@ -155,6 +180,7 @@ jobs:
           done
 
           echo "❌ Gunicorn did not start within 30 seconds"
+          echo ""
           echo "Container logs:"
           docker logs ${CONTAINER_ID}
           docker stop ${CONTAINER_ID} >/dev/null 2>&1 || true
