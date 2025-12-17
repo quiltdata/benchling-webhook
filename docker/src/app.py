@@ -397,6 +397,7 @@ def create_app() -> FastAPI:
         # Create Benchling client factory (creates fresh client with fresh secrets on demand)
         def create_benchling_client():
             """Create Benchling client with fresh secrets from Secrets Manager."""
+            assert config is not None, "Config must be initialized"
             logger.debug("Creating Benchling client with fresh secrets")
             secrets = config.get_benchling_secrets()
             config.apply_benchling_secrets(secrets)
@@ -565,11 +566,10 @@ def create_app() -> FastAPI:
                     "bucket": None,
                     "queue_url": None,
                 }
+                # Benchling credentials fetched on-demand (not exposed in health/config)
                 degraded["benchling"] = {
-                    "tenant": None,
-                    "client_id": None,
-                    "has_client_secret": False,
-                    "has_app_definition_id": False,
+                    "secret_source": "aws_secrets_manager",
+                    "fetched_on_demand": True,
                 }
                 degraded["parameters"] = {
                     "pkg_prefix": None,
@@ -627,11 +627,11 @@ def create_app() -> FastAPI:
                     "bucket": config.s3_bucket_name,
                     "queue_url": mask_queue_url(config.queue_url) if config.queue_url else None,
                 },
+                # Benchling credentials fetched on-demand (not exposed in health/config)
                 "benchling": {
-                    "tenant": config.benchling_tenant,
-                    "client_id": mask_value(config.benchling_client_id, 4),
-                    "has_client_secret": bool(config.benchling_client_secret),
-                    "has_app_definition_id": bool(config.benchling_app_definition_id),
+                    "secret_source": "aws_secrets_manager",
+                    "fetched_on_demand": True,
+                    "secret_name": benchling_secret_name,
                 },
                 "parameters": {
                     "pkg_prefix": config.pkg_prefix,
