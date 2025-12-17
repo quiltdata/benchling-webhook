@@ -539,7 +539,51 @@ Stored in AWS Secrets Manager and referenced in profile config:
 
 ## Deployment Workflows
 
+### Docker Image Build Process
+
+**Where Docker images are built:**
+
+- **Local development**: Images built on your machine via `docker/Makefile`
+- **CI/CD (production)**: Images built by GitHub Actions in the cloud
+- **ECR destination**: Always pushes to centralized Quilt ECR:
+  - Account: `712023778557`
+  - Region: `us-east-1`
+  - Repository: `quiltdata/benchling`
+  - Full URI: `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:<tag>`
+
+**Build commands:**
+
+```bash
+# Local Docker builds (for testing)
+npm run docker:build:local   # Builds dev image, runs on port 8082
+npm run test:local           # Builds + tests dev image
+
+# CI-triggered builds (for deployment)
+npm run version:tag:dev      # Creates git tag → triggers CI to build + push to ECR
+npm run version:tag          # Creates release tag → triggers CI to build + push to ECR
+```
+
+**Important: `version:tag:dev` does NOT build locally** - it only creates a git tag and pushes it to GitHub, which triggers CI to build and push the Docker image to ECR.
+
 ### Development Deployment
+
+**IMPORTANT: You must create a dev tag BEFORE running `test:dev`**
+
+```bash
+# Step 1: Create dev tag and trigger CI build (REQUIRED FIRST)
+npm run version:tag:dev      # Creates git tag, CI builds + pushes to ECR
+
+# Step 2: Wait for CI to complete, then test the deployment
+npm run test:dev             # Tests deployed dev stack via API Gateway
+```
+
+**Why this order matters:**
+
+- `test:dev` expects a Docker image to exist in ECR with the dev tag
+- `version:tag:dev` triggers CI to build and push that image to ECR
+- Without running `version:tag:dev` first, `test:dev` will fail because no image exists
+
+**Alternative: Local development deployment**
 
 ```bash
 npm run deploy:dev           # Test + build + deploy dev stack + verify
@@ -548,7 +592,7 @@ npm run deploy:dev           # Test + build + deploy dev stack + verify
 This runs:
 
 1. `npm run test` - Fast unit tests
-2. Build and push dev Docker image
+2. Build and push dev Docker image (locally)
 3. Deploy to dev stack
 4. Run integration tests
 
