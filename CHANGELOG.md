@@ -1,7 +1,23 @@
 <!-- markdownlint-disable MD024 -->
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this project will be documented in this file, one line per user-visible change.
+
+## [0.9.3] - 2025-12-16
+
+### Added
+
+- **On-demand secret fetching** - Secrets fetched from AWS Secrets Manager on every webhook request for instant rotation
+- **Enhanced logs command** - Automatic health check filtering, JSON parsing for API Gateway logs, color-coded HTTP status, increased default limit to 20 entries
+- **API Gateway log discovery** - Comprehensive log discovery for REST API v1 and HTTP API v2 in integrated stacks
+- **Compact logs header** - Display catalog DNS, webhook URL, and ECS rollout status (✓/⟳/✗) prominently at top
+- **Webhook URL caching** - Query and cache webhook URL from CloudFormation for integrated stacks
+
+### Fixed
+
+- **Security improvement** - Removed Benchling credentials from `/config` endpoint
+- **Log ordering** - Time window expansion now shows most recent logs instead of old startup logs
+- **Deduplicated log groups** - Shared log groups in integrated mode no longer displayed multiple times
 
 ## [0.9.2] - 2025-12-04
 
