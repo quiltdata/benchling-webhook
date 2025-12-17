@@ -22,6 +22,7 @@ import type { XDGBase } from "../../lib/xdg-base";
 import { discoverECSServiceLogGroups, discoverAPIGatewayLogGroups } from "../../lib/utils/ecs-service-discovery";
 import { parseTimeRange, formatTimeRange, formatLocalDateTime, formatLocalTime, getLocalTimezone } from "../../lib/utils/time-format";
 import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers";
+import { getEcsRolloutStatus } from "./status";
 
 const STACK_NAME = "BenchlingWebhookStack";
 
@@ -262,6 +263,8 @@ function displayLogs(
     webhookEndpoint?: string,
     catalogDns?: string,
     expanded?: boolean,
+    rolloutStatus?: string,
+    stackArn?: string,
 ): void {
     const timeStr = formatLocalDateTime(new Date());
     const timezone = getLocalTimezone();
@@ -269,19 +272,33 @@ function displayLogs(
     console.log(chalk.bold(`\nLogs for Profile: ${profile} @ ${timeStr} (${timezone})\n`));
     console.log(chalk.dim("─".repeat(80)));
 
-    // Show catalog DNS and webhook URL prominently at the top
-    if (catalogDns) {
-        console.log(`${chalk.bold("Catalog DNS:")} ${chalk.cyan(catalogDns)}`);
-    }
-    if (webhookEndpoint) {
-        console.log(`${chalk.bold("Webhook URL:")} ${chalk.cyan(webhookEndpoint)}`);
-    }
-    if (catalogDns || webhookEndpoint) {
-        console.log(chalk.dim("─".repeat(80)));
+    // Compact header: Catalog DNS and Webhook URL on one line
+    const dnsText = catalogDns ? `${chalk.bold("Catalog:")} ${chalk.cyan(catalogDns)}` : "";
+    const webhookText = webhookEndpoint ? `${chalk.bold("Webhook:")} ${chalk.cyan(webhookEndpoint)}` : "";
+    if (dnsText || webhookText) {
+        console.log(`${dnsText}  ${webhookText}`.trim());
     }
 
-    console.log(`${chalk.bold("Region:")} ${chalk.cyan(region)}  ${chalk.bold("Time Range:")} ${chalk.cyan(`Last ${since}`)}${expanded ? chalk.yellow(" (auto-expanded)") : ""}`);
-    console.log(`${chalk.bold("Showing:")} ${chalk.cyan(`Last ~${limit} entries per log group`)}`);
+    // Second line: Stack ARN (or Region), Time Range, Limit, and Rollout Status
+    const rolloutText = rolloutStatus
+        ? rolloutStatus === "COMPLETED"
+            ? chalk.green("✓")
+            : rolloutStatus === "FAILED"
+                ? chalk.red("✗ FAILED")
+                : chalk.yellow("⟳ " + rolloutStatus)
+        : "";
+    const expandedText = expanded ? chalk.yellow(" (auto-expanded)") : "";
+
+    // Strip UUID from stack ARN for cleaner display
+    // arn:aws:cloudformation:us-east-2:712023778557:stack/tf-dev-bench2/4c744610... -> arn:aws:cloudformation:us-east-2:712023778557:stack/tf-dev-bench2
+    const cleanStackArn = stackArn ? stackArn.replace(/\/[a-f0-9-]{36}$/, "") : undefined;
+    const stackText = cleanStackArn ? `${chalk.bold("Stack:")} ${chalk.cyan(cleanStackArn)}` : `${chalk.bold("Region:")} ${chalk.cyan(region)}`;
+
+    console.log(
+        `${stackText}  ` +
+            `${chalk.bold("Range:")} ${chalk.cyan(`Last ${since}`)}${expandedText}  ` +
+            `${chalk.bold("Tail:")} ${chalk.cyan(`~${limit}`)}${rolloutText ? `  ${chalk.bold("Status:")} ${rolloutText}` : ""}`,
+    );
     console.log(chalk.dim("─".repeat(80)));
     console.log("");
 
@@ -302,22 +319,69 @@ function displayLogs(
             if (!entry.timestamp || !entry.message) continue;
 
             const timeDisplay = formatLocalTime(entry.timestamp);
-
-            // Color code by log level if detectable
             let message = entry.message.trim();
-            let messageColor = chalk.white;
 
-            if (message.includes("ERROR") || message.includes("CRITICAL")) {
-                messageColor = chalk.red;
-            } else if (message.includes("WARNING") || message.includes("WARN")) {
-                messageColor = chalk.yellow;
-            } else if (message.includes("INFO")) {
-                messageColor = chalk.cyan;
-            } else if (message.includes("DEBUG")) {
-                messageColor = chalk.dim;
+            // Try to parse as JSON (API Gateway access logs are JSON formatted)
+            let isJsonLog = false;
+            let parsedLog: Record<string, unknown> | null = null;
+            try {
+                parsedLog = JSON.parse(message);
+                isJsonLog = true;
+            } catch {
+                // Not JSON, treat as plain text
             }
 
-            console.log(`  ${chalk.dim(timeDisplay)} ${messageColor(message)}`);
+            // Format JSON logs in a more readable way
+            if (isJsonLog && parsedLog) {
+                // API Gateway access log format
+                const ip = parsedLog.ip as string | undefined;
+                const httpMethod = parsedLog.httpMethod as string | undefined;
+                const resourcePath = parsedLog.resourcePath as string | undefined;
+                const status = parsedLog.status as number | undefined;
+                const requestTime = parsedLog.requestTime as string | undefined;
+                const responseLength = parsedLog.responseLength as number | undefined;
+                const protocol = parsedLog.protocol as string | undefined;
+
+                // Color code by status
+                let statusColor = chalk.white;
+                if (status) {
+                    if (status >= 500) {
+                        statusColor = chalk.red.bold;
+                    } else if (status >= 400) {
+                        statusColor = chalk.yellow;
+                    } else if (status >= 300) {
+                        statusColor = chalk.cyan;
+                    } else if (status >= 200) {
+                        statusColor = chalk.green;
+                    }
+                }
+
+                // Build formatted log line
+                const parts: string[] = [];
+                if (ip) parts.push(chalk.dim(`IP: ${ip}`));
+                if (httpMethod && resourcePath) parts.push(`${chalk.bold(httpMethod)} ${resourcePath}`);
+                if (status) parts.push(`${statusColor(status.toString())}`);
+                if (responseLength !== undefined) parts.push(chalk.dim(`${responseLength} bytes`));
+                if (protocol) parts.push(chalk.dim(protocol));
+                if (requestTime) parts.push(chalk.dim(`(${requestTime})`));
+
+                console.log(`  ${chalk.dim(timeDisplay)} ${parts.join(" ")}`);
+            } else {
+                // Plain text log - color code by log level if detectable
+                let messageColor = chalk.white;
+
+                if (message.includes("ERROR") || message.includes("CRITICAL")) {
+                    messageColor = chalk.red;
+                } else if (message.includes("WARNING") || message.includes("WARN")) {
+                    messageColor = chalk.yellow;
+                } else if (message.includes("INFO")) {
+                    messageColor = chalk.cyan;
+                } else if (message.includes("DEBUG")) {
+                    messageColor = chalk.dim;
+                }
+
+                console.log(`  ${chalk.dim(timeDisplay)} ${messageColor(message)}`);
+            }
         }
 
         console.log("");
@@ -504,7 +568,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
         filter,
         follow = false,
         timer,
-        limit = 5,
+        limit = 20,
         configStorage,
     } = options;
 
@@ -568,8 +632,8 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
         // For integrated mode, use full stack ARN if available (for API Gateway discovery),
         // otherwise use extracted stack name; for standalone use BenchlingWebhookStack
         const stackName = integratedMode && stackArn ? stackArn :
-                          integratedMode && quiltStackName ? quiltStackName :
-                          STACK_NAME;
+            integratedMode && quiltStackName ? quiltStackName :
+                STACK_NAME;
 
         // Parse timer value
         const refreshInterval = parseTimerValue(timer);
@@ -660,8 +724,20 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
                 continue;
             }
 
+            // Fetch ECS rollout status (optional, non-blocking)
+            let rolloutStatus: string | undefined;
+            try {
+                rolloutStatus = await getEcsRolloutStatus(
+                    integratedMode && quiltStackName ? quiltStackName : STACK_NAME,
+                    region,
+                    awsProfile,
+                );
+            } catch {
+                // Silently ignore errors - rollout status is optional
+            }
+
             // Display logs
-            displayLogs(logGroups, profile, region, currentSince, limit, webhookEndpoint, catalogDns, wasExpanded);
+            displayLogs(logGroups, profile, region, currentSince, limit, webhookEndpoint, catalogDns, wasExpanded, rolloutStatus, stackArn);
 
             result.logGroups = logGroups;
 
