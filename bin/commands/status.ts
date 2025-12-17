@@ -242,7 +242,7 @@ async function getStackStatus(
         // Extract stack outputs
         const outputs = stack.Outputs || [];
         const stackOutputs = {
-            webhookEndpoint: outputs.find((o) => o.OutputKey === "WebhookEndpoint")?.OutputValue,
+            webhookEndpoint: outputs.find((o) => o.OutputKey === "WebhookEndpoint" || o.OutputKey === "BenchlingWebhookEndpoint" || o.OutputKey === "BenchlingUrl")?.OutputValue,
             benchlingUrl: outputs.find((o) => o.OutputKey === "BenchlingUrl")?.OutputValue,
             secretArn: outputs.find((o) => o.OutputKey === "BenchlingSecretArn" || o.OutputKey === "BenchlingClientSecretArn" || o.OutputKey === "SecretArn")?.OutputValue,
             dockerImage: outputs.find((o) => o.OutputKey === "BenchlingDockerImage" || o.OutputKey === "DockerImage")?.OutputValue,

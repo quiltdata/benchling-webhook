@@ -57,7 +57,7 @@ export interface LogGroupInfo {
 function getDeploymentInfo(
     profile: string,
     configStorage: XDGBase,
-): { region: string; stackName: string; integratedMode: boolean; quiltStackName?: string; webhookEndpoint?: string; catalogDns?: string } | null {
+): { region: string; stackName: string; integratedMode: boolean; quiltStackName?: string; webhookEndpoint?: string; catalogDns?: string; stackArn?: string } | null {
     try {
         const config = configStorage.readProfile(profile);
         if (config.deployment?.region) {
@@ -89,6 +89,7 @@ function getDeploymentInfo(
                         quiltStackName: match[1],
                         webhookEndpoint,
                         catalogDns,
+                        stackArn: config.quilt.stackArn,
                     };
                 }
             }
@@ -107,6 +108,40 @@ function getDeploymentInfo(
         console.warn(chalk.yellow(`⚠️  Could not read profile '${profile}': ${(error as Error).message}`));
     }
     return null;
+}
+
+/**
+ * Query webhook URL from CloudFormation stack outputs (for integrated mode)
+ */
+async function queryWebhookEndpoint(
+    stackArn: string,
+    region: string,
+    awsProfile?: string,
+): Promise<string | undefined> {
+    try {
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
+        if (awsProfile) {
+            clientConfig.credentials = fromIni({ profile: awsProfile });
+        }
+
+        const cfClient = new CloudFormationClient(clientConfig);
+        const command = new DescribeStacksCommand({ StackName: stackArn });
+        const response = await cfClient.send(command);
+        const stack = response.Stacks?.[0];
+
+        if (stack?.Outputs) {
+            // Look for BenchlingWebhookEndpoint, WebhookEndpoint, or BenchlingUrl
+            const webhookOutput = stack.Outputs.find(
+                (o) => o.OutputKey === "BenchlingWebhookEndpoint" ||
+                       o.OutputKey === "WebhookEndpoint" ||
+                       o.OutputKey === "BenchlingUrl",
+            );
+            return webhookOutput?.OutputValue;
+        }
+    } catch (error) {
+        console.warn(chalk.dim(`Could not query webhook URL from stack: ${(error as Error).message}`));
+    }
+    return undefined;
 }
 
 /**
@@ -453,7 +488,29 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
             return { success: false, error: errorMsg };
         }
 
-        const { region, integratedMode, quiltStackName, webhookEndpoint, catalogDns } = deploymentInfo;
+        let { region, integratedMode, quiltStackName, webhookEndpoint, catalogDns, stackArn } = deploymentInfo;
+
+        // For integrated mode, query webhook URL from CloudFormation if not in deployments.json
+        if (integratedMode && !webhookEndpoint && stackArn) {
+            webhookEndpoint = await queryWebhookEndpoint(stackArn, region, awsProfile);
+
+            // Cache the webhook URL in deployments.json for future lookups
+            if (webhookEndpoint) {
+                try {
+                    xdg.recordDeployment(profile, {
+                        stage: "prod",
+                        endpoint: webhookEndpoint,
+                        timestamp: new Date().toISOString(),
+                        imageTag: "integrated", // Marker for integrated stack (no image deployment)
+                        stackName: quiltStackName || "QuiltStack",
+                        region,
+                    });
+                } catch (error) {
+                    // Non-fatal - just means we'll query again next time
+                    console.warn(chalk.dim(`Could not cache webhook URL: ${(error as Error).message}`));
+                }
+            }
+        }
 
         // For integrated mode, use Quilt stack name; for standalone use BenchlingWebhookStack
         const stackName = integratedMode && quiltStackName ? quiltStackName : STACK_NAME;
