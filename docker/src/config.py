@@ -1,25 +1,30 @@
 import os
 from dataclasses import dataclass
+from typing import Optional
 
 import boto3
+import structlog
 from botocore.config import Config as BotocoreConfig
 
-from .secrets_manager import fetch_benchling_secret
+from .secrets_manager import BenchlingSecretData, fetch_benchling_secret
+
+logger = structlog.get_logger(__name__)
 
 
 @dataclass
 class Config:
-    """Application configuration - hybrid approach.
+    """Application configuration - hybrid approach with on-demand secret fetching.
 
-    v0.8.0+: Service-specific environment variables + Secrets Manager for Benchling
+    v1.2.0+: Secrets fetched on-demand per request (no caching)
 
     Quilt/AWS configuration comes from environment variables (set by XDG Launch or CDK):
         - QUILT_WEB_HOST, ATHENA_USER_DATABASE, PACKAGER_SQS_URL, etc.
         - QUILT_WRITE_ROLE_ARN (optional, for cross-account access)
 
-    Benchling credentials come from AWS Secrets Manager:
+    Benchling credentials come from AWS Secrets Manager (fetched on EVERY request):
         - BenchlingSecret environment variable points to the secret name
         - Secret contains: tenant, client_id, client_secret, app_definition_id, etc.
+        - Secrets are NOT cached - fresh fetch on every webhook for instant rotation
 
     No CloudFormation queries! Only Secrets Manager for Benchling credentials.
     """
@@ -37,17 +42,21 @@ class Config:
     athena_results_bucket: str = ""
     iceberg_database: str = ""
     iceberg_workgroup: str = ""
-    benchling_tenant: str = ""
-    benchling_client_id: str = ""
-    benchling_client_secret: str = ""
-    benchling_app_definition_id: str = ""
     enable_webhook_verification: bool = True
     webhook_allow_list: str = ""
     pkg_prefix: str = ""
     quilt_write_role_arn: str = ""
 
+    # Secret fetching infrastructure (not the secrets themselves)
+    _benchling_secret_name: str = ""
+    _sm_client: Optional[object] = None
+    _test_mode: bool = False
+
     def __post_init__(self):
-        """Initialize configuration from environment variables and Secrets Manager.
+        """Initialize configuration from environment variables.
+
+        NOTE: Benchling secrets are NOT fetched here - they are fetched on-demand
+        via get_benchling_secrets() to enable instant rotation without restart.
 
         Required environment variables (Quilt/AWS services):
             - QUILT_WEB_HOST: Quilt catalog URL
@@ -86,7 +95,7 @@ class Config:
         self.iceberg_database = os.getenv("ICEBERG_DATABASE", "")
         self.iceberg_workgroup = os.getenv("ICEBERG_WORKGROUP", "")
 
-        # Package configuration - initialized to defaults, will be set from Secrets Manager
+        # Package configuration - initialized to defaults, will be set from on-demand secret fetch
         self.s3_bucket_name = ""
         self.s3_prefix = "benchling"
         self.package_key = "experiment_id"
@@ -99,17 +108,17 @@ class Config:
         # Security configuration - propagated to API Gateway Lambda authorizer
         enable_verification = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "true").lower()
         self.enable_webhook_verification = enable_verification in ("true", "1", "yes")
-        self.webhook_allow_list = ""  # Will be set from Secrets Manager
+        self.webhook_allow_list = ""  # Will be set from on-demand secret fetch
 
         # Test mode override: disable webhook verification for local integration tests
-        test_mode = os.getenv("BENCHLING_TEST_MODE", "").lower() in ("true", "1", "yes")
-        if test_mode:
+        self._test_mode = os.getenv("BENCHLING_TEST_MODE", "").lower() in ("true", "1", "yes")
+        if self._test_mode:
             self.enable_webhook_verification = False
             self.webhook_allow_list = ""
 
-        # Fetch Benchling credentials from Secrets Manager
-        benchling_secret = os.getenv("BenchlingSecret")
-        if not benchling_secret:
+        # Store secret name and client for on-demand fetching
+        self._benchling_secret_name = os.getenv("BenchlingSecret", "")
+        if not self._benchling_secret_name:
             raise ValueError(
                 "Missing required environment variable: BenchlingSecret\n"
                 "\n"
@@ -131,57 +140,27 @@ class Config:
                 "}\n"
             )
 
-        # Fetch secret from Secrets Manager
-        # Use a session with proper credential caching to avoid signature expiration
-        # during container startup (especially important for ECS Fargate)
+        # Create Secrets Manager client for on-demand fetching
         session = boto3.Session(region_name=self.aws_region)
-        sm_client = session.client(
+        self._sm_client = session.client(
             "secretsmanager",
             config=BotocoreConfig(
                 retries={"max_attempts": 3, "mode": "standard"},
-                # Use a longer timeout to handle slow network conditions
                 connect_timeout=5,
                 read_timeout=10,
             ),
         )
-        secret_data = fetch_benchling_secret(sm_client, self.aws_region, benchling_secret)
 
-        # Set Benchling configuration from secret
-        self.benchling_tenant = secret_data.tenant
-        self.benchling_client_id = secret_data.client_id
-        self.benchling_client_secret = secret_data.client_secret
-        self.benchling_app_definition_id = secret_data.app_definition_id
+        # Validate required environment variable fields only
+        self._validate_env_vars()
 
-        # Set package/security config from secret (NOT environment variables!)
-        if not test_mode:
-            # Package configuration ALWAYS comes from secret
-            self.s3_bucket_name = secret_data.user_bucket
-            self.s3_prefix = secret_data.pkg_prefix or "benchling"
-            self.pkg_prefix = self.s3_prefix
-            self.package_key = secret_data.pkg_key or "experiment_id"
-
-            # Security configuration ALWAYS comes from secret
-            self.enable_webhook_verification = secret_data.enable_webhook_verification
-            self.webhook_allow_list = secret_data.webhook_allow_list
-
-            # Log level from secret
-            if secret_data.log_level:
-                self.log_level = secret_data.log_level
-
-        # Validate required fields
-        self._validate()
-
-    def _validate(self):
-        """Validate required configuration fields."""
+    def _validate_env_vars(self):
+        """Validate required environment variable fields (not secrets)."""
         required = {
             "QUILT_WEB_HOST": self.quilt_catalog,
             "ATHENA_USER_DATABASE": self.quilt_database,
             "PACKAGER_SQS_URL": self.queue_url,
             "AWS_REGION": self.aws_region,
-            "benchling_tenant": self.benchling_tenant,
-            "benchling_client_id": self.benchling_client_id,
-            "benchling_client_secret": self.benchling_client_secret,
-            "benchling_app_definition_id": self.benchling_app_definition_id,
         }
 
         missing = [key for key, value in required.items() if not value]
@@ -205,6 +184,70 @@ class Config:
                 "For production deployment, these are set automatically by CDK.\n"
             )
 
+    def get_benchling_secrets(self) -> BenchlingSecretData:
+        """Fetch Benchling secrets from Secrets Manager on-demand.
+
+        This method fetches fresh secrets on EVERY call, enabling instant rotation
+        without container restart. The latency cost (~100-500ms) is acceptable
+        compared to 40-second JWKS fetches and overall webhook processing time.
+
+        Returns:
+            BenchlingSecretData with current secret values from Secrets Manager
+
+        Raises:
+            SecretsManagerError: If secret fetch fails
+        """
+        logger.debug(
+            "Fetching Benchling secrets on-demand (no cache)",
+            secret_name=self._benchling_secret_name,
+        )
+
+        secret_data = fetch_benchling_secret(
+            self._sm_client,
+            self.aws_region,
+            self._benchling_secret_name,
+        )
+
+        logger.debug(
+            "Benchling secrets fetched successfully",
+            has_tenant=bool(secret_data.tenant),
+            has_client_id=bool(secret_data.client_id),
+            has_client_secret=bool(secret_data.client_secret),
+            has_app_definition_id=bool(secret_data.app_definition_id),
+        )
+
+        return secret_data
+
+    def apply_benchling_secrets(self, secret_data: BenchlingSecretData) -> None:
+        """Apply fetched secrets to config instance fields.
+
+        This updates the config instance with fresh secret values. Called after
+        get_benchling_secrets() to populate instance fields for backward compatibility.
+
+        Args:
+            secret_data: Fresh secret data from Secrets Manager
+        """
+        # Set package/security config from secret (NOT environment variables!)
+        if not self._test_mode:
+            # Package configuration ALWAYS comes from secret
+            self.s3_bucket_name = secret_data.user_bucket
+            self.s3_prefix = secret_data.pkg_prefix or "benchling"
+            self.pkg_prefix = self.s3_prefix
+            self.package_key = secret_data.pkg_key or "experiment_id"
+
+            # Security configuration ALWAYS comes from secret
+            self.enable_webhook_verification = secret_data.enable_webhook_verification
+            self.webhook_allow_list = secret_data.webhook_allow_list
+
+            # Log level from secret
+            if secret_data.log_level:
+                self.log_level = secret_data.log_level
+
 
 def get_config() -> Config:
+    """Get configuration instance with on-demand secret fetching.
+
+    NOTE: This returns a Config instance that does NOT have Benchling secrets
+    populated. Call config.get_benchling_secrets() to fetch fresh secrets on-demand.
+    """
     return Config()

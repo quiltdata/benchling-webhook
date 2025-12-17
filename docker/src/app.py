@@ -78,9 +78,12 @@ async def verify_webhook_signature(request: Request, config, jwks_fetcher: Calla
     3. Enables graceful degradation if authorizer is disabled
     4. Allows local testing without Lambda infrastructure
 
+    v1.2.0+: Fetches fresh secrets from Secrets Manager on every request to enable
+    instant secret rotation without container restart.
+
     Args:
         request: FastAPI request object containing headers and body
-        config: Application configuration containing app_definition_id
+        config: Application configuration with on-demand secret fetching
         jwks_fetcher: Function to fetch JWKS keys (supports connection pooling)
 
     Raises:
@@ -89,7 +92,24 @@ async def verify_webhook_signature(request: Request, config, jwks_fetcher: Calla
     Environment Variables:
         ENABLE_WEBHOOK_VERIFICATION: Enable/disable verification (default: true)
     """
-    # Check if verification is enabled
+    # Fetch fresh secrets from Secrets Manager for every webhook request
+    # This enables instant rotation without container restart (~100-500ms latency)
+    logger.debug("Fetching fresh Benchling secrets for webhook verification")
+    try:
+        secrets = config.get_benchling_secrets()
+        config.apply_benchling_secrets(secrets)
+    except Exception as exc:
+        logger.error(
+            "Failed to fetch Benchling secrets for webhook verification",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        raise WebhookVerificationError(
+            "secret_fetch_failed",
+            f"Failed to fetch Benchling secrets: {str(exc)}",
+        ) from exc
+
+    # Check if verification is enabled (from freshly fetched secrets)
     if not config.enable_webhook_verification:
         logger.info(
             "Webhook verification disabled",
@@ -103,11 +123,15 @@ async def verify_webhook_signature(request: Request, config, jwks_fetcher: Calla
 
     # Log incoming webhook details for security auditing
     webhook_id = headers.get("webhook-id", "unknown")
+
+    # Get app_definition_id from freshly fetched secrets
+    app_definition_id = secrets.app_definition_id
+
     logger.info(
-        "Verifying webhook signature",
+        "Verifying webhook signature with fresh secrets",
         path=request.url.path,
         webhook_id=webhook_id,
-        has_app_definition_id=bool(config.benchling_app_definition_id),
+        has_app_definition_id=bool(app_definition_id),
         header_keys=list(headers.keys()),
     )
 
@@ -124,7 +148,7 @@ async def verify_webhook_signature(request: Request, config, jwks_fetcher: Calla
         raise WebhookVerificationError("missing_headers", error_msg)
 
     # Validate app_definition_id is configured
-    if not config.benchling_app_definition_id:
+    if not app_definition_id:
         error_msg = "app_definition_id not configured in Benchling secret"
         logger.error(
             "Webhook verification failed - missing app_definition_id",
@@ -141,7 +165,7 @@ async def verify_webhook_signature(request: Request, config, jwks_fetcher: Calla
     logger.debug(
         "Webhook verification details",
         webhook_id=webhook_id,
-        app_definition_id=config.benchling_app_definition_id,
+        app_definition_id=app_definition_id,
         body_length=len(body_str),
         signature=headers.get("webhook-signature", "")[:20] + "...",  # Log first 20 chars
         timestamp=headers.get("webhook-timestamp"),
@@ -149,18 +173,18 @@ async def verify_webhook_signature(request: Request, config, jwks_fetcher: Calla
 
     # Verify HMAC signature using Benchling SDK with custom JWKS fetcher
     try:
-        verify(config.benchling_app_definition_id, body_str, headers, jwk_function=jwks_fetcher)  # type: ignore[arg-type]
+        verify(app_definition_id, body_str, headers, jwk_function=jwks_fetcher)  # type: ignore[arg-type]
     except Exception as exc:
         # Log detailed error for security auditing and troubleshooting
         logger.error(
             "Webhook signature verification failed",
             webhook_id=webhook_id,
-            app_definition_id=config.benchling_app_definition_id,
+            app_definition_id=app_definition_id,
             error=str(exc),
             error_type=type(exc).__name__,
             path=request.url.path,
             troubleshooting=(
-                f"Ensure the webhook in Benchling is configured under app '{config.benchling_app_definition_id}'. "
+                f"Ensure the webhook in Benchling is configured under app '{app_definition_id}'. "
                 "Check that this matches the app_definition_id in your AWS Secrets Manager secret."
             ),
         )
@@ -276,10 +300,30 @@ def create_app() -> FastAPI:
         # Cache JWKS keys to avoid fetching on every webhook request
         # The Benchling SDK's verify() function calls the jwk_function on EVERY call
         # without any caching, which causes 40-second delays in VPC environments
+        #
+        # v1.2.0+: Track current app_definition_id to detect rotation and invalidate cache
         jwks_cache: Dict[str, Any] = {}
+        current_app_definition_id: Dict[str, str] = {"id": ""}  # Mutable for closure
 
         def _jwks_fetcher_with_caching(app_definition_id: str) -> Any:
-            """Fetch JWKS keys with caching to prevent repeated slow network calls."""
+            """Fetch JWKS keys with caching and automatic invalidation on app_definition_id change.
+
+            When app_definition_id changes (e.g., dev -> prod rotation), the entire JWKS cache
+            is invalidated to prevent using keys from the wrong app.
+            """
+            # Detect app_definition_id rotation and invalidate cache
+            if current_app_definition_id["id"] and current_app_definition_id["id"] != app_definition_id:
+                logger.warning(
+                    "app_definition_id changed - invalidating JWKS cache",
+                    old_app_id=current_app_definition_id["id"],
+                    new_app_id=app_definition_id,
+                    cached_keys=list(jwks_cache.keys()),
+                )
+                jwks_cache.clear()
+                current_app_definition_id["id"] = app_definition_id
+            elif not current_app_definition_id["id"]:
+                current_app_definition_id["id"] = app_definition_id
+
             if app_definition_id not in jwks_cache:
                 logger.info(
                     "Fetching JWKS keys for app (first time or cache miss)",
@@ -303,26 +347,37 @@ def create_app() -> FastAPI:
         jwks_fetcher_with_caching = _jwks_fetcher_with_caching
 
         # Pre-warm JWKS cache during app initialization (for Gunicorn --preload)
-        # With --preload, the app is loaded once before forking workers, so this cache
-        # is shared across all worker processes via copy-on-write semantics
-        if config.benchling_app_definition_id:
-            logger.info(
-                "Pre-warming JWKS cache",
-                app_definition_id=config.benchling_app_definition_id,
-            )
-            try:
-                jwks_fetcher_with_caching(config.benchling_app_definition_id)
+        # Fetch secrets ONCE at startup just for JWKS pre-warming (performance optimization)
+        # Note: Secrets will be re-fetched on EVERY webhook request for rotation support
+        logger.info("Fetching secrets at startup for JWKS pre-warming")
+        try:
+            startup_secrets = config.get_benchling_secrets()
+            config.apply_benchling_secrets(startup_secrets)
+
+            if startup_secrets.app_definition_id:
                 logger.info(
-                    "JWKS cache pre-warmed successfully",
-                    app_definition_id=config.benchling_app_definition_id,
+                    "Pre-warming JWKS cache with startup secrets",
+                    app_definition_id=startup_secrets.app_definition_id,
                 )
-            except Exception as exc:
-                logger.error(
-                    "Failed to pre-warm JWKS cache - workers will fetch on first request",
-                    app_definition_id=config.benchling_app_definition_id,
-                    error=str(exc),
-                    error_type=type(exc).__name__,
-                )
+                try:
+                    jwks_fetcher_with_caching(startup_secrets.app_definition_id)
+                    logger.info(
+                        "JWKS cache pre-warmed successfully",
+                        app_definition_id=startup_secrets.app_definition_id,
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Failed to pre-warm JWKS cache - workers will fetch on first request",
+                        app_definition_id=startup_secrets.app_definition_id,
+                        error=str(exc),
+                        error_type=type(exc).__name__,
+                    )
+        except Exception as exc:
+            logger.warning(
+                "Failed to fetch secrets for JWKS pre-warming - will fetch on first request",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
 
         logger.info("Python orchestration enabled")
 
@@ -339,12 +394,24 @@ def create_app() -> FastAPI:
                 role_arn="not-configured",
             )
 
-        # Initialize Benchling SDK with OAuth
-        auth_method = ClientCredentialsOAuth2(
-            client_id=config.benchling_client_id,
-            client_secret=config.benchling_client_secret,
-        )
-        benchling = Benchling(url=f"https://{config.benchling_tenant}.benchling.com", auth_method=auth_method)
+        # Create Benchling client factory (creates fresh client with fresh secrets on demand)
+        def create_benchling_client():
+            """Create Benchling client with fresh secrets from Secrets Manager."""
+            logger.debug("Creating Benchling client with fresh secrets")
+            secrets = config.get_benchling_secrets()
+            config.apply_benchling_secrets(secrets)
+
+            auth_method = ClientCredentialsOAuth2(
+                client_id=secrets.client_id,
+                client_secret=secrets.client_secret,
+            )
+            return Benchling(url=f"https://{secrets.tenant}.benchling.com", auth_method=auth_method)
+
+        # Create initial Benchling client for startup validation
+        benchling = create_benchling_client()
+
+        # Store the factory for on-demand client creation
+        app.state.create_benchling_client = create_benchling_client
 
         entry_packager = EntryPackager(
             benchling=benchling,
