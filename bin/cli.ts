@@ -228,6 +228,7 @@ program
     .option("--filter <pattern>", "Filter logs by pattern (example: ERROR)")
     .option("--limit <n>", `Number of log entries to show per log group (default: ${DEFAULT_LOG_LIMIT})`, String(DEFAULT_LOG_LIMIT))
     .option("--timer <seconds>", "Auto-refresh interval in seconds (default: 10, use 0 to disable)", "10")
+    .option("--include-health", "Include health check logs (excluded by default)", false)
     .addHelpText(
         "after",
         `
@@ -238,6 +239,8 @@ Log Types:
   api       API Gateway access logs (request/response info)
   api-exec  API Gateway execution logs (detailed debugging)
 
+Note: Health check logs are automatically filtered out by default. Use --include-health to show them.
+
 Examples:
   View all logs (auto-refreshes every 10 seconds):
     $ npx @quiltdata/benchling-webhook logs --profile sales
@@ -245,8 +248,11 @@ Examples:
   View only ECS logs:
     $ npx @quiltdata/benchling-webhook logs --profile sales --type ecs
 
-  Show last 10 entries per log group:
-    $ npx @quiltdata/benchling-webhook logs --profile sales --limit 10
+  Show last 20 meaningful entries (excluding health checks):
+    $ npx @quiltdata/benchling-webhook logs --profile sales --limit 20
+
+  Include health check logs:
+    $ npx @quiltdata/benchling-webhook logs --profile sales --include-health
 
   Disable auto-refresh (single snapshot):
     $ npx @quiltdata/benchling-webhook logs --profile sales --timer 0

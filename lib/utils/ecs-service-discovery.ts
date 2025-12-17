@@ -352,7 +352,7 @@ export async function discoverAPIGatewayLogs(
 
                 // Find stages for this HTTP API
                 // Note: For HTTP API v2, stage PhysicalResourceId is just the stage name (e.g., "$default", "prod")
-                // not prefixed with the API ID
+                // We need to try all stages since we can't filter by API ID
                 const stageResources = resourcesResponse.StackResources?.filter(
                     (r) => r.ResourceType === "AWS::ApiGatewayV2::Stage",
                 ) || [];
@@ -375,9 +375,10 @@ export async function discoverAPIGatewayLogs(
 
                         // Access logs
                         if (stageResponse.AccessLogSettings?.DestinationArn) {
-                            const logGroupMatch = stageResponse.AccessLogSettings.DestinationArn.match(
-                                /log-group:([^:]+)/,
-                            );
+                            // ARN format: arn:aws:logs:region:account:log-group:log-group-name
+                            // or arn:aws:logs:region:account:log-group:log-group-name:*
+                            const destinationArn = stageResponse.AccessLogSettings.DestinationArn;
+                            const logGroupMatch = destinationArn.match(/log-group:([^:*]+)/);
                             if (logGroupMatch) {
                                 accessLogGroup = logGroupMatch[1];
                             }
@@ -388,8 +389,13 @@ export async function discoverAPIGatewayLogs(
                             // HTTP API v2 execution logs are automatically created with pattern
                             executionLogGroup = `API-Gateway-Execution-Logs_${apiId}/${stageName}`;
                         }
-                    } catch {
-                        // Skip this stage if we can't get its configuration
+
+                        // If we found logs for this stage, we can stop checking other stages
+                        if (accessLogGroup || executionLogGroup) {
+                            break;
+                        }
+                    } catch (stageError) {
+                        // This stage might belong to a different API, continue trying others
                         continue;
                     }
                 }
@@ -441,5 +447,75 @@ export async function discoverAPIGatewayLogGroups(
         }
     }
 
+    // Fallback: Also search for log groups directly by logical ID patterns
+    // This handles cases where log groups are created separately and not discoverable via stage settings
+    if (Object.keys(logGroups).length === 0) {
+        const directLogGroups = await discoverLogGroupsDirectly(stackNameOrArn, region, awsProfile);
+        Object.assign(logGroups, directLogGroups);
+    }
+
     return logGroups;
+}
+
+/**
+ * Discover log groups directly from CloudFormation stack resources
+ * This is a fallback for integrated stacks where log groups are created separately
+ *
+ * @param stackNameOrArn - CloudFormation stack name or ARN
+ * @param region - AWS region
+ * @param awsProfile - Optional AWS profile name
+ * @returns Map of log types to log group names
+ */
+async function discoverLogGroupsDirectly(
+    stackNameOrArn: string,
+    region: string,
+    awsProfile?: string,
+): Promise<Record<string, string>> {
+    try {
+        const { CloudFormationClient, DescribeStackResourcesCommand } = await import("@aws-sdk/client-cloudformation");
+
+        // Configure AWS SDK client
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
+        if (awsProfile) {
+            const { fromIni: fromIniImport } = await import("@aws-sdk/credential-providers");
+            clientConfig.credentials = fromIniImport({ profile: awsProfile });
+        }
+
+        const cfClient = new CloudFormationClient(clientConfig);
+
+        // Get all stack resources
+        const resourcesCommand = new DescribeStackResourcesCommand({
+            StackName: stackNameOrArn,
+        });
+        const resourcesResponse = await cfClient.send(resourcesCommand);
+
+        // Find log group resources
+        const logGroupResources = resourcesResponse.StackResources?.filter(
+            (r) => r.ResourceType === "AWS::Logs::LogGroup",
+        ) || [];
+
+        const logGroups: Record<string, string> = {};
+
+        // Match log groups by logical ID patterns
+        for (const resource of logGroupResources) {
+            const logicalId = resource.LogicalResourceId || "";
+            const physicalId = resource.PhysicalResourceId;
+
+            if (!physicalId) continue;
+
+            // Match API Gateway access log patterns
+            if (logicalId.match(/Api.*Log/i) || logicalId.match(/Benchling.*Log/i) || physicalId.match(/api.*access/i)) {
+                logGroups["api-gateway-access"] = physicalId;
+            }
+            // Match API Gateway execution log patterns
+            else if (logicalId.match(/Execution.*Log/i) || physicalId.match(/execution/i)) {
+                logGroups["api-gateway-execution"] = physicalId;
+            }
+        }
+
+        return logGroups;
+    } catch (error) {
+        console.warn(`Could not discover log groups directly: ${(error as Error).message}`);
+        return {};
+    }
 }
