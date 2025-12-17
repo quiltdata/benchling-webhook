@@ -204,6 +204,56 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
         }
     }
 
+    // Step 3.6: Query and cache webhook URL from Quilt stack
+    console.log("Querying webhook URL from stack...\n");
+
+    let webhookUrl: string | undefined;
+    try {
+        const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+        const { fromIni } = await import("@aws-sdk/credential-providers");
+
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = {
+            region: config.deployment.region,
+        };
+        if (awsProfile) {
+            clientConfig.credentials = fromIni({ profile: awsProfile });
+        }
+
+        const cfClient = new CloudFormationClient(clientConfig);
+        const command = new DescribeStacksCommand({ StackName: stackQuery.stackArn });
+        const response = await cfClient.send(command);
+        const stack = response.Stacks?.[0];
+
+        if (stack?.Outputs) {
+            const webhookOutput = stack.Outputs.find(
+                (o) => o.OutputKey === "BenchlingWebhookEndpoint" ||
+                       o.OutputKey === "WebhookEndpoint" ||
+                       o.OutputKey === "BenchlingUrl",
+            );
+            webhookUrl = webhookOutput?.OutputValue;
+
+            if (webhookUrl) {
+                console.log(chalk.green(`✓ Webhook URL: ${webhookUrl}\n`));
+
+                // Cache webhook URL in deployments.json
+                configStorage.recordDeployment(profile, {
+                    stage: "prod",
+                    endpoint: webhookUrl,
+                    timestamp: new Date().toISOString(),
+                    imageTag: "integrated",
+                    stackName: stackQuery.stackArn.match(/stack\/([^/]+)\//)?.[1] || "QuiltStack",
+                    region: config.deployment.region,
+                });
+            } else {
+                console.log(chalk.yellow("⚠️  Webhook URL not found in stack outputs"));
+                console.log(chalk.dim("   This is expected if BenchlingIntegration was just enabled\n"));
+            }
+        }
+    } catch (error) {
+        console.warn(chalk.yellow(`⚠️  Could not query webhook URL: ${(error as Error).message}`));
+        console.warn(chalk.dim("   You can view it later with: npx @quiltdata/benchling-webhook status\n"));
+    }
+
     // Step 4: Show success message with status monitoring command
     console.log("╔═══════════════════════════════════════════════════════════╗");
     console.log("║   Setup Complete!                                         ║");
