@@ -91,8 +91,8 @@ export async function runParameterCollection(
                 console.log("");
                 console.log(chalk.red("   Changing VPC requires destroying and redeploying the stack."));
                 console.log(chalk.yellow("   You will likely need to run:"));
-                console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook destroy${profileFlag}`));
-                console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook deploy${profileFlag}`));
+                console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook@latest destroy${profileFlag}`));
+                console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook@latest deploy${profileFlag}`));
                 console.log("");
 
                 const { confirmVpcChange } = await inquirer.prompt([

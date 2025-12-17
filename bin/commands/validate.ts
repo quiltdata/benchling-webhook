@@ -177,7 +177,7 @@ export async function validateCommand(options: ValidateOptions): Promise<void> {
         }
 
         console.log(chalk.yellow("To fix this:"));
-        console.log("  1. Run: " + chalk.cyan("npx @quiltdata/benchling-webhook"));
+        console.log("  1. Run: " + chalk.cyan("npx @quiltdata/benchling-webhook@latest"));
         console.log("  2. Or manually edit: " + chalk.cyan(`~/.config/benchling-webhook/${profile}/config.json`));
         console.log();
         process.exit(1);
