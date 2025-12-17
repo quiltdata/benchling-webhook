@@ -139,6 +139,23 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
         });
 
         console.log(chalk.green("✓ BenchlingSecret updated in Quilt stack\n"));
+
+        // Step 3.1: Restart ECS services to pick up new secret values
+        console.log("Restarting ECS services to apply updated configuration...\n");
+
+        const { restartECSServices } = await import("../utils/ecs-service-discovery");
+        const restartedServices = await restartECSServices(
+            stackQuery.stackArn,
+            config.deployment.region,
+            awsProfile,
+        );
+
+        if (restartedServices.length > 0) {
+            console.log(chalk.green(`✓ Restarted ${restartedServices.length} ECS service(s): ${restartedServices.join(", ")}`));
+            console.log(chalk.dim("  Services are now deploying with updated configuration\n"));
+        } else {
+            console.log(chalk.dim("  No ECS services found to restart\n"));
+        }
     } catch (error) {
         console.warn(chalk.yellow(`⚠️  Failed to sync secrets: ${(error as Error).message}`));
         console.warn(chalk.yellow("   You can sync secrets manually later with:"));
