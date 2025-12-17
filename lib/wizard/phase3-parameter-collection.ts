@@ -172,7 +172,7 @@ export async function runParameterCollection(
             {
                 type: "confirm",
                 name: "reuseApp",
-                message: `Use existing app (${existingConfig.benchling.appDefinitionId})?`,
+                message: `Use existing App Definition ID (${existingConfig.benchling.appDefinitionId})?`,
                 default: true,
             },
         ]);
@@ -189,12 +189,20 @@ export async function runParameterCollection(
 
     if (input.benchlingAppDefinitionId) {
         appDefinitionId = input.benchlingAppDefinitionId;
+        // Validate CLI input
+        if (!appDefinitionId.startsWith("appdef_")) {
+            throw new Error("App definition ID must start with: appdef_");
+        }
         hasAppDefId = true;
         console.log(`  App Definition ID: ${appDefinitionId} (from CLI)`);
     } else if (yes) {
         // In non-interactive mode, use existing config or error
         if (existingConfig?.benchling?.appDefinitionId && shouldReuseApp) {
             appDefinitionId = existingConfig.benchling.appDefinitionId;
+            // Validate existing config
+            if (!appDefinitionId.startsWith("appdef_")) {
+                throw new Error("App definition ID must start with: appdef_");
+            }
             hasAppDefId = true;
             console.log(`  App Definition ID: ${appDefinitionId} (from existing config)`);
         } else {
@@ -208,8 +216,15 @@ export async function runParameterCollection(
                 name: "appDefinitionId",
                 message: "Benchling App Definition ID:",
                 default: existingConfig.benchling.appDefinitionId,
-                validate: (value: string): boolean | string =>
-                    value.trim().length > 0 || "App definition ID is required",
+                validate: (value: string): boolean | string => {
+                    if (value.trim().length === 0) {
+                        return "App definition ID is required";
+                    }
+                    if (!value.startsWith("appdef_")) {
+                        return "App definition ID must start with: appdef_";
+                    }
+                    return true;
+                },
             },
         ]);
         appDefinitionId = appDefAnswer.appDefinitionId;
@@ -236,8 +251,15 @@ export async function runParameterCollection(
                     type: "input",
                     name: "appDefinitionId",
                     message: "Benchling App Definition ID:",
-                    validate: (value: string): boolean | string =>
-                        value.trim().length > 0 || "App definition ID is required",
+                    validate: (value: string): boolean | string => {
+                        if (value.trim().length === 0) {
+                            return "App definition ID is required";
+                        }
+                        if (!value.startsWith("appdef_")) {
+                            return "App definition ID must start with: appdef_";
+                        }
+                        return true;
+                    },
                 },
             ]);
             appDefinitionId = appDefAnswer.appDefinitionId;
@@ -263,8 +285,15 @@ export async function runParameterCollection(
                 type: "input",
                 name: "appDefinitionId",
                 message: "Benchling App Definition ID:",
-                validate: (value: string): boolean | string =>
-                    value.trim().length > 0 || "App definition ID is required to continue",
+                validate: (value: string): boolean | string => {
+                    if (value.trim().length === 0) {
+                        return "App definition ID is required to continue";
+                    }
+                    if (!value.startsWith("appdef_")) {
+                        return "App definition ID must start with: appdef_";
+                    }
+                    return true;
+                },
             },
         ]);
         appDefinitionId = appDefAnswer.appDefinitionId;
@@ -275,6 +304,13 @@ export async function runParameterCollection(
         console.log("\n" + chalk.red("Setup cannot continue without an App Definition ID."));
         console.log(chalk.yellow("Please install the app in Benchling first, then run setup again.\n"));
         process.exit(0);
+    }
+
+    // Validation: Ensure app definition ID has correct format
+    if (!appDefinitionId.startsWith("appdef_")) {
+        console.log("\n" + chalk.red("Invalid App Definition ID format."));
+        console.log(chalk.yellow("App definition ID must start with: appdef_\n"));
+        process.exit(1);
     }
 
     // OAuth Credentials

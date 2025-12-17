@@ -130,6 +130,16 @@ export async function runStandaloneMode(input: StandaloneModeInput): Promise<Sta
     console.log("Creating dedicated BenchlingSecret...\n");
 
     let secretArn = "";
+    let hasExistingDeployment = false;
+
+    // Check if there are existing deployments that might need restarting
+    try {
+        const deployments = configStorage.getDeployments(profile);
+        hasExistingDeployment = Object.keys(deployments.active || {}).length > 0;
+    } catch {
+        // No existing deployments
+        hasExistingDeployment = false;
+    }
 
     try {
         const results = await syncSecretsToAWS({
@@ -143,6 +153,12 @@ export async function runStandaloneMode(input: StandaloneModeInput): Promise<Sta
         if (results.length > 0) {
             secretArn = results[0].secretArn;
             console.log(chalk.green("✓ Secret created for standalone deployment\n"));
+        }
+
+        // Step 3.1: ECS restart is optional (v1.2.0+ fetches secrets on-demand)
+        if (hasExistingDeployment) {
+            console.log(chalk.dim("ℹ️  Benchling webhook v1.2.0+ fetches secrets on-demand per request"));
+            console.log(chalk.dim("   ECS service restart is NOT required for secret updates to take effect\n"));
         }
     } catch (error) {
         console.warn(chalk.yellow(`⚠️  Failed to sync secrets: ${(error as Error).message}`));

@@ -354,8 +354,25 @@ class TestFastAPIApp:
 
     def test_webhook_verification_missing_app_definition_id(self, mock_config):
         """Test webhook verification fails when app_definition_id is not configured."""
+        from unittest.mock import MagicMock
+
+        from src.secrets_manager import BenchlingSecretData
+
+        # Mock get_benchling_secrets to return secret with empty app_definition_id
+        mock_secret = BenchlingSecretData(
+            tenant="test-tenant",
+            client_id="test-client-id",
+            client_secret="test-secret",
+            app_definition_id="",  # Empty app_definition_id
+            pkg_prefix="benchling",
+            pkg_key="experiment_id",
+            user_bucket="test-bucket",
+            log_level="INFO",
+            enable_webhook_verification=True,
+            webhook_allow_list="",
+        )
+        mock_config.get_benchling_secrets = MagicMock(return_value=mock_secret)
         mock_config.enable_webhook_verification = True
-        mock_config.benchling_app_definition_id = ""  # Not configured
 
         with (
             patch("src.app.get_config", return_value=mock_config),

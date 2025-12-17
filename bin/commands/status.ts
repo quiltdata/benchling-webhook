@@ -242,7 +242,7 @@ async function getStackStatus(
         // Extract stack outputs
         const outputs = stack.Outputs || [];
         const stackOutputs = {
-            webhookEndpoint: outputs.find((o) => o.OutputKey === "WebhookEndpoint")?.OutputValue,
+            webhookEndpoint: outputs.find((o) => o.OutputKey === "WebhookEndpoint" || o.OutputKey === "BenchlingWebhookEndpoint" || o.OutputKey === "BenchlingUrl")?.OutputValue,
             benchlingUrl: outputs.find((o) => o.OutputKey === "BenchlingUrl")?.OutputValue,
             secretArn: outputs.find((o) => o.OutputKey === "BenchlingSecretArn" || o.OutputKey === "BenchlingClientSecretArn" || o.OutputKey === "SecretArn")?.OutputValue,
             dockerImage: outputs.find((o) => o.OutputKey === "BenchlingDockerImage" || o.OutputKey === "DockerImage")?.OutputValue,
@@ -308,6 +308,67 @@ async function getStackStatus(
             stackArn: stackName,
             region,
         };
+    }
+}
+
+/**
+ * Get the least-ready (most critical) ECS rollout status for a stack
+ * Returns the "worst" rollout state across all services for quick status checks
+ */
+export async function getEcsRolloutStatus(
+    stackName: string,
+    region: string,
+    awsProfile?: string,
+): Promise<string | undefined> {
+    try {
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
+        if (awsProfile) {
+            clientConfig.credentials = fromIni({ profile: awsProfile });
+        }
+
+        const cfClient = new CloudFormationClient(clientConfig);
+        const ecsClient = new ECSClient(clientConfig);
+
+        const resourcesCommand = new DescribeStackResourcesCommand({ StackName: stackName });
+        const resourcesResponse = await cfClient.send(resourcesCommand);
+
+        const ecsServices = resourcesResponse.StackResources?.filter(
+            (r) => r.ResourceType === "AWS::ECS::Service",
+        ) || [];
+
+        if (ecsServices.length === 0) return undefined;
+
+        const clusterResource = resourcesResponse.StackResources?.find(
+            (r) => r.ResourceType === "AWS::ECS::Cluster",
+        );
+        const clusterName = clusterResource?.PhysicalResourceId || stackName;
+
+        const serviceArns = ecsServices
+            .map((s) => s.PhysicalResourceId)
+            .filter((arn): arn is string => !!arn);
+
+        if (serviceArns.length === 0) return undefined;
+
+        const servicesCommand = new DescribeServicesCommand({
+            cluster: clusterName,
+            services: serviceArns,
+        });
+        const servicesResponse = await ecsClient.send(servicesCommand);
+
+        // Find the "worst" rollout state (priority: FAILED > IN_PROGRESS > COMPLETED)
+        let worstState: string | undefined;
+        for (const svc of servicesResponse.services || []) {
+            const state = svc.deployments?.[0]?.rolloutState;
+            if (!state) continue;
+
+            if (state === "FAILED") return "FAILED"; // Immediately return on failure
+            if (state === "IN_PROGRESS" && worstState !== "FAILED") worstState = "IN_PROGRESS";
+            if (!worstState && state === "COMPLETED") worstState = "COMPLETED";
+        }
+
+        return worstState;
+    } catch (_error) {
+        return undefined; // Silently fail for optional status
     }
 }
 
@@ -787,9 +848,14 @@ function displayStatusResult(
     console.log(chalk.bold(`\nStack Status for Profile: ${profile} ${modeLabel}${lastUpdatedStr}\n`));
     console.log(chalk.dim("─".repeat(80)));
 
-    // Show webhook URL prominently at the top
+    // Show catalog DNS and webhook URL prominently at the top
+    if (quiltConfig?.catalog) {
+        console.log(`${chalk.bold("Catalog DNS:")} ${chalk.cyan(quiltConfig.catalog)}`);
+    }
     if (result.stackOutputs?.webhookEndpoint) {
         console.log(`${chalk.bold("Webhook URL:")} ${chalk.cyan(result.stackOutputs.webhookEndpoint)}`);
+    }
+    if (quiltConfig?.catalog || result.stackOutputs?.webhookEndpoint) {
         console.log(chalk.dim("─".repeat(80)));
     }
 

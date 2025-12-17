@@ -139,6 +139,10 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
         });
 
         console.log(chalk.green("✓ BenchlingSecret updated in Quilt stack\n"));
+
+        // Step 3.1: ECS restart is optional (v1.2.0+ fetches secrets on-demand)
+        console.log(chalk.dim("ℹ️  Benchling webhook v1.2.0+ fetches secrets on-demand per request"));
+        console.log(chalk.dim("   ECS service restart is NOT required for secret updates to take effect\n"));
     } catch (error) {
         console.warn(chalk.yellow(`⚠️  Failed to sync secrets: ${(error as Error).message}`));
         console.warn(chalk.yellow("   You can sync secrets manually later with:"));
@@ -202,6 +206,56 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
         } else {
             console.log(chalk.dim("  Skipped - you can enable it later via CloudFormation console\n"));
         }
+    }
+
+    // Step 3.6: Query and cache webhook URL from Quilt stack
+    console.log("Querying webhook URL from stack...\n");
+
+    let webhookUrl: string | undefined;
+    try {
+        const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+        const { fromIni } = await import("@aws-sdk/credential-providers");
+
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = {
+            region: config.deployment.region,
+        };
+        if (awsProfile) {
+            clientConfig.credentials = fromIni({ profile: awsProfile });
+        }
+
+        const cfClient = new CloudFormationClient(clientConfig);
+        const command = new DescribeStacksCommand({ StackName: stackQuery.stackArn });
+        const response = await cfClient.send(command);
+        const stack = response.Stacks?.[0];
+
+        if (stack?.Outputs) {
+            const webhookOutput = stack.Outputs.find(
+                (o) => o.OutputKey === "BenchlingWebhookEndpoint" ||
+                       o.OutputKey === "WebhookEndpoint" ||
+                       o.OutputKey === "BenchlingUrl",
+            );
+            webhookUrl = webhookOutput?.OutputValue;
+
+            if (webhookUrl) {
+                console.log(chalk.green(`✓ Webhook URL: ${webhookUrl}\n`));
+
+                // Cache webhook URL in deployments.json
+                configStorage.recordDeployment(profile, {
+                    stage: "prod",
+                    endpoint: webhookUrl,
+                    timestamp: new Date().toISOString(),
+                    imageTag: "integrated",
+                    stackName: stackQuery.stackArn.match(/stack\/([^/]+)\//)?.[1] || "QuiltStack",
+                    region: config.deployment.region,
+                });
+            } else {
+                console.log(chalk.yellow("⚠️  Webhook URL not found in stack outputs"));
+                console.log(chalk.dim("   This is expected if BenchlingIntegration was just enabled\n"));
+            }
+        }
+    } catch (error) {
+        console.warn(chalk.yellow(`⚠️  Could not query webhook URL: ${(error as Error).message}`));
+        console.warn(chalk.dim("   You can view it later with: npx @quiltdata/benchling-webhook status\n"));
     }
 
     // Step 4: Show success message with status monitoring command
