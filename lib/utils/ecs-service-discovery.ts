@@ -15,6 +15,13 @@ export interface ECSServiceInfo {
     logStreamPrefix?: string;
 }
 
+export interface APIGatewayLogInfo {
+    apiId: string;
+    apiName: string;
+    accessLogGroup?: string;
+    executionLogGroup?: string;
+}
+
 /**
  * Discover all ECS services in a CloudFormation stack and their log groups
  *
@@ -212,4 +219,227 @@ export async function discoverECSServices(
         console.warn(`Could not discover ECS services: ${(error as Error).message}`);
         return [];
     }
+}
+
+/**
+ * Discover API Gateway APIs (both REST v1 and HTTP v2) in a CloudFormation stack and their log groups
+ *
+ * @param stackNameOrArn - CloudFormation stack name or ARN
+ * @param region - AWS region
+ * @param awsProfile - Optional AWS profile name
+ * @returns Array of API Gateway log information
+ */
+export async function discoverAPIGatewayLogs(
+    stackNameOrArn: string,
+    region: string,
+    awsProfile?: string,
+): Promise<APIGatewayLogInfo[]> {
+    try {
+        const { CloudFormationClient, DescribeStackResourcesCommand } = await import("@aws-sdk/client-cloudformation");
+        const { ApiGatewayV2Client, GetStageCommand: GetStageV2Command, GetApiCommand: GetApiV2Command } = await import("@aws-sdk/client-apigatewayv2");
+        const { APIGatewayClient, GetStageCommand: GetStageV1Command, GetRestApiCommand } = await import("@aws-sdk/client-api-gateway");
+
+        // Configure AWS SDK clients
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
+        if (awsProfile) {
+            const { fromIni: fromIniImport } = await import("@aws-sdk/credential-providers");
+            clientConfig.credentials = fromIniImport({ profile: awsProfile });
+        }
+
+        const cfClient = new CloudFormationClient(clientConfig);
+        const apigwV2Client = new ApiGatewayV2Client(clientConfig);
+        const apigwV1Client = new APIGatewayClient(clientConfig);
+
+        // Find API Gateway resources in stack (accepts both ARN and name)
+        const resourcesCommand = new DescribeStackResourcesCommand({
+            StackName: stackNameOrArn,
+        });
+        const resourcesResponse = await cfClient.send(resourcesCommand);
+
+        // Find both REST API v1 and HTTP API v2 resources
+        const restApis = resourcesResponse.StackResources?.filter(
+            (r) => r.ResourceType === "AWS::ApiGateway::RestApi",
+        ) || [];
+
+        const httpApis = resourcesResponse.StackResources?.filter(
+            (r) => r.ResourceType === "AWS::ApiGatewayV2::Api",
+        ) || [];
+
+        if (restApis.length === 0 && httpApis.length === 0) {
+            return [];
+        }
+
+        const apiInfos: APIGatewayLogInfo[] = [];
+
+        // Process REST API v1 resources
+        for (const apiResource of restApis) {
+            const apiId = apiResource.PhysicalResourceId;
+            if (!apiId) continue;
+
+            try {
+                // Get API name
+                const apiCommand = new GetRestApiCommand({ restApiId: apiId });
+                const apiResponse = await apigwV1Client.send(apiCommand);
+                const apiName = apiResponse.name || apiId;
+
+                // Find stages for this REST API
+                const stageResources = resourcesResponse.StackResources?.filter(
+                    (r) => r.ResourceType === "AWS::ApiGateway::Stage" &&
+                           r.PhysicalResourceId?.includes(apiId),
+                ) || [];
+
+                let accessLogGroup: string | undefined;
+                let executionLogGroup: string | undefined;
+
+                // Check each stage for log configuration
+                for (const stageResource of stageResources) {
+                    // For REST API, stage name is the logical resource ID or extracted from physical ID
+                    const stageName = stageResource.PhysicalResourceId?.split("/").pop();
+                    if (!stageName) continue;
+
+                    try {
+                        const stageCommand = new GetStageV1Command({
+                            restApiId: apiId,
+                            stageName: stageName,
+                        });
+                        const stageResponse = await apigwV1Client.send(stageCommand);
+
+                        // Access logs
+                        if (stageResponse.accessLogSettings?.destinationArn) {
+                            const logGroupMatch = stageResponse.accessLogSettings.destinationArn.match(
+                                /log-group:([^:]+)/,
+                            );
+                            if (logGroupMatch) {
+                                accessLogGroup = logGroupMatch[1];
+                            }
+                        }
+
+                        // Execution logs (CloudWatch Logs for REST API)
+                        if (stageResponse.methodSettings?.["*/*"]?.loggingLevel) {
+                            // REST API execution logs use this pattern
+                            executionLogGroup = `API-Gateway-Execution-Logs_${apiId}/${stageName}`;
+                        }
+                    } catch {
+                        // Skip this stage if we can't get its configuration
+                        continue;
+                    }
+                }
+
+                if (accessLogGroup || executionLogGroup) {
+                    apiInfos.push({
+                        apiId,
+                        apiName,
+                        accessLogGroup,
+                        executionLogGroup,
+                    });
+                }
+            } catch {
+                // Skip this API if we can't get its details
+                continue;
+            }
+        }
+
+        // Process HTTP API v2 resources
+        for (const apiResource of httpApis) {
+            const apiId = apiResource.PhysicalResourceId;
+            if (!apiId) continue;
+
+            try {
+                // Get API name
+                const apiCommand = new GetApiV2Command({ ApiId: apiId });
+                const apiResponse = await apigwV2Client.send(apiCommand);
+                const apiName = apiResponse.Name || apiId;
+
+                // Find stages for this HTTP API
+                // Note: For HTTP API v2, stage PhysicalResourceId is just the stage name (e.g., "$default", "prod")
+                // not prefixed with the API ID
+                const stageResources = resourcesResponse.StackResources?.filter(
+                    (r) => r.ResourceType === "AWS::ApiGatewayV2::Stage",
+                ) || [];
+
+                let accessLogGroup: string | undefined;
+                let executionLogGroup: string | undefined;
+
+                // Check each stage for log configuration
+                for (const stageResource of stageResources) {
+                    // For HTTP API v2, the PhysicalResourceId is just the stage name
+                    const stageName = stageResource.PhysicalResourceId;
+                    if (!stageName) continue;
+
+                    try {
+                        const stageCommand = new GetStageV2Command({
+                            ApiId: apiId,
+                            StageName: stageName,
+                        });
+                        const stageResponse = await apigwV2Client.send(stageCommand);
+
+                        // Access logs
+                        if (stageResponse.AccessLogSettings?.DestinationArn) {
+                            const logGroupMatch = stageResponse.AccessLogSettings.DestinationArn.match(
+                                /log-group:([^:]+)/,
+                            );
+                            if (logGroupMatch) {
+                                accessLogGroup = logGroupMatch[1];
+                            }
+                        }
+
+                        // Execution logs (if detailed metrics are enabled)
+                        if (stageResponse.DefaultRouteSettings?.DetailedMetricsEnabled) {
+                            // HTTP API v2 execution logs are automatically created with pattern
+                            executionLogGroup = `API-Gateway-Execution-Logs_${apiId}/${stageName}`;
+                        }
+                    } catch {
+                        // Skip this stage if we can't get its configuration
+                        continue;
+                    }
+                }
+
+                if (accessLogGroup || executionLogGroup) {
+                    apiInfos.push({
+                        apiId,
+                        apiName,
+                        accessLogGroup,
+                        executionLogGroup,
+                    });
+                }
+            } catch {
+                // Skip this API if we can't get its details
+                continue;
+            }
+        }
+
+        return apiInfos;
+    } catch (error) {
+        console.warn(`Could not discover API Gateway logs: ${(error as Error).message}`);
+        return [];
+    }
+}
+
+/**
+ * Discover API Gateway log groups from a CloudFormation stack (simplified version for logs command)
+ *
+ * @param stackNameOrArn - CloudFormation stack name or ARN
+ * @param region - AWS region
+ * @param awsProfile - Optional AWS profile name
+ * @returns Map of log types to log group names
+ */
+export async function discoverAPIGatewayLogGroups(
+    stackNameOrArn: string,
+    region: string,
+    awsProfile?: string,
+): Promise<Record<string, string>> {
+    const apiInfos = await discoverAPIGatewayLogs(stackNameOrArn, region, awsProfile);
+
+    const logGroups: Record<string, string> = {};
+
+    for (const apiInfo of apiInfos) {
+        if (apiInfo.accessLogGroup) {
+            logGroups["api-gateway-access"] = apiInfo.accessLogGroup;
+        }
+        if (apiInfo.executionLogGroup) {
+            logGroups["api-gateway-execution"] = apiInfo.executionLogGroup;
+        }
+    }
+
+    return logGroups;
 }

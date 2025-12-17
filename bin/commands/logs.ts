@@ -19,7 +19,7 @@ import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-clo
 import { fromIni } from "@aws-sdk/credential-providers";
 import { XDGConfig } from "../../lib/xdg-config";
 import type { XDGBase } from "../../lib/xdg-base";
-import { discoverECSServiceLogGroups } from "../../lib/utils/ecs-service-discovery";
+import { discoverECSServiceLogGroups, discoverAPIGatewayLogGroups } from "../../lib/utils/ecs-service-discovery";
 import { parseTimeRange, formatTimeRange, formatLocalDateTime, formatLocalTime, getLocalTimezone } from "../../lib/utils/time-format";
 import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers";
 
@@ -169,9 +169,15 @@ async function getLogGroupsFromStack(
     awsProfile?: string,
 ): Promise<Record<string, string>> {
     try {
-        // For integrated mode, use shared ECS service discovery
+        // For integrated mode, discover both ECS services and API Gateway logs
         if (integratedMode) {
-            return await discoverECSServiceLogGroups(stackName, region, awsProfile);
+            const [ecsLogGroups, apiGatewayLogGroups] = await Promise.all([
+                discoverECSServiceLogGroups(stackName, region, awsProfile),
+                discoverAPIGatewayLogGroups(stackName, region, awsProfile),
+            ]);
+
+            // Merge both log group collections
+            return { ...ecsLogGroups, ...apiGatewayLogGroups };
         }
 
         // For standalone mode, use stack outputs
@@ -345,11 +351,29 @@ async function fetchAllLogs(
         const logGroupEntries = Object.entries(discoveredLogGroups);
 
         for (const [serviceName, logGroupName] of logGroupEntries) {
+            // Determine log type
+            let logType: "ecs" | "api-gateway" = "ecs";
+            if (serviceName.includes("api-gateway")) {
+                logType = "api-gateway";
+            }
+
             // If type filter is specified, only show matching services
             if (type !== "all") {
-                // For integrated mode, "ecs" type shows all ECS services
-                // Other types (api, api-exec) are not available in integrated mode
-                if (type !== "ecs") {
+                // For integrated mode:
+                // - "ecs" type shows all ECS services
+                // - "api" type shows API Gateway access logs
+                // - "api-exec" type shows API Gateway execution logs
+                if (type === "ecs" && logType !== "ecs") {
+                    continue;
+                }
+                if ((type === "api" || type === "api-exec") && logType !== "api-gateway") {
+                    continue;
+                }
+                // For API Gateway, further filter by access vs execution
+                if (type === "api" && !serviceName.includes("access")) {
+                    continue;
+                }
+                if (type === "api-exec" && !serviceName.includes("execution")) {
                     continue;
                 }
             }
@@ -369,15 +393,28 @@ async function fetchAllLogs(
                 .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
                 .slice(0, limit);
 
-            // Create friendly display name from service name
-            const displayName = serviceName
-                .split("-")
-                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(" ");
+            // Create friendly display name
+            let displayName: string;
+            if (logType === "api-gateway") {
+                if (serviceName.includes("access")) {
+                    displayName = "API Gateway Access Logs";
+                } else if (serviceName.includes("execution")) {
+                    displayName = "API Gateway Execution Logs";
+                } else {
+                    displayName = "API Gateway Logs";
+                }
+            } else {
+                // ECS service - create friendly name from service name
+                displayName = serviceName
+                    .split("-")
+                    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(" ");
+                displayName = `${displayName} (ECS)`;
+            }
 
             result.push({
                 name: logGroupName,
-                displayName: `${displayName} (ECS)`,
+                displayName,
                 entries: sortedEntries,
             });
         }
@@ -512,8 +549,11 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
             }
         }
 
-        // For integrated mode, use Quilt stack name; for standalone use BenchlingWebhookStack
-        const stackName = integratedMode && quiltStackName ? quiltStackName : STACK_NAME;
+        // For integrated mode, use full stack ARN if available (for API Gateway discovery),
+        // otherwise use extracted stack name; for standalone use BenchlingWebhookStack
+        const stackName = integratedMode && stackArn ? stackArn :
+                          integratedMode && quiltStackName ? quiltStackName :
+                          STACK_NAME;
 
         // Parse timer value
         const refreshInterval = parseTimerValue(timer);
