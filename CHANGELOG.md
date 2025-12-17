@@ -23,6 +23,10 @@ All notable changes to this project will be documented in this file, one line pe
   - Validates Gunicorn starts and health checks pass in degraded mode
   - Script: [scripts/test-minimal.sh](scripts/test-minimal.sh)
 
+## [0.9.4] - 2025-12-16
+
+Re-released due to failed tag
+
 ## [0.9.3] - 2025-12-16
 
 ### Added
