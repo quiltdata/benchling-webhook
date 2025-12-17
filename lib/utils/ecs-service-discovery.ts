@@ -394,7 +394,7 @@ export async function discoverAPIGatewayLogs(
                         if (accessLogGroup || executionLogGroup) {
                             break;
                         }
-                    } catch (stageError) {
+                    } catch (_stageError) {
                         // This stage might belong to a different API, continue trying others
                         continue;
                     }
