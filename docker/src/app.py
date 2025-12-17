@@ -635,7 +635,7 @@ def create_app() -> FastAPI:
                 },
                 "parameters": {
                     "pkg_prefix": config.pkg_prefix,
-                    "pkg_key": config.pkg_key,  # type: ignore[attr-defined]
+                    "pkg_key": config.package_key,
                     "user_bucket": config.s3_bucket_name,
                     "log_level": config.log_level,
                     "webhook_allow_list": config.webhook_allow_list if config.webhook_allow_list else "",
