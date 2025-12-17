@@ -219,7 +219,7 @@ export async function deployCommand(options: {
         console.log();
         console.log(chalk.yellow("Options:"));
         console.log("  1. Provide via CLI:");
-        console.log(chalk.cyan("     npx @quiltdata/benchling-webhook deploy \\"));
+        console.log(chalk.cyan("     npx @quiltdata/benchling-webhook@latest deploy \\"));
         console.log(chalk.cyan("       --quilt-stack-arn <arn> \\"));
         console.log(chalk.cyan("       --benchling-secret <arn>"));
         console.log();
@@ -345,10 +345,10 @@ export async function deploy(
         console.error(chalk.red((error as Error).message));
         console.log();
         console.log(chalk.yellow("To sync secrets manually, run:"));
-        console.log(chalk.cyan("  npx @quiltdata/benchling-webhook setup"));
+        console.log(chalk.cyan("  npx @quiltdata/benchling-webhook@latest setup"));
         if (options.profileName !== "default") {
             console.log(chalk.cyan("  # Or with custom profile:"));
-            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook setup --profile ${options.profileName}`));
+            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook@latest setup --profile ${options.profileName}`));
         }
         console.log();
         process.exit(1);
@@ -433,8 +433,8 @@ export async function deploy(
         if (proceedChoice === "destroy") {
             console.log();
             console.log(chalk.bold("Run destroy then redeploy:"));
-            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook destroy --profile ${options.profileName} --stage ${options.stage}`));
-            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook deploy --profile ${options.profileName} --stage ${options.stage}`));
+            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook@latest destroy --profile ${options.profileName} --stage ${options.stage}`));
+            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook@latest deploy --profile ${options.profileName} --stage ${options.stage}`));
             console.log();
             process.exit(1);
         }
