@@ -25,7 +25,8 @@ import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers
 import { getEcsRolloutStatus } from "./status";
 
 const STACK_NAME = "BenchlingWebhookStack";
-const DEFAULT_LOG_LIMIT = 5; // Number of log entries to show per log group (health checks dominate, so keep this small)
+const DEFAULT_LOG_LIMIT = 20; // Number of meaningful log entries to show per log group (after filtering health checks)
+const FETCH_LIMIT = 100; // Fetch more logs to ensure we get meaningful entries after filtering
 
 export interface LogsCommandOptions {
     profile?: string;
@@ -39,6 +40,7 @@ export interface LogsCommandOptions {
     configStorage?: XDGBase;
     timer?: string | number;
     limit?: number;
+    includeHealth?: boolean;
 }
 
 export interface LogsResult {
@@ -218,6 +220,19 @@ async function getLogGroupsFromStack(
 }
 
 /**
+ * Check if a log message is a health check
+ */
+function isHealthCheck(message: string): boolean {
+    const healthCheckPatterns = [
+        /GET\s+\/health/i,
+        /GET\s+\/healthcheck/i,
+        /ELB-HealthChecker/i,
+        /"GET\s+\/\s+HTTP/i, // Root path health checks
+    ];
+    return healthCheckPatterns.some((pattern) => pattern.test(message));
+}
+
+/**
  * Fetch logs from a single log group
  */
 async function fetchLogsFromGroup(
@@ -225,6 +240,7 @@ async function fetchLogsFromGroup(
     region: string,
     since: string,
     limit: number,
+    includeHealth: boolean,
     filterPattern?: string,
     awsProfile?: string,
 ): Promise<FilteredLogEvent[]> {
@@ -237,15 +253,25 @@ async function fetchLogsFromGroup(
 
         const startTime = Date.now() - parseTimeRange(since);
 
+        // Fetch more logs than needed to account for filtering
+        const fetchLimit = includeHealth ? limit : FETCH_LIMIT;
+
         const command = new FilterLogEventsCommand({
             logGroupName,
             startTime,
             filterPattern,
-            limit,
+            limit: fetchLimit,
         });
 
         const response = await logsClient.send(command);
-        return response.events || [];
+        let events = response.events || [];
+
+        // Filter out health checks unless explicitly requested
+        if (!includeHealth) {
+            events = events.filter((event) => !isHealthCheck(event.message || ""));
+        }
+
+        return events;
     } catch (error) {
         console.warn(chalk.dim(`Could not fetch logs from ${logGroupName}: ${(error as Error).message}`));
         return [];
@@ -402,6 +428,7 @@ async function fetchAllLogs(
     limit: number,
     type: string,
     integratedMode: boolean,
+    includeHealth: boolean,
     filterPattern?: string,
     awsProfile?: string,
 ): Promise<LogGroupInfo[]> {
@@ -458,6 +485,7 @@ async function fetchAllLogs(
                 region,
                 since,
                 limit,
+                includeHealth,
                 filterPattern,
                 awsProfile,
             );
@@ -538,6 +566,7 @@ async function fetchAllLogs(
             region,
             since,
             limit,
+            includeHealth,
             filterPattern,
             awsProfile,
         );
@@ -571,6 +600,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
         timer,
         limit = DEFAULT_LOG_LIMIT,
         configStorage,
+        includeHealth = false,
     } = options;
 
     // Validate log type
@@ -668,6 +698,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
                 limit,
                 type,
                 integratedMode,
+                includeHealth,
                 filter,
                 awsProfile,
             );
