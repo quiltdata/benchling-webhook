@@ -242,4 +242,226 @@ describe("BenchlingWebhookStack", () => {
         // Check for NAT Gateways (required for private subnets)
         template.resourceCountIs("AWS::EC2::NatGateway", 2);
     });
+
+    describe("CloudFormation Parameter Defaults (Option A)", () => {
+        test("uses config values as parameter defaults for required Quilt fields", () => {
+            const app = new cdk.App();
+            const config = createMockConfig({
+                quilt: {
+                    catalog: "test-catalog.quiltdata.com",
+                    database: "test_database",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+                    region: "us-east-1",
+                },
+            });
+            const stack = new BenchlingWebhookStack(app, "TestStack", {
+                config,
+                env: {
+                    account: "123456789012",
+                    region: "us-east-1",
+                },
+            });
+
+            const testTemplate = Template.fromStack(stack);
+
+            // Verify parameters have correct defaults from config
+            testTemplate.hasParameter("QuiltWebHost", {
+                Default: "test-catalog.quiltdata.com",
+            });
+            testTemplate.hasParameter("AthenaUserDatabase", {
+                Default: "test_database",
+            });
+            testTemplate.hasParameter("PackagerQueueUrl", {
+                Default: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            });
+        });
+
+        test("uses config values as parameter defaults for optional Quilt fields", () => {
+            const app = new cdk.App();
+            const config = createMockConfig({
+                quilt: {
+                    catalog: "test.quiltdata.com",
+                    database: "test_db",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123/queue",
+                    region: "us-east-1",
+                    icebergDatabase: "iceberg_db",
+                    icebergWorkgroup: "iceberg_wg",
+                    athenaUserWorkgroup: "athena_wg",
+                    athenaResultsBucket: "s3://results-bucket",
+                },
+            });
+            const stack = new BenchlingWebhookStack(app, "TestStackOptional", {
+                config,
+                env: {
+                    account: "123456789012",
+                    region: "us-east-1",
+                },
+            });
+
+            const testTemplate = Template.fromStack(stack);
+
+            // Verify optional parameters have correct defaults from config
+            testTemplate.hasParameter("IcebergDatabase", {
+                Default: "iceberg_db",
+            });
+            testTemplate.hasParameter("IcebergWorkgroup", {
+                Default: "iceberg_wg",
+            });
+            testTemplate.hasParameter("AthenaUserWorkgroup", {
+                Default: "athena_wg",
+            });
+            testTemplate.hasParameter("AthenaResultsBucket", {
+                Default: "s3://results-bucket",
+            });
+        });
+
+        test("uses empty string as default when optional config fields are missing", () => {
+            const app = new cdk.App();
+            const config = createMockConfig({
+                quilt: {
+                    catalog: "test.quiltdata.com",
+                    database: "test_db",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123/queue",
+                    region: "us-east-1",
+                    // Optional fields intentionally omitted
+                },
+            });
+            const stack = new BenchlingWebhookStack(app, "TestStackNoOptional", {
+                config,
+                env: {
+                    account: "123456789012",
+                    region: "us-east-1",
+                },
+            });
+
+            const testTemplate = Template.fromStack(stack);
+
+            // Verify optional parameters default to empty string when not configured
+            testTemplate.hasParameter("IcebergDatabase", {
+                Default: "",
+            });
+            testTemplate.hasParameter("IcebergWorkgroup", {
+                Default: "",
+            });
+            testTemplate.hasParameter("AthenaUserWorkgroup", {
+                Default: "",
+            });
+            testTemplate.hasParameter("AthenaResultsBucket", {
+                Default: "",
+            });
+        });
+
+        test("validates required Quilt config fields are present", () => {
+            const app = new cdk.App();
+            const config = createMockConfig({
+                quilt: {
+                    catalog: "",  // Missing required field
+                    database: "test_db",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123/queue",
+                    region: "us-east-1",
+                },
+            });
+
+            expect(() => {
+                new BenchlingWebhookStack(app, "TestStackValidation", {
+                    config,
+                    env: {
+                        account: "123456789012",
+                        region: "us-east-1",
+                    },
+                });
+            }).toThrow("Configuration validation failed");
+
+            // Check the error message contains the missing field
+            try {
+                const app2 = new cdk.App();
+                new BenchlingWebhookStack(app2, "TestStackValidation2", {
+                    config,
+                    env: {
+                        account: "123456789012",
+                        region: "us-east-1",
+                    },
+                });
+            } catch (error: any) {
+                expect(error.message).toContain("config.quilt.catalog");
+            }
+        });
+
+        test("validates all required Quilt fields and shows all missing fields", () => {
+            const app = new cdk.App();
+            const config = createMockConfig({
+                benchling: {
+                    secretArn: "",  // Missing required Benchling field
+                    tenant: "test",
+                    clientId: "client_123",
+                    appDefinitionId: "app_123",
+                },
+                quilt: {
+                    catalog: "",  // Missing
+                    database: "",  // Missing
+                    queueUrl: "",  // Missing
+                    region: "us-east-1",
+                },
+            });
+
+            expect(() => {
+                new BenchlingWebhookStack(app, "TestStackAllValidation", {
+                    config,
+                    env: {
+                        account: "123456789012",
+                        region: "us-east-1",
+                    },
+                });
+            }).toThrow("Configuration validation failed");
+
+            try {
+                const app2 = new cdk.App();
+                new BenchlingWebhookStack(app2, "TestStackAllValidation2", {
+                    config,
+                    env: {
+                        account: "123456789012",
+                        region: "us-east-1",
+                    },
+                });
+            } catch (error: any) {
+                // Verify all missing fields are listed
+                expect(error.message).toContain("config.benchling.secretArn");
+                expect(error.message).toContain("config.quilt.catalog");
+                expect(error.message).toContain("config.quilt.database");
+                expect(error.message).toContain("config.quilt.queueUrl");
+            }
+        });
+
+        test("allows validation skip with SKIP_CONFIG_VALIDATION=true", () => {
+            process.env.SKIP_CONFIG_VALIDATION = "true";
+
+            const app = new cdk.App();
+            const config = createMockConfig({
+                benchling: {
+                    secretArn: "",  // Would normally fail
+                    tenant: "test",
+                    clientId: "client_123",
+                    appDefinitionId: "app_123",
+                },
+                quilt: {
+                    catalog: "",
+                    database: "",
+                    queueUrl: "",
+                    region: "us-east-1",
+                },
+            });
+
+            expect(() => {
+                new BenchlingWebhookStack(app, "TestStack", {
+                    config,
+                    env: {
+                        account: "123456789012",
+                        region: "us-east-1",
+                    },
+                });
+            }).not.toThrow();
+
+            delete process.env.SKIP_CONFIG_VALIDATION;
+        });
+    });
 });

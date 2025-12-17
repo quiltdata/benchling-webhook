@@ -40,12 +40,32 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // Validate required configuration fields
         // Skip validation if SKIP_CONFIG_VALIDATION is set (for destroy operations)
         const skipValidation = process.env.SKIP_CONFIG_VALIDATION === "true";
-        if (!skipValidation && !config.benchling.secretArn) {
-            throw new Error(
-                "Configuration validation failed. Required fields:\n" +
-                "  - config.benchling.secretArn: Secrets Manager secret ARN\n\n" +
-                "Run 'npm run setup' to configure your deployment.",
-            );
+        if (!skipValidation) {
+            const missingFields: string[] = [];
+
+            // Validate Benchling configuration
+            if (!config.benchling.secretArn) {
+                missingFields.push("config.benchling.secretArn: Secrets Manager secret ARN");
+            }
+
+            // Validate required Quilt configuration
+            if (!config.quilt.catalog) {
+                missingFields.push("config.quilt.catalog: Quilt catalog domain");
+            }
+            if (!config.quilt.database) {
+                missingFields.push("config.quilt.database: Athena/Glue database name");
+            }
+            if (!config.quilt.queueUrl) {
+                missingFields.push("config.quilt.queueUrl: SQS queue URL for package creation");
+            }
+
+            if (missingFields.length > 0) {
+                throw new Error(
+                    "Configuration validation failed. Required fields:\n" +
+                    missingFields.map(f => `  - ${f}`).join("\n") + "\n\n" +
+                    "Run 'npm run setup' to configure your deployment.",
+                );
+            }
         }
 
         console.log(`Deploying with profile configuration (v${packageJson.version})`);
@@ -60,44 +80,44 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const packagerQueueUrlParam = new cdk.CfnParameter(this, "PackagerQueueUrl", {
             type: "String",
             description: "SQS queue URL for Quilt package creation jobs",
-            default: "",  // Will be resolved at deployment time
+            default: config.quilt.queueUrl || "",  // Use config value as default
         });
 
         const athenaUserDatabaseParam = new cdk.CfnParameter(this, "AthenaUserDatabase", {
             type: "String",
             description: "Athena/Glue database name for Quilt catalog metadata",
-            default: "",  // Will be resolved at deployment time
+            default: config.quilt.database || "",  // Use config value as default
         });
 
         const quiltWebHostParam = new cdk.CfnParameter(this, "QuiltWebHost", {
             type: "String",
             description: "Quilt catalog domain (without protocol or trailing slash)",
-            default: "",  // Will be resolved at deployment time
+            default: config.quilt.catalog || "",  // Use config value as default
         });
 
         const icebergDatabaseParam = new cdk.CfnParameter(this, "IcebergDatabase", {
             type: "String",
             description: "Iceberg database name (optional, leave empty if not used)",
-            default: "",
+            default: config.quilt.icebergDatabase || "",  // Use config value as default
         });
 
         // NEW: Optional Athena resources (from Quilt stack discovery)
         const icebergWorkgroupParam = new cdk.CfnParameter(this, "IcebergWorkgroup", {
             type: "String",
             description: "Iceberg workgroup name (optional, from Quilt stack discovery)",
-            default: "",
+            default: config.quilt.icebergWorkgroup || "",  // Use config value as default
         });
 
         const athenaUserWorkgroupParam = new cdk.CfnParameter(this, "AthenaUserWorkgroup", {
             type: "String",
             description: "Athena workgroup for user queries (optional, from Quilt stack discovery)",
-            default: "",
+            default: config.quilt.athenaUserWorkgroup || "",  // Use config value as default
         });
 
         const athenaResultsBucketParam = new cdk.CfnParameter(this, "AthenaResultsBucket", {
             type: "String",
             description: "S3 bucket for Athena query results (optional, from Quilt stack discovery)",
-            default: "",
+            default: config.quilt.athenaResultsBucket || "",  // Use config value as default
         });
 
         const benchlingSecretParam = new cdk.CfnParameter(this, "BenchlingSecretARN", {
