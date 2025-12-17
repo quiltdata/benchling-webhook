@@ -155,27 +155,10 @@ export async function runStandaloneMode(input: StandaloneModeInput): Promise<Sta
             console.log(chalk.green("✓ Secret created for standalone deployment\n"));
         }
 
-        // Step 3.1: If there's an existing deployment, restart services to pick up new secret
+        // Step 3.1: ECS restart is optional (v1.2.0+ fetches secrets on-demand)
         if (hasExistingDeployment) {
-            console.log("Restarting existing ECS services to apply updated configuration...\n");
-
-            const { restartECSServices } = await import("../utils/ecs-service-discovery");
-
-            // Try to find the stack name from deployments or use default
-            const stackName = "BenchlingWebhookStack"; // Default standalone stack name
-
-            const restartedServices = await restartECSServices(
-                stackName,
-                config.deployment.region,
-                awsProfile,
-            );
-
-            if (restartedServices.length > 0) {
-                console.log(chalk.green(`✓ Restarted ${restartedServices.length} ECS service(s): ${restartedServices.join(", ")}`));
-                console.log(chalk.dim("  Services are now deploying with updated configuration\n"));
-            } else {
-                console.log(chalk.dim("  No existing ECS services found to restart\n"));
-            }
+            console.log(chalk.dim("ℹ️  Benchling webhook v1.2.0+ fetches secrets on-demand per request"));
+            console.log(chalk.dim("   ECS service restart is NOT required for secret updates to take effect\n"));
         }
     } catch (error) {
         console.warn(chalk.yellow(`⚠️  Failed to sync secrets: ${(error as Error).message}`));
