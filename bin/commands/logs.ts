@@ -25,6 +25,7 @@ import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers
 import { getEcsRolloutStatus } from "./status";
 
 const STACK_NAME = "BenchlingWebhookStack";
+const DEFAULT_LOG_LIMIT = 5; // Number of log entries to show per log group (health checks dominate, so keep this small)
 
 export interface LogsCommandOptions {
     profile?: string;
@@ -568,7 +569,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
         filter,
         follow = false,
         timer,
-        limit = 20,
+        limit = DEFAULT_LOG_LIMIT,
         configStorage,
     } = options;
 

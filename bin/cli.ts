@@ -15,6 +15,7 @@ import { statusCommand } from "./commands/status";
 import { logsCommand } from "./commands/logs";
 import pkg from "../package.json";
 
+const DEFAULT_LOG_LIMIT = 5; // Number of log entries to show per log group (health checks dominate, so keep this small)
 const program = new Command();
 
 program
@@ -225,7 +226,7 @@ program
         "5m",
     )
     .option("--filter <pattern>", "Filter logs by pattern (example: ERROR)")
-    .option("--limit <n>", "Number of log entries to show per log group (default: 5)", "5")
+    .option("--limit <n>", `Number of log entries to show per log group (default: ${DEFAULT_LOG_LIMIT})`, String(DEFAULT_LOG_LIMIT))
     .option("--timer <seconds>", "Auto-refresh interval in seconds (default: 10, use 0 to disable)", "10")
     .addHelpText(
         "after",
