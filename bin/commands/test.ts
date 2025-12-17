@@ -29,14 +29,14 @@ export async function testCommand(options: ConfigOptions & { url?: string }): Pr
                 } else {
                     spinner.fail("Could not find WebhookEndpoint in stack outputs");
                     console.log();
-                    console.log(chalk.yellow("Usage: npx @quiltdata/benchling-webhook test --url <webhook-url>"));
+                    console.log(chalk.yellow("Usage: npx @quiltdata/benchling-webhook@latest test --url <webhook-url>"));
                     process.exit(1);
                 }
             } else {
                 spinner.fail("Stack BenchlingWebhookStack not found");
                 console.log();
                 console.log(chalk.yellow("Make sure the stack is deployed, or provide a URL:"));
-                console.log(chalk.cyan("  npx @quiltdata/benchling-webhook test --url <webhook-url>"));
+                console.log(chalk.cyan("  npx @quiltdata/benchling-webhook@latest test --url <webhook-url>"));
                 process.exit(1);
             }
         } catch (err) {
@@ -45,7 +45,7 @@ export async function testCommand(options: ConfigOptions & { url?: string }): Pr
             console.log(chalk.red((err as Error).message));
             console.log();
             console.log(chalk.yellow("Make sure the stack is deployed, or provide a URL:"));
-            console.log(chalk.cyan("  npx @quiltdata/benchling-webhook test --url <webhook-url>"));
+            console.log(chalk.cyan("  npx @quiltdata/benchling-webhook@latest test --url <webhook-url>"));
             process.exit(1);
         }
     }
