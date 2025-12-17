@@ -347,8 +347,17 @@ async function fetchAllLogs(
 
     // For integrated mode, query all discovered log groups
     if (integratedMode) {
+        // Deduplicate log groups (multiple ECS services may share the same log group)
+        const uniqueLogGroups = new Map<string, string>();
+        for (const [serviceName, logGroupName] of Object.entries(discoveredLogGroups)) {
+            // Keep the first service name for each unique log group
+            if (!uniqueLogGroups.has(logGroupName)) {
+                uniqueLogGroups.set(logGroupName, serviceName);
+            }
+        }
+
         // If type is specified and not "all", filter to only matching services
-        const logGroupEntries = Object.entries(discoveredLogGroups);
+        const logGroupEntries = Array.from(uniqueLogGroups.entries()).map(([logGroupName, serviceName]) => [serviceName, logGroupName]);
 
         for (const [serviceName, logGroupName] of logGroupEntries) {
             // Determine log type
@@ -404,12 +413,19 @@ async function fetchAllLogs(
                     displayName = "API Gateway Logs";
                 }
             } else {
-                // ECS service - create friendly name from service name
-                displayName = serviceName
-                    .split("-")
-                    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                    .join(" ");
-                displayName = `${displayName} (ECS)`;
+                // ECS service - use log group name for shared log groups
+                // If log group name looks like a simple identifier, use it directly
+                if (logGroupName.includes("/") || logGroupName.startsWith("ecs-")) {
+                    // Standard ECS log group format - extract friendly name from service
+                    displayName = serviceName
+                        .split("-")
+                        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(" ");
+                    displayName = `${displayName} (ECS)`;
+                } else {
+                    // Simple shared log group name - use it directly
+                    displayName = `${logGroupName} (ECS)`;
+                }
             }
 
             result.push({
