@@ -408,41 +408,46 @@ def create_app() -> FastAPI:
             )
             return Benchling(url=f"https://{secrets.tenant}.benchling.com", auth_method=auth_method)
 
-        # Create initial Benchling client for startup validation
-        benchling = create_benchling_client()
+        # Create initial Benchling client and entry packager for startup validation
+        # If secrets are unavailable, record the problem and continue in degraded mode
+        try:
+            benchling = create_benchling_client()
 
-        # Store the factory for on-demand client creation
-        app.state.create_benchling_client = create_benchling_client
+            # Store the factory for on-demand client creation
+            app.state.create_benchling_client = create_benchling_client
 
-        entry_packager = EntryPackager(
-            benchling=benchling,
-            config=config,
-        )
+            entry_packager = EntryPackager(
+                benchling=benchling,
+                config=config,
+            )
 
-        # Validate role assumption at startup (blocking - fail fast)
-        role_arn = getattr(config, "quilt_write_role_arn", None)
-        if role_arn and isinstance(role_arn, str):
-            logger.info("Validating IAM role assumption at startup")
-            try:
-                validation_results = entry_packager.role_manager.validate_roles()
+            # Validate role assumption at startup (blocking - fail fast)
+            role_arn = getattr(config, "quilt_write_role_arn", None)
+            if role_arn and isinstance(role_arn, str):
+                logger.info("Validating IAM role assumption at startup")
+                try:
+                    validation_results = entry_packager.role_manager.validate_roles()
 
-                if validation_results["role"]["configured"]:
-                    if validation_results["role"]["valid"]:
-                        logger.info("Role validated successfully", role_arn=role_arn)
-                    else:
-                        logger.error(
-                            "Role validation failed at startup - container cannot function correctly",
-                            role_arn=role_arn,
-                            error=validation_results["role"]["error"],
-                        )
-                        raise RuntimeError(f"IAM role validation failed: {validation_results['role']['error']}")
-            except Exception as exc:
-                logger.error(
-                    "Role validation failed at startup - failing container to prevent data misrouting",
-                    error=str(exc),
-                    error_type=type(exc).__name__,
-                )
-                raise
+                    if validation_results["role"]["configured"]:
+                        if validation_results["role"]["valid"]:
+                            logger.info("Role validated successfully", role_arn=role_arn)
+                        else:
+                            logger.error(
+                                "Role validation failed at startup - container cannot function correctly",
+                                role_arn=role_arn,
+                                error=validation_results["role"]["error"],
+                            )
+                            raise RuntimeError(f"IAM role validation failed: {validation_results['role']['error']}")
+                except Exception as exc:
+                    logger.error(
+                        "Role validation failed at startup - failing container to prevent data misrouting",
+                        error=str(exc),
+                        error_type=type(exc).__name__,
+                    )
+                    raise
+        except SecretsManagerError as exc:
+            record_startup_problem(exc, "benchling_client")
+            return
 
     _initialize_runtime()
 
