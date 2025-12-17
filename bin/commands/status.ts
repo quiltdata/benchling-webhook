@@ -312,6 +312,67 @@ async function getStackStatus(
 }
 
 /**
+ * Get the least-ready (most critical) ECS rollout status for a stack
+ * Returns the "worst" rollout state across all services for quick status checks
+ */
+export async function getEcsRolloutStatus(
+    stackName: string,
+    region: string,
+    awsProfile?: string,
+): Promise<string | undefined> {
+    try {
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
+        if (awsProfile) {
+            clientConfig.credentials = fromIni({ profile: awsProfile });
+        }
+
+        const cfClient = new CloudFormationClient(clientConfig);
+        const ecsClient = new ECSClient(clientConfig);
+
+        const resourcesCommand = new DescribeStackResourcesCommand({ StackName: stackName });
+        const resourcesResponse = await cfClient.send(resourcesCommand);
+
+        const ecsServices = resourcesResponse.StackResources?.filter(
+            (r) => r.ResourceType === "AWS::ECS::Service",
+        ) || [];
+
+        if (ecsServices.length === 0) return undefined;
+
+        const clusterResource = resourcesResponse.StackResources?.find(
+            (r) => r.ResourceType === "AWS::ECS::Cluster",
+        );
+        const clusterName = clusterResource?.PhysicalResourceId || stackName;
+
+        const serviceArns = ecsServices
+            .map((s) => s.PhysicalResourceId)
+            .filter((arn): arn is string => !!arn);
+
+        if (serviceArns.length === 0) return undefined;
+
+        const servicesCommand = new DescribeServicesCommand({
+            cluster: clusterName,
+            services: serviceArns,
+        });
+        const servicesResponse = await ecsClient.send(servicesCommand);
+
+        // Find the "worst" rollout state (priority: FAILED > IN_PROGRESS > COMPLETED)
+        let worstState: string | undefined;
+        for (const svc of servicesResponse.services || []) {
+            const state = svc.deployments?.[0]?.rolloutState;
+            if (!state) continue;
+
+            if (state === "FAILED") return "FAILED"; // Immediately return on failure
+            if (state === "IN_PROGRESS" && worstState !== "FAILED") worstState = "IN_PROGRESS";
+            if (!worstState && state === "COMPLETED") worstState = "COMPLETED";
+        }
+
+        return worstState;
+    } catch (_error) {
+        return undefined; // Silently fail for optional status
+    }
+}
+
+/**
  * Formats stack status with color coding
  */
 export function formatStackStatus(status: string): string {
