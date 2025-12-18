@@ -3,7 +3,7 @@
 
 All notable changes to this project will be documented in this file, one line per user-visible change.
 
-## [Unreleased]
+## [0.9.6] - 2025-12-18
 
 ### Added
 
