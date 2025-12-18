@@ -166,7 +166,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
 # Start application with Gunicorn + Uvicorn workers
-# Note: Use 'src.app:create_app()' with parentheses to call the factory function
+# Note: Quote 'src.app:create_app()' to prevent shell from parsing parentheses as subshell operators
 # Architecture:
 # - --preload: Load app before forking workers (enables JWKS cache sharing)
 # - --workers 2: Reduced from 4 (shared cache eliminates need for more workers)
@@ -178,5 +178,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # - --log-level info: Log worker lifecycle events for debugging
 # PORT Configuration:
 # - Uses shell form to expand PORT environment variable (defaults to 8080 in ENV)
-# - This allows runtime override (e.g., PORT=5001 in ECS task definition)
-CMD sh -c "gunicorn src.app:create_app() --preload -k uvicorn.workers.UvicornWorker --workers 2 --bind 0.0.0.0:${PORT} --worker-tmp-dir /dev/shm --timeout 60 --graceful-timeout 30 --keep-alive 75 --log-level info --access-logfile - --error-logfile -"
+# - This allows runtime override (e.g., PORT=5001 in integrated deployments)
+CMD sh -c "gunicorn 'src.app:create_app()' --preload -k uvicorn.workers.UvicornWorker --workers 2 --bind 0.0.0.0:${PORT} --worker-tmp-dir /dev/shm --timeout 60 --graceful-timeout 30 --keep-alive 75 --log-level info --access-logfile - --error-logfile -"
