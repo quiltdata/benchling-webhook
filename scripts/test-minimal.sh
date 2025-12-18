@@ -12,11 +12,9 @@ echo "- No valid AWS Secrets Manager secret"
 echo "- No AWS credentials"
 echo ""
 
-# Build Docker image if it doesn't exist
-if ! docker images | grep -q "benchling-webhook"; then
-    echo "📦 Building Docker image..."
-    cd docker && docker build -t benchling-webhook . && cd ..
-fi
+# Always build fresh Docker image to ensure latest changes are included
+echo "📦 Building fresh Docker image..."
+make -C docker docker-build-local
 
 # Use the local image
 IMAGE_URI="benchling-webhook:latest"
