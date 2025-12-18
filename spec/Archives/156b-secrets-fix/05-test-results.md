@@ -111,7 +111,7 @@ The `BenchlingWebhookStackProps` interface was refactored (issue #156b) to use *
 ### Passing Test Suites (7/8)
 
 | Test Suite | Tests Passed | Duration |
-|------------|--------------|----------|
+| ------------ | -------------- | ---------- |
 | `utils-secrets.test.ts` | ✅ 44 tests | ~1s |
 | `utils-stack-inference.test.ts` | ✅ ~15 tests | ~1s |
 | `utils-config-resolver.test.ts` | ✅ ~20 tests | ~1s |
@@ -160,7 +160,7 @@ Duration:    ~15 seconds
 ### Test Breakdown by Module
 
 | Module | File | Tests | Status |
-|--------|------|-------|--------|
+| -------- | ------ | ------- | -------- |
 | Flask App | `test_app.py` | 10 | ✅ 7 passed, ⚠️ 3 skipped |
 | Canvas | `test_canvas.py` | 18 | ✅ All passed |
 | Canvas Browser | `test_canvas_browser.py` | 17 | ✅ All passed |
@@ -197,7 +197,7 @@ test_app.py::TestFlaskApp::test_health_secrets_endpoint_with_individual_vars
 **Focus**: Core functionality for issue #156b
 
 | Test Category | Tests | Status | Description |
-|---------------|-------|--------|-------------|
+| --------------- | ------- | -------- | ------------- |
 | Format Detection | 6 | ✅ | ARN, JSON, invalid format detection |
 | JSON Parsing | 7 | ✅ | Valid/invalid JSON, missing fields |
 | Secrets Manager | 5 | ✅ | Fetch success, errors (NotFound, AccessDenied) |
@@ -338,7 +338,7 @@ test_app.py::TestFlaskApp::test_health_secrets_endpoint_with_individual_vars
 ### Required Dependencies ✅
 
 | Dependency | Status | Location |
-|------------|--------|----------|
+| ------------ | -------- | ---------- |
 | Node.js | ✅ Installed | System |
 | npm | ✅ Installed | System |
 | TypeScript | ✅ Installed | `node_modules` |

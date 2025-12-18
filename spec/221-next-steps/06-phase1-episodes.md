@@ -475,7 +475,7 @@ export function generateNextSteps(options: NextStepsOptions): string;
 ## Summary of Episodes
 
 | Episode | Type | Description | Commit |
-|---------|------|-------------|--------|
+| --------- | ------ | ------------- | -------- |
 | 1 | Feat | Create type definitions | `feat: add type definitions for next steps generator` |
 | 2 | Test | Write failing test | `test: add failing test for next steps generator` |
 | 3 | Feat | Basic implementation | `feat: implement basic next steps generator` |

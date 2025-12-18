@@ -233,7 +233,7 @@ npm pack --dry-run
 ### Files Moving to `bin/commands/` (CLI)
 
 | Current Location | New Location | Reason |
-|-----------------|--------------|--------|
+| ----------------- | -------------- | -------- |
 | `scripts/install-wizard.ts` | `bin/commands/setup-wizard.ts` | Merge into CLI |
 | `scripts/config-health-check.ts` | `bin/commands/validate.ts` | Merge into CLI |
 | `scripts/sync-secrets.ts` | `bin/commands/sync-secrets.ts` | CLI command |
@@ -241,7 +241,7 @@ npm pack --dry-run
 ### Files Moving to `scripts/` (Dev Tools)
 
 | Current Location | New Location | Reason |
-|-----------------|--------------|--------|
+| ----------------- | -------------- | -------- |
 | `bin/dev-deploy.ts` | `scripts/dev-deploy.ts` | Dev-only workflow |
 | `bin/version.ts` | `scripts/version.ts` | Dev-only (release mgmt) |
 | `bin/check-logs.ts` | `scripts/check-logs.ts` | Dev-only (monitoring) |
@@ -251,13 +251,13 @@ npm pack --dry-run
 ### Files Becoming Libraries
 
 | Current Location | New Location | Reason |
-|-----------------|--------------|--------|
+| ----------------- | -------------- | -------- |
 | `scripts/infer-quilt-config.ts` | `bin/lib/config/infer-quilt-config.ts` | Imported by setup |
 
 ### Files to Investigate
 
 | File | Question | Action |
-|------|----------|--------|
+| ------ | ---------- | -------- |
 | `bin/benchling-webhook.ts` | Legacy? | Delete if unused |
 | `bin/publish.ts` | CI-only? | Move to `.github/workflows/` |
 | `bin/create-secret.ts` | Replaced? | Delete if redundant |
@@ -378,7 +378,7 @@ node dist/bin/cli.js  (same as developer)
 ## Comparison to Original Proposal
 
 | Aspect | Original (3 Options) | Revised (This Doc) |
-|--------|---------------------|-------------------|
+| -------- | --------------------- | ------------------- |
 | Directory names | `tools/` (new) | `bin/` + `scripts/` (existing) |
 | CLI implementation | Scattered | Consolidated in `bin/` |
 | Setup entry point | `scripts/` | `bin/cli.ts` |

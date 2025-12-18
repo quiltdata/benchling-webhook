@@ -634,7 +634,7 @@ After making all changes:
 ### What Goes Where
 
 | Configuration | Source | Destination |
-|---------------|--------|-------------|
+| --------------- | -------- | ------------- |
 | AWS Service Endpoints | XDG Config → Environment Variables | Flask App |
 | BenchlingSecret Name | XDG Config → Environment Variables | Flask App |
 | Benchling Credentials | Secrets Manager | Flask App (fetched at runtime) |

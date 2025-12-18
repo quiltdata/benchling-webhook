@@ -4,6 +4,7 @@
 **Reviewer:** Claude Code (Code Reviewer Agent)
 **Scope:** Implementation of Option A from spec/a07-library-config.md
 **Files Reviewed:**
+
 - `/Users/ernest/GitHub/benchling-webhook/lib/benchling-webhook-stack.ts` (lines 60-147)
 - `/Users/ernest/GitHub/benchling-webhook/lib/fargate-service.ts` (lines 302-323)
 - `/Users/ernest/GitHub/benchling-webhook/lib/types/config.ts` (complete)
@@ -16,6 +17,7 @@
 The current CloudFormation parameter implementation has a **critical flaw** that prevents library usage from working correctly. The hardcoded empty string defaults (`default: ""`) ignore config values passed to the stack constructor, resulting in "degraded" mode deployments with missing configuration.
 
 **Impact:**
+
 - Library users receive degraded deployments with empty environment variables
 - NPM deployment works because it explicitly passes `--parameters` flags
 - This creates a confusing user experience gap between library and CLI usage
@@ -31,7 +33,7 @@ The current CloudFormation parameter implementation has a **critical flaw** that
 These parameters control core Quilt service integration and are **required** for healthy operation:
 
 | Parameter ID | Line | Current Default | Proposed Default | Config Path |
-|--------------|------|-----------------|------------------|-------------|
+| -------------- | ------ | ----------------- | ------------------ | ------------- |
 | `PackagerQueueUrl` | 60-64 | `""` | `config.quilt.queueUrl \|\| ""` | `config.quilt.queueUrl` |
 | `AthenaUserDatabase` | 66-70 | `""` | `config.quilt.database \|\| ""` | `config.quilt.database` |
 | `QuiltWebHost` | 72-76 | `""` | `config.quilt.catalog \|\| ""` | `config.quilt.catalog` |
@@ -43,7 +45,7 @@ These parameters control core Quilt service integration and are **required** for
 These parameters are optional and should use config values if available:
 
 | Parameter ID | Line | Current Default | Proposed Default | Config Path |
-|--------------|------|-----------------|------------------|-------------|
+| -------------- | ------ | ----------------- | ------------------ | ------------- |
 | `IcebergDatabase` | 78-82 | `""` | `config.quilt.icebergDatabase \|\| ""` | `config.quilt.icebergDatabase` |
 | `IcebergWorkgroup` | 85-89 | `""` | `config.quilt.icebergWorkgroup \|\| ""` | `config.quilt.icebergWorkgroup` |
 | `AthenaUserWorkgroup` | 91-95 | `""` | `config.quilt.athenaUserWorkgroup \|\| ""` | `config.quilt.athenaUserWorkgroup` |
@@ -54,7 +56,7 @@ These parameters are optional and should use config values if available:
 These parameters already use config values as defaults:
 
 | Parameter ID | Line | Current Default | Status |
-|--------------|------|-----------------|--------|
+| -------------- | ------ | ----------------- | -------- |
 | `BenchlingSecretARN` | 103-107 | `config.benchling.secretArn` | ✅ Correct |
 | `LogLevel` | 109-114 | `config.logging?.level \|\| "INFO"` | ✅ Correct |
 | `ImageTag` | 116-120 | `config.deployment.imageTag \|\| "latest"` | ✅ Correct |
@@ -90,6 +92,7 @@ ECS Container Runtime
 #### Point A: Parameter Default Assignment (benchling-webhook-stack.ts:60-101)
 
 **Current implementation:**
+
 ```typescript
 const packagerQueueUrlParam = new cdk.CfnParameter(this, "PackagerQueueUrl", {
     type: "String",
@@ -101,6 +104,7 @@ const packagerQueueUrlParam = new cdk.CfnParameter(this, "PackagerQueueUrl", {
 **Problem:** Config value is available in scope (`config.quilt.queueUrl`) but **not used**.
 
 **Proposed fix:**
+
 ```typescript
 const packagerQueueUrlParam = new cdk.CfnParameter(this, "PackagerQueueUrl", {
     type: "String",
@@ -112,6 +116,7 @@ const packagerQueueUrlParam = new cdk.CfnParameter(this, "PackagerQueueUrl", {
 #### Point B: Parameter Value Extraction (benchling-webhook-stack.ts:136-147)
 
 **Current implementation (CORRECT):**
+
 ```typescript
 const packagerQueueUrlValue = packagerQueueUrlParam.valueAsString;
 const athenaUserDatabaseValue = athenaUserDatabaseParam.valueAsString;
@@ -120,6 +125,7 @@ const quiltWebHostValue = quiltWebHostParam.valueAsString;
 ```
 
 This is correct - it uses `valueAsString` which returns either:
+
 1. The `--parameters` CLI override value, OR
 2. The parameter's `default` value
 
@@ -128,6 +134,7 @@ The problem is the defaults are empty strings instead of config values.
 #### Point C: Props to FargateService (benchling-webhook-stack.ts:246-270)
 
 **Current implementation (CORRECT):**
+
 ```typescript
 this.fargateService = new FargateService(this, "FargateService", {
     // ... other props
@@ -143,6 +150,7 @@ This is correct - parameter values flow through as-is.
 #### Point D: Environment Variable Assignment (fargate-service.ts:295-323)
 
 **Current implementation (CORRECT with caveat):**
+
 ```typescript
 const environmentVars: { [key: string]: string } = {
     QUILT_WEB_HOST: props.quiltWebHost,           // ← Gets empty string from parameter
@@ -171,11 +179,13 @@ const environmentVars: { [key: string]: string } = {
 **Location:** `lib/benchling-webhook-stack.ts:60-101`
 
 **Problem:**
+
 ```typescript
 default: "",  // Ignores config.quilt.queueUrl
 ```
 
 **Impact:**
+
 - Library users get degraded deployments
 - No error during deployment - fails silently at runtime
 - Python application detects missing config and sets `mode: "degraded"`
@@ -187,6 +197,7 @@ default: "",  // Ignores config.quilt.queueUrl
 **Location:** Parameters on lines 60-101 vs 103-132
 
 **Problem:** The code already uses the correct pattern for some parameters:
+
 - Lines 103-132: ✅ Use config defaults
 - Lines 60-101: ❌ Use empty defaults
 
@@ -199,6 +210,7 @@ This inconsistency suggests the empty defaults were an **oversight** rather than
 **Location:** `lib/benchling-webhook-stack.ts:40-49`
 
 **Problem:**
+
 ```typescript
 const skipValidation = process.env.SKIP_CONFIG_VALIDATION === "true";
 if (!skipValidation && !config.benchling.secretArn) {
@@ -209,6 +221,7 @@ if (!skipValidation && !config.benchling.secretArn) {
 The validation only checks `benchling.secretArn`, not the Quilt fields that are causing degraded mode.
 
 **Missing Validation:**
+
 - `config.quilt.queueUrl` (required for PACKAGER_SQS_URL)
 - `config.quilt.database` (required for ATHENA_USER_DATABASE)
 - `config.quilt.catalog` (required for QUILT_WEB_HOST)
@@ -244,11 +257,13 @@ const packagerQueueUrlParam = new cdk.CfnParameter(this, "PackagerQueueUrl", {
 **Problem:** When npm deployment passes `--parameters`, these **override** the defaults. However, this behavior isn't documented in the parameter descriptions.
 
 **Current description:**
+
 ```typescript
 description: "SQS queue URL for Quilt package creation jobs"
 ```
 
 **Recommended description:**
+
 ```typescript
 description: "SQS queue URL for Quilt package creation jobs (overrides config value if specified)"
 ```
@@ -260,6 +275,7 @@ description: "SQS queue URL for Quilt package creation jobs (overrides config va
 **Location:** `lib/benchling-webhook-stack.ts:63, 69, 75`
 
 **Current comment:**
+
 ```typescript
 default: "",  // Will be resolved at deployment time
 ```
@@ -267,6 +283,7 @@ default: "",  // Will be resolved at deployment time
 **Problem:** This comment is **misleading**. The empty string is NOT resolved at deployment time - it stays empty. The npm CLI resolves it by passing `--parameters` flags, but library users don't do that.
 
 **Recommended comment:**
+
 ```typescript
 default: config.quilt.queueUrl || "",  // From profile config; can be overridden via --parameters
 ```
@@ -278,6 +295,7 @@ default: config.quilt.queueUrl || "",  // From profile config; can be overridden
 ### 4.1 NPM Deployment Command (bin/commands/deploy.ts)
 
 **Current behavior:**
+
 ```bash
 npx cdk deploy --parameters PackagerQueueUrl=<value> --parameters AthenaUserDatabase=<value> ...
 ```
@@ -285,6 +303,7 @@ npx cdk deploy --parameters PackagerQueueUrl=<value> --parameters AthenaUserData
 **Impact of change:** ✅ **NO BREAKING CHANGE**
 
 The npm command will continue to work because:
+
 1. `--parameters` flags **override** defaults (not merge)
 2. Parameter names remain unchanged
 3. Parameter values come from same source (`config.quilt.queueUrl`)
@@ -328,6 +347,7 @@ After:  PackagerQueueUrl = "https://sqs.us-east-1..." (same value, now from conf
 **Test case:** Does `--parameters` flag override config default?
 
 **Expected behavior:**
+
 ```bash
 cdk deploy --parameters PackagerQueueUrl=https://sqs.us-west-2.amazonaws.com/123/override
 ```
@@ -408,6 +428,7 @@ const athenaResultsBucketParam = new cdk.CfnParameter(this, "AthenaResultsBucket
 ```
 
 **Changes:**
+
 1. ✅ Use config values as defaults (primary fix)
 2. ✅ Update descriptions to clarify override behavior
 3. ⚠️ Optionally add validation constraints (discuss with team)
@@ -453,6 +474,7 @@ if (!skipValidation) {
 ```
 
 **Benefits:**
+
 - ✅ Fails fast with clear error message
 - ✅ Prevents deployments with missing config
 - ✅ Matches existing validation pattern (line 43-49)
@@ -540,6 +562,7 @@ test("throws error when required Quilt fields are missing", () => {
 ```
 
 **Test coverage:**
+
 - ✅ Verify parameter defaults use config values
 - ✅ Verify validation catches missing required fields
 - ✅ Ensure optional fields work correctly
@@ -553,12 +576,14 @@ test("throws error when required Quilt fields are missing", () => {
 **Test file:** `test/benchling-webhook-stack.test.ts`
 
 **Test cases:**
+
 1. ✅ Parameter defaults match config values
 2. ✅ Missing required Quilt fields throw validation error
 3. ✅ Optional Quilt fields work with or without values
 4. ✅ Existing tests continue to pass (regression)
 
 **Command:**
+
 ```bash
 npm run test:ts
 ```
@@ -636,6 +661,7 @@ npm run deploy:dev -- --profile test --yes
 ### 7.1 Parameter Value Exposure
 
 **Issue:** CloudFormation parameters are visible in:
+
 - CloudFormation console
 - AWS CLI (`aws cloudformation describe-stacks`)
 - CloudFormation change sets
@@ -645,6 +671,7 @@ npm run deploy:dev -- --profile test --yes
 **Risk Assessment:** ✅ **LOW RISK**
 
 These values are **not sensitive**:
+
 - Catalog URL: Already public (used in browser)
 - Database name: Internal identifier, not exploitable
 - Queue URL: Contains account ID (already known) and queue name (low risk)
@@ -656,6 +683,7 @@ These values are **not sensitive**:
 **Scenario:** Malicious actor with CloudFormation access could override parameters with malicious values.
 
 **Mitigation:**
+
 1. ✅ Requires CloudFormation `UpdateStack` permission (already protected by IAM)
 2. ✅ Parameter validation constraints (if added) limit malicious input
 3. ✅ Health check will fail if invalid values are provided
@@ -671,6 +699,7 @@ These values are **not sensitive**:
 **Section:** Library usage example
 
 **Current:**
+
 ```typescript
 new BenchlingWebhookStack(app, 'MyStack', {
   config: myConfig,
@@ -678,6 +707,7 @@ new BenchlingWebhookStack(app, 'MyStack', {
 ```
 
 **Add note:**
+
 ```markdown
 ### Library Usage
 
@@ -692,6 +722,7 @@ To override specific parameters at deployment time:
 ```bash
 cdk deploy --parameters PackagerQueueUrl=https://sqs...
 ```
+
 ```
 
 ### 8.2 CLAUDE.md (Developer-facing)
@@ -719,6 +750,7 @@ CloudFormation parameters now use config values as defaults, enabling library us
 **Update "Implementation Plan" section:**
 
 Add checkboxes for completed phases:
+
 ```markdown
 ### Phase 1: Update Parameter Defaults ✅
 
@@ -768,6 +800,7 @@ config.quilt.icebergDatabase = "";         // Case 2
 ```
 
 **Behavior with `config.quilt.icebergDatabase || ""`:**
+
 - Case 1: Returns `""` (empty string)
 - Case 2: Returns `""` (empty string)
 
@@ -794,6 +827,7 @@ cdk deploy --parameters PackagerQueueUrl=""
 ### 9.4 Config Value Changes After Deployment
 
 **Scenario:**
+
 1. Deploy with `config.quilt.queueUrl = "https://sqs.../queue1"`
 2. Update config to `config.quilt.queueUrl = "https://sqs.../queue2"`
 3. Re-deploy without passing `--parameters`
@@ -842,7 +876,7 @@ cdk deploy --parameters PackagerQueueUrl=""
 
 ### 11.2 Should-Have Changes (P1)
 
-4. ✅ **Add MinLength constraints to required parameters** - Prevents empty overrides
+1. ✅ **Add MinLength constraints to required parameters** - Prevents empty overrides
 
 ```typescript
 const packagerQueueUrlParam = new cdk.CfnParameter(this, "PackagerQueueUrl", {
@@ -853,19 +887,19 @@ const packagerQueueUrlParam = new cdk.CfnParameter(this, "PackagerQueueUrl", {
 });
 ```
 
-5. ✅ **Update parameter descriptions** - Clarify override behavior
+1. ✅ **Update parameter descriptions** - Clarify override behavior
 
 **Rationale:** Improves error messages and prevents configuration mistakes.
 
 ### 11.3 Nice-to-Have Changes (P2)
 
-6. ⚠️ **Add allowedPattern validation** - Stricter input validation
+1. ⚠️ **Add allowedPattern validation** - Stricter input validation
 
 ```typescript
 allowedPattern: "^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/\\d{12}/.+",
 ```
 
-7. ⚠️ **Add integration test for stack updates** - Verify CloudFormation change detection
+1. ⚠️ **Add integration test for stack updates** - Verify CloudFormation change detection
 
 **Rationale:** Additional safety, but not critical for basic functionality.
 
@@ -880,12 +914,14 @@ allowedPattern: "^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/\\d{12}/.+",
 ## 12. Implementation Checklist
 
 ### Phase 1: Code Changes
+
 - [ ] Update `lib/benchling-webhook-stack.ts` lines 60-101 (parameter defaults)
 - [ ] Add validation after line 49 (required field checks)
 - [ ] Update parameter descriptions (clarify override behavior)
 - [ ] Add MinLength constraints (optional but recommended)
 
 ### Phase 2: Testing
+
 - [ ] Add unit test for parameter defaults
 - [ ] Add unit test for validation errors
 - [ ] Add integration test for library usage
@@ -893,12 +929,14 @@ allowedPattern: "^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/\\d{12}/.+",
 - [ ] Test CloudFormation stack update behavior
 
 ### Phase 3: Documentation
+
 - [ ] Update README.md (library usage example)
 - [ ] Update CLAUDE.md (parameter flow documentation)
 - [ ] Update spec/a07-library-config.md (mark phases complete)
 - [ ] Add migration notes if needed
 
 ### Phase 4: Deployment
+
 - [ ] Deploy to dev environment
 - [ ] Verify health check returns "healthy"
 - [ ] Deploy to prod environment
@@ -949,7 +987,7 @@ Implement Option A as specified, with the following enhancements:
 ## Appendix A: Full Parameter Mapping
 
 | Parameter ID | Config Path | Environment Variable | Required | Default Pattern |
-|--------------|-------------|---------------------|----------|-----------------|
+| -------------- | ------------- | --------------------- | ---------- | ----------------- |
 | PackagerQueueUrl | `config.quilt.queueUrl` | `PACKAGER_SQS_URL` | ✅ Yes | `config.quilt.queueUrl \|\| ""` |
 | AthenaUserDatabase | `config.quilt.database` | `ATHENA_USER_DATABASE` | ✅ Yes | `config.quilt.database \|\| ""` |
 | QuiltWebHost | `config.quilt.catalog` | `QUILT_WEB_HOST` | ✅ Yes | `config.quilt.catalog \|\| ""` |

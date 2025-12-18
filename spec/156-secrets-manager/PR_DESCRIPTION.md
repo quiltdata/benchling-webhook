@@ -207,7 +207,7 @@ This release maintains full backward compatibility. Breaking changes planned for
 ### Phase Completion Status
 
 | Phase | Description | Status |
-|-------|-------------|--------|
+| ------- | ------------- | -------- |
 | Phase 1 | Secret Structure & Validation | ✅ Complete |
 | Phase 2 | CLI Parameter Addition | ✅ Complete |
 | Phase 3 | CDK Secret Handling | ✅ Complete |

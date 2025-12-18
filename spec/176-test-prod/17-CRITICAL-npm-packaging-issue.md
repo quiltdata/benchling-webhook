@@ -36,7 +36,7 @@
 The consolidation mistakenly treated **ALL** scripts as "dev-only tools" when in reality:
 
 | Script | Type | Used By | Should Publish? |
-|--------|------|---------|-----------------|
+| -------- | ------ | --------- | ----------------- |
 | `infer-quilt-config.ts` | **Library** | `bin/commands/setup-wizard.ts` | ✅ YES |
 | `sync-secrets.ts` | **Library** | `bin/commands/setup-wizard.ts` | ✅ YES |
 | `config-health-check.ts` | **Library** | Exports class, has main() | ⚠️ HYBRID |

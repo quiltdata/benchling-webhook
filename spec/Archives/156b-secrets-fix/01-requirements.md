@@ -20,7 +20,7 @@ A single AWS Secrets Manager secret containing **all 11 runtime parameters**.
 **Required Parameters**:
 
 | Parameter | Type | Example | Description |
-|-----------|------|---------|-------------|
+| ----------- | ------ | --------- | ------------- |
 | `APP_DEFINITION_ID` | string | `appdef_wqFfaXBVMu` | App definition ID for webhook verification |
 | `CLIENT_ID` | string | `wqFfVOhbYe` | OAuth client ID from Benchling app |
 | `CLIENT_SECRET` | string | `6NUPNtpWP7f...` | OAuth client secret from Benchling app |

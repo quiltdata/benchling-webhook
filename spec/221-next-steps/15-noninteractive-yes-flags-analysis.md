@@ -22,7 +22,7 @@
 ### 1.1 Commands with Prompt Behavior
 
 | Command | Flag | Prompts? | Library | Location | Notes |
-|---------|------|----------|---------|----------|-------|
+| --------- | ------ | ---------- | --------- | ---------- | ------- |
 | `install` | `--yes` | ✅ YES (broken) | inquirer | `bin/commands/install.ts:137-146` | Prompts for deployment confirmation |
 | `setup-wizard` | `nonInteractive` | ✅ YES (broken) | inquirer | `bin/commands/setup-wizard.ts:332+` | Prompts for all config fields |
 | `deploy` | `--yes` | ❌ NO | enquirer | `bin/commands/deploy.ts:321-331` | Correctly skips prompt |
@@ -258,7 +258,7 @@ Even when:
 ### 2.4 Inconsistent Behavior Across Commands
 
 | Command | With `--yes` | Expected | Actual | Status |
-|---------|--------------|----------|--------|--------|
+| --------- | -------------- | ---------- | -------- | -------- |
 | `deploy` | `npx ... deploy --yes` | Skip prompt | ✅ Skips | ✅ WORKS |
 | `install` | `npx ... --yes` | Skip all prompts | ❌ Prompts for config | 🔴 BROKEN |
 | `setup` | Via `npm run setup -- --yes` | Skip prompts | ❌ Prompts for config | 🔴 BROKEN |
@@ -496,7 +496,7 @@ export async function validateCommand(options: {
 ### 3.5 Options Comparison
 
 | Criterion | Option A: Smart Prompting | Option B: Skip Flag | Option C: Unify on --yes | Option D: Validate Cmd |
-|-----------|--------------------------|---------------------|--------------------------|------------------------|
+| ----------- | -------------------------- | --------------------- | -------------------------- | ------------------------ |
 | **Effort** | 4-6 hours | 4-6 hours | 8-12 hours | 4-6 hours |
 | **First-time setup** | ✅ Prompts for missing | ✅ Uses defaults | ✅ Prompts for missing | ⚠️ Extra validation step |
 | **Repeat deployments** | ✅ No prompts | ✅ No prompts | ✅ No prompts | ✅ No prompts (after validate) |
@@ -824,7 +824,7 @@ After implementing the fix, verify:
 ### Prompts in `setup-wizard.ts`
 
 | Line | Prompt | Condition | Skippable? |
-|------|--------|-----------|------------|
+| ------ | -------- | ----------- | ------------ |
 | 332 | Quilt Stack ARN | Always | ✅ With nonInteractive |
 | 332 | Quilt Catalog URL | Always | ✅ With nonInteractive |
 | 332 | Quilt Athena Database | Always | ✅ With nonInteractive |
@@ -852,7 +852,7 @@ After implementing the fix, verify:
 ### Prompts in `install.ts`
 
 | Line | Prompt | Condition | Skippable? |
-|------|--------|-----------|------------|
+| ------ | -------- | ----------- | ------------ |
 | 137 | Deploy to AWS now? | If not --yes | ✅ With --yes |
 
 **Total**: 1 prompt (1 skippable)
@@ -860,7 +860,7 @@ After implementing the fix, verify:
 ### Prompts in `deploy.ts`
 
 | Line | Prompt | Condition | Skippable? |
-|------|--------|-----------|------------|
+| ------ | -------- | ----------- | ------------ |
 | 321 | Proceed with deployment? | If not --yes | ✅ With --yes |
 
 **Total**: 1 prompt (1 skippable)
@@ -868,7 +868,7 @@ After implementing the fix, verify:
 ### Prompts in `setup-profile.ts`
 
 | Line | Prompt | Condition | Skippable? |
-|------|--------|-----------|------------|
+| ------ | -------- | ----------- | ------------ |
 | 58 | Overwrite existing? | If profile exists | ❌ No flag |
 | 101 | Use inheritance? | Always | ❌ No flag |
 | 101 | App Definition ID | Always | ❌ No flag |

@@ -17,7 +17,7 @@ The secrets manager implementation (Issue #156) has been thoroughly tested and i
 ### Automated Tests
 
 | Component | Tests | Status | Coverage |
-|-----------|-------|--------|----------|
+| ----------- | ------- | -------- | ---------- |
 | **TypeScript** | 181 passed | ✅ PASS | 94.44% |
 | **Python** | 245 passed | ✅ PASS | 97% |
 | **Total** | **426 passed** | ✅ **PASS** | **>90%** |
@@ -25,7 +25,7 @@ The secrets manager implementation (Issue #156) has been thoroughly tested and i
 ### Manual Testing
 
 | Scenario | Status |
-|----------|--------|
+| ---------- | -------- |
 | ARN validation | ✅ PASS |
 | JSON validation | ✅ PASS |
 | Invalid input handling | ✅ PASS |

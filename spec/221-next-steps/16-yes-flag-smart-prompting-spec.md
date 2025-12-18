@@ -187,7 +187,7 @@ Full interactive mode (current behavior):
 ### 4.3 Value Type Decision Matrix
 
 | Value Type | Has CONFIGURED Value | Has OPTIONAL Preset | --yes Behavior |
-|------------|---------------------|---------------------|----------------|
+| ------------ | --------------------- | --------------------- | ---------------- |
 | CONFIGURED | ✅ Yes | N/A | Use CONFIGURED value, no prompt |
 | OPTIONAL | ❌ No | ✅ Yes | Use OPTIONAL preset, no prompt |
 | Required Missing | ❌ No | ❌ No | **Prompt required** |
@@ -583,5 +583,5 @@ None. Specification is complete and ready for implementation.
 ## 12. Changelog
 
 | Date | Change | Author |
-|------|--------|--------|
+| ------ | -------- | -------- |
 | 2025-11-13 | Initial specification created | Assistant |

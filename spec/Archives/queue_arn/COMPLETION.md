@@ -187,7 +187,7 @@ grep -r "QUEUE_URL" --exclude-dir=.git --exclude-dir=spec/queue_arn --exclude=CH
 
 ### Bug Fixes (5)
 | File | Type | Issue | Fix |
-|------|------|-------|-----|
+| ------ | ------ | ------- | ----- |
 | test_app.py | Python | Wrong attribute | queue_url → queue_arn |
 | run_local.py | Python | Wrong env var | QUEUE_URL → QUEUE_ARN |
 | test_benchling.py | Python | Wrong parameter | queue_url → queue_arn |
@@ -196,7 +196,7 @@ grep -r "QUEUE_URL" --exclude-dir=.git --exclude-dir=spec/queue_arn --exclude=CH
 
 ### Documentation Updates (3)
 | File | Type | Change |
-|------|------|--------|
+| ------ | ------ | -------- |
 | AGENTS.md | Markdown | SQS_QUEUE_URL → QUEUE_ARN |
 | docker/README.md | Markdown | SQS_QUEUE_URL → QUEUE_ARN |
 | docker/src/README.md | Markdown | SQS_QUEUE_URL → QUEUE_ARN |

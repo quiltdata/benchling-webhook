@@ -445,7 +445,7 @@ From bin/commands/test.ts (not read yet, but referenced):
 #### 16.1 Requirements vs. Current State
 
 | Requirement | Current State | Gap |
-|-------------|---------------|-----|
+| ------------- | --------------- | ----- |
 | AC1: Default wizard behavior | Help displayed | Need to change default command |
 | AC2: Manifest generation | Separate command | Need to integrate into wizard flow |
 | AC3: Credential collection | In install-wizard.ts | Need to integrate into wizard |

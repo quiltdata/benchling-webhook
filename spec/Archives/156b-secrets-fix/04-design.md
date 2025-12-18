@@ -149,7 +149,7 @@ This design document defines the complete architectural solution for implementin
 
 #### Benchling Authentication (4 parameters)
 | Parameter | Type | Example | Purpose |
-|-----------|------|---------|---------|
+| ----------- | ------ | --------- | --------- |
 | `tenant` | string | `quilt-dtt` | Benchling subdomain |
 | `client_id` | string | `wqFfVOhbYe` | OAuth client ID |
 | `client_secret` | string | `6NUPNtpWP7f...` | OAuth client secret (sensitive) |
@@ -157,14 +157,14 @@ This design document defines the complete architectural solution for implementin
 
 #### Quilt Package Configuration (3 parameters)
 | Parameter | Type | Example | Purpose |
-|-----------|------|---------|---------|
+| ----------- | ------ | --------- | --------- |
 | `pkg_prefix` | string | `benchling` | Quilt package name prefix |
 | `pkg_key` | string | `experiment_id` | Metadata key for linking entries to packages |
 | `user_bucket` | string | `my-s3-bucket` | S3 bucket name for Benchling exports |
 
 #### Application Behavior (3 parameters)
 | Parameter | Type | Example | Purpose |
-|-----------|------|---------|---------|
+| ----------- | ------ | --------- | --------- |
 | `log_level` | string | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
 | `enable_webhook_verification` | string/bool | `"true"` | Verify webhook signatures |
 | `webhook_allow_list` | string | `""` | Comma-separated IP allowlist (empty = no restriction) |
@@ -181,7 +181,7 @@ This design document defines the complete architectural solution for implementin
 
 **Naming Translation Table**:
 | Concept | Documentation | Secret Key | Python Field | TypeScript Field |
-|---------|--------------|------------|--------------|------------------|
+| --------- | -------------- | ------------ | -------------- | ------------------ |
 | Tenant | `TENANT` | `tenant` | `tenant` | `tenant` |
 | Client ID | `CLIENT_ID` | `client_id` | `client_id` | `clientId` |
 | Client Secret | `CLIENT_SECRET` | `client_secret` | `client_secret` | `clientSecret` |
@@ -1312,7 +1312,7 @@ pytest --cov=docker/src/config --cov=docker/src/config_resolver --cov-report=htm
 ## Appendix A: Design Decisions Summary
 
 | Decision | Choice | Rationale |
-|----------|--------|-----------|
+| ---------- | -------- | ----------- |
 | Number of runtime parameters | 10 (not 11) | ECR_REPOSITORY_NAME is deployment-time only |
 | Secret key naming | snake_case | Backward compatibility, Python convention |
 | Required vs optional parameters | All 10 required | Fail-fast, no silent defaults |

@@ -493,7 +493,7 @@ After each episode, code should be in a stable state that could be committed if 
 ## Time Estimates
 
 | Episode | Estimated Time | Cumulative |
-|---------|---------------|------------|
+| --------- | --------------- | ------------ |
 | 1. Install Foundation | 1-1.5h | 1-1.5h |
 | 2. Setup Return Value | 1-1.5h | 2-3h |
 | 3. Confirmation Prompt | 1-1.5h | 3-4.5h |

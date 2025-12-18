@@ -348,7 +348,7 @@ The implementation will create a unified configuration model that eliminates env
 ### Configuration Variables Reference
 
 | Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
+| ---------- | ---------- | --------- | ------------- |
 | `BENCHLING_APP_DEFINITION_ID` | Yes | - | Benchling app identifier from manifest |
 | `BENCHLING_CLIENT_ID` | Yes | - | OAuth client ID from Benchling app |
 | `BENCHLING_CLIENT_SECRET` | Yes | - | OAuth client secret from Benchling app |
@@ -364,7 +364,7 @@ The implementation will create a unified configuration model that eliminates env
 ### Configuration Failure Modes Reference
 
 | Failure | Cause | Mitigation |
-|---------|-------|------------|
+| --------- | ------- | ------------ |
 | Missing Quilt catalog | Quilt3 not configured | Prompt user to run `quilt3 config` and retry |
 | XDG config corrupted | Manual file edit | Validate JSON schema on read; re-run `make install` |
 | AWS auth error | Invalid credentials | Check `AWS_PROFILE` and region before operations |

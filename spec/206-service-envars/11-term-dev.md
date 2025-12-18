@@ -17,7 +17,7 @@ This document catalogs all uses of "dev" in:
 ## THE FOUR MEANINGS OF "DEV"
 
 | # | Meaning | Examples | Scope | Confusing? |
-|---|---------|----------|-------|------------|
+| --- | --------- | ---------- | ------- | ------------ |
 | 1. **Profile Name** | `--profile dev`, `PROFILE=dev` | Configuration files in `~/.config/benchling-webhook/dev/` | ⚠️ Independent of stage! |
 | 2. **Deployment Stage** | `--stage dev` | AWS API Gateway stage (e.g., `/dev/webhook`) | ⚠️ Independent of profile! |
 | 3. **Docker Service** | `app-dev`, `--profile dev` (Compose) | Hot-reload container on port 5002 | ✅ Clear context |
@@ -59,7 +59,7 @@ This document catalogs all uses of "dev" in:
 **Usage Locations**:
 
 | File | Line | Context |
-|------|------|---------|
+| ------ | ------ | --------- |
 | `docker/Makefile` | 11 | `PROFILE ?= dev` (default value) |
 | `package.json` | 21 | `deploy:dev` uses `--profile dev` |
 | `package.json` | 31 | `setup:dev` uses `--profile dev` |
@@ -118,7 +118,7 @@ npm run deploy -- --profile sales --stage dev
 **Usage Locations**:
 
 | File | Line | Context |
-|------|------|---------|
+| ------ | ------ | --------- |
 | `bin/cli.ts` | 67 | `--stage <name>: "dev or prod"` |
 | `package.json` | 21 | `deploy:dev` uses `--stage dev` |
 | `package.json` | 22 | `deploy:prod` uses `--stage prod` |
@@ -184,7 +184,7 @@ services:
 **Makefile Targets**:
 
 | Target | Port | Purpose |
-|--------|------|---------|
+| -------- | ------ | --------- |
 | `run` / `run-dev` | 5002 | Start Docker dev service |
 | `test-dev` | 5002 | Test webhooks against Docker dev |
 | `health-dev` | 5002 | Health check Docker dev |
@@ -327,7 +327,7 @@ debug = os.getenv("FLASK_ENV") == "development"
 ## RELATIONSHIP MATRIX
 
 | Meaning | Scope | Default | Port | Environment Variable | File Location |
-|---------|-------|---------|------|---------------------|---------------|
+| --------- | ------- | --------- | ------ | --------------------- | --------------- |
 | **Profile Name** | Configuration | `dev` | N/A | `PROFILE=dev` | `~/.config/benchling-webhook/dev/` |
 | **Deployment Stage** | AWS Infrastructure | `prod` | N/A | N/A | Stack name, API Gateway |
 | **Docker Service** | Local Development | `app` (prod) | 5002 | `FLASK_ENV=development` | `docker-compose.yml` |
@@ -374,7 +374,7 @@ npm run deploy -- --profile dev --stage prod
 **Examples**:
 
 | Command | What Users Think | What It Actually Does |
-|---------|------------------|----------------------|
+| --------- | ------------------ | ---------------------- |
 | `npm run deploy:dev` | Deploys Docker dev container | Deploys to AWS dev stage using dev profile |
 | `make run-dev` | Runs dev version in AWS | Starts Docker dev container locally on port 5002 |
 | `npm run test:dev` | Tests Docker dev container | Tests AWS dev stage deployment (and auto-deploys if needed!) |
@@ -473,7 +473,7 @@ npm run deploy:prod  # Uses prod profile's imageTag from config
 ### Package.json Scripts (6 scripts)
 
 | Script | Profile | Stage | Purpose |
-|--------|---------|-------|---------|
+| -------- | --------- | ------- | --------- |
 | `deploy:dev` | `dev` | `dev` | Deploy dev profile to dev stage |
 | `setup:dev` | `dev` | N/A | Configure dev profile |
 | `test:dev` | `dev` | `dev` | Test dev stage (auto-deploys if needed) |
@@ -484,7 +484,7 @@ npm run deploy:prod  # Uses prod profile's imageTag from config
 ### Makefile Targets (8 targets in docker/Makefile)
 
 | Target | Type | Port | Purpose |
-|--------|------|------|---------|
+| -------- | ------ | ------ | --------- |
 | `run` / `run-dev` | Docker | 5002 | Start Docker dev service |
 | `test-dev` | Docker | 5002 | Test Docker dev service |
 | `health-dev` | Docker | 5002 | Health check Docker dev |
@@ -495,20 +495,20 @@ npm run deploy:prod  # Uses prod profile's imageTag from config
 ### Makefile Variables (2 variables)
 
 | Variable | Value | Purpose |
-|----------|-------|---------|
+| ---------- | ------- | --------- |
 | `PROFILE` | `dev` (default) | Default profile name |
 | `PORT_DOCKER_DEV` | `5002` | Docker dev service port |
 
 ### Docker Services (1 service)
 
 | Service | Profile | Port | Environment |
-|---------|---------|------|-------------|
+| --------- | --------- | ------ | ------------- |
 | `app-dev` | `dev` | 5002 | `FLASK_ENV=development` |
 
 ### TypeScript/JavaScript Files (15+ files)
 
 | File | Dev References | Type |
-|------|----------------|------|
+| ------ | ---------------- | ------ |
 | `bin/cli.ts` | Examples with `--profile dev`, `--stage dev` | Profile + Stage |
 | `bin/commands/deploy.ts` | Auto-detect logic for dev profile | Profile + Version Tags |
 | `bin/commands/setup-profile.ts` | Default logic for dev profile | Profile |
@@ -520,7 +520,7 @@ npm run deploy:prod  # Uses prod profile's imageTag from config
 ### Python Files (5+ files)
 
 | File | Dev References | Type |
-|------|----------------|------|
+| ------ | ---------------- | ------ |
 | `docker/src/app.py` | `FLASK_ENV == "development"` | Flask Mode |
 | `docker/scripts/run_native.py` | `profile="dev"` default | Profile |
 | `docker/scripts/test_webhook.py` | `profile = "dev"` default | Profile |
@@ -530,7 +530,7 @@ npm run deploy:prod  # Uses prod profile's imageTag from config
 ### Configuration Files (3 files)
 
 | File | Dev References | Type |
-|------|----------------|------|
+| ------ | ---------------- | ------ |
 | `docker-compose.yml` | `app-dev` service, `profiles: ["dev"]` | Docker Service |
 | `.env.example` | `FLASK_ENV=development` | Flask Mode |
 | `test/fixtures/config-v0.7.0-dev.json` | Test fixture | Profile |
@@ -621,7 +621,7 @@ uv run python scripts/test_query.py --profile dev
 **Problem**: Similar names for Docker vs AWS operations
 
 | Command | Actual Target | Port/Stage | Users Might Think |
-|---------|---------------|------------|-------------------|
+| --------- | --------------- | ------------ | ------------------- |
 | `npm run deploy:dev` | AWS dev stage | N/A | Docker dev container |
 | `make run-dev` | Docker dev service | 5002 | AWS dev environment |
 | `npm run test:dev` | AWS dev stage | N/A | Docker dev container |
@@ -751,7 +751,7 @@ Add to `package.json` for clearer intent:
 Consider renaming for clarity:
 
 | Current | Better Alternative | Why |
-|---------|-------------------|-----|
+| --------- | ------------------- | ----- |
 | `test-dev` | `test-docker-dev` | Clarify it's Docker, not AWS |
 | `run-dev` | `run-docker-dev` | Match port naming pattern |
 | `test:dev` | `test:aws:dev` | Clarify AWS target |
@@ -763,7 +763,7 @@ Consider renaming for clarity:
 ## COMPARISON TO "LOCAL" TERMINOLOGY
 
 | Aspect | "local" | "dev" |
-|--------|---------|-------|
+| -------- | --------- | ------- |
 | **Distinct Meanings** | 5 | 4 |
 | **Scope** | Mostly local development | Local + AWS + Git + Flask |
 | **Consistency** | Low (5 unrelated meanings) | High (4 related meanings) |
@@ -785,7 +785,7 @@ Consider renaming for clarity:
 ## SUMMARY STATISTICS
 
 | Category | Count | Notes |
-|----------|-------|-------|
+| ---------- | ------- | ------- |
 | **Distinct Meanings** | 4 | Profile, Stage, Docker Service, Version Tag |
 | **Project Files with "dev"** | ~60 | Excluding node_modules |
 | **Makefile Targets** | 8 | All in docker/Makefile |

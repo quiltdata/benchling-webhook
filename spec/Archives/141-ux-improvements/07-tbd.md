@@ -511,7 +511,7 @@ ruff format src/
 ### Completion by Episode Group
 
 | Group | Total Episodes | Done | Partial | Not Done | % Complete |
-|-------|----------------|------|---------|----------|------------|
+| ------- | ---------------- | ------ | --------- | ---------- | ------------ |
 | A: Foundation | 3 | 2 | 0 | 1 | 67% |
 | B: URLs & Navigation | 6 | 2 | 0 | 3 | 33% (1 blocked) |
 | C: Metadata Structure | 4 | 0 | 2 | 2 | 25% |
@@ -524,7 +524,7 @@ Note: E2.6 (conditional) not counted in totals.
 ### Completion by User Story
 
 | User Story | Description | Status | Evidence |
-|------------|-------------|--------|----------|
+| ------------ | ------------- | -------- | ---------- |
 | US-1 | Display ID Prominence | ⚠️ PARTIAL | Canvas ✅, README ❌ |
 | US-2 | Package Revision URLs | ❌ NOT DONE | Not investigated |
 | US-3 | Browse Package Button | ✅ DONE | Implemented & tested |
@@ -536,7 +536,7 @@ Note: E2.6 (conditional) not counted in totals.
 ### Test Coverage Status
 
 | Test Type | Required | Created | Passing | Missing |
-|-----------|----------|---------|---------|---------|
+| ----------- | ---------- | --------- | --------- | --------- |
 | Display ID Canvas | ✅ | ✅ | ✅ | - |
 | Display ID README | ✅ | ❌ | - | All tests |
 | URL Linkification | ✅ | ⚠️ | ⚠️ | README-specific tests |
@@ -689,7 +689,7 @@ Note: E2.6 (conditional) not counted in totals.
 ### Source Files
 
 | File | Current State | Changes Needed | Episodes |
-|------|---------------|----------------|----------|
+| ------ | --------------- | ---------------- | ---------- |
 | `docker/src/entry_packager.py` | Partial | Add indices, fix README title, add metadata_version, linkify URLs | E1.3, E2.2, E3.2, E3.4 |
 | `docker/src/packages.py` | Unknown | Possibly fix upload_url (pending E2.5) | E2.6 (conditional) |
 | `docker/src/canvas_formatting.py` | Complete | None | - |
@@ -700,7 +700,7 @@ Note: E2.6 (conditional) not counted in totals.
 ### Test Files
 
 | File | Current State | Changes Needed | Episodes |
-|------|---------------|----------------|----------|
+| ------ | --------------- | ---------------- | ---------- |
 | `docker/tests/test_entry_packager.py` | Partial | Add README tests, index tests, version tests | E1.1, E3.1, E3.3 |
 | `docker/tests/test_canvas_formatting.py` | Partial | Add README URL tests | E2.1 |
 | `docker/tests/test_packages.py` | Unknown | Add URL validation tests | E2.5 |

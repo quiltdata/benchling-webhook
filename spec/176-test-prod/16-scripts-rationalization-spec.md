@@ -40,7 +40,7 @@ scripts/
 ### By npm Scripts
 
 | Script | npm Command | Category | Used In |
-|--------|-------------|----------|---------|
+| -------- | ------------- | ---------- | --------- |
 | `version.ts` | `npm run version` | Release | Frequently |
 | `check-logs.ts` | `npm run deploy:logs` | Monitoring | Frequently |
 | `config-health-check.ts` | `npm run setup:health` | Setup | Occasionally |
@@ -54,7 +54,7 @@ scripts/
 ### By Imports
 
 | Script | Imported By | Purpose |
-|--------|-------------|---------|
+| -------- | ------------- | --------- |
 | `infer-quilt-config.ts` | `bin/commands/setup-wizard.ts` | Setup utility |
 | `sync-secrets.ts` | `bin/commands/setup-wizard.ts` | Setup utility |
 | `config-health-check.ts` | None (standalone) | Validation tool |
@@ -172,7 +172,7 @@ scripts/
 ### Detailed Renaming Plan
 
 | Old Name | New Name | Reason |
-|----------|----------|--------|
+| ---------- | ---------- | -------- |
 | `config-health-check.ts` | `setup-validate-config.ts` | Matches `setup:*` npm script pattern |
 | `infer-quilt-config.ts` | `setup-infer-quilt.ts` | Matches `setup:*` npm script pattern, shorter |
 | `sync-secrets.ts` | `setup-sync-secrets.ts` | Matches `setup:*` npm script pattern |

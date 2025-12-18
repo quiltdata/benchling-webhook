@@ -388,7 +388,7 @@ npm run release              # Full release workflow
 ### Command Comparison
 
 | Task | NPX Command | NPM Command |
-|------|-------------|-------------|
+| ------ | ------------- | ------------- |
 | Generate manifest | `npx ... manifest` | N/A (use npx) |
 | Setup configuration | `npx ... init` (basic) | `npm run setup` (advanced) |
 | Deploy to AWS | `npx ... deploy` | `npm run deploy:prod` |

@@ -17,7 +17,7 @@ Successfully refactored the monolithic setup wizard (1150 lines) into 7 independ
 ### 1. Core Phase Modules (`lib/wizard/`)
 
 | File | Lines | Purpose |
-|------|-------|---------|
+| ------ | ------- | --------- |
 | `types.ts` | 178 | Shared TypeScript interfaces for all phases |
 | `phase1-catalog-discovery.ts` | 164 | Detect and confirm catalog (NO AWS) |
 | `phase2-stack-query.ts` | 127 | Query CloudFormation for confirmed catalog |
@@ -32,7 +32,7 @@ Successfully refactored the monolithic setup wizard (1150 lines) into 7 independ
 ### 2. Refactored Orchestrator
 
 | File | Before | After | Change |
-|------|--------|-------|--------|
+| ------ | -------- | ------- | -------- |
 | `bin/commands/setup-wizard.ts` | 1150 lines | 291 lines | -75% |
 
 ---
@@ -254,7 +254,7 @@ setup-wizard.ts:
 ### Line Count by Phase
 
 | Module | Lines | Complexity |
-|--------|-------|------------|
+| -------- | ------- | ------------ |
 | types.ts | 178 | Simple (just types) |
 | phase1 | 164 | Low (detection + prompt) |
 | phase2 | 127 | Low (AWS query wrapper) |

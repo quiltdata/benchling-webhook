@@ -117,7 +117,7 @@ Everything else (AWS account, region, SQS queue, database) is automatically infe
 ## Implementation Timeline
 
 | Phase | Duration | Description |
-|-------|----------|-------------|
+| ------- | ---------- | ------------- |
 | Phase 1: Setup | 2 hours | Install dependencies, configure TypeScript, update package.json |
 | Phase 2: Core | 4 hours | Extract config utilities, refactor bin/benchling-webhook.ts |
 | Phase 3: CLI | 8 hours | Implement CLI entry point and commands (init, deploy, validate) |

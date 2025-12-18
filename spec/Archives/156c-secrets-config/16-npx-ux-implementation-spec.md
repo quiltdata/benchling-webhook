@@ -24,7 +24,7 @@
 ### Command Overview
 
 | Command | Purpose | Interactive | Manual Steps | Use Case |
-|---------|---------|-------------|--------------|----------|
+| --------- | --------- | ------------- | -------------- | ---------- |
 | `setup` | Full guided wizard | Yes | Pauses for manual | First-time setup |
 | `init` | Generate manifest | No | Shows instructions | Quick start, regenerate |
 | `deploy` | Deploy/update stack | Yes (prompts) | None | Deploy, update secrets |

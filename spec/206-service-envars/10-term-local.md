@@ -13,7 +13,7 @@ The word "local" is used inconsistently across the project with at least **5 dif
 ## THE FIVE MEANINGS OF "LOCAL"
 
 | Meaning | Examples | Confusing? |
-|---------|----------|------------|
+| --------- | ---------- | ------------ |
 | 1. **Native Python** (not Docker) | `run-local`, `PORT_LOCAL`, `test-local` | ✅ Consistent |
 | 2. **Built on dev machine** (not CI) | `docker-build-local` | ✅ Makes sense |
 | 3. **Built on dev machine BUT pushed to AWS** | `push-local` | ❌ VERY CONFUSING! |
@@ -27,7 +27,7 @@ The word "local" is used inconsistently across the project with at least **5 dif
 ### Package.json (1 script)
 
 | Script | Uses Docker? | Port | What "local" means |
-|--------|--------------|------|-------------------|
+| -------- | -------------- | ------ | ------------------- |
 | `test:local` | Builds image, tests Python | 5001 | "Not deployed to AWS" |
 
 **Problem:** Builds Docker but tests native Python - why build Docker at all?!
@@ -37,7 +37,7 @@ The word "local" is used inconsistently across the project with at least **5 dif
 ### Makefile (7 targets)
 
 | Target | Uses Docker? | Port | What "local" means | Pushes to AWS? |
-|--------|--------------|------|-------------------|----------------|
+| -------- | -------------- | ------ | ------------------- | ---------------- |
 | `run-local` | NO | 5001 | Native Python | NO |
 | `run-local-verbose` | NO | 5001 | Native Python | NO |
 | `run-local-ngrok` | NO | 5001 | Native Python + tunnel | NO |
@@ -61,7 +61,7 @@ The word "local" is used inconsistently across the project with at least **5 dif
 ### Files (1 file)
 
 | File | What it does | What "local" means |
-|------|--------------|-------------------|
+| ------ | -------------- | ------------------- |
 | `run_local.py` | Runs Flask in native Python | Runs on your machine (but pulls secrets from AWS!) |
 
 **Problem:** It's "local execution" but "remote configuration" - confusing!
@@ -120,7 +120,7 @@ Should be:
 ## COMPLETE INVENTORY: EVERY "LOCAL" USAGE
 
 | Command/File | Docker? | Port | AWS Push? | AWS Pull? | What "local" means |
-|--------------|---------|------|-----------|-----------|-------------------|
+| -------------- | --------- | ------ | ----------- | ----------- | ------------------- |
 | `npm run test:local` | Build only | 5001 | NO | YES | "Not deployed" |
 | `make run-local` | NO | 5001 | NO | YES | "Native Python" |
 | `make run-local-verbose` | NO | 5001 | NO | YES | "Native Python" |
@@ -216,7 +216,7 @@ These refer to Docker operations on the local dev machine:
 ## RECOMMENDED NAMING CONVENTION
 
 | Current Name | Better Name | Why |
-|--------------|-------------|-----|
+| -------------- | ------------- | ----- |
 | `push-local` | `push-from-dev` or `push-with-arch` | Makes clear it pushes TO AWS |
 | `PORT_LOCAL` | `PORT_NATIVE` | Clarifies it's for native Python |
 | `test:local` | `test:native` | Clarifies it tests Python (not Docker) |

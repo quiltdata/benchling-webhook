@@ -1394,7 +1394,7 @@ Relates to #156
 ## Episode Summary
 
 | Episode | Description | Complexity | Status |
-|---------|-------------|------------|--------|
+| --------- | ------------- | ------------ | -------- |
 | 1 | Type definitions | Low | ✅ |
 | 2 | Format detection | Low | ✅ |
 | 3 | ARN validation | Medium | ✅ |
