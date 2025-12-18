@@ -170,9 +170,13 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Architecture:
 # - --preload: Load app before forking workers (enables JWKS cache sharing)
 # - --workers 2: Reduced from 4 (shared cache eliminates need for more workers)
+# - --worker-tmp-dir /dev/shm: Use tmpfs for worker heartbeat files (read-only filesystem compatibility)
 # Timeout Configuration:
 # - --timeout 60: Worker timeout (allows JWKS fetch in VPC to complete)
 # - --graceful-timeout 30: Graceful shutdown period for workers
 # - --keep-alive 75: Keep connections alive to avoid recreation overhead
 # - --log-level info: Log worker lifecycle events for debugging
-CMD ["gunicorn", "src.app:create_app()", "--preload", "-k", "uvicorn.workers.UvicornWorker", "--workers", "2", "--bind", "0.0.0.0:8080", "--timeout", "60", "--graceful-timeout", "30", "--keep-alive", "75", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-"]
+# PORT Configuration:
+# - Uses shell form to expand PORT environment variable (defaults to 8080 in ENV)
+# - This allows runtime override (e.g., PORT=5001 in ECS task definition)
+CMD sh -c "gunicorn src.app:create_app() --preload -k uvicorn.workers.UvicornWorker --workers 2 --bind 0.0.0.0:${PORT} --worker-tmp-dir /dev/shm --timeout 60 --graceful-timeout 30 --keep-alive 75 --log-level info --access-logfile - --error-logfile -"

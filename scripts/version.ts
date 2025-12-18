@@ -212,8 +212,9 @@ function main(): void {
         console.log("  sync       - Force TOML and YAML to match JSON version");
         console.log("");
         console.log("Release Tagging Commands:");
-        console.log("  tag        - Create and push production release tag");
-        console.log("  tag dev    - Create and push dev release tag with timestamp");
+        console.log("  tag              - Create and push production release tag");
+        console.log("  tag dev          - Create and push dev release tag with timestamp");
+        console.log("  verify-clean-git - Check for uncommitted changes (pre-flight check)");
         console.log("");
         console.log("Options:");
         console.log("  --no-push  - Create tag but do not push to origin (tag command only)");
@@ -233,6 +234,19 @@ function main(): void {
     }
 
     const bumpType = args[0];
+
+    // Verify clean git command - check for uncommitted changes
+    if (bumpType === "verify-clean-git") {
+        try {
+            execSync("git diff-index --quiet HEAD --", { stdio: "ignore" });
+            console.log("✅ Git working directory is clean");
+            process.exit(0);
+        } catch {
+            console.error("❌ You have uncommitted changes");
+            console.error("   Commit or stash your changes before creating a release");
+            process.exit(1);
+        }
+    }
 
     // Sync command - force TOML and YAML to match JSON
     if (bumpType === "sync") {

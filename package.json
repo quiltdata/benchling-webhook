@@ -1,6 +1,6 @@
 {
   "name": "@quiltdata/benchling-webhook",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "description": "AWS CDK deployment for Benchling webhook processing using Fargate - Deploy directly with npx",
   "main": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
@@ -54,8 +54,9 @@
     "test:ts": "cross-env NODE_ENV=test NODE_OPTIONS='--experimental-vm-modules' jest --maxWorkers=50%",
     "version": "ts-node scripts/version.ts",
     "version:dev": "ts-node scripts/get-dev-version.ts",
-    "version:tag": "npm test && ts-node scripts/version.ts tag",
-    "version:tag:dev": "npm test && ts-node scripts/version.ts tag dev",
+    "version:verify": "ts-node scripts/version.ts verify-clean-git",
+    "version:tag": "npm run version:verify && npm test && ts-node scripts/version.ts tag",
+    "version:tag:dev": "npm run version:verify && npm test && ts-node scripts/version.ts tag dev",
     "test:integration": "cross-env NODE_ENV=test NODE_OPTIONS='--experimental-vm-modules'  jest --testMatch='**/test/integration/**/*.test.ts' --runInBand",
     "test:integration:verbose": "npm run test:integration -- --verbose"
   },

@@ -199,6 +199,43 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
                 console.log(chalk.green("✓ Stack update initiated"));
                 console.log(chalk.dim("  The stack is now updating in the background\n"));
                 integrationStatusUpdated = true;
+
+                // Offer to monitor stack update status
+                let shouldMonitorStatus = yes;
+                if (!yes) {
+                    const { monitor } = await inquirer.prompt([
+                        {
+                            type: "confirm",
+                            name: "monitor",
+                            message: "Monitor stack update status now?",
+                            default: true,
+                        },
+                    ]);
+                    shouldMonitorStatus = monitor;
+                }
+
+                if (shouldMonitorStatus) {
+                    console.log(chalk.dim("\nLaunching status monitor...\n"));
+
+                    try {
+                        // Import and run status command
+                        const { statusCommand } = await import("../../bin/commands/status");
+                        await statusCommand({
+                            profile,
+                            awsProfile,
+                            configStorage,
+                            timer: 10, // 10 second refresh interval
+                            exit: true, // Exit when terminal status reached
+                        });
+                    } catch (error) {
+                        console.warn(chalk.yellow(`\n⚠️  Status monitoring failed: ${(error as Error).message}`));
+                        console.warn(chalk.yellow("   You can run status manually with:"));
+                        console.warn(chalk.cyan(`   npx @quiltdata/benchling-webhook status --profile ${profile}\n`));
+                    }
+                } else {
+                    console.log(chalk.dim("  You can monitor status later with:"));
+                    console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook status --profile ${profile}\n`));
+                }
             } else {
                 console.warn(chalk.yellow(`⚠️  Failed to enable BenchlingIntegration: ${updateResult.error}`));
                 console.warn(chalk.yellow("   You can enable it manually in CloudFormation console\n"));
@@ -279,12 +316,25 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
     console.log(chalk.dim("✓ Quilt stack will handle webhook events\n"));
 
     console.log(chalk.bold("Next steps:"));
-    console.log("  1. Monitor stack update:");
-    console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook@latest status --profile ${profile}`));
-    console.log("  2. Configure webhook URL in Benchling app settings");
-    console.log("     (Get the webhook URL from your Quilt stack outputs)");
-    console.log("  3. Test the webhook integration");
-    console.log("  4. Monitor logs:");
+    let stepNumber = 1;
+
+    // Only show status monitoring if we didn't just run it
+    if (integrationStatusUpdated && !yes) {
+        // Status was likely already shown, skip this step
+    } else if (integrationStatusUpdated) {
+        // --yes mode, suggest manual monitoring
+        console.log(`  ${stepNumber++}. Monitor stack update:`);
+        console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook@latest status --profile ${profile}`));
+    }
+
+    console.log(`  ${stepNumber++}. Configure webhook URL in Benchling app settings`);
+    if (webhookUrl) {
+        console.log(chalk.dim(`     Webhook URL: ${webhookUrl}`));
+    } else {
+        console.log("     (Get the webhook URL from your Quilt stack outputs)");
+    }
+    console.log(`  ${stepNumber++}. Test the webhook integration`);
+    console.log(`  ${stepNumber++}. Monitor logs:`);
     console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook@latest logs --profile ${profile}`));
     console.log("");
 
