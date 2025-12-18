@@ -355,7 +355,7 @@ def health():
 ## FILE LOCATIONS
 
 | File | Line | Purpose | Status |
-|------|------|---------|--------|
+| ------ | ------ | --------- | -------- |
 | [docker/Dockerfile](../../docker/Dockerfile) | 40, 130, 144 | Accept VERSION arg, set BUILD_VERSION | ✅ Working |
 | [docker/src/version.py](../../docker/src/version.py) | 8-35 | Read version from BUILD_VERSION or pyproject.toml | ✅ Working |
 | [docker/src/app.py](../../docker/src/app.py) | 84 | Display version in /health endpoint | ❌ Uses wrong variable |

@@ -37,7 +37,7 @@ The environment variable mapping logic in `bin/xdg-launch.ts:buildEnvVars()` (li
 **Environment variables differ between local and deployed execution**:
 
 | Envar | XDG Launch (local) | CDK (deployed) | Status |
-|-------|-------------------|----------------|--------|
+| ------- | ------------------- | ---------------- | -------- |
 | `QUILT_WEB_HOST` | ✅ Set | ❌ Missing | **NEW** |
 | `ATHENA_USER_DATABASE` | ✅ Set | ✅ Set | Exists |
 | `ATHENA_USER_WORKGROUP` | ✅ Set | ❌ Optional | **NEW** |
@@ -302,7 +302,7 @@ const parameters = [
 ### Test Cases
 
 | Test | Command | Expected Result |
-|------|---------|-----------------|
+| ------ | --------- | ----------------- |
 | Dev deployment | `npm run deploy:dev -- --yes` | Stack deploys with all envars |
 | Prod deployment | `npm run deploy:prod -- --yes` | Stack deploys with all envars |
 | Local native | `npm run test:native` | Same envars as deployed |
@@ -315,7 +315,7 @@ const parameters = [
 ### Environment Variable Renames
 
 | Old Name | New Name | Impact |
-|----------|----------|--------|
+| ---------- | ---------- | -------- |
 | `LOG_LEVEL` | `BENCHLING_LOG_LEVEL` | Python code must check both (fallback) |
 | `BENCHLING_PKG_BUCKET` | `PACKAGE_BUCKET` | Python code must check both (fallback) |
 | `BENCHLING_PKG_PREFIX` | `PACKAGE_PREFIX` | Python code must check both (fallback) |

@@ -387,7 +387,7 @@ function validateVpc(vpc: DiscoveredVpc): void {
 ### AWS API Errors
 
 | Error | Cause | Mitigation |
-|-------|-------|------------|
+| ------- | ------- | ------------ |
 | `StackNotFoundException` | Invalid stack ARN | Prompt user to verify stack ARN |
 | `AccessDenied` | Missing IAM permissions | Display required IAM permissions |
 | `InvalidVpcID.NotFound` | VPC deleted after discovery | Fall back to auto-create |

@@ -116,7 +116,7 @@ Successfully completed Phase 3 of the configuration architecture cleanup by extr
 ### Separation of Concerns
 
 | Module | Responsibility | Lines |
-|--------|---------------|-------|
+| -------- | --------------- | ------- |
 | `validator.ts` | All validation logic | 310 |
 | `wizard.ts` | All inquirer prompts | 297 |
 | `infer-quilt-config.ts` | Quilt detection | 337 |
@@ -176,7 +176,7 @@ While the total line count increased by ~400 lines (48%), each module is now:
 ## Testing Status
 
 | Test | Status | Notes |
-|------|--------|-------|
+| ------ | -------- | ------- |
 | **Linting** | ✅ PASS | All files pass ESLint |
 | **Type Safety** | ✅ PASS | TypeScript compilation successful |
 | **Integration** | ⚠️ PARTIAL | Other files still use v0.6.x APIs (Phase 4 work) |
@@ -321,7 +321,7 @@ npx ts-node scripts/install-wizard.ts --profile default --yes
 ## Metrics
 
 | Metric | Value |
-|--------|-------|
+| -------- | ------- |
 | **Files Created** | 4 |
 | **Lines of Code** | 1,222 |
 | **Functions Exported** | 6 |

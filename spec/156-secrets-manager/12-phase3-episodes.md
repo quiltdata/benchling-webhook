@@ -962,7 +962,7 @@ Relates to #156
 ## Episode Summary
 
 | Episode | Type | Focus | Files Modified | Tests |
-|---------|------|-------|----------------|-------|
+| --------- | ------ | ------- | ---------------- | ------- |
 | 1 | RED | CFT parameter tests | test/*.test.ts | 3 new (failing) |
 | 2 | GREEN | CFT parameters | lib/stack.ts | 3 pass |
 | 3 | RED | Secret creation tests | test/*.test.ts | 2 new (failing) |

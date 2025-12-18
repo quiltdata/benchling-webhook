@@ -94,7 +94,7 @@ None of these options are simple or reliable.
 From `lib/utils/stack-inference.ts`, the Quilt stack provides these outputs:
 
 | Output Key | Purpose | Example Value |
-|---|---|---|
+| --- | --- | --- |
 | `UserAthenaDatabaseName` | Athena database for Quilt packages | `quilt_example_db` |
 | `PackagerQueueArn` | SQS queue for processing | `arn:aws:sqs:us-east-1:123456789012:QuiltStack-PackagerQueue` |
 
@@ -148,7 +148,7 @@ Then query CloudFormation API for stack outputs:
 ### Configuration Comparison
 
 | Aspect | Current (156-secrets-manager) | Proposed (156a-secrets-only) |
-|---|---|---|
+| --- | --- | --- |
 | **Env Vars for Container** | 10+ variables | 2 variables |
 | **Configuration Sources** | 6 sources | 2 sources (AWS only) |
 | **Inference Location** | CLI deployment time | Container runtime |
@@ -260,7 +260,7 @@ This is a **breaking change**. Users must:
 ### Risks and Mitigation
 
 | Risk | Mitigation |
-|---|---|
+| --- | --- |
 | Breaking existing deployments | Clear migration guide, major version bump |
 | CloudFormation API failures at runtime | Cache results, provide fallback to env vars for debugging |
 | Slower container startup | Acceptable tradeoff for simplicity; implement caching |

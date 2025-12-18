@@ -436,7 +436,7 @@ Examples:
 **Compatibility Matrix**:
 
 | Old Parameters | New Parameter | Behavior |
-|----------------|---------------|----------|
+| ---------------- | --------------- | ---------- |
 | ✅ Present     | ❌ Not Present | Use old parameters (no warning) |
 | ❌ Not Present | ✅ Present     | Use new parameter |
 | ✅ Present     | ✅ Present     | Use new parameter (warning displayed) |

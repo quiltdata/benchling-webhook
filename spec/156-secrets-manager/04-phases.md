@@ -560,7 +560,7 @@ Phase 8 (Deprecation) ← depends on Phase 7 and user feedback
 ## Success Metrics by Phase
 
 | Phase | Metric | Target |
-|-------|--------|--------|
+| ------- | -------- | -------- |
 | 1 | Test coverage for validation | > 90% |
 | 2 | Backward compatibility maintained | 100% |
 | 3 | CDK synth changes | < 50 lines |

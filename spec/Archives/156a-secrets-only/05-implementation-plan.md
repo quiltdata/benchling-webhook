@@ -889,7 +889,7 @@ Document how to migrate from old to new approach:
 ## Risk Mitigation
 
 | Risk | Mitigation |
-|------|-----------|
+| ------ | ----------- |
 | Breaking existing deployments | Clear migration guide, major version bump |
 | Slower container startup | Acceptable tradeoff, implement caching |
 | CloudFormation API rate limits | Cache results, single call at startup |

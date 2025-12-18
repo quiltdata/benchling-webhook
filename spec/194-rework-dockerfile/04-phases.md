@@ -436,7 +436,7 @@ Phase 1 is complete when:
 ## Timeline Estimate
 
 | Sub-Phase | Duration | Cumulative |
-|-----------|----------|------------|
+| ----------- | ---------- | ------------ |
 | 1.1 Research | 1 hour | 1 hour |
 | 1.2 Builder | 2 hours | 3 hours |
 | 1.3 Runtime | 2 hours | 5 hours |

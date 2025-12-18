@@ -10,7 +10,7 @@
 Enhance stack inference to discover three additional AWS resources from Quilt CloudFormation stacks:
 
 | Resource | Type | Purpose |
-|----------|------|---------|
+| ---------- | ------ | --------- |
 | `UserAthenaNonManagedRoleWorkgroup` | AWS::Athena::WorkGroup | User query workgroup |
 | `IcebergWorkGroup` | AWS::Athena::WorkGroup | Iceberg query workgroup |
 | `IcebergDatabase` | AWS::Glue::Database | Iceberg database |

@@ -53,7 +53,7 @@ npx @quiltdata/benchling-webhook
 ### Why Setup Wizard Works but Deploy Fails
 
 | Component | How It's Called | Result |
-|-----------|----------------|--------|
+| ----------- | ---------------- | -------- |
 | Setup Wizard | Direct TypeScript import: `import { syncSecretsToAWS } from './sync-secrets'` | ✓ Works |
 | Deploy Command | Shell command: `execSync('npm run setup:sync-secrets ...')` | ✗ Fails |
 

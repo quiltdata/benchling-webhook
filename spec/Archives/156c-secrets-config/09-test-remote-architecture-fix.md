@@ -154,7 +154,7 @@ npm run test:remote
 ### What Gets Tested Where
 
 | Test Command | What's Tested | Image Source | Network Path |
-|--------------|---------------|--------------|--------------|
+| -------------- | --------------- | -------------- | -------------- |
 | `npm run test` | Unit tests | N/A | N/A |
 | `npm run test:local` | Local Docker | Local build | localhost:5001 |
 | `npm run test:remote` | Deployed dev stack | ECR (dev tag) | API Gateway → ALB → Fargate |

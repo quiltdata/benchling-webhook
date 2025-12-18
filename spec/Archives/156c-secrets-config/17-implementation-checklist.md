@@ -494,7 +494,7 @@ Track these metrics:
 ### Risks & Mitigation Strategies
 
 | Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
+| ------ | -------- | ------------ | ------------ |
 | Quilt config inference fails | High | Medium | Provide manual input fallback |
 | CloudWatch Logs delay | Medium | High | Set realistic expectations (60s timeout) |
 | Clipboard doesn't work | Low | Low | Show URL prominently even if copy fails |

@@ -283,7 +283,7 @@ Remove the `vpc` section from `~/.config/benchling-webhook/default/config.json`:
 ## Cost Comparison
 
 | Approach | NAT Gateway Cost/Month | Savings vs Auto-Gen |
-|----------|----------------------|---------------------|
+| ---------- | ---------------------- | --------------------- |
 | Option 1: Use Quilt VPC | $32.40 | $32.40 |
 | Option 2: Use Quilt VPC | $32.40 | $32.40 |
 | Option 3: Auto-generated VPC | $64.80 | $0.00 |

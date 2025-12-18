@@ -344,7 +344,7 @@ this.logGroup = new logs.LogGroup(scope, "ApiGatewayAccessLogs", {
   ### Monthly Costs (1M requests/month)
 
   | Component | Cost |
-  |-----------|------|
+  | ----------- | ------ |
 - | HTTP API v2 | $1.00 |
 - | WAF (optional) | $7.00 |
 + | REST API v1 | $3.50 |
@@ -507,7 +507,7 @@ After migration, verify:
 ### Before (v0.9.0 with IP filtering)
 
 | Component | Cost |
-|-----------|------|
+| ----------- | ------ |
 | HTTP API v2 | $1.00 |
 | WAF | $7.60 |
 | NLB | $16.21 |
@@ -517,7 +517,7 @@ After migration, verify:
 ### After (v1.0.0 with IP filtering)
 
 | Component | Cost |
-|-----------|------|
+| ----------- | ------ |
 | REST API v1 | $3.50 |
 | Resource Policy | $0.00 |
 | NLB | $16.21 |

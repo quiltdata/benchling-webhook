@@ -597,7 +597,7 @@ Add to existing test file at `test/bin/commands/status.test.ts`:
 ## Implementation Estimate
 
 | Task | Time |
-|------|------|
+| ------ | ------ |
 | Add `StackIdentification` interface and `identifyTargetStack` function | 45 min |
 | Update `statusCommand` entry point | 20 min |
 | Update `getStackStatus` function | 25 min |

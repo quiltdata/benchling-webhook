@@ -407,7 +407,7 @@ From `spec/189-multi/02-todo.md` lines 309-318:
 ### Core Requirements
 
 | Requirement | Status | Notes |
-|-------------|--------|-------|
+| ------------- | -------- | ------- |
 | All tests pass (`npm run test`) | ✅ PASS | 263 tests passing (TypeScript + Python) |
 | Local integration tests pass (`npm run test:local`) | ⏳ NEEDS VERIFICATION | Not run in this analysis |
 | Documentation is complete and accurate | ✅ COMPLETE | README.md, CLAUDE.md, MIGRATION.md, CHANGELOG.md all updated |
@@ -420,7 +420,7 @@ From `spec/189-multi/02-todo.md` lines 309-318:
 ### Additional Checks
 
 | Item | Status | Notes |
-|------|--------|-------|
+| ------ | -------- | ------- |
 | All phases (1-7) complete | ✅ COMPLETE | Phases 1-7 marked complete in 02-todo.md |
 | Legacy code removed | ⚠️ PARTIALLY | `xdg-config-legacy.ts` still exists, TODOs need cleanup |
 | Production deployment tested | ⏳ NEEDS MANUAL TEST | Manual testing checklist provided above |

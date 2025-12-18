@@ -375,7 +375,7 @@ Expected Results:
 ## Time Estimate
 
 | Phase | Tasks | Estimated Time |
-|-------|-------|----------------|
+| ------- | ------- | ---------------- |
 | Phase 1 | Critical fixes (3 files) | 10-15 minutes |
 | Phase 2 | Documentation (3-4 files) | 20-30 minutes |
 | Phase 3 | Spec files (6 files) | 30-60 minutes |

@@ -358,7 +358,7 @@ if (!shouldDeploy) {
 ### Flag Combinations
 
 | Command | Flags | Behavior |
-|---------|-------|----------|
+| --------- | ------- | ---------- |
 | `npx @quiltdata/benchling-webhook` | (none) | Interactive setup + deploy prompt |
 | `npx @quiltdata/benchling-webhook --yes` | `--yes` | Setup + auto-deploy |
 | `npx @quiltdata/benchling-webhook --setup-only` | `--setup-only` | Setup only, no deploy |

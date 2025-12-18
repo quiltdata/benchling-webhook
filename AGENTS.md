@@ -220,7 +220,7 @@ See [spec/2025-11-26-architecture/11-arch-30.md](spec/2025-11-26-architecture/11
 **Monthly Fixed Costs (us-east-1):**
 
 | Component | Cost |
-|-----------|------|
+| ----------- | ------ |
 | REST API v1 | $0.00 |
 | Resource Policy | $0.00 |
 | VPC Link | $0.00 |
@@ -232,7 +232,7 @@ See [spec/2025-11-26-architecture/11-arch-30.md](spec/2025-11-26-architecture/11
 **Variable Costs (per million requests):**
 
 | Component | Cost |
-|-----------|------|
+| ----------- | ------ |
 | REST API v1 | ~$3.50 |
 | Resource Policy | $0.00 |
 | ECS Fargate | Included in fixed cost |
@@ -284,7 +284,7 @@ npm run lint                 # Auto-fix formatting
 ### Quick Reference
 
 | Command | Docker? | AWS? | When to Use |
-|---------|---------|------|-------------|
+| --------- | --------- | ------ | ------------- |
 | `test` | No | Mocked | Daily development, pre-commit |
 | `test:local` | Yes (dev) | Real | Before PR, local integration testing |
 | `test:local:prod` | Yes (prod) | Real | Test prod Docker config locally |
@@ -516,7 +516,7 @@ class XDGConfig {
 Stored in AWS Secrets Manager and referenced in profile config:
 
 | Field | Required | Default | Description |
-|-------|----------|---------|-------------|
+| ------- | ---------- | --------- | ------------- |
 | `benchling.tenant` | Yes | - | Benchling tenant name |
 | `benchling.clientId` | Yes | - | OAuth client ID |
 | `benchling.clientSecret` | Via Secrets Manager | - | OAuth client secret |
@@ -668,7 +668,7 @@ npx @quiltdata/benchling-webhook logs --profile default
 ## Configuration Failure Modes
 
 | Failure | Cause | Mitigation |
-|----------|--------|-------------|
+| ---------- | -------- | ------------- |
 | Missing profile | Profile not found | Run `npm run setup` to create profile |
 | Missing Quilt catalog | Quilt3 not configured | Run `quilt3 config` and retry |
 | Profile config corrupted | Manual file edit | Validate JSON schema; re-run `npm run setup` |

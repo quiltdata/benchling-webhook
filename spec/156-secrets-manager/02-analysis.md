@@ -274,7 +274,7 @@ Pattern: lowercase with hyphens, descriptive resource-type suffixes.
 ### Requirements vs Current State
 
 | Requirement | Current State | Gap |
-|-------------|---------------|-----|
+| ------------- | --------------- | ----- |
 | Single `BENCHLING_SECRETS` parameter | Individual parameters per secret | Major refactoring needed |
 | CLI `--benchling-secrets` option | Individual CLI options | New option + validation |
 | Quilt secret discovery | No discovery mechanism | Need research + implementation |

@@ -102,7 +102,7 @@ Version 0.7.0 replaces the legacy configuration system with a clean, profile-bas
 ### Configuration File Locations
 
 | v0.6.x | v0.7.0 |
-|--------|--------|
+| -------- | -------- |
 | `~/.config/benchling-webhook/default.json` | `~/.config/benchling-webhook/default/config.json` |
 | `~/.config/benchling-webhook/profiles/dev/default.json` | `~/.config/benchling-webhook/dev/config.json` |
 | `~/.config/benchling-webhook/deploy.json` (shared) | `~/.config/benchling-webhook/{profile}/deployments.json` (per-profile) |

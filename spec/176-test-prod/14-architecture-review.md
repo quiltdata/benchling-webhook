@@ -589,7 +589,7 @@ The specification is complete and implementable.
 ### Infrastructure (CDK)
 
 | Component | Current State | Spec Requirements | Gap | Complexity |
-|-----------|--------------|-------------------|-----|------------|
+| ----------- | -------------- | ------------------- | ----- | ------------ |
 | API Gateway | Single stage ("prod") | Multiple stages (dev/prod) | Medium | Low |
 | Fargate Service | Single service | Multiple services | High | Medium-High |
 | ALB | Single listener | Stage-based routing | Medium | Low |
@@ -600,7 +600,7 @@ The specification is complete and implementable.
 ### Configuration (XDG)
 
 | Component | Current State | Spec Requirements | Gap | Complexity |
-|-----------|--------------|-------------------|-----|------------|
+| ----------- | -------------- | ------------------- | ----- | ------------ |
 | Profile System | ✅ Implemented | Profile read/write | None | None |
 | Profile Listing | ✅ Implemented | List profiles | None | None |
 | Profile Creation | ✅ Implemented | Setup command | Minor | Low |
@@ -610,7 +610,7 @@ The specification is complete and implementable.
 ### Deployment (CLI)
 
 | Component | Current State | Spec Requirements | Gap | Complexity |
-|-----------|--------------|-------------------|-----|------------|
+| ----------- | -------------- | ------------------- | ----- | ------------ |
 | Deploy Command | No profile support | --profile, --environment | Medium | Low |
 | npm Scripts | Separate scripts | Unified approach | Medium | Low |
 | Deploy Config | Structure ready | Environment param | Low | Low |
@@ -620,7 +620,7 @@ The specification is complete and implementable.
 ### Testing
 
 | Component | Current State | Spec Requirements | Gap | Complexity |
-|-----------|--------------|-------------------|-----|------------|
+| ----------- | -------------- | ------------------- | ----- | ------------ |
 | Test Scripts | ✅ Both exist | dev/prod tests | None | None |
 | Makefile | ✅ Both exist | dev/prod targets | None | None |
 | Deploy.json | Structure ready | Populate both sections | Low | Low |

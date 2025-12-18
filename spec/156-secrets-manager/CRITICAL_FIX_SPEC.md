@@ -687,7 +687,7 @@ describe('Secrets Loading Integration', () => {
 ## Estimated Effort
 
 | Task | Effort | Priority |
-|------|--------|----------|
+| ------ | -------- | ---------- |
 | Container entrypoint | 2-3 hours | P0 |
 | Update Dockerfile | 30 min | P0 |
 | Update CDK stack | 2-3 hours | P0 |

@@ -378,7 +378,7 @@ npm run build
 ## Testing Matrix
 
 | Context      | Profile   | Expected Command Pattern                    | Test Status |
-|--------------|-----------|---------------------------------------------|-------------|
+| -------------- | ----------- | --------------------------------------------- | ------------- |
 | Repository   | default   | `npm run deploy`                            | [ ]         |
 | Repository   | dev       | `npm run deploy:dev`                        | [ ]         |
 | Repository   | prod      | `npm run deploy:prod`                       | [ ]         |
@@ -393,7 +393,7 @@ npm run build
 ## Error Scenarios
 
 | Scenario                     | Expected Behavior                  | Test Status |
-|------------------------------|-----------------------------------|-------------|
+| ------------------------------ | ----------------------------------- | ------------- |
 | No package.json              | Default to npx context            | [ ]         |
 | Malformed package.json       | Default to npx context            | [ ]         |
 | Wrong package name           | Default to npx context            | [ ]         |
@@ -404,7 +404,7 @@ npm run build
 ## Coverage Goals
 
 | Module                  | Target | Actual | Status |
-|------------------------|--------|--------|--------|
+| ------------------------ | -------- | -------- | -------- |
 | context-detector.ts    | 100%   | ---    | [ ]    |
 | next-steps-generator.ts| 95%+   | ---    | [ ]    |
 | Overall Phase 2 code   | 100%   | ---    | [ ]    |
@@ -412,7 +412,7 @@ npm run build
 ## Performance Benchmarks
 
 | Operation                    | Target   | Actual | Status |
-|-----------------------------|----------|--------|--------|
+| ----------------------------- | ---------- | -------- | -------- |
 | detectExecutionContext()    | <10ms    | ---    | [ ]    |
 | generateNextSteps()         | <5ms     | ---    | [ ]    |
 | Full Phase 2 overhead       | <15ms    | ---    | [ ]    |
@@ -442,7 +442,7 @@ npm run build
 ## Risk Mitigation Status
 
 | Risk                    | Mitigation                      | Status |
-|------------------------|--------------------------------|--------|
+| ------------------------ | -------------------------------- | -------- |
 | False detection        | Comprehensive test matrix      | [ ]    |
 | Breaking changes       | Backward compatibility tests   | [ ]    |
 | Performance impact     | Benchmarking                   | [ ]    |

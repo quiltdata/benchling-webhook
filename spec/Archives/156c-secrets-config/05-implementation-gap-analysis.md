@@ -23,7 +23,7 @@ Issue #156 requested a **breaking change (v0.6.0)** with six top-level Makefile 
 ### Architecture Requirements
 
 | Component | Required | Implemented | Status |
-|-----------|----------|-------------|---------|
+| ----------- | ---------- | ------------- | --------- |
 | Makefile orchestration | ✅ Yes | ❌ No | **MISSING** |
 | npm for CDK/scripts | ✅ Yes | ✅ Yes | ✅ Complete |
 | Python for Docker | ✅ Yes | ✅ Yes | ✅ Complete |

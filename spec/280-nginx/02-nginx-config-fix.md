@@ -243,7 +243,7 @@ curl https://<api-gateway-url>/dev/health
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
-|------|--------|------------|
+| ------ | -------- | ------------ |
 | ARM64 Unit packages unavailable | Build failure | Verify nginx.org supports ARM64 before implementation |
 | Dev hot-reload broken | Developer productivity | Test `DISABLE_NGINX=true` thoroughly in docker-compose |
 | Production Unit still fails | Service degradation | Deploy to dev first; validate logs before prod |
