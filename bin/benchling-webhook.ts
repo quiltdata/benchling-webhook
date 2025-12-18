@@ -126,9 +126,10 @@ export function createStack(config: Config): DeploymentResult {
         },
     };
 
-    // Determine stack name: use profile from config or default to "default"
-    const profile = config.profile || "default";
-    const stackName = getStackName(profile, config.stackName);
+    // Determine stack name: use profile-based naming with optional custom name
+    // For legacy compatibility, assume "default" profile unless specified in deployment config
+    const profile = "default";
+    const stackName = getStackName(profile, profileConfig.deployment?.stackName);
 
     const stack = new BenchlingWebhookStack(app, stackName, {
         env: {
