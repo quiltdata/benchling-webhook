@@ -2,21 +2,17 @@
 /**
  * Configuration Profile Management CLI
  *
- * WARNING: This file needs refactoring for v0.7.0
- * TODO: Update to use ProfileConfig instead of UserConfig/DerivedConfig/DeploymentConfig
- * TODO: Remove references to BaseConfig and loadProfile
- * TODO: Update to use new readProfile API
- *
  * Provides commands for creating, listing, and managing configuration profiles.
- * Supports AWS profile integration and profile validation.
+ * Fully migrated to v0.7.0+ architecture using ProfileConfig and XDGConfig.
  *
  * Usage:
- *   npx ts-node bin/config-profiles.ts list
- *   npx ts-node bin/config-profiles.ts create <profile-name>
- *   npx ts-node bin/config-profiles.ts show <profile-name>
- *   npx ts-node bin/config-profiles.ts validate <profile-name>
+ *   npx ts-node bin/commands/config-profiles.ts list
+ *   npx ts-node bin/commands/config-profiles.ts create <profile-name>
+ *   npx ts-node bin/commands/config-profiles.ts show <profile-name>
+ *   npx ts-node bin/commands/config-profiles.ts validate <profile-name>
  *
- * @module bin/config-profiles
+ * @module bin/commands/config-profiles
+ * @version 0.7.0+
  */
 
 import { XDGConfig } from "../../lib/xdg-config";

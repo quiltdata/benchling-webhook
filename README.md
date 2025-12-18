@@ -201,6 +201,66 @@ In Benchling:
 A Quilt package will be automatically created and linked to your notebook entry.
 If you run into problems, contact [Quilt Support](support@quilt.bio)
 
+## Multi-Stack Deployments (v0.9.8+)
+
+Starting with version 0.9.8, you can deploy **multiple webhook stacks** in the same AWS account/region. This is useful for:
+
+- **Multi-tenant deployments** - Separate stacks for each customer
+- **Environment isolation** - Dev, staging, prod in same account
+- **A/B testing** - Parallel stacks with different configurations
+
+### Profile-Based Stack Names
+
+Each profile automatically gets its own CloudFormation stack:
+
+```bash
+# Default profile uses legacy name (backwards compatible)
+npx @quiltdata/benchling-webhook@latest deploy --profile default
+# Creates: BenchlingWebhookStack
+
+# Other profiles get unique names
+npx @quiltdata/benchling-webhook@latest deploy --profile sales
+# Creates: BenchlingWebhookStack-sales
+
+npx @quiltdata/benchling-webhook@latest deploy --profile customer-acme
+# Creates: BenchlingWebhookStack-customer-acme
+```
+
+### Custom Stack Names
+
+You can also specify a custom stack name in your profile configuration:
+
+```json
+{
+  "deployment": {
+    "stackName": "MyCustomWebhookStack",
+    ...
+  }
+}
+```
+
+### Managing Multiple Stacks
+
+All commands support the `--profile` flag:
+
+```bash
+# Deploy a specific profile
+npx @quiltdata/benchling-webhook@latest deploy --profile sales
+
+# Check status
+npx @quiltdata/benchling-webhook@latest status --profile sales
+
+# View logs
+npx @quiltdata/benchling-webhook@latest logs --profile sales
+
+# Destroy stack
+npx @quiltdata/benchling-webhook@latest destroy --profile sales
+```
+
+### Migration from Single Stack
+
+Existing "default" profile deployments continue to use `BenchlingWebhookStack` with no changes required. New profiles automatically get unique stack names.
+
 ## Monitoring
 
 ### CloudWatch Logs
@@ -232,6 +292,9 @@ npx @quiltdata/benchling-webhook@latest status [--profile <name>]
 
 # View CloudWatch logs
 npx @quiltdata/benchling-webhook@latest logs [--profile <name>]
+
+# Destroy stack
+npx @quiltdata/benchling-webhook@latest destroy [--profile <name>]
 
 # Show all available commands
 npx @quiltdata/benchling-webhook@latest --help

@@ -157,7 +157,7 @@ describe("FargateService - Multi-Environment Support", () => {
             expect(benchlingSecretEnv).toBeDefined();
         });
 
-        test.skip("includes log level environment variable - TODO: verify implementation", () => {
+        test("includes LOG_LEVEL environment variable", () => {
             const config = createMockConfig({
                 logging: {
                     level: "DEBUG",
@@ -173,7 +173,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters 
+                // New explicit service parameters
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -186,8 +186,9 @@ describe("FargateService - Multi-Environment Support", () => {
             const containerDef = taskDef.Properties.ContainerDefinitions[0];
             const environment = containerDef.Environment || [];
 
-            const logLevelEnv = environment.find((e: any) => e.Name === "LogLevel");
+            const logLevelEnv = environment.find((e: any) => e.Name === "LOG_LEVEL");
             expect(logLevelEnv).toBeDefined();
+            expect(logLevelEnv.Value).toBe("DEBUG");
         });
     });
 

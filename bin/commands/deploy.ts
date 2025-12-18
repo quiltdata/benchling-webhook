@@ -11,7 +11,7 @@ import {
 } from "../../lib/utils/service-resolver";
 import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
-import { ProfileConfig } from "../../lib/types/config";
+import { ProfileConfig, getStackName } from "../../lib/types/config";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 import { syncSecretsToAWS } from "./sync-secrets";
 import * as fs from "fs";
@@ -40,10 +40,9 @@ type StackCheck = {
  * successfully rolled back and is ready for new updates. Only active rollbacks
  * (in progress) and truly failed states require user attention.
  */
-async function checkStackStatus(region: string): Promise<StackCheck> {
+async function checkStackStatus(region: string, stackName: string): Promise<StackCheck> {
     try {
         const cloudformation = new CloudFormationClient({ region });
-        const stackName = "BenchlingWebhookStack";
 
         // Check if stack exists
         const describeCommand = new DescribeStacksCommand({ StackName: stackName });
@@ -384,9 +383,12 @@ export async function deploy(
         }
     }
 
+    // Determine stack name using helper function
+    const stackName = getStackName(options.profileName, config.deployment.stackName);
+
     // Check for rollback or failed state
     spinner.start("Checking stack status...");
-    const stackCheck = await checkStackStatus(deployRegion);
+    const stackCheck = await checkStackStatus(deployRegion, stackName);
 
     const needsAttention = ["in_progress", "failed", "rolled_back"].includes(stackCheck.statusCategory);
 
@@ -491,7 +493,7 @@ export async function deploy(
     console.log();
     console.log(chalk.bold("Deployment Plan"));
     console.log(chalk.gray("─".repeat(80)));
-    console.log(`  ${chalk.bold("Stack:")}                     BenchlingWebhookStack`);
+    console.log(`  ${chalk.bold("Stack:")}                     ${stackName}`);
     console.log(`  ${chalk.bold("Account:")}                   ${deployAccount}`);
     console.log(`  ${chalk.bold("Region:")}                    ${deployRegion}`);
     console.log(`  ${chalk.bold("Stage:")}                     ${options.stage}`);
@@ -632,6 +634,10 @@ export async function deploy(
             QUILT_STACK_ARN: stackArn,
             BENCHLING_SECRET: benchlingSecret,
 
+            // Pass profile and stack name for multi-stack support
+            PROFILE: options.profileName,
+            STACK_NAME: stackName,
+
             // Pass Quilt configuration (required by A07 validation)
             QUILT_CATALOG: config.quilt.catalog,
             QUILT_DATABASE: config.quilt.database,
@@ -712,7 +718,6 @@ export async function deploy(
 
         try {
             const cloudformation = new CloudFormationClient({ region: deployRegion });
-            const stackName = "BenchlingWebhookStack";
 
             const command = new DescribeStacksCommand({ StackName: stackName });
             const response = await cloudformation.send(command);
@@ -749,7 +754,7 @@ export async function deploy(
                     console.log(
                         boxen(
                             `${chalk.green.bold("✓ Deployment Complete!")}\n\n` +
-                            `Stack:  ${chalk.cyan("BenchlingWebhookStack")}\n` +
+                            `Stack:  ${chalk.cyan(stackName)}\n` +
                             `Region: ${chalk.cyan(deployRegion)}\n` +
                             `Stage:  ${chalk.cyan(options.stage)}\n` +
                             `Profile: ${chalk.cyan(options.profileName)}\n` +

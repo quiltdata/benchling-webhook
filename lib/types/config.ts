@@ -399,6 +399,22 @@ export interface DeploymentConfig {
     imageTag?: string;
 
     /**
+     * CloudFormation stack name (optional)
+     *
+     * If not specified, stack name is auto-generated based on profile:
+     * - "default" profile → "BenchlingWebhookStack" (backwards compatible)
+     * - Other profiles → "BenchlingWebhookStack-{profile}"
+     *
+     * This enables multiple webhook stacks per AWS account/region.
+     *
+     * @example "BenchlingWebhookStack-sales"
+     * @example "BenchlingWebhookStack-customer-acme"
+     * @default Auto-generated based on profile name
+     * @since 0.9.8
+     */
+    stackName?: string;
+
+    /**
      * VPC configuration for ECS deployment
      * If not specified, a new VPC will be created with private subnets and NAT Gateway
      *
@@ -798,6 +814,7 @@ export const ProfileConfigSchema = {
                 account: { type: "string", pattern: "^[0-9]{12}$" },
                 ecrRepository: { type: "string" },
                 imageTag: { type: "string" },
+                stackName: { type: "string", minLength: 1, maxLength: 128 },
             },
         },
         integratedStack: { type: "boolean" },
@@ -876,3 +893,32 @@ export const DeploymentHistorySchema = {
     },
     additionalProperties: false,
 } as const;
+
+/**
+ * Get CloudFormation stack name for a profile
+ *
+ * Implements profile-based naming strategy with backwards compatibility:
+ * - "default" profile → "BenchlingWebhookStack" (legacy name)
+ * - Other profiles → "BenchlingWebhookStack-{profile}"
+ * - Custom name in config → Use as-is
+ *
+ * @param profile - Profile name
+ * @param customName - Optional custom stack name from deployment config
+ * @returns CloudFormation stack name
+ *
+ * @example
+ * getStackName("default") // "BenchlingWebhookStack"
+ * getStackName("sales") // "BenchlingWebhookStack-sales"
+ * getStackName("dev", "MyCustomStack") // "MyCustomStack"
+ *
+ * @since 0.9.8
+ */
+export function getStackName(profile: string, customName?: string): string {
+    if (customName) {
+        return customName;
+    }
+    if (profile === "default") {
+        return "BenchlingWebhookStack"; // Backwards compatibility
+    }
+    return `BenchlingWebhookStack-${profile}`;
+}
