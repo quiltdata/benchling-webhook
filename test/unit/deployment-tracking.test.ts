@@ -4,7 +4,7 @@
  * Tests deployment history management and active deployment tracking.
  */
 
-import { ProfileConfig, DeploymentRecord, DeploymentHistory } from "../../lib/types/config";
+import { ProfileConfig, DeploymentRecord, DeploymentHistory, getStackName } from "../../lib/types/config";
 import { XDGTest } from "../helpers/xdg-test";
 
 describe("Deployment Tracking", () => {
@@ -172,6 +172,54 @@ describe("Deployment Tracking", () => {
 
             expect(deployments.active["prod"].deployedBy).toBe("ernest@example.com");
             expect(deployments.active["prod"].commit).toBe("abc123f");
+        });
+
+        it("should record profile-based stack names", () => {
+            // Test "default" profile uses legacy stack name
+            const defaultDeployment: DeploymentRecord = {
+                stage: "prod",
+                timestamp: "2025-11-04T10:00:00Z",
+                imageTag: "0.9.8",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
+                stackName: "BenchlingWebhookStack",
+                region: "us-east-1",
+            };
+
+            // Test "sales" profile uses profile-specific stack name
+            const salesDeployment: DeploymentRecord = {
+                stage: "prod",
+                timestamp: "2025-11-04T10:30:00Z",
+                imageTag: "0.9.8",
+                endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com",
+                stackName: "BenchlingWebhookStack-sales",
+                region: "us-east-1",
+            };
+
+            mockStorage.recordDeployment("default", defaultDeployment);
+            mockStorage.recordDeployment("sales", salesDeployment);
+
+            const defaultDeployments = mockStorage.getDeployments("default");
+            const salesDeployments = mockStorage.getDeployments("sales");
+
+            expect(defaultDeployments.active["prod"].stackName).toBe("BenchlingWebhookStack");
+            expect(salesDeployments.active["prod"].stackName).toBe("BenchlingWebhookStack-sales");
+        });
+
+        it("should support custom stack names", () => {
+            const customDeployment: DeploymentRecord = {
+                stage: "prod",
+                timestamp: "2025-11-04T10:00:00Z",
+                imageTag: "0.9.8",
+                endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
+                stackName: "CustomBenchlingStack",
+                region: "us-east-1",
+            };
+
+            mockStorage.recordDeployment("custom-profile", customDeployment);
+
+            const deployments = mockStorage.getDeployments("custom-profile");
+
+            expect(deployments.active["prod"].stackName).toBe("CustomBenchlingStack");
         });
     });
 
@@ -367,6 +415,36 @@ describe("Deployment Tracking", () => {
 
             expect(deployments.active["dev"]).toEqual(deployment);
             expect(deployments.history).toHaveLength(1);
+        });
+    });
+
+    describe("getStackName() helper function", () => {
+        it("should return legacy name for 'default' profile", () => {
+            const stackName = getStackName("default");
+            expect(stackName).toBe("BenchlingWebhookStack");
+        });
+
+        it("should return profile-suffixed name for non-default profiles", () => {
+            expect(getStackName("sales")).toBe("BenchlingWebhookStack-sales");
+            expect(getStackName("dev")).toBe("BenchlingWebhookStack-dev");
+            expect(getStackName("staging")).toBe("BenchlingWebhookStack-staging");
+            expect(getStackName("customer-acme")).toBe("BenchlingWebhookStack-customer-acme");
+        });
+
+        it("should use custom name when provided", () => {
+            expect(getStackName("default", "CustomStack")).toBe("CustomStack");
+            expect(getStackName("sales", "SalesWebhookStack")).toBe("SalesWebhookStack");
+            expect(getStackName("dev", "MyCustomStack")).toBe("MyCustomStack");
+        });
+
+        it("should handle empty custom name", () => {
+            expect(getStackName("default", "")).toBe("BenchlingWebhookStack");
+            expect(getStackName("sales", "")).toBe("BenchlingWebhookStack-sales");
+        });
+
+        it("should handle undefined custom name", () => {
+            expect(getStackName("default", undefined)).toBe("BenchlingWebhookStack");
+            expect(getStackName("sales", undefined)).toBe("BenchlingWebhookStack-sales");
         });
     });
 });

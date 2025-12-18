@@ -4,6 +4,7 @@ import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
 import { execSync } from "child_process";
 import type { Config } from "../lib/utils/config";
 import type { ProfileConfig } from "../lib/types/config";
+import { getStackName } from "../lib/types/config";
 
 /**
  * Result of CDK bootstrap check
@@ -73,12 +74,18 @@ export async function checkCdkBootstrap(
     }
 }
 
+
 /**
- * Convert legacy Config to ProfileConfig (temporary adapter for Phase 4 migration)
- * TODO: Remove this function in Phase 4 when all config loading uses ProfileConfig directly
+ * Create CDK app and stack (synthesis only, no deployment)
+ * Accepts legacy Config for backward compatibility with existing deployment scripts.
+ * v0.7.0: Uses ProfileConfig internally
+ * v0.9.8: Supports profile-based stack names for multi-stack deployments
  */
-function legacyConfigToProfileConfig(config: Config): ProfileConfig {
-    return {
+export function createStack(config: Config): DeploymentResult {
+    const app = new cdk.App();
+
+    // Convert legacy config to ProfileConfig for backward compatibility
+    const profileConfig: ProfileConfig = {
         quilt: {
             stackArn: config.quiltStackArn || "",
             catalog: config.quiltCatalog,
@@ -118,20 +125,12 @@ function legacyConfigToProfileConfig(config: Config): ProfileConfig {
             source: "cli",
         },
     };
-}
 
-/**
- * Create CDK app and stack (synthesis only, no deployment)
- * v0.7.0: Updated to use ProfileConfig
- * TODO: Phase 4 will update this to read ProfileConfig directly from XDGConfig
- */
-export function createStack(config: Config): DeploymentResult {
-    const app = new cdk.App();
+    // Determine stack name: use profile from config or default to "default"
+    const profile = config.profile || "default";
+    const stackName = getStackName(profile, config.stackName);
 
-    // Convert legacy config to ProfileConfig
-    const profileConfig = legacyConfigToProfileConfig(config);
-
-    const stack = new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
+    const stack = new BenchlingWebhookStack(app, stackName, {
         env: {
             account: config.cdkAccount,
             region: config.cdkRegion,
@@ -148,8 +147,8 @@ export function createStack(config: Config): DeploymentResult {
 }
 
 // Only run if called directly (not imported)
-// v0.7.0: Updated to use ProfileConfig
-// TODO: Phase 4 will replace this with proper XDGConfig loading
+// v0.7.0+: Uses ProfileConfig read from environment variables
+// This module is primarily used by CDK CLI (npx cdk deploy) which requires direct execution
 if (require.main === module) {
     const app = new cdk.App();
 
@@ -199,6 +198,10 @@ if (require.main === module) {
                     }),
                 },
             }),
+            // Include custom stack name if specified
+            ...(process.env.STACK_NAME && {
+                stackName: process.env.STACK_NAME,
+            }),
         },
         logging: {
             level: (process.env.LOG_LEVEL as "DEBUG" | "INFO" | "WARNING" | "ERROR") || "INFO",
@@ -215,7 +218,11 @@ if (require.main === module) {
         },
     };
 
-    new BenchlingWebhookStack(app, "BenchlingWebhookStack", {
+    // Determine stack name from environment or profile
+    const profile = process.env.PROFILE || "default";
+    const stackName = getStackName(profile, profileConfig.deployment.stackName);
+
+    new BenchlingWebhookStack(app, stackName, {
         env: {
             account: process.env.CDK_DEFAULT_ACCOUNT,
             region: process.env.CDK_DEFAULT_REGION,

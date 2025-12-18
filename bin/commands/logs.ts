@@ -19,12 +19,12 @@ import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-clo
 import { fromIni } from "@aws-sdk/credential-providers";
 import { XDGConfig } from "../../lib/xdg-config";
 import type { XDGBase } from "../../lib/xdg-base";
+import { getStackName } from "../../lib/types/config";
 import { discoverECSServiceLogGroups, discoverAPIGatewayLogGroups } from "../../lib/utils/ecs-service-discovery";
 import { parseTimeRange, formatTimeRange, formatLocalDateTime, formatLocalTime, getLocalTimezone } from "../../lib/utils/time-format";
 import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers";
 import { getEcsRolloutStatus } from "./status";
 
-const STACK_NAME = "BenchlingWebhookStack";
 const DEFAULT_LOG_LIMIT = 20; // Number of meaningful log entries to show per log group (after filtering health checks)
 const FETCH_LIMIT = 100; // Fetch more logs to ensure we get meaningful entries after filtering
 
@@ -68,6 +68,9 @@ function getDeploymentInfo(
             const region = config.deployment.region;
             const integratedMode = config.integratedStack || false;
 
+            // Determine stack name using helper function
+            const stackName = getStackName(profile, config.deployment?.stackName);
+
             // Get catalog DNS from config
             const catalogDns = config.quilt?.catalog;
 
@@ -88,7 +91,7 @@ function getDeploymentInfo(
                 if (match) {
                     return {
                         region,
-                        stackName: STACK_NAME,
+                        stackName,
                         integratedMode: true,
                         quiltStackName: match[1],
                         webhookEndpoint,
@@ -98,10 +101,10 @@ function getDeploymentInfo(
                 }
             }
 
-            // For standalone mode, use BenchlingWebhookStack
+            // For standalone mode, use calculated stack name
             return {
                 region,
-                stackName: STACK_NAME,
+                stackName,
                 integratedMode: false,
                 webhookEndpoint,
                 catalogDns,
@@ -633,7 +636,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
             return { success: false, error: errorMsg };
         }
 
-        let { region, integratedMode, quiltStackName, webhookEndpoint, catalogDns, stackArn } = deploymentInfo;
+        let { region, stackName, integratedMode, quiltStackName, webhookEndpoint, catalogDns, stackArn } = deploymentInfo;
 
         // For integrated mode, query webhook URL from CloudFormation if not in deployments.json
         if (integratedMode && !webhookEndpoint && stackArn) {
@@ -658,10 +661,10 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
         }
 
         // For integrated mode, use full stack ARN if available (for API Gateway discovery),
-        // otherwise use extracted stack name; for standalone use BenchlingWebhookStack
-        const stackName = integratedMode && stackArn ? stackArn :
+        // otherwise use extracted stack name; for standalone use calculated stack name
+        const stackNameForQuery = integratedMode && stackArn ? stackArn :
             integratedMode && quiltStackName ? quiltStackName :
-                STACK_NAME;
+                stackName;
 
         // Parse timer value
         const refreshInterval = parseTimerValue(timer);
@@ -689,7 +692,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
 
             // Fetch logs from all relevant log groups
             const logGroups = await fetchAllLogs(
-                stackName,
+                stackNameForQuery,
                 region,
                 currentSince,
                 limit,
@@ -711,7 +714,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
                 console.log(chalk.dim("   This could mean:"));
                 console.log(chalk.dim("   - The stack hasn't been deployed yet"));
                 console.log(chalk.dim("   - Log groups haven't been created"));
-                console.log(chalk.dim(`   - Stack name might be incorrect: ${stackName}\n`));
+                console.log(chalk.dim(`   - Stack name might be incorrect: ${stackNameForQuery}\n`));
 
                 // Don't loop if there are no log groups
                 if (!refreshInterval) {
@@ -757,7 +760,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
             let rolloutStatus: string | undefined;
             try {
                 rolloutStatus = await getEcsRolloutStatus(
-                    integratedMode && quiltStackName ? quiltStackName : STACK_NAME,
+                    integratedMode && quiltStackName ? quiltStackName : stackName,
                     region,
                     awsProfile,
                 );
