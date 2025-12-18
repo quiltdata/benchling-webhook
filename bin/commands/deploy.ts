@@ -631,6 +631,44 @@ export async function deploy(
             CDK_DEFAULT_REGION: deployRegion,
             QUILT_STACK_ARN: stackArn,
             BENCHLING_SECRET: benchlingSecret,
+
+            // Pass Quilt configuration (required by A07 validation)
+            QUILT_CATALOG: config.quilt.catalog,
+            QUILT_DATABASE: config.quilt.database,
+            QUEUE_URL: config.quilt.queueUrl,
+
+            // Pass optional Quilt fields if present
+            ...(config.quilt.icebergDatabase && {
+                ICEBERG_DATABASE: config.quilt.icebergDatabase,
+            }),
+            ...(config.quilt.icebergWorkgroup && {
+                ICEBERG_WORKGROUP: config.quilt.icebergWorkgroup,
+            }),
+            ...(config.quilt.athenaUserWorkgroup && {
+                ATHENA_USER_WORKGROUP: config.quilt.athenaUserWorkgroup,
+            }),
+            ...(config.quilt.athenaResultsBucket && {
+                ATHENA_RESULTS_BUCKET: config.quilt.athenaResultsBucket,
+            }),
+
+            // Pass package configuration
+            QUILT_USER_BUCKET: config.packages.bucket,
+            PKG_PREFIX: config.packages.prefix || "benchling",
+            PKG_KEY: config.packages.metadataKey || "experiment_id",
+
+            // Pass Benchling configuration
+            BENCHLING_TENANT: config.benchling.tenant,
+            BENCHLING_CLIENT_ID: config.benchling.clientId || "",
+            BENCHLING_APP_DEFINITION_ID: config.benchling.appDefinitionId || "",
+
+            // Pass logging configuration
+            LOG_LEVEL: config.logging?.level || "INFO",
+
+            // Pass image configuration
+            IMAGE_TAG: options.imageTag,
+            ...(config.deployment.ecrRepository && {
+                ECR_REPOSITORY_NAME: config.deployment.ecrRepository,
+            }),
         };
 
         // Pass VPC configuration if specified in profile
