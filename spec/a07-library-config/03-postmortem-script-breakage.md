@@ -17,7 +17,7 @@ The A07 fix (commit `87532f5`) successfully resolved library usage by adding val
 
 ### Error Message
 
-```
+```log
 Error: Configuration validation failed. Required fields:
   - config.quilt.catalog: Quilt catalog domain
   - config.quilt.database: Athena/Glue database name
@@ -214,7 +214,7 @@ A07 added comprehensive tests ([test/benchling-webhook-stack.test.ts:246-466](..
 
 **Timeline:**
 
-```
+```flow
 1. Read config from profile
    ↓
 2. Validate config ← ❌ FAILS HERE if incomplete
@@ -256,7 +256,7 @@ A07 added comprehensive tests ([test/benchling-webhook-stack.test.ts:246-466](..
 
 ### User Impact
 
-**Severity: High**
+#### Severity: High
 
 - **Blocks all deployments** using incomplete profiles
 - **Breaking change** despite A07 claiming backward compatibility
