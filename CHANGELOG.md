@@ -3,6 +3,46 @@
 
 All notable changes to this project will be documented in this file, one line per user-visible change.
 
+## [Unreleased]
+
+### Added
+
+- **Status monitoring after integrated deployment** - Setup wizard now prompts to monitor stack updates in real-time
+  - Interactive prompt to launch status command with auto-refresh (default: yes)
+  - Auto-exits when stack reaches terminal state
+  - In `--yes` mode, suggests manual status monitoring command
+  - Smart next steps omit status step if already shown
+
+- **Verify-clean-git command** - Fail-fast git checks before running tests
+  - New `npm run version:verify` command checks for uncommitted changes
+  - Integrated into `version:tag` and `version:tag:dev` workflows
+  - Fails immediately (< 1 second) instead of after full test suite (30+ seconds)
+
+### Fixed
+
+- **CloudFormation parameter defaults** - Library usage now works without explicit `--parameters` flags
+  - Config values now used as CloudFormation parameter defaults for Quilt services
+  - Fixes degraded mode in library deployments (PackagerQueueUrl, AthenaUserDatabase, QuiltWebHost, etc.)
+  - Validation ensures required config fields are present before deployment
+  - No breaking changes to existing NPM deployments (parameters still override defaults)
+
+- **Gunicorn PORT environment variable** - Container now respects PORT overrides in ECS task definitions
+  - Changed Gunicorn CMD to shell form to enable PORT variable expansion
+  - Fixes health check failures in integrated deployments using custom ports (e.g., PORT=5001)
+  - Maintains backward compatibility (defaults to 8080 when PORT not set)
+
+- **Gunicorn read-only filesystem compatibility** - Worker processes now start successfully with read-only filesystems
+  - Configured `--worker-tmp-dir /dev/shm` for worker heartbeat files
+  - Uses RAM-based tmpfs mount (automatically available in Linux containers)
+  - Maintains security posture without compromising read-only filesystem model
+
+### Changed
+
+- **Docker build documentation** - Clarified where images are built (local vs CI/CD) and deployment workflow
+  - Documents centralized Quilt ECR repository configuration
+  - Explains `version:tag:dev` triggers CI builds, not local builds
+  - Step-by-step workflow for dev deployment (tag first, then test)
+
 ## [0.9.5] - 2025-12-17
 
 ### Fixed
