@@ -390,6 +390,90 @@ export async function deploy(
     spinner.start("Checking stack status...");
     const stackCheck = await checkStackStatus(deployRegion, stackName);
 
+    // REVIEW_IN_PROGRESS is unrecoverable - must destroy and recreate
+    if (stackCheck.stackExists && stackCheck.stackStatus === "REVIEW_IN_PROGRESS") {
+        spinner.fail("Stack in unrecoverable state (REVIEW_IN_PROGRESS)");
+        console.log();
+        console.log(
+            boxen(
+                `${chalk.red.bold("Stack in Unrecoverable State")}\n\n` +
+                `The stack ${chalk.cyan(stackName)} is in ${chalk.yellow("REVIEW_IN_PROGRESS")} state.\n` +
+                `This means a CloudFormation change set failed during creation.\n\n` +
+                `${chalk.bold("This stack must be destroyed and recreated.")}\n`,
+                { padding: 1, borderColor: "red", borderStyle: "round" },
+            ),
+        );
+        console.log();
+
+        const { shouldDestroy } = await prompt<{ shouldDestroy: boolean }>([
+            {
+                type: "confirm",
+                name: "shouldDestroy",
+                message: "Destroy this stack and recreate? (Only option to proceed)",
+                initial: true,
+            },
+        ]);
+
+        if (!shouldDestroy) {
+            console.log(chalk.yellow("Deployment cancelled"));
+            process.exit(1);
+        }
+
+        // Destroy the stack
+        console.log();
+        spinner.start("Destroying stuck stack...");
+
+        try {
+            // Build environment for CDK destroy
+            const destroyEnv: Record<string, string> = {
+                ...process.env,
+                CDK_DEFAULT_ACCOUNT: deployAccount,
+                CDK_DEFAULT_REGION: deployRegion,
+            };
+
+            // Determine the CDK app entry point (same logic as deploy)
+            let moduleDir: string;
+            if (__dirname.includes("/dist/")) {
+                moduleDir = path.resolve(__dirname, "../../..");
+            } else {
+                moduleDir = path.resolve(__dirname, "../..");
+            }
+
+            let appPath: string;
+            const tsSourcePath = path.join(moduleDir, "bin/benchling-webhook.ts");
+            const jsDistPath = path.join(moduleDir, "dist/bin/benchling-webhook.js");
+
+            if (fs.existsSync(tsSourcePath)) {
+                appPath = `npx ts-node --prefer-ts-exts "${tsSourcePath}"`;
+            } else if (fs.existsSync(jsDistPath)) {
+                appPath = `node "${jsDistPath}"`;
+            } else {
+                appPath = "";
+            }
+
+            const appArg = appPath ? `--app "${appPath}"` : "";
+            const destroyCommand = `npx cdk destroy ${stackName} ${appArg} --force`;
+
+            execSync(destroyCommand, {
+                stdio: "inherit",
+                env: destroyEnv,
+            });
+
+            spinner.succeed("Stack destroyed");
+            console.log(chalk.blue("Proceeding with fresh deployment..."));
+            console.log();
+        } catch (error) {
+            spinner.fail("Failed to destroy stack");
+            console.log();
+            console.error(chalk.red((error as Error).message));
+            console.log();
+            console.log(chalk.yellow("You may need to manually delete the stack:"));
+            console.log(chalk.cyan(`  aws cloudformation delete-stack --stack-name ${stackName} --region ${deployRegion}`));
+            console.log();
+            process.exit(1);
+        }
+    }
+
     const needsAttention = ["in_progress", "failed", "rolled_back"].includes(stackCheck.statusCategory);
 
     if (needsAttention) {

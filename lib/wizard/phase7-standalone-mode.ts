@@ -155,11 +155,6 @@ export async function runStandaloneMode(input: StandaloneModeInput): Promise<Sta
             console.log(chalk.green("✓ Secret created for standalone deployment\n"));
         }
 
-        // Step 3.1: ECS restart is optional (v1.2.0+ fetches secrets on-demand)
-        if (hasExistingDeployment) {
-            console.log(chalk.dim("ℹ️  Benchling webhook v1.2.0+ fetches secrets on-demand per request"));
-            console.log(chalk.dim("   ECS service restart is NOT required for secret updates to take effect\n"));
-        }
     } catch (error) {
         console.warn(chalk.yellow(`⚠️  Failed to sync secrets: ${(error as Error).message}`));
         console.warn(chalk.yellow("   You can sync secrets manually later with:"));
