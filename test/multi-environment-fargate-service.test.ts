@@ -61,7 +61,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters 
+                // New explicit service parameters
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -70,9 +70,8 @@ describe("FargateService - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ECS::Cluster", {
-                ClusterName: "benchling-webhook-cluster",
-            });
+            // ClusterName removed to allow multiple stacks per account (v0.9.8+)
+            template.resourceCountIs("AWS::ECS::Cluster", 1);
         });
 
         test("creates single Fargate service", () => {
@@ -85,7 +84,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 benchlingSecret: config.benchling.secretArn!,
                 packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters 
+                // New explicit service parameters
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -94,8 +93,8 @@ describe("FargateService - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
+            // ServiceName removed to allow multiple stacks per account (v0.9.8+)
             template.hasResourceProperties("AWS::ECS::Service", {
-                ServiceName: "benchling-webhook-service",
                 LaunchType: "FARGATE",
             });
         });

@@ -30,10 +30,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            // Should create ECS service
-            template.hasResourceProperties("AWS::ECS::Service", {
-                ServiceName: "benchling-webhook-service",
-            });
+            // Should create ECS service (ServiceName removed for multi-stack support v0.9.8+)
+            template.resourceCountIs("AWS::ECS::Service", 1);
 
             // REST API v1 with resource policy (not HTTP API v2)
             template.hasResourceProperties("AWS::ApiGateway::RestApi", {
@@ -210,9 +208,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
             const template = Template.fromStack(stack);
 
-            template.hasResourceProperties("AWS::ECS::Cluster", {
-                ClusterName: "benchling-webhook-cluster",
-            });
+            // ClusterName removed for multi-stack support (v0.9.8+)
+            template.resourceCountIs("AWS::ECS::Cluster", 1);
         });
 
         test("creates Network Load Balancer (uses NLB)", () => {
@@ -371,14 +368,9 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
             const devTemplate = Template.fromStack(devStack);
             const prodTemplate = Template.fromStack(prodStack);
 
-            // Both stacks should have their own services
-            devTemplate.hasResourceProperties("AWS::ECS::Service", {
-                ServiceName: "benchling-webhook-service",
-            });
-
-            prodTemplate.hasResourceProperties("AWS::ECS::Service", {
-                ServiceName: "benchling-webhook-service",
-            });
+            // Both stacks should have their own services (ServiceName removed for multi-stack support v0.9.8+)
+            devTemplate.resourceCountIs("AWS::ECS::Service", 1);
+            prodTemplate.resourceCountIs("AWS::ECS::Service", 1);
         });
     });
 
