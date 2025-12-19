@@ -530,25 +530,34 @@ export async function deploy(
         spinner.start("Destroying stuck stack...");
 
         try {
-            // Build environment for CDK destroy (same as deploy to avoid validation errors)
-            const destroyEnv = buildCdkEnv(config, {
-                stackArn,
-                benchlingSecret,
-                profileName: options.profileName,
-                stackName,
-                imageTag: options.imageTag,
-                deployAccount,
-                deployRegion,
-            });
+            // REVIEW_IN_PROGRESS stacks require special handling:
+            // 1. Delete the failed changeset first
+            // 2. Then delete the stack directly (CDK destroy won't work)
 
-            const appPath = getCdkAppPath();
-            const appArg = appPath ? `--app "${appPath}"` : "";
-            const destroyCommand = `npx cdk destroy ${stackName} ${appArg} --force`;
+            // Step 1: Delete the failed changeset
+            spinner.text = "Deleting failed changeset...";
+            try {
+                execSync(
+                    `aws cloudformation delete-change-set --change-set-name cdk-deploy-change-set --stack-name ${stackName} --region ${deployRegion}`,
+                    { encoding: "utf-8" },
+                );
+            } catch (_changesetError) {
+                // Changeset might not exist, which is fine - continue with stack deletion
+            }
 
-            execSync(destroyCommand, {
-                stdio: "inherit",
-                env: destroyEnv,
-            });
+            // Step 2: Delete the stack directly using AWS CLI
+            spinner.text = "Deleting stack...";
+            execSync(
+                `aws cloudformation delete-stack --stack-name ${stackName} --region ${deployRegion}`,
+                { encoding: "utf-8" },
+            );
+
+            // Step 3: Wait for deletion to complete
+            spinner.text = "Waiting for stack deletion to complete...";
+            execSync(
+                `aws cloudformation wait stack-delete-complete --stack-name ${stackName} --region ${deployRegion}`,
+                { encoding: "utf-8", timeout: 300000 },
+            );
 
             spinner.succeed("Stack destroyed");
             console.log(chalk.blue("Proceeding with fresh deployment..."));
@@ -559,6 +568,7 @@ export async function deploy(
             console.error(chalk.red((error as Error).message));
             console.log();
             console.log(chalk.yellow("You may need to manually delete the stack:"));
+            console.log(chalk.cyan(`  aws cloudformation delete-change-set --change-set-name cdk-deploy-change-set --stack-name ${stackName} --region ${deployRegion}`));
             console.log(chalk.cyan(`  aws cloudformation delete-stack --stack-name ${stackName} --region ${deployRegion}`));
             console.log();
             process.exit(1);
@@ -769,7 +779,8 @@ export async function deploy(
 
         const appPath = getCdkAppPath();
         const appArg = appPath ? `--app "${appPath}"` : "";
-        const cdkCommand = `npx cdk deploy ${appArg} --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
+        // Use --method=direct to skip changeset creation (avoids REVIEW_IN_PROGRESS state for new stacks)
+        const cdkCommand = `npx cdk deploy ${appArg} --require-approval ${options.requireApproval || "never"} --method=direct ${parametersArg}`;
 
         // Build environment variables for CDK synthesis
         const env = buildCdkEnv(config, {
