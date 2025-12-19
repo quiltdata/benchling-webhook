@@ -27,6 +27,112 @@ function suggestSetup(profileName: string, message: string): void {
     console.log();
 }
 
+/**
+ * Build CDK app path
+ */
+function getCdkAppPath(): string {
+    let moduleDir: string;
+    if (__dirname.includes("/dist/")) {
+        moduleDir = path.resolve(__dirname, "../../..");
+    } else {
+        moduleDir = path.resolve(__dirname, "../..");
+    }
+
+    const tsSourcePath = path.join(moduleDir, "bin/benchling-webhook.ts");
+    const jsDistPath = path.join(moduleDir, "dist/bin/benchling-webhook.js");
+
+    if (fs.existsSync(tsSourcePath)) {
+        return `npx ts-node --prefer-ts-exts "${tsSourcePath}"`;
+    } else if (fs.existsSync(jsDistPath)) {
+        return `node "${jsDistPath}"`;
+    }
+    return "";
+}
+
+/**
+ * Build CDK environment variables from config
+ */
+function buildCdkEnv(
+    config: ProfileConfig,
+    options: {
+        stackArn: string;
+        benchlingSecret: string;
+        profileName: string;
+        stackName: string;
+        imageTag: string;
+        deployAccount: string;
+        deployRegion: string;
+    },
+): Record<string, string> {
+    const env: Record<string, string> = {
+        ...process.env,
+        CDK_DEFAULT_ACCOUNT: options.deployAccount,
+        CDK_DEFAULT_REGION: options.deployRegion,
+        QUILT_STACK_ARN: options.stackArn,
+        BENCHLING_SECRET: options.benchlingSecret,
+        PROFILE: options.profileName,
+        STACK_NAME: options.stackName,
+        QUILT_CATALOG: config.quilt.catalog,
+        QUILT_DATABASE: config.quilt.database,
+        QUEUE_URL: config.quilt.queueUrl,
+        QUILT_USER_BUCKET: config.packages.bucket,
+        PKG_PREFIX: config.packages.prefix || "benchling",
+        PKG_KEY: config.packages.metadataKey || "experiment_id",
+        BENCHLING_TENANT: config.benchling.tenant,
+        BENCHLING_CLIENT_ID: config.benchling.clientId || "",
+        BENCHLING_APP_DEFINITION_ID: config.benchling.appDefinitionId || "",
+        LOG_LEVEL: config.logging?.level || "INFO",
+        IMAGE_TAG: options.imageTag,
+    };
+
+    // Add optional Quilt fields if present
+    if (config.quilt.icebergDatabase) {
+        env.ICEBERG_DATABASE = config.quilt.icebergDatabase;
+    }
+    if (config.quilt.icebergWorkgroup) {
+        env.ICEBERG_WORKGROUP = config.quilt.icebergWorkgroup;
+    }
+    if (config.quilt.athenaUserWorkgroup) {
+        env.ATHENA_USER_WORKGROUP = config.quilt.athenaUserWorkgroup;
+    }
+    if (config.quilt.athenaResultsBucket) {
+        env.ATHENA_RESULTS_BUCKET = config.quilt.athenaResultsBucket;
+    }
+
+    // Pass VPC configuration if specified in profile
+    if (config.deployment.vpc?.vpcId) {
+        env.VPC_ID = config.deployment.vpc.vpcId;
+
+        if (config.deployment.vpc.privateSubnetIds) {
+            env.VPC_PRIVATE_SUBNET_IDS = JSON.stringify(config.deployment.vpc.privateSubnetIds);
+        }
+        if (config.deployment.vpc.publicSubnetIds) {
+            env.VPC_PUBLIC_SUBNET_IDS = JSON.stringify(config.deployment.vpc.publicSubnetIds);
+        }
+        if (config.deployment.vpc.availabilityZones) {
+            env.VPC_AVAILABILITY_ZONES = JSON.stringify(config.deployment.vpc.availabilityZones);
+        }
+        if (config.deployment.vpc.vpcCidrBlock) {
+            env.VPC_CIDR_BLOCK = config.deployment.vpc.vpcCidrBlock;
+        }
+    }
+
+    // Pass security configuration if specified in profile
+    if (config.security?.webhookAllowList) {
+        env.WEBHOOK_ALLOW_LIST = config.security.webhookAllowList;
+    }
+    if (config.security?.enableVerification !== undefined) {
+        env.ENABLE_WEBHOOK_VERIFICATION = config.security.enableVerification.toString();
+    }
+
+    // Pass ECR repository if specified
+    if (config.deployment.ecrRepository) {
+        env.ECR_REPOSITORY_NAME = config.deployment.ecrRepository;
+    }
+
+    return env;
+}
+
 type StackCheck = {
     stackExists: boolean;
     stackStatus?: string;
@@ -424,33 +530,18 @@ export async function deploy(
         spinner.start("Destroying stuck stack...");
 
         try {
-            // Build environment for CDK destroy
-            const destroyEnv: Record<string, string> = {
-                ...process.env,
-                CDK_DEFAULT_ACCOUNT: deployAccount,
-                CDK_DEFAULT_REGION: deployRegion,
-            };
+            // Build environment for CDK destroy (same as deploy to avoid validation errors)
+            const destroyEnv = buildCdkEnv(config, {
+                stackArn,
+                benchlingSecret,
+                profileName: options.profileName,
+                stackName,
+                imageTag: options.imageTag,
+                deployAccount,
+                deployRegion,
+            });
 
-            // Determine the CDK app entry point (same logic as deploy)
-            let moduleDir: string;
-            if (__dirname.includes("/dist/")) {
-                moduleDir = path.resolve(__dirname, "../../..");
-            } else {
-                moduleDir = path.resolve(__dirname, "../..");
-            }
-
-            let appPath: string;
-            const tsSourcePath = path.join(moduleDir, "bin/benchling-webhook.ts");
-            const jsDistPath = path.join(moduleDir, "dist/bin/benchling-webhook.js");
-
-            if (fs.existsSync(tsSourcePath)) {
-                appPath = `npx ts-node --prefer-ts-exts "${tsSourcePath}"`;
-            } else if (fs.existsSync(jsDistPath)) {
-                appPath = `node "${jsDistPath}"`;
-            } else {
-                appPath = "";
-            }
-
+            const appPath = getCdkAppPath();
             const appArg = appPath ? `--app "${appPath}"` : "";
             const destroyCommand = `npx cdk destroy ${stackName} ${appArg} --force`;
 
@@ -676,117 +767,20 @@ export async function deploy(
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
 
-        // Determine the CDK app entry point
-        // The path needs to be absolute to work from any cwd
-
-        // Find the package root directory
-        // When compiled: __dirname is dist/bin/commands, so go up 3 levels
-        // When source: __dirname is bin/commands, so go up 2 levels
-        let moduleDir: string;
-        if (__dirname.includes("/dist/")) {
-            // Compiled: dist/bin/commands -> ../../../
-            moduleDir = path.resolve(__dirname, "../../..");
-        } else {
-            // Source: bin/commands -> ../../
-            moduleDir = path.resolve(__dirname, "../..");
-        }
-
-        let appPath: string;
-        const tsSourcePath = path.join(moduleDir, "bin/benchling-webhook.ts");
-        const jsDistPath = path.join(moduleDir, "dist/bin/benchling-webhook.js");
-
-        if (fs.existsSync(tsSourcePath)) {
-            // Development mode: TypeScript source exists, use it directly
-            appPath = `npx ts-node --prefer-ts-exts "${tsSourcePath}"`;
-        } else if (fs.existsSync(jsDistPath)) {
-            // Production mode: use compiled JavaScript
-            appPath = `node "${jsDistPath}"`;
-        } else {
-            // Fallback: rely on cdk.json (should not happen)
-            console.warn(chalk.yellow("⚠️  Could not find CDK app entry point, relying on cdk.json"));
-            appPath = "";
-        }
-
+        const appPath = getCdkAppPath();
         const appArg = appPath ? `--app "${appPath}"` : "";
         const cdkCommand = `npx cdk deploy ${appArg} --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
 
         // Build environment variables for CDK synthesis
-        const env: Record<string, string> = {
-            ...process.env,
-            CDK_DEFAULT_ACCOUNT: deployAccount,
-            CDK_DEFAULT_REGION: deployRegion,
-            QUILT_STACK_ARN: stackArn,
-            BENCHLING_SECRET: benchlingSecret,
-
-            // Pass profile and stack name for multi-stack support
-            PROFILE: options.profileName,
-            STACK_NAME: stackName,
-
-            // Pass Quilt configuration (required by A07 validation)
-            QUILT_CATALOG: config.quilt.catalog,
-            QUILT_DATABASE: config.quilt.database,
-            QUEUE_URL: config.quilt.queueUrl,
-
-            // Pass optional Quilt fields if present
-            ...(config.quilt.icebergDatabase && {
-                ICEBERG_DATABASE: config.quilt.icebergDatabase,
-            }),
-            ...(config.quilt.icebergWorkgroup && {
-                ICEBERG_WORKGROUP: config.quilt.icebergWorkgroup,
-            }),
-            ...(config.quilt.athenaUserWorkgroup && {
-                ATHENA_USER_WORKGROUP: config.quilt.athenaUserWorkgroup,
-            }),
-            ...(config.quilt.athenaResultsBucket && {
-                ATHENA_RESULTS_BUCKET: config.quilt.athenaResultsBucket,
-            }),
-
-            // Pass package configuration
-            QUILT_USER_BUCKET: config.packages.bucket,
-            PKG_PREFIX: config.packages.prefix || "benchling",
-            PKG_KEY: config.packages.metadataKey || "experiment_id",
-
-            // Pass Benchling configuration
-            BENCHLING_TENANT: config.benchling.tenant,
-            BENCHLING_CLIENT_ID: config.benchling.clientId || "",
-            BENCHLING_APP_DEFINITION_ID: config.benchling.appDefinitionId || "",
-
-            // Pass logging configuration
-            LOG_LEVEL: config.logging?.level || "INFO",
-
-            // Pass image configuration
-            IMAGE_TAG: options.imageTag,
-            ...(config.deployment.ecrRepository && {
-                ECR_REPOSITORY_NAME: config.deployment.ecrRepository,
-            }),
-        };
-
-        // Pass VPC configuration if specified in profile
-        if (config.deployment.vpc?.vpcId) {
-            env.VPC_ID = config.deployment.vpc.vpcId;
-
-            // Serialize subnet arrays as JSON for environment variables
-            if (config.deployment.vpc.privateSubnetIds) {
-                env.VPC_PRIVATE_SUBNET_IDS = JSON.stringify(config.deployment.vpc.privateSubnetIds);
-            }
-            if (config.deployment.vpc.publicSubnetIds) {
-                env.VPC_PUBLIC_SUBNET_IDS = JSON.stringify(config.deployment.vpc.publicSubnetIds);
-            }
-            if (config.deployment.vpc.availabilityZones) {
-                env.VPC_AVAILABILITY_ZONES = JSON.stringify(config.deployment.vpc.availabilityZones);
-            }
-            if (config.deployment.vpc.vpcCidrBlock) {
-                env.VPC_CIDR_BLOCK = config.deployment.vpc.vpcCidrBlock;
-            }
-        }
-
-        // Pass security configuration if specified in profile
-        if (config.security?.webhookAllowList) {
-            env.WEBHOOK_ALLOW_LIST = config.security.webhookAllowList;
-        }
-        if (config.security?.enableVerification !== undefined) {
-            env.ENABLE_WEBHOOK_VERIFICATION = config.security.enableVerification.toString();
-        }
+        const env = buildCdkEnv(config, {
+            stackArn,
+            benchlingSecret,
+            profileName: options.profileName,
+            stackName,
+            imageTag: options.imageTag,
+            deployAccount,
+            deployRegion,
+        });
 
         execSync(cdkCommand, {
             stdio: "inherit",
