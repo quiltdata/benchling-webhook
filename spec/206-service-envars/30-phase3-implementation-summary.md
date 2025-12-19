@@ -412,7 +412,7 @@ python -m pytest tests/test_role_manager.py -v
 ## Failure Modes and Mitigation
 
 | Failure Mode | Behavior | Mitigation |
-|--------------|----------|------------|
+| -------------- | ---------- | ------------ |
 | Role ARN not configured | Use default credentials | Log INFO message at startup |
 | Role assumption fails (AccessDenied) | Fall back to default credentials | Log WARNING with error details |
 | Credentials expire during operation | Automatic refresh via botocore | Transparent to application |

@@ -114,7 +114,7 @@ Features:
 Current validation status (run with `./scripts/phase8-validation.sh`):
 
 | Check | Status | Notes |
-|-------|--------|-------|
+| ------- | -------- | ------- |
 | Legacy file removed | ❌ FAIL | Need to run cleanup script |
 | No legacy imports | ✅ PASS | Clean |
 | TypeScript compilation | ✅ PASS | No errors |
@@ -176,7 +176,7 @@ Current validation status (run with `./scripts/phase8-validation.sh`):
 ## Timeline
 
 | Milestone | Estimated Time | Status |
-|-----------|----------------|--------|
+| ----------- | ---------------- | -------- |
 | **Today** | | |
 | Remove legacy code | 5 min | ⏳ Pending |
 | Clean up TODOs | 10 min | ⏳ Pending |

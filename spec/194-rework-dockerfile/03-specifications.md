@@ -254,7 +254,7 @@ Compatibility requirements:
 ### Build Metrics
 
 | Metric | Current Baseline | Target | Measurement |
-|--------|-----------------|---------|-------------|
+| -------- | ----------------- | --------- | ------------- |
 | Image size | TBD (measure current) | -30% | docker images ls |
 | Build time | TBD (measure current) | No regression | time docker build |
 | Layer count | TBD | Minimize | docker history |
@@ -263,7 +263,7 @@ Compatibility requirements:
 ### Runtime Metrics
 
 | Metric | Current Baseline | Target | Measurement |
-|--------|-----------------|---------|-------------|
+| -------- | ----------------- | --------- | ------------- |
 | Startup time | <30s | <30s (maintain) | Container logs |
 | Health check response | <10s | <10s (maintain) | curl timing |
 | Memory usage | TBD | No regression | ECS metrics |
@@ -272,7 +272,7 @@ Compatibility requirements:
 ### Quality Metrics
 
 | Metric | Target | Measurement |
-|--------|--------|-------------|
+| -------- | -------- | ------------- |
 | Test coverage | 85%+ | pytest --cov |
 | Linting errors | 0 | flake8, black --check |
 | Security vulnerabilities | 0 high/critical | trivy scan |

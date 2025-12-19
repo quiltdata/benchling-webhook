@@ -175,7 +175,7 @@ FROM python:3.14-slim
 #### Requirements vs Current State
 
 | Requirement | Current State | Gap |
-|------------|---------------|-----|
+| ------------ | --------------- | ----- |
 | Amazon Linux 2023 base | python:3.14-slim | Different base entirely |
 | Hash pinning | No hash | Missing reproducibility |
 | Multi-stage build | Single stage | Missing optimization |

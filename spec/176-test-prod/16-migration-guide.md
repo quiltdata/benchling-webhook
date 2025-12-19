@@ -379,7 +379,7 @@ BenchlingWebhookStack
 
 **Cost Breakdown**:
 | Resource | Single Env | Dual Env | Change |
-|----------|-----------|----------|--------|
+| ---------- | ----------- | ---------- | -------- |
 | ALB | $23 | $23 | Shared |
 | NAT Gateway | $32 | $32 | Shared |
 | ECS Fargate | $15-45 | $30-90 | +$15-45 |

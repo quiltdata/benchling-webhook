@@ -94,7 +94,7 @@ GitHub Issue #156 describes a **3-component architecture**:
 All runtime configuration stored in AWS Secrets Manager secret:
 
 | Parameter | Description |
-|-----------|-------------|
+| ----------- | ------------- |
 | `CLIENT_ID` | OAuth client ID from Benchling app |
 | `CLIENT_SECRET` | OAuth client secret from Benchling app |
 | `TENANT` | Benchling subdomain |

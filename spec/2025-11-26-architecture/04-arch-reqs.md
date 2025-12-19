@@ -563,7 +563,7 @@
 ## Summary Statistics
 
 | Metric | Count |
-|--------|-------|
+| -------- | ------- |
 | **Components Added** | 1 Lambda function + IAM role |
 | **CDK Files Modified** | 2 (`rest-api-gateway.ts`, stack config) |
 | **Application Files Modified** | 1 (`docker/src/app.py`) |

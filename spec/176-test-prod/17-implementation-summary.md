@@ -309,7 +309,7 @@ npm run test:prod  # Tests prod deployment
 ## Cost Impact
 
 | Configuration | Monthly Cost | Change |
-|--------------|--------------|--------|
+| -------------- | -------------- | -------- |
 | **Single (prod only)** | $70-100 | Baseline |
 | **Dual (dev + prod)** | $85-145 | +$15-45 (+15-45%) |
 

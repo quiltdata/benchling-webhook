@@ -54,7 +54,7 @@ Reworked Dockerfile with Amazon Linux 2023 multi-stage build for improved stabil
 ### Check Results (All Passing ✅)
 
 | Check | Status | Duration | Run |
-|-------|--------|----------|-----|
+| ------- | -------- | ---------- | ----- |
 | Test | ✅ PASS | 1m18s | [19173729364](https://github.com/quiltdata/benchling-webhook/actions/runs/19173729364/job/54812891147) |
 | Test | ✅ PASS | 1m28s | [19173763786](https://github.com/quiltdata/benchling-webhook/actions/runs/19173763786/job/54813015138) |
 | Build and Push Docker Image | ✅ PASS | 1m2s | [19173729364](https://github.com/quiltdata/benchling-webhook/actions/runs/19173729364/job/54813011455) |

@@ -1017,7 +1017,7 @@ Ref: spec/194-rework-dockerfile/06-phase1-episodes.md Episode 18
 ## Episode Summary
 
 | Episode | Goal | Deliverable | Testing |
-|---------|------|-------------|---------|
+| --------- | ------ | ------------- | --------- |
 | 1 | Research | Baseline metrics, base image hash | Manual measurement |
 | 2 | Backup | Dockerfile.backup-python-slim | Build test |
 | 3 | Builder base | AL2023 builder stage | Stage build test |

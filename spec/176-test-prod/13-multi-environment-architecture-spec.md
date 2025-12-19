@@ -103,7 +103,7 @@ Single Stack: BenchlingWebhookStack
 ### URL Structure
 
 | Environment | Endpoint Example |
-|-------------|------------------|
+| ------------- | ------------------ |
 | **Dev** | `https://abc123.execute-api.us-east-1.amazonaws.com/dev/event` |
 | **Prod** | `https://abc123.execute-api.us-east-1.amazonaws.com/prod/event` |
 
@@ -165,7 +165,7 @@ Both environments use the **same API Gateway**, different **stages**.
 ### Profile → Environment Mapping
 
 | Command | Profile | API Gateway Stage | ECS Service | Image Tag |
-|---------|---------|-------------------|-------------|-----------|
+| --------- | --------- | ------------------- | ------------- | ----------- |
 | `npm run deploy:dev` | `dev` | `dev` | `benchling-webhook-dev` | `latest` |
 | `npm run deploy:prod` | `default` | `prod` | `benchling-webhook-prod` | `v0.6.3` |
 
@@ -568,7 +568,7 @@ quiltdata/benchling-webhook/<profile>/<tenant>
 ### Current (Single Environment)
 
 | Resource | Monthly Cost |
-|----------|-------------|
+| ---------- | ------------- |
 | ALB | ~$23 |
 | NAT Gateway | ~$32 |
 | ECS Fargate (1-3 tasks) | ~$15-45 |
@@ -577,7 +577,7 @@ quiltdata/benchling-webhook/<profile>/<tenant>
 ### Proposed (Dual Environment)
 
 | Resource | Monthly Cost | Change |
-|----------|-------------|--------|
+| ---------- | ------------- | -------- |
 | ALB | ~$23 | No change (shared) |
 | NAT Gateway | ~$32 | No change (shared) |
 | ECS Fargate (2-6 tasks) | ~$30-90 | +$15-45 (2x containers) |

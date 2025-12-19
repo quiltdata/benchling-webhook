@@ -201,7 +201,7 @@ interface QuiltConfig {
 **Required CloudFormation Outputs**:
 
 | Output Key | Purpose | Example Value |
-|------------|---------|---------------|
+| ------------ | --------- | --------------- |
 | `PackagerQueueUrl` | SQS queue for package creation | `https://sqs.us-east-1.amazonaws.com/123456789012/packager-queue` |
 | `UserAthenaDatabaseName` | Athena database for user data | `quilt_user_catalog` |
 | `Catalog` or `CatalogDomain` or `ApiGatewayEndpoint` | Catalog web host | `quilt.example.com` or `https://api.execute-api.us-east-1.amazonaws.com` |
@@ -209,7 +209,7 @@ interface QuiltConfig {
 **Optional CloudFormation Outputs**:
 
 | Output Key | Purpose | Example Value |
-|------------|---------|---------------|
+| ------------ | --------- | --------------- |
 | `IcebergDatabase` | Iceberg database name | `quilt_iceberg_catalog` |
 | `UserBucket` or `BucketName` | S3 bucket name (if not in profile) | `quilt-packages-prod` |
 

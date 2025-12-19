@@ -54,7 +54,7 @@ We already have NLB for load balancing. Adding NGINX inside containers provides 
 ### Alternatives Considered
 
 | Option | Verdict | Reason |
-|--------|---------|--------|
+| -------- | --------- | -------- |
 | Fix NGINX Unit | ❌ Rejected | Archived, no ARM64 support, security risk |
 | Use nginx/unit Docker image | ❌ Rejected | Still unmaintained, ~200MB larger images |
 | uWSGI + NGINX | ❌ Rejected | WSGI-focused, ASGI support experimental |
@@ -327,7 +327,7 @@ npm run deploy:prod -- --profile default --stage prod --yes
 ## Risks and Mitigations
 
 | Risk | Impact | Probability | Mitigation |
-|------|--------|-------------|------------|
+| ------ | -------- | ------------- | ------------ |
 | Regression in production | High | Low | Deploy to dev first, monitor 24h |
 | Performance degradation | Medium | Low | Gunicorn is proven, used widely |
 | Unknown dependencies on Unit | Medium | Very Low | Thorough testing in dev |

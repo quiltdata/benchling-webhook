@@ -49,7 +49,7 @@ Internet → WAF (IP filter) → HTTP API v2 → Lambda Authorizer (HMAC) → VP
 ### WAF Advantages Over Resource Policies
 
 | Feature | REST API Resource Policy | HTTP API v2 + WAF |
-|---------|-------------------------|-------------------|
+| --------- | ------------------------- | ------------------- |
 | IP filtering | Limited (10KB policy) | Unlimited (10,000 IPs) |
 | Rate limiting | Not available | Per-IP rate limits |
 | DDoS protection | Basic | Advanced Layer 7 |
@@ -212,7 +212,7 @@ interface SecurityConfig {
 The WAF construct automatically chooses the default action based on configuration:
 
 | IP Allowlist | Default Action | Behavior |
-|--------------|----------------|----------|
+| -------------- | ---------------- | ---------- |
 | Empty (`""`) | `COUNT` | Logs all requests, allows through to Lambda Authorizer (discovery mode) |
 | Has IPs | `BLOCK` | Blocks requests not matching IP allowlist (security mode) |
 
@@ -457,7 +457,7 @@ fields @timestamp, httpRequest.clientIp, terminatingRuleId
 ### Cost Comparison (per million requests)
 
 | Architecture | Fixed | Variable | Total |
-|--------------|-------|----------|-------|
+| -------------- | ------- | ---------- | ------- |
 | **REST API + Lambda Authorizer + NLB** | $16.20/mo | $3.70/M | $19.90 |
 | **HTTP API v2 + Lambda Authorizer** | $0/mo | $1.20/M | $1.20 |
 | **HTTP API v2 + Lambda + WAF** | $7.00/mo | $1.80/M | $8.80 |

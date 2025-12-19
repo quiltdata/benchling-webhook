@@ -11,7 +11,7 @@ import {
 } from "../../lib/utils/service-resolver";
 import { checkCdkBootstrap } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
-import { ProfileConfig } from "../../lib/types/config";
+import { ProfileConfig, getStackName } from "../../lib/types/config";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 import { syncSecretsToAWS } from "./sync-secrets";
 import * as fs from "fs";
@@ -27,6 +27,112 @@ function suggestSetup(profileName: string, message: string): void {
     console.log();
 }
 
+/**
+ * Build CDK app path
+ */
+function getCdkAppPath(): string {
+    let moduleDir: string;
+    if (__dirname.includes("/dist/")) {
+        moduleDir = path.resolve(__dirname, "../../..");
+    } else {
+        moduleDir = path.resolve(__dirname, "../..");
+    }
+
+    const tsSourcePath = path.join(moduleDir, "bin/benchling-webhook.ts");
+    const jsDistPath = path.join(moduleDir, "dist/bin/benchling-webhook.js");
+
+    if (fs.existsSync(tsSourcePath)) {
+        return `npx ts-node --prefer-ts-exts "${tsSourcePath}"`;
+    } else if (fs.existsSync(jsDistPath)) {
+        return `node "${jsDistPath}"`;
+    }
+    return "";
+}
+
+/**
+ * Build CDK environment variables from config
+ */
+function buildCdkEnv(
+    config: ProfileConfig,
+    options: {
+        stackArn: string;
+        benchlingSecret: string;
+        profileName: string;
+        stackName: string;
+        imageTag: string;
+        deployAccount: string;
+        deployRegion: string;
+    },
+): Record<string, string> {
+    const env: Record<string, string> = {
+        ...process.env,
+        CDK_DEFAULT_ACCOUNT: options.deployAccount,
+        CDK_DEFAULT_REGION: options.deployRegion,
+        QUILT_STACK_ARN: options.stackArn,
+        BENCHLING_SECRET: options.benchlingSecret,
+        PROFILE: options.profileName,
+        STACK_NAME: options.stackName,
+        QUILT_CATALOG: config.quilt.catalog,
+        QUILT_DATABASE: config.quilt.database,
+        QUEUE_URL: config.quilt.queueUrl,
+        QUILT_USER_BUCKET: config.packages.bucket,
+        PKG_PREFIX: config.packages.prefix || "benchling",
+        PKG_KEY: config.packages.metadataKey || "experiment_id",
+        BENCHLING_TENANT: config.benchling.tenant,
+        BENCHLING_CLIENT_ID: config.benchling.clientId || "",
+        BENCHLING_APP_DEFINITION_ID: config.benchling.appDefinitionId || "",
+        LOG_LEVEL: config.logging?.level || "INFO",
+        IMAGE_TAG: options.imageTag,
+    };
+
+    // Add optional Quilt fields if present
+    if (config.quilt.icebergDatabase) {
+        env.ICEBERG_DATABASE = config.quilt.icebergDatabase;
+    }
+    if (config.quilt.icebergWorkgroup) {
+        env.ICEBERG_WORKGROUP = config.quilt.icebergWorkgroup;
+    }
+    if (config.quilt.athenaUserWorkgroup) {
+        env.ATHENA_USER_WORKGROUP = config.quilt.athenaUserWorkgroup;
+    }
+    if (config.quilt.athenaResultsBucket) {
+        env.ATHENA_RESULTS_BUCKET = config.quilt.athenaResultsBucket;
+    }
+
+    // Pass VPC configuration if specified in profile
+    if (config.deployment.vpc?.vpcId) {
+        env.VPC_ID = config.deployment.vpc.vpcId;
+
+        if (config.deployment.vpc.privateSubnetIds) {
+            env.VPC_PRIVATE_SUBNET_IDS = JSON.stringify(config.deployment.vpc.privateSubnetIds);
+        }
+        if (config.deployment.vpc.publicSubnetIds) {
+            env.VPC_PUBLIC_SUBNET_IDS = JSON.stringify(config.deployment.vpc.publicSubnetIds);
+        }
+        if (config.deployment.vpc.availabilityZones) {
+            env.VPC_AVAILABILITY_ZONES = JSON.stringify(config.deployment.vpc.availabilityZones);
+        }
+        if (config.deployment.vpc.vpcCidrBlock) {
+            env.VPC_CIDR_BLOCK = config.deployment.vpc.vpcCidrBlock;
+        }
+    }
+
+    // Pass security configuration if specified in profile
+    if (config.security?.webhookAllowList) {
+        env.WEBHOOK_ALLOW_LIST = config.security.webhookAllowList;
+    }
+    if (config.security?.enableVerification !== undefined) {
+        env.ENABLE_WEBHOOK_VERIFICATION = config.security.enableVerification.toString();
+    }
+
+    // Pass ECR repository if specified
+    if (config.deployment.ecrRepository) {
+        env.ECR_REPOSITORY_NAME = config.deployment.ecrRepository;
+    }
+
+    return env;
+}
+
 type StackCheck = {
     stackExists: boolean;
     stackStatus?: string;
@@ -40,10 +146,9 @@ type StackCheck = {
  * successfully rolled back and is ready for new updates. Only active rollbacks
  * (in progress) and truly failed states require user attention.
  */
-async function checkStackStatus(region: string): Promise<StackCheck> {
+async function checkStackStatus(region: string, stackName: string): Promise<StackCheck> {
     try {
         const cloudformation = new CloudFormationClient({ region });
-        const stackName = "BenchlingWebhookStack";
 
         // Check if stack exists
         const describeCommand = new DescribeStacksCommand({ StackName: stackName });
@@ -384,9 +489,91 @@ export async function deploy(
         }
     }
 
+    // Determine stack name using helper function
+    const stackName = getStackName(options.profileName, config.deployment.stackName);
+
     // Check for rollback or failed state
     spinner.start("Checking stack status...");
-    const stackCheck = await checkStackStatus(deployRegion);
+    const stackCheck = await checkStackStatus(deployRegion, stackName);
+
+    // REVIEW_IN_PROGRESS is unrecoverable - must destroy and recreate
+    if (stackCheck.stackExists && stackCheck.stackStatus === "REVIEW_IN_PROGRESS") {
+        spinner.fail("Stack in unrecoverable state (REVIEW_IN_PROGRESS)");
+        console.log();
+        console.log(
+            boxen(
+                `${chalk.red.bold("Stack in Unrecoverable State")}\n\n` +
+                `The stack ${chalk.cyan(stackName)} is in ${chalk.yellow("REVIEW_IN_PROGRESS")} state.\n` +
+                "This means a CloudFormation change set failed during creation.\n\n" +
+                `${chalk.bold("This stack must be destroyed and recreated.")}\n`,
+                { padding: 1, borderColor: "red", borderStyle: "round" },
+            ),
+        );
+        console.log();
+
+        const { shouldDestroy } = await prompt<{ shouldDestroy: boolean }>([
+            {
+                type: "confirm",
+                name: "shouldDestroy",
+                message: "Destroy this stack and recreate? (Only option to proceed)",
+                initial: true,
+            },
+        ]);
+
+        if (!shouldDestroy) {
+            console.log(chalk.yellow("Deployment cancelled"));
+            process.exit(1);
+        }
+
+        // Destroy the stack
+        console.log();
+        spinner.start("Destroying stuck stack...");
+
+        try {
+            // REVIEW_IN_PROGRESS stacks require special handling:
+            // 1. Delete the failed changeset first
+            // 2. Then delete the stack directly (CDK destroy won't work)
+
+            // Step 1: Delete the failed changeset
+            spinner.text = "Deleting failed changeset...";
+            try {
+                execSync(
+                    `aws cloudformation delete-change-set --change-set-name cdk-deploy-change-set --stack-name ${stackName} --region ${deployRegion}`,
+                    { encoding: "utf-8" },
+                );
+            } catch (_changesetError) {
+                // Changeset might not exist, which is fine - continue with stack deletion
+            }
+
+            // Step 2: Delete the stack directly using AWS CLI
+            spinner.text = "Deleting stack...";
+            execSync(
+                `aws cloudformation delete-stack --stack-name ${stackName} --region ${deployRegion}`,
+                { encoding: "utf-8" },
+            );
+
+            // Step 3: Wait for deletion to complete
+            spinner.text = "Waiting for stack deletion to complete...";
+            execSync(
+                `aws cloudformation wait stack-delete-complete --stack-name ${stackName} --region ${deployRegion}`,
+                { encoding: "utf-8", timeout: 300000 },
+            );
+
+            spinner.succeed("Stack destroyed");
+            console.log(chalk.blue("Proceeding with fresh deployment..."));
+            console.log();
+        } catch (error) {
+            spinner.fail("Failed to destroy stack");
+            console.log();
+            console.error(chalk.red((error as Error).message));
+            console.log();
+            console.log(chalk.yellow("You may need to manually delete the stack:"));
+            console.log(chalk.cyan(`  aws cloudformation delete-change-set --change-set-name cdk-deploy-change-set --stack-name ${stackName} --region ${deployRegion}`));
+            console.log(chalk.cyan(`  aws cloudformation delete-stack --stack-name ${stackName} --region ${deployRegion}`));
+            console.log();
+            process.exit(1);
+        }
+    }
 
     const needsAttention = ["in_progress", "failed", "rolled_back"].includes(stackCheck.statusCategory);
 
@@ -491,7 +678,7 @@ export async function deploy(
     console.log();
     console.log(chalk.bold("Deployment Plan"));
     console.log(chalk.gray("─".repeat(80)));
-    console.log(`  ${chalk.bold("Stack:")}                     BenchlingWebhookStack`);
+    console.log(`  ${chalk.bold("Stack:")}                     ${stackName}`);
     console.log(`  ${chalk.bold("Account:")}                   ${deployAccount}`);
     console.log(`  ${chalk.bold("Region:")}                    ${deployRegion}`);
     console.log(`  ${chalk.bold("Stage:")}                     ${options.stage}`);
@@ -565,6 +752,10 @@ export async function deploy(
     console.log(chalk.blue.bold("▶ Starting deployment..."));
     console.log();
 
+    // Track deployment success - we'll verify actual stack status even if CDK command fails
+    let deploymentSucceeded = false;
+    let cdkError: Error | null = null;
+
     try {
         // Build CloudFormation parameters
         // Parameter names must match the CfnParameter IDs in BenchlingWebhookStack
@@ -590,83 +781,51 @@ export async function deploy(
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
 
-        // Determine the CDK app entry point
-        // The path needs to be absolute to work from any cwd
-
-        // Find the package root directory
-        // When compiled: __dirname is dist/bin/commands, so go up 3 levels
-        // When source: __dirname is bin/commands, so go up 2 levels
-        let moduleDir: string;
-        if (__dirname.includes("/dist/")) {
-            // Compiled: dist/bin/commands -> ../../../
-            moduleDir = path.resolve(__dirname, "../../..");
-        } else {
-            // Source: bin/commands -> ../../
-            moduleDir = path.resolve(__dirname, "../..");
-        }
-
-        let appPath: string;
-        const tsSourcePath = path.join(moduleDir, "bin/benchling-webhook.ts");
-        const jsDistPath = path.join(moduleDir, "dist/bin/benchling-webhook.js");
-
-        if (fs.existsSync(tsSourcePath)) {
-            // Development mode: TypeScript source exists, use it directly
-            appPath = `npx ts-node --prefer-ts-exts "${tsSourcePath}"`;
-        } else if (fs.existsSync(jsDistPath)) {
-            // Production mode: use compiled JavaScript
-            appPath = `node "${jsDistPath}"`;
-        } else {
-            // Fallback: rely on cdk.json (should not happen)
-            console.warn(chalk.yellow("⚠️  Could not find CDK app entry point, relying on cdk.json"));
-            appPath = "";
-        }
-
+        const appPath = getCdkAppPath();
         const appArg = appPath ? `--app "${appPath}"` : "";
-        const cdkCommand = `npx cdk deploy ${appArg} --require-approval ${options.requireApproval || "never"} ${parametersArg}`;
+        // Use --method=direct to skip changeset creation (avoids REVIEW_IN_PROGRESS state for new stacks)
+        const cdkCommand = `npx cdk deploy ${appArg} --require-approval ${options.requireApproval || "never"} --method=direct ${parametersArg}`;
 
         // Build environment variables for CDK synthesis
-        const env: Record<string, string> = {
-            ...process.env,
-            CDK_DEFAULT_ACCOUNT: deployAccount,
-            CDK_DEFAULT_REGION: deployRegion,
-            QUILT_STACK_ARN: stackArn,
-            BENCHLING_SECRET: benchlingSecret,
-        };
-
-        // Pass VPC configuration if specified in profile
-        if (config.deployment.vpc?.vpcId) {
-            env.VPC_ID = config.deployment.vpc.vpcId;
-
-            // Serialize subnet arrays as JSON for environment variables
-            if (config.deployment.vpc.privateSubnetIds) {
-                env.VPC_PRIVATE_SUBNET_IDS = JSON.stringify(config.deployment.vpc.privateSubnetIds);
-            }
-            if (config.deployment.vpc.publicSubnetIds) {
-                env.VPC_PUBLIC_SUBNET_IDS = JSON.stringify(config.deployment.vpc.publicSubnetIds);
-            }
-            if (config.deployment.vpc.availabilityZones) {
-                env.VPC_AVAILABILITY_ZONES = JSON.stringify(config.deployment.vpc.availabilityZones);
-            }
-            if (config.deployment.vpc.vpcCidrBlock) {
-                env.VPC_CIDR_BLOCK = config.deployment.vpc.vpcCidrBlock;
-            }
-        }
-
-        // Pass security configuration if specified in profile
-        if (config.security?.webhookAllowList) {
-            env.WEBHOOK_ALLOW_LIST = config.security.webhookAllowList;
-        }
-        if (config.security?.enableVerification !== undefined) {
-            env.ENABLE_WEBHOOK_VERIFICATION = config.security.enableVerification.toString();
-        }
+        const env = buildCdkEnv(config, {
+            stackArn,
+            benchlingSecret,
+            profileName: options.profileName,
+            stackName,
+            imageTag: options.imageTag,
+            deployAccount,
+            deployRegion,
+        });
 
         execSync(cdkCommand, {
             stdio: "inherit",
             env,
         });
 
+        deploymentSucceeded = true;
         console.log();
         spinner.succeed("Stack deployed successfully");
+    } catch (error) {
+        // CDK command failed, but the stack might have actually deployed successfully
+        // Check actual stack status before failing
+        cdkError = error as Error;
+        console.log();
+        console.log(chalk.yellow("CDK command exited with error, checking actual stack status..."));
+
+        const finalCheck = await checkStackStatus(deployRegion, stackName);
+        if (finalCheck.stackExists &&
+            (finalCheck.stackStatus === "CREATE_COMPLETE" || finalCheck.stackStatus === "UPDATE_COMPLETE")) {
+            console.log(chalk.green(`✓ Stack deployment succeeded despite CDK error (${finalCheck.stackStatus})`));
+            deploymentSucceeded = true;
+            spinner.succeed("Stack deployed successfully");
+        } else {
+            deploymentSucceeded = false;
+            spinner.fail("Deployment failed");
+        }
+    }
+
+    // Record deployment endpoint if stack deployed successfully
+    if (deploymentSucceeded) {
 
         // After successful deployment, store endpoint and run tests
         console.log();
@@ -674,7 +833,6 @@ export async function deploy(
 
         try {
             const cloudformation = new CloudFormationClient({ region: deployRegion });
-            const stackName = "BenchlingWebhookStack";
 
             const command = new DescribeStacksCommand({ StackName: stackName });
             const response = await cloudformation.send(command);
@@ -711,7 +869,7 @@ export async function deploy(
                     console.log(
                         boxen(
                             `${chalk.green.bold("✓ Deployment Complete!")}\n\n` +
-                            `Stack:  ${chalk.cyan("BenchlingWebhookStack")}\n` +
+                            `Stack:  ${chalk.cyan(stackName)}\n` +
                             `Region: ${chalk.cyan(deployRegion)}\n` +
                             `Stage:  ${chalk.cyan(options.stage)}\n` +
                             `Profile: ${chalk.cyan(options.profileName)}\n` +
@@ -732,10 +890,10 @@ export async function deploy(
             console.warn(`⚠️  Could not retrieve deployment endpoint: ${(error as Error).message}`);
             console.warn("   Deployment succeeded but endpoint could not be recorded");
         }
-    } catch (error) {
-        spinner.fail("Deployment failed");
-        console.error();
-        console.error(chalk.red((error as Error).message));
+    } else {
+        // Deployment failed - report the error
+        console.log();
+        console.error(chalk.red((cdkError as Error).message));
         process.exit(1);
     }
 }

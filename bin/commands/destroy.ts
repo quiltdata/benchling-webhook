@@ -4,7 +4,7 @@ import ora from "ora";
 import boxen from "boxen";
 import { prompt } from "enquirer";
 import { XDGConfig } from "../../lib/xdg-config";
-import { ProfileConfig } from "../../lib/types/config";
+import { ProfileConfig, getStackName } from "../../lib/types/config";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 
 /**
@@ -56,6 +56,9 @@ export async function destroyCommand(options: {
     // Use region from config, but allow override from CLI
     const destroyRegion = options.region || config.deployment?.region || "us-east-1";
 
+    // Determine stack name using helper function
+    const stackName = getStackName(profileName, config.deployment?.stackName);
+
     // Check if stack exists
     const spinner = ora("Checking if stack exists...").start();
     let stackExists = false;
@@ -63,7 +66,6 @@ export async function destroyCommand(options: {
 
     try {
         const cloudformation = new CloudFormationClient({ region: destroyRegion });
-        const stackName = "BenchlingWebhookStack";
 
         const command = new DescribeStacksCommand({ StackName: stackName });
         const response = await cloudformation.send(command);
@@ -103,7 +105,7 @@ export async function destroyCommand(options: {
                 console.log(chalk.bold("To check status:"));
                 console.log();
                 console.log(chalk.cyan("  aws cloudformation describe-stacks \\"));
-                console.log(chalk.cyan("    --stack-name BenchlingWebhookStack \\"));
+                console.log(chalk.cyan(`    --stack-name ${stackName} \\`));
                 console.log(chalk.cyan(`    --region ${destroyRegion} \\`));
                 console.log(chalk.cyan("    --query 'Stacks[0].StackStatus'"));
                 console.log();
@@ -154,7 +156,7 @@ export async function destroyCommand(options: {
     console.log();
     console.log(chalk.bold("Destruction Plan"));
     console.log(chalk.gray("─".repeat(80)));
-    console.log(`  ${chalk.bold("Stack:")}        BenchlingWebhookStack`);
+    console.log(`  ${chalk.bold("Stack:")}        ${stackName}`);
     console.log(`  ${chalk.bold("Region:")}       ${destroyRegion}`);
     console.log(`  ${chalk.bold("Stage:")}        ${stage}`);
     console.log(`  ${chalk.bold("Profile:")}      ${profileName}`);
@@ -185,7 +187,7 @@ export async function destroyCommand(options: {
             "aws",
             "cloudformation",
             "delete-stack",
-            "--stack-name BenchlingWebhookStack",
+            `--stack-name ${stackName}`,
             `--region ${destroyRegion}`,
         ].join(" ");
 
@@ -211,7 +213,7 @@ export async function destroyCommand(options: {
             "cloudformation",
             "wait",
             "stack-delete-complete",
-            "--stack-name BenchlingWebhookStack",
+            `--stack-name ${stackName}`,
             `--region ${destroyRegion}`,
         ].join(" ");
 
@@ -244,7 +246,7 @@ export async function destroyCommand(options: {
         console.log(
             boxen(
                 `${chalk.green.bold("✓ Destruction Complete!")}\n\n` +
-                    `Stack:   ${chalk.cyan("BenchlingWebhookStack")}\n` +
+                    `Stack:   ${chalk.cyan(stackName)}\n` +
                     `Region:  ${chalk.cyan(destroyRegion)}\n` +
                     `Stage:   ${chalk.cyan(stage)}\n` +
                     `Profile: ${chalk.cyan(profileName)}\n\n` +

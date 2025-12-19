@@ -11,7 +11,7 @@ This document summarizes the implementation of the temporary file removal and IA
 ## Commits
 
 | Commit | Phase | Description |
-|--------|-------|-------------|
+| -------- | ------- | ------------- |
 | `1774dca` | Phase 1 | feat(python): replace temporary file with BytesIO for in-memory ZIP processing |
 | `3286993` | Phase 2 | feat(python): consolidate to single IAM role for S3/Athena access |
 | `95f9812` | Phase 3 | feat(cdk): remove read role from infrastructure, consolidate to single write role |
@@ -519,7 +519,7 @@ Deployed to production and monitored for 48 hours:
 ### Latency Improvements
 
 | Operation | Before | After | Change |
-|-----------|--------|-------|--------|
+| ----------- | -------- | ------- | -------- |
 | ZIP Download | 2.5s | 2.3s | -8% |
 | ZIP Extract | 1.2s | 0.8s | -33% |
 | STS AssumeRole | 2 calls | 1 call | -50% |

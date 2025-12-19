@@ -139,10 +139,6 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
         });
 
         console.log(chalk.green("✓ BenchlingSecret updated in Quilt stack\n"));
-
-        // Step 3.1: ECS restart is optional (v1.2.0+ fetches secrets on-demand)
-        console.log(chalk.dim("ℹ️  Benchling webhook v1.2.0+ fetches secrets on-demand per request"));
-        console.log(chalk.dim("   ECS service restart is NOT required for secret updates to take effect\n"));
     } catch (error) {
         console.warn(chalk.yellow(`⚠️  Failed to sync secrets: ${(error as Error).message}`));
         console.warn(chalk.yellow("   You can sync secrets manually later with:"));

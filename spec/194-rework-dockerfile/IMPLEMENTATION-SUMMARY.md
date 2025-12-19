@@ -552,7 +552,7 @@ docker rm -f prod-test
 ## Success Metrics (To Be Measured)
 
 | Metric | Target | Measured | Status |
-|--------|--------|----------|--------|
+| -------- | -------- | ---------- | -------- |
 | Image Size Reduction | 30%+ | TBD MB → TBD MB | ⏳ |
 | Build Time | < 10 min | TBD | ⏳ |
 | Startup Time | < 30 sec | TBD | ⏳ |

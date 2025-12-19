@@ -27,7 +27,7 @@ This violates the principle of **implementation isolation** - callers should use
 ### Script Inventory
 
 | Script | Purpose | Callers | Status |
-|--------|---------|---------|--------|
+| -------- | --------- | --------- | -------- |
 | `bin/version.ts` | Version bumping (patch/minor/major/sync) | `npm run version` | ✅ Keep |
 | `bin/release.ts` | Create and push git tags | `npm run release:tag` | 🔄 Merge into version.ts |
 | `bin/release-notes.sh` | Generate GitHub release notes | Direct call in CI | ⚠️ Needs npm task |

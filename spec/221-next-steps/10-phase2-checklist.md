@@ -151,7 +151,7 @@
 ## Coverage Requirements
 
 | Module                     | Target  | Actual | Status |
-|---------------------------|---------|--------|--------|
+| --------------------------- | --------- | -------- | -------- |
 | lib/context-detector.ts   | 100%    | ---    | [ ]    |
 | lib/next-steps-generator.ts| 95%+   | ---    | [ ]    |
 | Overall Phase 2           | 100%    | ---    | [ ]    |
@@ -159,7 +159,7 @@
 ## Performance Benchmarks
 
 | Operation                      | Target  | Actual | Status |
-|-------------------------------|---------|--------|--------|
+| ------------------------------- | --------- | -------- | -------- |
 | detectExecutionContext()      | <10ms   | ---    | [ ]    |
 | generateNextSteps()           | <5ms    | ---    | [ ]    |
 | Full Phase 2 overhead         | <15ms   | ---    | [ ]    |

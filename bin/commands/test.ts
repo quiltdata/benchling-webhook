@@ -3,6 +3,8 @@ import chalk from "chalk";
 import ora from "ora";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 import type { ConfigOptions } from "../../lib/utils/config";
+import { getStackName } from "../../lib/types/config";
+import { XDGConfig } from "../../lib/xdg-config";
 
 export async function testCommand(options: ConfigOptions & { url?: string }): Promise<void> {
     let webhookUrl = options.url;
@@ -13,9 +15,17 @@ export async function testCommand(options: ConfigOptions & { url?: string }): Pr
         try {
             const cloudformation = new CloudFormationClient({});
 
+            // Determine stack name from profile
+            const profile = options.profile || "default";
+            const xdg = new XDGConfig();
+            const config = xdg.readProfile(profile);
+            const stackName = getStackName(profile, config.deployment?.stackName);
+
+            spinner.text = `Retrieving webhook URL from stack: ${stackName}...`;
+
             // Try to find the stack
             const command = new DescribeStacksCommand({
-                StackName: "BenchlingWebhookStack",
+                StackName: stackName,
             });
             const response = await cloudformation.send(command);
 
@@ -33,10 +43,10 @@ export async function testCommand(options: ConfigOptions & { url?: string }): Pr
                     process.exit(1);
                 }
             } else {
-                spinner.fail("Stack BenchlingWebhookStack not found");
+                spinner.fail(`Stack ${stackName} not found`);
                 console.log();
                 console.log(chalk.yellow("Make sure the stack is deployed, or provide a URL:"));
-                console.log(chalk.cyan("  npx @quiltdata/benchling-webhook@latest test --url <webhook-url>"));
+                console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook@latest test --profile ${profile} --url <webhook-url>`));
                 process.exit(1);
             }
         } catch (err) {

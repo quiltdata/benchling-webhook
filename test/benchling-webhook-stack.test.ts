@@ -20,8 +20,8 @@ describe("BenchlingWebhookStack", () => {
     });
 
     test("creates ECS cluster", () => {
+        // ClusterName removed to allow multiple stacks per account (v0.9.8+)
         template.hasResourceProperties("AWS::ECS::Cluster", {
-            ClusterName: "benchling-webhook-cluster",
             ClusterSettings: [{
                 Name: "containerInsights",
                 Value: "enabled",
@@ -30,8 +30,8 @@ describe("BenchlingWebhookStack", () => {
     });
 
     test("creates Fargate service", () => {
+        // ServiceName removed to allow multiple stacks per account (v0.9.8+)
         template.hasResourceProperties("AWS::ECS::Service", {
-            ServiceName: "benchling-webhook-service",
             LaunchType: "FARGATE",
             DesiredCount: 2,
         });

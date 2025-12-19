@@ -220,7 +220,7 @@ if (useNewParam) {
 CLI configuration to CloudFormation parameters:
 
 | Config Source | CFT Parameter | Value Format |
-|--------------|---------------|--------------|
+| -------------- | --------------- | -------------- |
 | `--benchling-secrets` (JSON) | `BenchlingSecrets` | JSON string |
 | `--benchling-secrets` (ARN) | `BenchlingSecrets` | JSON string (resolved from ARN) |
 | Individual flags (deprecated) | `BenchlingClientId`, etc. | Individual strings |

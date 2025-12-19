@@ -3,6 +3,18 @@
 
 All notable changes to this project will be documented in this file, one line per user-visible change.
 
+## [0.9.7] - 2025-12-18
+
+### Fixed
+
+- **NPM script deployment validation** - Fixed A07 config validation break in `npm run deploy:dev` (#A07)
+  - `deploy.ts` now passes complete config to CDK via environment variables
+  - Fixes validation errors: "Required field missing: quilt.catalog"
+  - No changes needed to `benchling-webhook.ts` (already reads env vars)
+  - Preserves A07 validation benefits for library users
+  - Parameters remain optional overrides as intended
+  - See [spec/a07-library-config/05-implementation-plan.md](spec/a07-library-config/05-implementation-plan.md) for details
+
 ## [0.9.6] - 2025-12-18
 
 ### Added

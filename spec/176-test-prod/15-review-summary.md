@@ -104,7 +104,7 @@ All gaps identified are minor implementation details with clear solutions.
 ## Implementation Estimate
 
 | Phase | Tasks | Effort | Risk |
-|-------|-------|--------|------|
+| ------- | ------- | -------- | ------ |
 | **Phase 1: Foundation** | API Gateway stages, deploy config, CLI params | 2-3 days | Low |
 | **Phase 2: Infrastructure** | Multi-service ECS, stack updates | 3-4 days | Medium |
 | **Phase 3: CLI & Tooling** | Profile setup, npm scripts | 2 days | Low |
@@ -200,7 +200,7 @@ npm run test:prod            # Test prod
 ## Specification Quality Assessment
 
 | Criterion | Rating | Notes |
-|-----------|--------|-------|
+| ----------- | -------- | ------- |
 | **Completeness** | ⭐⭐⭐⭐⭐ | All components specified |
 | **Clarity** | ⭐⭐⭐⭐⭐ | Excellent diagrams and examples |
 | **Implementability** | ⭐⭐⭐⭐⭐ | Code examples are correct |

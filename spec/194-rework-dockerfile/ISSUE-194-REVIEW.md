@@ -271,7 +271,7 @@ ENV BUILD_VERSION="${VERSION}"
 **Alignment Assessment**: ✅ FULLY ALIGNED
 
 | Pattern | Quilt Reference | This Implementation | Status |
-|---------|----------------|---------------------|---------|
+| --------- | ---------------- | --------------------- | --------- |
 | Base Image | Amazon Linux 2023 | Amazon Linux 2023 | ✅ Match |
 | Hash Pinning | SHA256 hash | SHA256 hash | ✅ Match |
 | Multi-Stage Build | Builder + Runtime | Builder + Runtime | ✅ Match |
@@ -385,7 +385,7 @@ docker run -d -p 5000:5000 --read-only --name test-ro benchling-webhook:test
 ## Metrics to Measure
 
 | Metric | Target | Status |
-|--------|--------|--------|
+| -------- | -------- | -------- |
 | Image Size Reduction | 30%+ | ⏳ Pending measurement |
 | Build Time | < 10 min | ⏳ Pending measurement |
 | Startup Time | < 30 sec | ⏳ Pending measurement |

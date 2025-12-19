@@ -194,7 +194,7 @@ This is **backward compatible**:
 ## Trade-offs
 
 | Aspect | Dev Stage | Prod Stage |
-|--------|-----------|------------|
+| -------- | ----------- | ------------ |
 | Deploy Speed | ⚡ Fast (~1 min) | 🐢 Safe (~2-3 min) |
 | Availability | ⚠️ Brief downtime OK | ✅ Zero downtime |
 | Cost | 💰 Lower (1 task) | 💰💰 Higher (2+ tasks) |

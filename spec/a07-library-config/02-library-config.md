@@ -168,12 +168,14 @@ const athenaResultsBucketParam = new cdk.CfnParameter(this, "AthenaResultsBucket
 ```
 
 **Benefits:**
+
 - Library usage works without passing `--parameters` flags
 - NPM deployment command still works (parameters override defaults)
 - No breaking changes to existing deployments
 - Config values flow through naturally
 
 **Trade-offs:**
+
 - Parameters can still override config values (but this is intentional for runtime updates)
 - Slightly more complex parameter definitions
 
@@ -192,10 +194,12 @@ const packagerQueueUrlValue = isLibraryUsage
 ```
 
 **Benefits:**
+
 - Clear separation between library and npm usage modes
 - No parameter passing required for library usage
 
 **Trade-offs:**
+
 - More complex logic
 - Harder to update values after deployment (no parameter updates)
 - Magic environment variable detection
@@ -213,10 +217,12 @@ const packagerQueueUrlParam = new cdk.CfnParameter(this, "PackagerQueueUrl", {
 ```
 
 **Benefits:**
+
 - Forces explicit configuration
 - Clear error messages when values missing
 
 **Trade-offs:**
+
 - **BREAKING CHANGE** - all deployments must pass parameters
 - Makes library usage worse (forces workaround)
 - Doesn't solve the actual problem
@@ -241,6 +247,7 @@ This is the least disruptive change that solves the library usage problem while 
    - AthenaResultsBucket → `default: config.quilt.athenaResultsBucket || ""`
 
 2. **Add validation for required Quilt config fields**
+
    ```typescript
    // In BenchlingWebhookStack constructor, after line 42
    if (!skipValidation) {
@@ -282,6 +289,7 @@ This is the least disruptive change that solves the library usage problem while 
 ### Phase 3: Add Tests
 
 1. **Add unit test for parameter defaults**
+
    ```typescript
    test('CloudFormation parameters use config values as defaults', () => {
        const app = new cdk.App();

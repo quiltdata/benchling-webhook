@@ -47,7 +47,7 @@ npx ts-node bin/xdg-launch.ts --mode native --profile dev --test
 ### Options
 
 | Option | Required | Default | Description |
-|--------|----------|---------|-------------|
+| -------- | ---------- | --------- | ------------- |
 | `--mode` | Yes | - | Execution mode: `native`, `docker`, `docker-dev` |
 | `--profile` | No | `default` | XDG profile name to load configuration from |
 | `--port` | No | Mode-specific | Override default port (native: 5001, docker: 5003, docker-dev: 5002) |

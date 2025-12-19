@@ -23,7 +23,7 @@ During a development deployment using `npm run cdk:dev`, the CloudFormation stac
 ## Timeline of Events
 
 | Time | Event |
-|------|-------|
+| ------ | ------- |
 | 23:47:57 | CloudFormation UPDATE_IN_PROGRESS initiated |
 | 23:48:02 | Secrets Manager secret updated (INCOMPLETE DATA) |
 | 23:48:08 | ECS Task Definition created successfully |

@@ -22,14 +22,14 @@ The current codebase has **three separate script directories** (`bin/`, `scripts
 
 #### CLI Framework (3 files)
 | File | Purpose | Used By | Lines |
-|------|---------|---------|-------|
+| ------ | --------- | --------- | ------- |
 | `cli.ts` | Main CLI entry point (Commander.js) | `npm run deploy:prod`, npx users | 130 |
 | `benchling-webhook.ts` | Legacy CLI (deprecated?) | Unknown | ? |
 | `commands/` | Sub-command implementations | `cli.ts` | - |
 
 #### Command Implementations (6 files)
 | File | Purpose | Used By | Lines |
-|------|---------|---------|-------|
+| ------ | --------- | --------- | ------- |
 | `commands/deploy.ts` | Production deployment logic | `cli.ts deploy` | 100+ |
 | `commands/init.ts` | Initialize configuration | `cli.ts init` | ? |
 | `commands/manifest.ts` | Generate Benchling manifest | `cli.ts manifest` | ? |
@@ -39,7 +39,7 @@ The current codebase has **three separate script directories** (`bin/`, `scripts
 
 #### Development Tools (8 files)
 | File | Purpose | Used By | Lines |
-|------|---------|---------|-------|
+| ------ | --------- | --------- | ------- |
 | `dev-deploy.ts` | Dev deployment workflow | `npm run deploy:dev` | 356 |
 | `version.ts` | Version management + git tagging | `npm run version`, `npm run version:tag` | 323 |
 | `check-logs.ts` | CloudWatch log viewer | `npm run deploy:logs` | 250 |
@@ -55,7 +55,7 @@ The current codebase has **three separate script directories** (`bin/`, `scripts
 All files are **setup/configuration utilities** run via `ts-node`:
 
 | File | Purpose | Used By | Lines |
-|------|---------|---------|-------|
+| ------ | --------- | --------- | ------- |
 | `install-wizard.ts` | Interactive setup wizard | `npm run setup` | 789 |
 | `sync-secrets.ts` | Sync config to AWS Secrets Manager | `npm run setup:sync-secrets` | 454 |
 | `infer-quilt-config.ts` | Auto-infer Quilt stack config | `npm run setup:infer` | 385 |
@@ -68,7 +68,7 @@ All files are **setup/configuration utilities** run via `ts-node`:
 All files are **Python test/development utilities**:
 
 | File | Purpose | Used By | Lines |
-|------|---------|---------|-------|
+| ------ | --------- | --------- | ------- |
 | `run_local.py` | Local Flask dev server | `make run-local` | ~200 |
 | `test_webhook.py` | Webhook integration tests | `make test-*` | ~200 |
 | `test_integration.py` | Full integration test suite | `make test-integration` | ~300 |
@@ -145,7 +145,7 @@ All files are **Python test/development utilities**:
 ### By Language
 
 | Directory | Language | Purpose | Lines of Code |
-|-----------|----------|---------|---------------|
+| ----------- | ---------- | --------- | --------------- |
 | `bin/` | TypeScript | CLI + dev tools + deployment | ~2,000+ |
 | `scripts/` | TypeScript | Setup & configuration | ~2,325 |
 | `docker/scripts/` | Python | Testing + Flask dev | ~2,200 |

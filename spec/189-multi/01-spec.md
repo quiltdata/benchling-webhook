@@ -973,7 +973,7 @@ export interface MigrationReport {
 ## Appendix B: Comparison Table
 
 | Aspect | Current (v0.6.3) | Proposed (v0.7.0) |
-|--------|------------------|-------------------|
+| -------- | ------------------ | ------------------- |
 | **Profile location** | Mixed (root + `profiles/`) | Flat (all top-level) |
 | **Config filename** | `default.json` | `config.json` |
 | **Config types** | 3 (user, derived, deploy) | 1 (unified) |

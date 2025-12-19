@@ -885,7 +885,7 @@ docker run -d -p 5000:5000 \
 ### Final Metrics
 
 | Metric | Baseline | Final | Change |
-|--------|----------|-------|--------|
+| -------- | ---------- | ------- | -------- |
 | Image Size | _____ MB | _____ MB | _____ % |
 | Build Time | _____ sec | _____ sec | _____ % |
 | Layer Count | _____ | _____ | _____ |

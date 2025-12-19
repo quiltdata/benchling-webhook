@@ -1026,7 +1026,7 @@ npx @quiltdata/benchling-webhook logs --help
 ### Feature Parity Matrix
 
 | Feature | check-logs.ts | logs command | Status |
-|---------|---------------|--------------|--------|
+| --------- | --------------- | -------------- | -------- |
 | ECS logs | ✅ | ✅ | Parity |
 | API logs | ✅ | ✅ | Parity |
 | API exec logs | ✅ | ✅ | Parity |
