@@ -504,7 +504,7 @@ export async function deploy(
             boxen(
                 `${chalk.red.bold("Stack in Unrecoverable State")}\n\n` +
                 `The stack ${chalk.cyan(stackName)} is in ${chalk.yellow("REVIEW_IN_PROGRESS")} state.\n` +
-                `This means a CloudFormation change set failed during creation.\n\n` +
+                "This means a CloudFormation change set failed during creation.\n\n" +
                 `${chalk.bold("This stack must be destroyed and recreated.")}\n`,
                 { padding: 1, borderColor: "red", borderStyle: "round" },
             ),
