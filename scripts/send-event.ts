@@ -1,13 +1,33 @@
 #!/usr/bin/env node
 /**
  * Send a test event to the deployed Benchling webhook endpoint
+ * Usage: npx ts-node scripts/send-event.ts [event-name] [--profile <profile>]
  */
 
 import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
+import { XDGConfig } from "../lib/xdg-config";
+import { getStackName } from "../lib/types/config";
 
-const STACK_NAME = "BenchlingWebhookStack";
+// Parse command line arguments
+const args = process.argv.slice(2);
+const profileIndex = args.indexOf("--profile");
+const profile = profileIndex !== -1 ? args[profileIndex + 1] : "default";
+
+// Get stack name from profile
+const xdg = new XDGConfig();
+let STACK_NAME: string;
+try {
+    const config = xdg.readProfile(profile);
+    STACK_NAME = getStackName(profile, config.deployment?.stackName);
+    console.log(`Using profile: ${profile}`);
+    console.log(`Stack name: ${STACK_NAME}`);
+} catch (_error) {
+    console.error(`Error: Could not read profile "${profile}"`);
+    console.error("Run 'npm run setup' to create a profile first.");
+    process.exit(1);
+}
 
 // Validate required environment variables
 if (!process.env.CDK_DEFAULT_REGION && !process.env.AWS_REGION) {
