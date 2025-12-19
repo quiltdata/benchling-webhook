@@ -752,6 +752,10 @@ export async function deploy(
     console.log(chalk.blue.bold("▶ Starting deployment..."));
     console.log();
 
+    // Track deployment success - we'll verify actual stack status even if CDK command fails
+    let deploymentSucceeded = false;
+    let cdkError: Error | null = null;
+
     try {
         // Build CloudFormation parameters
         // Parameter names must match the CfnParameter IDs in BenchlingWebhookStack
@@ -798,8 +802,30 @@ export async function deploy(
             env,
         });
 
+        deploymentSucceeded = true;
         console.log();
         spinner.succeed("Stack deployed successfully");
+    } catch (error) {
+        // CDK command failed, but the stack might have actually deployed successfully
+        // Check actual stack status before failing
+        cdkError = error as Error;
+        console.log();
+        console.log(chalk.yellow("CDK command exited with error, checking actual stack status..."));
+
+        const finalCheck = await checkStackStatus(deployRegion, stackName);
+        if (finalCheck.stackExists &&
+            (finalCheck.stackStatus === "CREATE_COMPLETE" || finalCheck.stackStatus === "UPDATE_COMPLETE")) {
+            console.log(chalk.green(`✓ Stack deployment succeeded despite CDK error (${finalCheck.stackStatus})`));
+            deploymentSucceeded = true;
+            spinner.succeed("Stack deployed successfully");
+        } else {
+            deploymentSucceeded = false;
+            spinner.fail("Deployment failed");
+        }
+    }
+
+    // Record deployment endpoint if stack deployed successfully
+    if (deploymentSucceeded) {
 
         // After successful deployment, store endpoint and run tests
         console.log();
@@ -864,10 +890,10 @@ export async function deploy(
             console.warn(`⚠️  Could not retrieve deployment endpoint: ${(error as Error).message}`);
             console.warn("   Deployment succeeded but endpoint could not be recorded");
         }
-    } catch (error) {
-        spinner.fail("Deployment failed");
-        console.error();
-        console.error(chalk.red((error as Error).message));
+    } else {
+        // Deployment failed - report the error
+        console.log();
+        console.error(chalk.red((cdkError as Error).message));
         process.exit(1);
     }
 }
