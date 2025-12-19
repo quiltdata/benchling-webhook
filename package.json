@@ -34,6 +34,7 @@
     "prebuild": "rm -rf dist",
     "prepublishOnly": "npm run build",
     "setup": "ts-node bin/cli.ts",
+    "setup:clean": "ts-node bin/cli.ts clean",
     "setup:dev": "ts-node bin/cli.ts --profile dev",
     "setup:prod": "ts-node bin/cli.ts --profile prod",
     "setup:health": "ts-node bin/cli.ts health-check",

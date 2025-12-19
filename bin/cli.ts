@@ -13,6 +13,7 @@ import { configShowCommand } from "./commands/config-show";
 import { installCommand } from "./commands/install";
 import { statusCommand } from "./commands/status";
 import { logsCommand } from "./commands/logs";
+import { cleanCommand } from "./commands/clean";
 import pkg from "../package.json";
 
 const DEFAULT_LOG_LIMIT = 5; // Number of log entries to show per log group (health checks dominate, so keep this small)
@@ -426,6 +427,44 @@ program
     .action(async (options) => {
         try {
             await configShowCommand(options);
+        } catch (error) {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        }
+    });
+
+// Clean command
+program
+    .command("clean")
+    .description("Remove a configuration profile (does not destroy AWS resources)")
+    .option("--profile <name>", "Configuration profile to delete (default: default)")
+    .option("--yes", "Skip confirmation prompt")
+    .addHelpText(
+        "after",
+        `
+
+Examples:
+  Remove the default profile:
+    $ npx @quiltdata/benchling-webhook clean
+
+  Remove a specific profile:
+    $ npx @quiltdata/benchling-webhook clean --profile dev
+
+  Remove without confirmation:
+    $ npx @quiltdata/benchling-webhook clean --profile dev --yes
+
+Important Notes:
+  - This command only removes local configuration files
+  - AWS resources (CloudFormation stacks) are NOT destroyed
+  - To destroy AWS resources, use the 'destroy' command first
+  - If you have active deployments, you should destroy them before cleaning
+
+For more information: https://github.com/quiltdata/benchling-webhook#configuration
+`,
+    )
+    .action(async (options) => {
+        try {
+            await cleanCommand(options);
         } catch (error) {
             console.error(chalk.red((error as Error).message));
             process.exit(1);
