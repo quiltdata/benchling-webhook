@@ -130,16 +130,6 @@ export async function runStandaloneMode(input: StandaloneModeInput): Promise<Sta
     console.log("Creating dedicated BenchlingSecret...\n");
 
     let secretArn = "";
-    let hasExistingDeployment = false;
-
-    // Check if there are existing deployments that might need restarting
-    try {
-        const deployments = configStorage.getDeployments(profile);
-        hasExistingDeployment = Object.keys(deployments.active || {}).length > 0;
-    } catch {
-        // No existing deployments
-        hasExistingDeployment = false;
-    }
 
     try {
         const results = await syncSecretsToAWS({
