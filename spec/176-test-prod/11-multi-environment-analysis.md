@@ -332,7 +332,7 @@ AWS recommends account-level isolation for environments:
 ## Comparison: Current vs Hypothetical Multi-Stack Approach
 
 | Aspect | Current (Multi-Account) | Hypothetical (Same-Account Multi-Stack) |
-|--------|-------------------------|----------------------------------------|
+| -------- | ------------------------- | ---------------------------------------- |
 | **Stack Names** | `BenchlingWebhookStack` (both) | `BenchlingWebhookStack-dev`, `BenchlingWebhookStack-prod` |
 | **Isolation** | AWS account boundaries | Stack name suffixes |
 | **Security** | ✅ Strong (account-level) | ⚠️ Weaker (same IAM context) |

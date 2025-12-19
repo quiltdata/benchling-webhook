@@ -731,7 +731,7 @@ const benchlingSecret = 'benchling-webhook-dev';
 #### 5.3.3 Current Naming Conventions by Layer
 
 | Layer | Convention | Example |
-|-------|-----------|---------|
+| ------- | ----------- | --------- |
 | Requirements/Specs Docs | SCREAMING_SNAKE_CASE | `PKG_PREFIX`, `USER_BUCKET` |
 | Secret JSON Keys | snake_case | `client_id`, `pkg_prefix` |
 | Environment Variables | PascalCase | `QuiltStackARN`, `BenchlingSecret` |
@@ -781,7 +781,7 @@ Document authoritative mappings in code comments and docs:
 
 ```markdown
 | Concept | Docs | Secret Key | Python | TypeScript | CFN Output |
-|---------|------|------------|--------|------------|------------|
+| --------- | ------ | ------------ | -------- | ------------ | ------------ |
 | Package prefix | PKG_PREFIX | pkg_prefix | pkg_prefix | pkgPrefix | N/A |
 | S3 bucket | USER_BUCKET | user_bucket | quilt_user_bucket | userBucket | UserBucket |
 | Client ID | CLIENT_ID | client_id | client_id | clientId | N/A |

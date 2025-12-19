@@ -10,7 +10,7 @@ The secrets-only architecture implementation (PR #160) has **successfully passed
 ### Test Results Overview
 
 | Test Category | Status | Details |
-|---------------|--------|---------|
+| --------------- | -------- | --------- |
 | TypeScript Unit Tests | ✅ PASS | 7/7 suites, all tests passing |
 | Python Unit Tests | ✅ PASS | 252/253 passing (1 pre-existing failure) |
 | ConfigResolver Tests | ✅ PASS | 28/28 tests with mocked AWS clients |
@@ -527,7 +527,7 @@ npx @quiltdata/benchling-webhook deploy \
 ### What We Tested ✅
 
 | Component | Test Type | Coverage | Status |
-|-----------|-----------|----------|--------|
+| ----------- | ----------- | ---------- | -------- |
 | ConfigResolver (TS) | Unit | 28 tests | ✅ Pass |
 | ConfigResolver (Python) | Unit | Included in 252 | ✅ Pass |
 | Config Loading | Unit | Full | ✅ Pass |
@@ -541,7 +541,7 @@ npx @quiltdata/benchling-webhook deploy \
 ### What We Didn't Test ❌
 
 | Component | Test Type | Why Not Tested |
-|-----------|-----------|----------------|
+| ----------- | ----------- | ---------------- |
 | Container Runtime | End-to-End | ECS deployment failed |
 | Secrets-Only Mode | End-to-End | Not attempted yet |
 | Health Checks (Real) | Integration | Container didn't start |
@@ -569,7 +569,7 @@ npx @quiltdata/benchling-webhook deploy \
 ### Development Effort
 
 | Phase | Estimated | Actual | Notes |
-|-------|-----------|--------|-------|
+| ------- | ----------- | -------- | ------- |
 | Phase 1-2 | 8 hours | 8 hours | ConfigResolver implementation |
 | Phase 3-4 | 6 hours | 10 hours | CDK and CLI updates |
 | Phase 5-7 | 6 hours | 8 hours | Health checks, tests, docs |
@@ -579,7 +579,7 @@ npx @quiltdata/benchling-webhook deploy \
 ### Test Execution Times
 
 | Test Suite | Duration | Tests | Pass Rate |
-|------------|----------|-------|-----------|
+| ------------ | ---------- | ------- | ----------- |
 | TypeScript | ~30s | 7 suites | 100% |
 | Python | ~20s | 253 tests | 99.6% |
 | Docker Build | ~2min | N/A | 100% |
@@ -589,7 +589,7 @@ npx @quiltdata/benchling-webhook deploy \
 ### Code Changes
 
 | Metric | Value |
-|--------|-------|
+| -------- | ------- |
 | Files Created | 9 |
 | Files Modified | 7 |
 | Lines Added | ~850 |

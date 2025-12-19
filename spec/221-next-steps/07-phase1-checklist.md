@@ -653,7 +653,7 @@ After Phase 1 completion:
 ### Critical Test Cases
 
 | ID | Description | Status |
-|----|-------------|--------|
+| ---- | ------------- | -------- |
 | TC-RED-1 | Default profile test fails initially | [ ] |
 | TC-GREEN-1 | Default profile test passes | [ ] |
 | TC-GREEN-2 | Function returns string | [ ] |

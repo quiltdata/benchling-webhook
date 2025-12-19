@@ -77,14 +77,14 @@ Complete technical specification for all commands (with corrections from Doc 18)
 #### Primary Command
 
 | Command | Purpose | Users |
-|---------|---------|-------|
+| --------- | --------- | ------- |
 | `(default)` | Full guided wizard = setup | 99% of users |
 | `setup` | Alias for default | Same |
 
 #### Internal Commands (used by setup, not in README)
 
 | Command | Purpose | Used By |
-|---------|---------|---------|
+| --------- | --------- | --------- |
 | `init` | Generate manifest | setup wizard |
 | `deploy` | Deploy stack | setup wizard |
 | `test` | Verify webhook | setup wizard |
@@ -316,7 +316,7 @@ npx @quiltdata/benchling-webhook@latest deploy \
 ### Risks
 
 | Risk | Mitigation |
-|------|------------|
+| ------ | ------------ |
 | Quilt config inference fails | Provide manual input fallback |
 | CloudWatch Logs delay events | Set 60s timeout, clear expectations |
 | User skips manual steps | Validate in test command, helpful errors |

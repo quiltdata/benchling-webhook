@@ -213,7 +213,7 @@ Use this checklist to track progress:
 ## Timeline
 
 | Phase | Duration | Status |
-|-------|----------|--------|
+| ------- | ---------- | -------- |
 | **Immediate** (Today) | | |
 | Remove legacy file | 5 min | ⏳ Pending |
 | Remove outdated TODOs | 10 min | ⏳ Pending |

@@ -131,8 +131,9 @@ describe("RestApiGateway", () => {
 
         const template = Template.fromStack(stack);
 
+        // Note: LogGroupName is auto-generated to support multiple stacks per account (v0.9.8+)
+        // We only verify the retention policy, not the exact name
         template.hasResourceProperties("AWS::Logs::LogGroup", {
-            LogGroupName: "/aws/apigateway/benchling-webhook-rest",
             RetentionInDays: 7,
         });
 

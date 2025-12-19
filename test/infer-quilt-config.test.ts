@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 import { execSync } from "child_process";
-import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand } from "@aws-sdk/client-cloudformation";
+import { CloudFormationClient, DescribeStacksCommand, ListStacksCommand, ListStackResourcesCommand } from "@aws-sdk/client-cloudformation";
 import { mockClient } from "aws-sdk-client-mock";
 import { inferQuiltConfig } from "../bin/commands/infer-quilt-config";
 import * as stackInference from "../lib/utils/stack-inference";
@@ -36,6 +36,9 @@ describe("infer-quilt-config", () => {
         jest.clearAllMocks();
         cfMock.reset();
         mockedFetchJson.mockReset();
+
+        // Default mock for ListStackResourcesCommand - returns empty resources
+        cfMock.on(ListStackResourcesCommand).resolves({ StackResourceSummaries: [] });
     });
 
     describe("inferQuiltConfig - quilt3 CLI detection", () => {

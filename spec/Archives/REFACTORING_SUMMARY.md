@@ -13,7 +13,7 @@
 All files in `/Users/ernest/GitHub/benchling-webhook/lib/wizard/`:
 
 | File | Purpose | Lines |
-|------|---------|-------|
+| ------ | --------- | ------- |
 | `types.ts` | Shared TypeScript interfaces | 178 |
 | `phase1-catalog-discovery.ts` | Detect/confirm catalog (NO AWS) | 164 |
 | `phase2-stack-query.ts` | Query CloudFormation stack | 127 |

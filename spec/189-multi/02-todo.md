@@ -348,7 +348,7 @@ npm run version:tag
 ## Estimated Timeline
 
 | Phase | Duration | Dependencies |
-|-------|----------|--------------|
+| ------- | ---------- | -------------- |
 | Phase 1 | 2 days | None |
 | Phase 2 | 3 days | Phase 1 complete |
 | Phase 3 | 2 days | Phase 2 complete |

@@ -564,7 +564,7 @@ describe("local development setup", () => {
 ## Episode Summary
 
 | Episode | Component | Estimated Time | Tests | Dependencies |
-|---------|-----------|----------------|-------|--------------|
+| --------- | ----------- | ---------------- | ------- | -------------- |
 | 1 | Type definitions | 30 min | Unit | None |
 | 2 | Service resolver | 2 hours | Unit | Episode 1 |
 | 3 | Deployment command | 1.5 hours | Unit | Episodes 1-2 |

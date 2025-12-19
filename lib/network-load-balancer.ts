@@ -71,17 +71,18 @@ export class NetworkLoadBalancer extends Construct {
             defaultTargetGroups: [this.targetGroup],
         });
 
-        // Outputs for debugging
+        // Outputs for debugging - use stack name to make exports profile-aware
+        const stackName = cdk.Stack.of(this).stackName;
         new cdk.CfnOutput(this, "LoadBalancerDnsName", {
             value: this.loadBalancer.loadBalancerDnsName,
             description: "Network Load Balancer DNS name",
-            exportName: "BenchlingWebhookNLBDnsName",
+            exportName: `${stackName}-NLBDnsName`,
         });
 
         new cdk.CfnOutput(this, "TargetGroupArn", {
             value: this.targetGroup.targetGroupArn,
             description: "Target Group ARN for ECS tasks",
-            exportName: "BenchlingWebhookTargetGroupArn",
+            exportName: `${stackName}-TargetGroupArn`,
         });
     }
 }

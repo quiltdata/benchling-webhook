@@ -26,8 +26,8 @@ export class RestApiGateway {
         this.stage = props.stage;
 
         // Access logs for REST API
+        // Note: logGroupName removed to allow multiple stacks per account
         this.logGroup = new logs.LogGroup(scope, "ApiGatewayAccessLogs", {
-            logGroupName: "/aws/apigateway/benchling-webhook-rest",
             retention: logs.RetentionDays.ONE_WEEK,
             removalPolicy: cdk.RemovalPolicy.DESTROY,
         });
@@ -138,8 +138,8 @@ export class RestApiGateway {
         });
 
         // Create REST API v1 with resource policy
+        // Note: restApiName removed to allow multiple stacks per account
         this.api = new apigateway.RestApi(scope, "BenchlingWebhookRestAPI", {
-            restApiName: "BenchlingWebhookRestAPI",
             description: "REST API v1 for Benchling webhook integration with resource policy IP filtering",
             policy: policyDoc,
             deployOptions: {

@@ -721,7 +721,7 @@ Part of Phase 2: CLI Parameter Addition (#156)
 ## Episode Summary
 
 | Episode | Objective | Test File | Implementation Files | Est. Time |
-|---------|-----------|-----------|---------------------|-----------|
+| --------- | ----------- | ----------- | --------------------- | ----------- |
 | 1 | File input processing | config.test.ts | config.ts | 1 hour |
 | 2 | Config interface update | config.test.ts | config.ts | 30 min |
 | 3 | Config loading integration | config.test.ts | config.ts | 1 hour |

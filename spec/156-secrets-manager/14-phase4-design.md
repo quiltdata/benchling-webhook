@@ -320,7 +320,7 @@ class SecretsResolutionError(Exception):
 **Error Scenarios**:
 
 | Scenario | Error Message | HTTP Status |
-|----------|---------------|-------------|
+| ---------- | --------------- | ------------- |
 | No secrets found | "No Benchling secrets found. Configure one of: ..." | 503 |
 | Invalid ARN format | "Invalid BENCHLING_SECRETS format. Must be ARN or JSON" | 500 |
 | Secret not found in AWS | "Secret not found: {arn}" | 503 |
@@ -458,7 +458,7 @@ def secrets_health():
 ### Compatibility Matrix
 
 | Configuration | Before Phase 4 | After Phase 4 |
-|---------------|----------------|---------------|
+| --------------- | ---------------- | --------------- |
 | Individual env vars | ✅ Works | ✅ Works (fallback) |
 | BENCHLING_SECRETS (ARN) | ❌ Not supported | ✅ Works |
 | BENCHLING_SECRETS (JSON) | ❌ Not supported | ✅ Works |

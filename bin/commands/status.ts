@@ -182,13 +182,13 @@ function identifyTargetStack(
             );
         }
 
-        // Use deployment tracking info
-        const stackName = activeDeployment.stackName; // "BenchlingWebhookStack"
+        // Use deployment tracking info (stack name is profile-specific)
+        const stackName = activeDeployment.stackName; // e.g., "BenchlingWebhookStack" or "BenchlingWebhookStack-sales"
         const region = activeDeployment.region;
 
         return {
             stackArn: null, // Will be resolved from CloudFormation query
-            stackName, // "BenchlingWebhookStack"
+            stackName, // Stack name from deployment tracking (profile-aware)
             region,
             mode: "standalone",
             hasDeployment: true,

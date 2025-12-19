@@ -94,7 +94,7 @@ This breaks HMAC signature verification because:
 **Event Format Differences:**
 
 | Field | REST API | HTTP API v2 |
-|-------|----------|-------------|
+| ------- | ---------- | ------------- |
 | Body access | ❌ Not available | ✅ `event['body']` |
 | Version | `"1.0"` | `"2.0"` |
 | Route identifier | `methodArn` | `routeArn` |

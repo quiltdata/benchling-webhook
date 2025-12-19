@@ -181,7 +181,7 @@ Phase 3 (Arrays/URLs)─┘
 ## Risk Assessment by Phase
 
 | Phase | Risk Level | Breaking | Rollback Difficulty | Impact Scope |
-|-------|-----------|----------|---------------------|--------------|
+| ------- | ----------- | ---------- | --------------------- | -------------- |
 | 1     | Low       | No       | Trivial             | Display only |
 | 2     | Low       | No       | Easy                | Display only |
 | 3     | Medium    | No       | Easy                | JSON/URLs    |

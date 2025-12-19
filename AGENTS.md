@@ -220,7 +220,7 @@ See [spec/2025-11-26-architecture/11-arch-30.md](spec/2025-11-26-architecture/11
 **Monthly Fixed Costs (us-east-1):**
 
 | Component | Cost |
-|-----------|------|
+| ----------- | ------ |
 | REST API v1 | $0.00 |
 | Resource Policy | $0.00 |
 | VPC Link | $0.00 |
@@ -232,7 +232,7 @@ See [spec/2025-11-26-architecture/11-arch-30.md](spec/2025-11-26-architecture/11
 **Variable Costs (per million requests):**
 
 | Component | Cost |
-|-----------|------|
+| ----------- | ------ |
 | REST API v1 | ~$3.50 |
 | Resource Policy | $0.00 |
 | ECS Fargate | Included in fixed cost |
@@ -284,7 +284,7 @@ npm run lint                 # Auto-fix formatting
 ### Quick Reference
 
 | Command | Docker? | AWS? | When to Use |
-|---------|---------|------|-------------|
+| --------- | --------- | ------ | ------------- |
 | `test` | No | Mocked | Daily development, pre-commit |
 | `test:local` | Yes (dev) | Real | Before PR, local integration testing |
 | `test:local:prod` | Yes (prod) | Real | Test prod Docker config locally |
@@ -333,6 +333,97 @@ Version 0.7.0 introduces a completely redesigned configuration architecture with
 
 **Independence**: Profiles and stages are independent - you can deploy any profile to any stage
 
+#### Multi-Stack Support (v0.9.8+)
+
+Starting with version 0.9.8, the webhook supports **multiple CloudFormation stacks per AWS account/region**. This enables parallel deployments for different customers, environments, or configurations.
+
+**Stack Naming Strategy:**
+
+1. **Default profile** → `BenchlingWebhookStack` (backwards compatible, legacy name)
+2. **Named profiles** → `BenchlingWebhookStack-{profile}` (auto-generated)
+3. **Custom name** → Use `deployment.stackName` in config.json (explicit override)
+
+**Examples:**
+
+```bash
+# Default profile uses legacy stack name
+npm run deploy:prod -- --profile default
+# Creates: BenchlingWebhookStack
+
+# Sales profile uses profile-suffixed name
+npm run deploy:prod -- --profile sales
+# Creates: BenchlingWebhookStack-sales
+
+# Customer profile with custom name
+# In ~/.config/benchling-webhook/customer-acme/config.json:
+{
+  "deployment": {
+    "stackName": "AcmeWebhookStack",
+    ...
+  }
+}
+npm run deploy:prod -- --profile customer-acme
+# Creates: AcmeWebhookStack
+```
+
+**Use Cases:**
+
+- **Multi-tenant deployments** - Separate stacks for each customer
+- **Environment isolation** - Dev, staging, prod in same account
+- **A/B testing** - Parallel stacks with different configurations
+- **Regional deployments** - Multiple stacks in different regions
+
+**Commands support profile-based stacks:**
+
+```bash
+# Deploy with profile (auto-generated stack name)
+npm run deploy:prod -- --profile sales
+
+# Check status of profile's stack
+npm run status -- --profile sales
+
+# View logs from profile's stack
+npm run logs -- --profile sales
+
+# Destroy profile's stack
+npm run destroy -- --profile sales
+```
+
+**Stack name resolution logic:**
+
+```typescript
+import { getStackName } from "./lib/types/config";
+
+// Returns "BenchlingWebhookStack" (backwards compatible)
+getStackName("default")
+
+// Returns "BenchlingWebhookStack-sales"
+getStackName("sales")
+
+// Returns custom name if specified in config
+getStackName("sales", "CustomStack") // "CustomStack"
+```
+
+**Deployment tracking:**
+
+Each profile's `deployments.json` stores the stack name used for each deployment:
+
+```json
+{
+  "active": {
+    "prod": {
+      "stackName": "BenchlingWebhookStack-sales",
+      "endpoint": "https://xyz.execute-api.us-east-1.amazonaws.com/prod",
+      ...
+    }
+  }
+}
+```
+
+**Migration from single stack:**
+
+Existing "default" profile deployments continue to use `BenchlingWebhookStack` with no changes required. New profiles automatically get unique stack names.
+
 #### Configuration File Structure
 
 Each profile's `config.json` contains:
@@ -362,7 +453,8 @@ Each profile's `config.json` contains:
   "deployment": {
     "region": "us-east-1",
     "account": "123456789012",
-    "imageTag": "latest"
+    "imageTag": "latest",
+    "stackName": "BenchlingWebhookStack-sales"
   },
   "logging": {
     "level": "INFO"
@@ -371,7 +463,7 @@ Each profile's `config.json` contains:
     "enableVerification": true
   },
   "_metadata": {
-    "version": "0.7.0",
+    "version": "0.9.8",
     "createdAt": "2025-11-04T10:00:00Z",
     "updatedAt": "2025-11-04T10:00:00Z",
     "source": "wizard"
@@ -407,12 +499,14 @@ Each profile's `deployments.json` tracks deployment history:
     "dev": {
       "endpoint": "https://xxx.execute-api.us-east-1.amazonaws.com/dev",
       "imageTag": "latest",
-      "deployedAt": "2025-11-04T10:30:00Z"
+      "deployedAt": "2025-11-04T10:30:00Z",
+      "stackName": "BenchlingWebhookStack-sales"
     },
     "prod": {
       "endpoint": "https://xxx.execute-api.us-east-1.amazonaws.com/prod",
-      "imageTag": "0.7.0",
-      "deployedAt": "2025-11-03T14:20:00Z"
+      "imageTag": "0.9.8",
+      "deployedAt": "2025-11-03T14:20:00Z",
+      "stackName": "BenchlingWebhookStack-sales"
     }
   },
   "history": [
@@ -421,7 +515,7 @@ Each profile's `deployments.json` tracks deployment history:
       "timestamp": "2025-11-04T10:30:00Z",
       "imageTag": "latest",
       "endpoint": "https://...",
-      "stackName": "BenchlingWebhookStack",
+      "stackName": "BenchlingWebhookStack-sales",
       "region": "us-east-1"
     }
   ]
@@ -516,7 +610,7 @@ class XDGConfig {
 Stored in AWS Secrets Manager and referenced in profile config:
 
 | Field | Required | Default | Description |
-|-------|----------|---------|-------------|
+| ------- | ---------- | --------- | ------------- |
 | `benchling.tenant` | Yes | - | Benchling tenant name |
 | `benchling.clientId` | Yes | - | OAuth client ID |
 | `benchling.clientSecret` | Via Secrets Manager | - | OAuth client secret |
@@ -531,6 +625,7 @@ Stored in AWS Secrets Manager and referenced in profile config:
 | `packages.bucket` | Yes | - | S3 bucket for package storage |
 | `packages.prefix` | No | `benchling` | S3 key prefix |
 | `packages.metadataKey` | No | `experiment_id` | Package metadata key |
+| `deployment.stackName` | No | Auto-generated | CloudFormation stack name |
 | `security.enableVerification` | No | `true` | Enable webhook signature verification |
 | `security.webhookAllowList` | No | `""` | IP allowlist (comma-separated) |
 | `logging.level` | No | `INFO` | Python logging level |
@@ -668,7 +763,7 @@ npx @quiltdata/benchling-webhook logs --profile default
 ## Configuration Failure Modes
 
 | Failure | Cause | Mitigation |
-|----------|--------|-------------|
+| ---------- | -------- | ------------- |
 | Missing profile | Profile not found | Run `npm run setup` to create profile |
 | Missing Quilt catalog | Quilt3 not configured | Run `quilt3 config` and retry |
 | Profile config corrupted | Manual file edit | Validate JSON schema; re-run `npm run setup` |
@@ -680,6 +775,7 @@ npx @quiltdata/benchling-webhook logs --profile default
 | 403 Forbidden (HMAC) | Invalid signature | Check ECS logs for HMAC verification errors; verify Benchling secret |
 | 403 Forbidden (Resource Policy) | IP not in allowlist | Add IP to webhookAllowList or remove IP filtering |
 | NLB unhealthy targets | ECS health check failing | Check ECS logs and container health status |
+| Stack name conflict | Multiple profiles, same custom name | Use unique stackName per profile or rely on auto-generation |
 
 ---
 
@@ -696,6 +792,7 @@ npx @quiltdata/benchling-webhook logs --profile default
 
 - **Profile-Based Configuration**: Each profile is self-contained with its own settings and deployment tracking
 - **Profile/Stage Independence**: Deploy any profile to any stage for maximum flexibility
+- **Multi-Stack Support**: Multiple CloudFormation stacks per AWS account/region (v0.9.8+)
 - **Single Source of Truth**: Profile's `config.json` defines all configuration
 - **Per-Profile Deployment Tracking**: Each profile tracks its own deployments independently
 - **Fail Fast**: Validation before deployment prevents partial stacks

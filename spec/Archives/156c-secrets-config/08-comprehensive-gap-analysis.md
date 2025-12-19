@@ -68,7 +68,7 @@ This is the root cause of the incomplete implementation. The file was created in
 ### AC1: One-Command Bootstrap ⚠️ PARTIAL
 
 | Requirement | Status | Gap |
-|-------------|--------|-----|
+| ------------- | -------- | ----- |
 | `make install` installs dependencies | ✅ DONE | - |
 | Creates XDG directory | ✅ DONE | - |
 | Auto-infers Quilt catalog | ✅ DONE | - |
@@ -81,7 +81,7 @@ This is the root cause of the incomplete implementation. The file was created in
 ### AC2: Configuration Model ❌ INCOMPLETE
 
 | Requirement | Status | Gap |
-|-------------|--------|-----|
+| ------------- | -------- | ----- |
 | XDG-compliant storage | ✅ DONE | - |
 | No .env files for deployment | ❌ BROKEN | Docker requires .env |
 | npm scripts read from XDG | ✅ DONE | - |
@@ -91,7 +91,7 @@ This is the root cause of the incomplete implementation. The file was created in
 ### AC3: Testing Tiers ❌ BLOCKED
 
 | Requirement | Status | Gap |
-|-------------|--------|-----|
+| ------------- | -------- | ----- |
 | `make test` (unit tests) | ✅ WORKS | Uses mocks |
 | `make test-local` (Docker + real creds) | ❌ BLOCKED | Requires .env file |
 | `make test-remote` (CI integration) | ❌ BLOCKED | Not verified |
@@ -100,7 +100,7 @@ This is the root cause of the incomplete implementation. The file was created in
 ### AC4: Secret Environment Variables ⚠️ PARTIAL
 
 | Requirement | Status | Gap |
-|-------------|--------|-----|
+| ------------- | -------- | ----- |
 | 11 variables documented | ✅ DONE | - |
 | Stored in Secrets Manager | ✅ DONE | - |
 | **Docker reads from Secrets Manager** | ❌ MISSING | Uses env vars from .env |
@@ -379,7 +379,7 @@ Similar to test_benchling.py, needs to read from XDG config instead of .env.
 ## Estimated Effort
 
 | Task | Complexity | Time | Dependencies |
-|------|------------|------|--------------|
+| ------ | ------------ | ------ | -------------- |
 | Update test_benchling.py | Low | 1 hour | None |
 | Update test_query.py | Low | 1 hour | None |
 | Update Makefile | Low | 1 hour | None |

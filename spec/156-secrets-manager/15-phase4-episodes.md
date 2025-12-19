@@ -1301,7 +1301,7 @@ Completes Phase 4 (Container Runtime Resolution) for #156
 ## Episode Summary
 
 | Episode | Focus | New Files | Modified Files | Tests | Commits |
-|---------|-------|-----------|----------------|-------|---------|
+| --------- | ------- | ----------- | ---------------- | ------- | --------- |
 | 1 | Data structures | `secrets_resolver.py` | None | 8 | 1 |
 | 2 | Format detection | None | `secrets_resolver.py` | 6 | 1 |
 | 3 | JSON parsing | None | `secrets_resolver.py` | 7 | 1 |

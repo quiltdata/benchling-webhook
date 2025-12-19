@@ -90,9 +90,9 @@ export class FargateService extends Construct {
         const { config } = props;
 
         // Create ECS Cluster
+        // Note: clusterName removed to allow multiple stacks per account
         this.cluster = new ecs.Cluster(this, "BenchlingWebhookCluster", {
             vpc: props.vpc,
-            clusterName: "benchling-webhook-cluster",
             enableFargateCapacityProviders: true,
         });
 
@@ -364,11 +364,11 @@ export class FargateService extends Construct {
 
         // Create Fargate Service with NLB target group integration
         // Replaced Cloud Map with NLB for reliable health checks
+        // Note: serviceName removed to allow multiple stacks per account
         this.service = new ecs.FargateService(this, "Service", {
             cluster: this.cluster,
             taskDefinition: taskDefinition,
             desiredCount: 2,
-            serviceName: "benchling-webhook-service",
             assignPublicIp: false,
             securityGroups: [this.securityGroup],
             healthCheckGracePeriod: cdk.Duration.seconds(60),
@@ -403,17 +403,17 @@ export class FargateService extends Construct {
             scaleOutCooldown: cdk.Duration.seconds(60),
         });
 
-        // Outputs
+        // Outputs - use stack name to make exports profile-aware
         new cdk.CfnOutput(this, "ServiceName", {
             value: this.service.serviceName,
             description: "ECS Service Name",
-            exportName: "BenchlingWebhookServiceName",
+            exportName: `${stackName}-ServiceName`,
         });
 
         new cdk.CfnOutput(this, "ClusterName", {
             value: this.cluster.clusterName,
             description: "ECS Cluster Name",
-            exportName: "BenchlingWebhookClusterName",
+            exportName: `${stackName}-ClusterName`,
         });
     }
 }

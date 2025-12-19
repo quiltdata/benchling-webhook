@@ -1,6 +1,6 @@
 {
   "name": "@quiltdata/benchling-webhook",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "description": "AWS CDK deployment for Benchling webhook processing using Fargate - Deploy directly with npx",
   "main": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
@@ -34,6 +34,7 @@
     "prebuild": "rm -rf dist",
     "prepublishOnly": "npm run build",
     "setup": "ts-node bin/cli.ts",
+    "setup:clean": "ts-node bin/cli.ts clean",
     "setup:dev": "ts-node bin/cli.ts --profile dev",
     "setup:prod": "ts-node bin/cli.ts --profile prod",
     "setup:health": "ts-node bin/cli.ts health-check",

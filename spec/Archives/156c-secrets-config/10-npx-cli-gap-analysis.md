@@ -81,7 +81,7 @@ The npx CLI (`dist/bin/cli.js`) provides a **streamlined deployment workflow** b
 ### Gap 2: Different Configuration Models
 
 | Feature | NPX Users | Developers |
-|---------|-----------|------------|
+| --------- | ----------- | ------------ |
 | Config Storage | `.env` files | XDG config (`~/.config/benchling-webhook/`) |
 | Setup Command | `npx ... init` | `npm run setup` |
 | Credential Validation | ❌ None | ✅ OAuth validation |

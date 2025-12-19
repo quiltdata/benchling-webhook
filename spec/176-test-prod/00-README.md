@@ -191,7 +191,7 @@ Single Stack: BenchlingWebhookStack
 ## Cost Impact
 
 | Scenario | Monthly Cost | Change |
-|----------|-------------|--------|
+| ---------- | ------------- | -------- |
 | Current (single env) | ~$70-100 | Baseline |
 | Proposed (dual env) | ~$85-145 | +15-45% |
 | Separate accounts (current for isolation) | ~$140-200 | +100% |

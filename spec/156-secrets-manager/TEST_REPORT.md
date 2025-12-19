@@ -22,7 +22,7 @@ All automated tests pass successfully, and manual testing confirms the implement
 ## Test Results Summary
 
 | Component | Test Suite | Tests | Status | Coverage |
-|-----------|------------|-------|--------|----------|
+| ----------- | ------------ | ------- | -------- | ---------- |
 | TypeScript Secrets Validation | `test/utils-secrets.test.ts` | 44 passed | ✅ PASS | 94.44% |
 | TypeScript Config Integration | `test/utils-config.test.ts` | All passed | ✅ PASS | >90% |
 | Python Secrets Resolver | `test/test_secrets_resolver.py` | 30 passed | ✅ PASS | 97% |
@@ -282,7 +282,7 @@ Response: 200 OK
 
 ```
 File        | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
-------------|---------|----------|---------|---------|-------------------
+------------ | --------- | ---------- | --------- | --------- | -------------------
 secrets.ts  |   94.44 |    89.47 |     100 |   94.44 | 180,189,198,276,402
 config.ts   |     >90 |      >85 |     100 |     >90 | -
 ```
@@ -366,7 +366,7 @@ BENCHLING_CLIENT_SECRET=secret
 ### Invalid Input Scenarios
 
 | Scenario | Input | Expected Behavior | Result |
-|----------|-------|-------------------|--------|
+| ---------- | ------- | ------------------- | -------- |
 | Invalid ARN service | `arn:aws:s3:...` | Reject with clear error | ✅ PASS |
 | Invalid ARN format | `arn:invalid` | Reject with clear error | ✅ PASS |
 | Missing required field | `{"client_id":"x"}` | Reject with field name | ✅ PASS |
@@ -408,7 +408,7 @@ All error scenarios handled correctly with actionable error messages.
 ### Secret Resolution Performance
 
 | Operation | Time | Status |
-|-----------|------|--------|
+| ----------- | ------ | -------- |
 | ARN validation | <1ms | ✅ Fast |
 | JSON parsing | <5ms | ✅ Fast |
 | Secrets Manager fetch (mocked) | <50ms | ✅ Acceptable |

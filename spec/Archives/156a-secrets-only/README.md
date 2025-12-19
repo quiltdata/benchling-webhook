@@ -225,7 +225,7 @@ For existing deployments:
 ## Risk Assessment
 
 | Risk | Impact | Mitigation |
-|------|--------|-----------|
+| ------ | -------- | ----------- |
 | Breaking existing deployments | HIGH | Migration guide, major version bump (2.0.0) |
 | Slower container startup | LOW | Acceptable tradeoff, implement caching |
 | CloudFormation API failures | MEDIUM | Clear error messages, fallback logging |
