@@ -70,11 +70,11 @@ class Package:
             Direct link to file in Quilt catalog
 
         Example:
-            'https://nightly.quilttest.com/b/my-bucket/packages/benchling/etr_123/tree/data%2Ffile.csv'
+            'https://nightly.quilttest.com/b/my-bucket/packages/benchling/etr_123/tree/latest/data%2Ffile.csv'
         """
         encoded_key = quote(logical_key, safe="")
         base_url = f"https://{self.catalog_base_url}/b/{self.bucket}/packages/{self.package_name}"
-        return f"{base_url}/tree/{encoded_key}"
+        return f"{base_url}/tree/latest/{encoded_key}"
 
     def make_sync_url(self, path: Optional[str] = None, version: Optional[str] = None) -> str:
         """Generate QuiltSync download URL for the package or a file within it.
