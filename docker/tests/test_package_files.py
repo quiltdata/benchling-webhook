@@ -67,7 +67,7 @@ class TestPackageFile:
         assert file.size_display == "1.0 GB"
 
     def test_package_file_catalog_url(self):
-        """Test catalog URL generation."""
+        """Test catalog URL generation includes /latest/ version."""
         file = PackageFile(
             logical_key="data/exp.csv",
             size=1024,
@@ -80,7 +80,7 @@ class TestPackageFile:
         assert "https://nightly.quilttest.com" in url
         assert "/b/test-bucket" in url
         assert "/packages/benchling/etr_123" in url
-        assert "/tree/" in url
+        assert "/tree/latest/" in url
 
     def test_package_file_sync_url(self):
         """Test QuiltSync URL generation."""

@@ -92,25 +92,25 @@ class TestPackage:
         assert "?action=revisePackage" in result
 
     def test_make_catalog_url_with_file_path(self, package):
-        """Test make_catalog_url generates correct URL for files."""
+        """Test make_catalog_url generates correct URL for files with /latest/ version."""
         result = package.make_catalog_url("README.md")
-        expected = "https://nightly.quilttest.com/b/test-bucket/packages/benchling/etr_123/tree/README.md"
+        expected = "https://nightly.quilttest.com/b/test-bucket/packages/benchling/etr_123/tree/latest/README.md"
         assert result == expected
 
     def test_make_catalog_url_with_nested_path(self, package):
-        """Test make_catalog_url with nested file paths."""
+        """Test make_catalog_url with nested file paths includes /latest/ version."""
         result = package.make_catalog_url("data/results.csv")
-        # Forward slash should be encoded
-        assert "/tree/data%2Fresults.csv" in result
+        # Forward slash should be encoded and version should be included
+        assert "/tree/latest/data%2Fresults.csv" in result
 
     def test_make_catalog_url_special_characters(self, package):
-        """Test make_catalog_url encodes special characters in file paths."""
+        """Test make_catalog_url encodes special characters in file paths and includes /latest/ version."""
         result = package.make_catalog_url("data/file name with spaces.txt")
-        # Spaces should be encoded
+        # Spaces should be encoded and version should be included
         assert "%20" in result
         expected_url = (
             "https://nightly.quilttest.com/b/test-bucket/packages/benchling/etr_123/"
-            "tree/data%2Ffile%20name%20with%20spaces.txt"
+            "tree/latest/data%2Ffile%20name%20with%20spaces.txt"
         )
         assert result == expected_url
 

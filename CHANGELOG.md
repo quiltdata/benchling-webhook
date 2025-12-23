@@ -3,6 +3,16 @@
 
 All notable changes to this project will be documented in this file, one line per user-visible change.
 
+## [0.9.8] - 2025-12-22
+
+### Fixed
+
+- **File catalog URLs now include version component** - Fixed file URL generation to include `/latest/` in path (#313)
+  - File URLs now follow correct format: `/tree/latest/{file_path}` instead of `/tree/{file_path}`
+  - Example: `https://catalog.com/b/bucket/packages/benchling/EXP25000088/tree/latest/README.md`
+  - Updated tests to verify correct URL format and prevent regression
+  - Affects `Package.make_catalog_url()` and `PackageFile.catalog_url` property
+
 ## [0.9.7] - 2025-12-18
 
 ### Fixed
