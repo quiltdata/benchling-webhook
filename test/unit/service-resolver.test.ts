@@ -194,7 +194,7 @@ describe("resolveQuiltServices", () => {
         expect(services.quiltWebHost).toBe("quilt.example.com");
     });
 
-    test("includes optional Iceberg database when available", async () => {
+    test("includes optional Athena metadata when available", async () => {
         cfnMock.on(DescribeStacksCommand).resolves({
             Stacks: [
                 mockStack([
@@ -212,8 +212,12 @@ describe("resolveQuiltServices", () => {
                         OutputValue: "quilt.example.com",
                     },
                     {
-                        OutputKey: "IcebergDatabase",
-                        OutputValue: "quilt_iceberg",
+                        OutputKey: "UserAthenaWorkgroupName",
+                        OutputValue: "user-wg",
+                    },
+                    {
+                        OutputKey: "AthenaResultsBucketName",
+                        OutputValue: "athena-results-bucket",
                     },
                 ]),
             ],
@@ -225,10 +229,11 @@ describe("resolveQuiltServices", () => {
             mockCloudFormation: cfnMock as unknown as CloudFormationClient,
         });
 
-        expect(services.icebergDatabase).toBe("quilt_iceberg");
+        expect(services.athenaUserWorkgroup).toBe("user-wg");
+        expect(services.athenaResultsBucket).toBe("athena-results-bucket");
     });
 
-    test("omits Iceberg database when not available", async () => {
+    test("omits optional Athena metadata when not available", async () => {
         cfnMock.on(DescribeStacksCommand).resolves({
             Stacks: [
                 mockStack([
@@ -255,7 +260,8 @@ describe("resolveQuiltServices", () => {
             mockCloudFormation: cfnMock as unknown as CloudFormationClient,
         });
 
-        expect(services.icebergDatabase).toBeUndefined();
+        expect(services.athenaUserWorkgroup).toBeUndefined();
+        expect(services.athenaResultsBucket).toBeUndefined();
     });
 
     test("throws error for missing PackagerQueueUrl output", async () => {

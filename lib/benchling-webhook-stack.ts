@@ -95,19 +95,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             default: config.quilt.catalog || "",  // Use config value as default
         });
 
-        const icebergDatabaseParam = new cdk.CfnParameter(this, "IcebergDatabase", {
-            type: "String",
-            description: "Iceberg database name (optional, leave empty if not used)",
-            default: config.quilt.icebergDatabase || "",  // Use config value as default
-        });
-
-        // NEW: Optional Athena resources (from Quilt stack discovery)
-        const icebergWorkgroupParam = new cdk.CfnParameter(this, "IcebergWorkgroup", {
-            type: "String",
-            description: "Iceberg workgroup name (optional, from Quilt stack discovery)",
-            default: config.quilt.icebergWorkgroup || "",  // Use config value as default
-        });
-
         const athenaUserWorkgroupParam = new cdk.CfnParameter(this, "AthenaUserWorkgroup", {
             type: "String",
             description: "Athena workgroup for user queries (optional, from Quilt stack discovery)",
@@ -156,8 +143,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const packagerQueueUrlValue = packagerQueueUrlParam.valueAsString;
         const athenaUserDatabaseValue = athenaUserDatabaseParam.valueAsString;
         const quiltWebHostValue = quiltWebHostParam.valueAsString;
-        const icebergDatabaseValue = icebergDatabaseParam.valueAsString;
-        const icebergWorkgroupValue = icebergWorkgroupParam.valueAsString;
         const athenaUserWorkgroupValue = athenaUserWorkgroupParam.valueAsString;
         const athenaResultsBucketValue = athenaResultsBucketParam.valueAsString;
         const benchlingSecretValue = benchlingSecretParam.valueAsString;
@@ -275,9 +260,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             packagerQueueUrl: packagerQueueUrlValue,
             athenaUserDatabase: athenaUserDatabaseValue,
             quiltWebHost: quiltWebHostValue,
-            icebergDatabase: icebergDatabaseValue,
             // NEW: Optional Athena resources (from Quilt stack discovery)
-            icebergWorkgroup: icebergWorkgroupValue,
             athenaUserWorkgroup: athenaUserWorkgroupValue,
             athenaResultsBucket: athenaResultsBucketValue,
             // IAM role ARN for cross-account S3 access (write role used for all operations)

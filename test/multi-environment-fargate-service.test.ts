@@ -65,7 +65,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -88,7 +87,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -113,7 +111,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -140,7 +137,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -176,7 +172,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -214,7 +209,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -240,7 +234,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -274,7 +267,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -315,7 +307,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             // Create prod service
@@ -332,7 +323,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             // Both services should be created
@@ -357,7 +347,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -390,7 +379,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -418,7 +406,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -449,7 +436,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -482,7 +468,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -518,7 +503,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -553,7 +537,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -590,7 +573,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);
@@ -619,7 +601,6 @@ describe("FargateService - Multi-Environment Support", () => {
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
-                icebergDatabase: "",
             });
 
             const template = Template.fromStack(stack);

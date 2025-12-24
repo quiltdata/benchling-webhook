@@ -33,27 +33,26 @@ describe("QuiltConfig", () => {
         expect(config.stackArn).toBe("arn:aws:cloudformation:us-east-1:123456789012:stack/quilt-stack/abc-123");
     });
 
-    test("icebergDatabase is optional", () => {
+    test("athenaUserWorkgroup is optional", () => {
         const config: QuiltConfig = {
             catalog: "quilt.example.com",
             database: "quilt_db",
             queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
             region: "us-east-1",
-            // icebergDatabase not provided - should be optional
         };
         expect(config).toBeDefined();
         expect(config.database).toBe("quilt_db");
     });
 
-    test("icebergDatabase can be provided when available", () => {
+    test("athenaUserWorkgroup can be provided when available", () => {
         const config: QuiltConfig = {
             catalog: "quilt.example.com",
             database: "quilt_db",
             queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
             region: "us-east-1",
-            icebergDatabase: "quilt_iceberg",
+            athenaUserWorkgroup: "quilt-workgroup",
         };
         expect(config).toBeDefined();
-        expect(config.icebergDatabase).toBe("quilt_iceberg");
+        expect(config.athenaUserWorkgroup).toBe("quilt-workgroup");
     });
 });

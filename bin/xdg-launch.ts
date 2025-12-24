@@ -202,8 +202,6 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         ATHENA_USER_DATABASE: config.quilt.database,
         ATHENA_USER_WORKGROUP: config.quilt.athenaUserWorkgroup || "primary",
         ATHENA_RESULTS_BUCKET: config.quilt.athenaResultsBucket || "",
-        ICEBERG_DATABASE: config.quilt.icebergDatabase || "",
-        ICEBERG_WORKGROUP: config.quilt.icebergWorkgroup || "",
         PACKAGER_SQS_URL: config.quilt.queueUrl,
 
         // IAM Role ARN for cross-account S3 access (optional, write role used for all operations)

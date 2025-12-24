@@ -15,7 +15,7 @@ import { ProfileConfig } from "./types/config";
  * Runtime-configurable parameters can be overridden via CloudFormation parameters.
  *
  * **Breaking Change (v0.9.0)**: Removed stackArn in favor of explicit service environment variables.
- * The explicit service parameters (packagerQueueUrl, athenaUserDatabase, quiltWebHost, icebergDatabase)
+ * The explicit service parameters (packagerQueueUrl, athenaUserDatabase, quiltWebHost)
  * are resolved at deployment time and passed directly to the container, eliminating runtime CloudFormation calls.
  */
 export interface FargateServiceProps {
@@ -31,10 +31,8 @@ export interface FargateServiceProps {
     readonly packagerQueueUrl: string;
     readonly athenaUserDatabase: string;
     readonly quiltWebHost: string;
-    readonly icebergDatabase: string;
 
     // NEW: Optional Athena resources (from Quilt stack discovery)
-    readonly icebergWorkgroup?: string;
     readonly athenaUserWorkgroup?: string;
     readonly athenaResultsBucket?: string;
 
@@ -304,8 +302,6 @@ export class FargateService extends Construct {
             ATHENA_USER_WORKGROUP: props.athenaUserWorkgroup || "primary",
             // Only set optional variables if they have values (don't pass empty strings)
             ...(props.athenaResultsBucket ? { ATHENA_RESULTS_BUCKET: props.athenaResultsBucket } : {}),
-            ...(props.icebergDatabase ? { ICEBERG_DATABASE: props.icebergDatabase } : {}),
-            ...(props.icebergWorkgroup ? { ICEBERG_WORKGROUP: props.icebergWorkgroup } : {}),
             PACKAGER_SQS_URL: props.packagerQueueUrl,
 
             // IAM Role ARN for cross-account S3 access (optional)

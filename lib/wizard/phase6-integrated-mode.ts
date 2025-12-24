@@ -63,22 +63,12 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
         },
     };
 
-    if (parameters.benchling.testEntryId) {
-        config.benchling.testEntryId = parameters.benchling.testEntryId;
-    }
-
     // Add discovered workgroups and resources if present
     if (stackQuery.athenaUserWorkgroup) {
         config.quilt.athenaUserWorkgroup = stackQuery.athenaUserWorkgroup;
     }
     if (stackQuery.athenaUserPolicy) {
         config.quilt.athenaUserPolicy = stackQuery.athenaUserPolicy;
-    }
-    if (stackQuery.icebergWorkgroup) {
-        config.quilt.icebergWorkgroup = stackQuery.icebergWorkgroup;
-    }
-    if (stackQuery.icebergDatabase) {
-        config.quilt.icebergDatabase = stackQuery.icebergDatabase;
     }
     if (stackQuery.athenaResultsBucket) {
         config.quilt.athenaResultsBucket = stackQuery.athenaResultsBucket;

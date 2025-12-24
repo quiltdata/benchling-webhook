@@ -63,8 +63,6 @@ export interface StackResourceMap {
  * Target resources:
  * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
  * - UserAthenaNonManagedRolePolicy (AWS::IAM::Policy)
- * - IcebergWorkGroup (AWS::Athena::WorkGroup)
- * - IcebergDatabase (AWS::Glue::Database)
  * - UserAthenaResultsBucket (AWS::S3::Bucket)
  * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
  * - T4BucketReadRole (AWS::IAM::Role)
@@ -74,8 +72,6 @@ export interface StackResourceMap {
 export interface DiscoveredQuiltResources {
     athenaUserWorkgroup?: string;
     athenaUserPolicy?: string;
-    icebergWorkgroup?: string;
-    icebergDatabase?: string;
     athenaResultsBucket?: string;
     athenaResultsBucketPolicy?: string;
     readRoleArn?: string;
@@ -159,13 +155,11 @@ export function toRoleArn(roleNameOrArn: string, account: string): string {
 }
 
 /**
- * Extract Athena workgroups, IAM policies, Glue databases, S3 buckets, IAM roles, and Secrets Manager secrets from stack resources
+ * Extract Athena workgroups, IAM policies, S3 buckets, IAM roles, and Secrets Manager secrets from stack resources
  *
  * Target resources:
  * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
  * - UserAthenaNonManagedRolePolicy (AWS::IAM::Policy)
- * - IcebergWorkGroup (AWS::Athena::WorkGroup)
- * - IcebergDatabase (AWS::Glue::Database)
  * - UserAthenaResultsBucket (AWS::S3::Bucket)
  * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
  * - T4BucketReadRole (AWS::IAM::Role)
@@ -186,8 +180,6 @@ export function extractQuiltResources(
     const resourceMapping: Record<string, keyof DiscoveredQuiltResources> = {
         UserAthenaNonManagedRoleWorkgroup: "athenaUserWorkgroup",
         UserAthenaNonManagedRolePolicy: "athenaUserPolicy",
-        IcebergWorkGroup: "icebergWorkgroup",
-        IcebergDatabase: "icebergDatabase",
         UserAthenaResultsBucket: "athenaResultsBucket",
         UserAthenaResultsBucketPolicy: "athenaResultsBucketPolicy",
         T4BucketReadRole: "readRoleArn",
