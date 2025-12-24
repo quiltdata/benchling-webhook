@@ -86,12 +86,6 @@ function buildCdkEnv(
     };
 
     // Add optional Quilt fields if present
-    if (config.quilt.icebergDatabase) {
-        env.ICEBERG_DATABASE = config.quilt.icebergDatabase;
-    }
-    if (config.quilt.icebergWorkgroup) {
-        env.ICEBERG_WORKGROUP = config.quilt.icebergWorkgroup;
-    }
     if (config.quilt.athenaUserWorkgroup) {
         env.ATHENA_USER_WORKGROUP = config.quilt.athenaUserWorkgroup;
     }
@@ -659,10 +653,8 @@ export async function deploy(
         packagerQueueUrl: config.quilt.queueUrl,
         athenaUserDatabase: config.quilt.database,
         quiltWebHost: config.quilt.catalog,
-        icebergDatabase: config.quilt.icebergDatabase,
         athenaUserWorkgroup: config.quilt.athenaUserWorkgroup,
         athenaResultsBucket: config.quilt.athenaResultsBucket,
-        icebergWorkgroup: config.quilt.icebergWorkgroup,
     };
 
     spinner.succeed("Quilt configuration loaded");
@@ -688,13 +680,11 @@ export async function deploy(
     console.log(`    ${chalk.bold("Catalog Host:")}            ${services.quiltWebHost}`);
     console.log(`    ${chalk.bold("Packager Queue:")}          ${services.packagerQueueUrl}`);
     console.log(`    ${chalk.bold("Athena Database:")}         ${services.athenaUserDatabase}`);
-    console.log(`    ${chalk.bold("Athena Workgroup:")}        ${services.athenaUserWorkgroup}`);
-    console.log(`    ${chalk.bold("Athena Results Bucket:")}   ${services.athenaResultsBucket}`);
-    if (services.icebergDatabase) {
-        console.log(`    ${chalk.bold("Iceberg Database:")}        ${services.icebergDatabase}`);
+    if (services.athenaUserWorkgroup) {
+        console.log(`    ${chalk.bold("Athena Workgroup:")}        ${services.athenaUserWorkgroup}`);
     }
-    if (services.icebergWorkgroup) {
-        console.log(`    ${chalk.bold("Iceberg Workgroup:")}       ${services.icebergWorkgroup}`);
+    if (services.athenaResultsBucket) {
+        console.log(`    ${chalk.bold("Athena Results Bucket:")}   ${services.athenaResultsBucket}`);
     }
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
@@ -764,10 +754,8 @@ export async function deploy(
             `PackagerQueueUrl=${services.packagerQueueUrl}`,
             `AthenaUserDatabase=${services.athenaUserDatabase}`,
             `QuiltWebHost=${services.quiltWebHost}`,
-            `IcebergDatabase=${services.icebergDatabase || ""}`,
 
             // NEW: Optional Athena resources (from Quilt stack discovery)
-            `IcebergWorkgroup=${services.icebergWorkgroup || ""}`,
             `AthenaUserWorkgroup=${services.athenaUserWorkgroup || ""}`,
             `AthenaResultsBucket=${services.athenaResultsBucket || ""}`,
 

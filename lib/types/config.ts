@@ -203,18 +203,6 @@ export interface QuiltConfig {
     region: string;
 
     /**
-     * Iceberg database name (optional)
-     *
-     * If available, use Iceberg database instead of Athena for package* tables.
-     * Resolved from stack output `IcebergDatabase` at deployment time if present.
-     *
-     * Passed to container as `ICEBERG_DATABASE` environment variable.
-     *
-     * @example "quilt_iceberg"
-     */
-    icebergDatabase?: string;
-
-    /**
      * Athena workgroup for user queries (non-managed role)
      *
      * Resolved from UserAthenaNonManagedRoleWorkgroup stack resource
@@ -233,16 +221,6 @@ export interface QuiltConfig {
      * @example "quilt-prod-UserAthenaNonManagedRolePolicy-ABC123"
      */
     athenaUserPolicy?: string;
-
-    /**
-     * Athena workgroup for Iceberg queries
-     *
-     * Resolved from IcebergWorkGroup stack resource
-     * This is a RESOURCE (not an output) - requires DescribeStackResources API
-     *
-     * @example "quilt-iceberg-workgroup-prod"
-     */
-    icebergWorkgroup?: string;
 
     /**
      * User Athena results bucket (S3 bucket for query results)
@@ -779,9 +757,7 @@ export const ProfileConfigSchema = {
                 database: { type: "string", minLength: 1 },
                 queueUrl: { type: "string", pattern: "^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/\\d{12}/.+" },
                 region: { type: "string", pattern: "^[a-z]{2}-[a-z]+-[0-9]$" },
-                icebergDatabase: { type: "string", minLength: 1 },
                 athenaUserWorkgroup: { type: "string", minLength: 1 },
-                icebergWorkgroup: { type: "string", minLength: 1 },
                 writeRoleArn: { type: "string", pattern: "^arn:aws:iam::\\d{12}:role/.+" },
             },
         },

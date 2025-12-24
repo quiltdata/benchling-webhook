@@ -42,8 +42,6 @@ interface QuiltStackInfo {
     benchlingIntegrationEnabled?: boolean;
     athenaUserWorkgroup?: string;
     athenaUserPolicy?: string;
-    icebergWorkgroup?: string;
-    icebergDatabase?: string;
     athenaResultsBucket?: string;
     athenaResultsBucketPolicy?: string;
     readRoleArn?: string;
@@ -64,8 +62,6 @@ interface InferenceResult {
     benchlingIntegrationEnabled?: boolean;
     athenaUserWorkgroup?: string;
     athenaUserPolicy?: string;
-    icebergWorkgroup?: string;
-    icebergDatabase?: string;
     athenaResultsBucket?: string;
     athenaResultsBucketPolicy?: string;
     readRoleArn?: string;
@@ -187,9 +183,6 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     } else if (key === "BenchlingSecretArn" || key === "BenchlingSecret") {
                         // Check for BenchlingSecret output from T4 template
                         stackInfo.benchlingSecretArn = value;
-                    } else if (key === "IcebergDatabase") {
-                        // Extract IcebergDatabase from outputs (fallback)
-                        stackInfo.icebergDatabase = value;
                     }
                 }
 
@@ -513,13 +506,6 @@ export async function inferQuiltConfig(options: {
     }
     if (selectedStack.athenaUserPolicy) {
         result.athenaUserPolicy = selectedStack.athenaUserPolicy;
-    }
-    if (selectedStack.icebergWorkgroup) {
-        result.icebergWorkgroup = selectedStack.icebergWorkgroup;
-    }
-    // icebergDatabase already handled (prefer resource over output)
-    if (selectedStack.icebergDatabase) {
-        result.icebergDatabase = selectedStack.icebergDatabase;
     }
     if (selectedStack.athenaResultsBucket) {
         result.athenaResultsBucket = selectedStack.athenaResultsBucket;

@@ -135,28 +135,6 @@ describe("XDG Launch Pure Functions - Integration", () => {
             expect(envVars.BENCHLING_TEST_MODE).toBe("true");
         });
 
-        it("should handle optional Iceberg resources gracefully", () => {
-            const envVars = buildEnvVars(mockConfig, "native", {
-                mode: "native",
-                profile: "default",
-                verbose: false,
-                test: false,
-                noSecret: false,
-            });
-
-            // Iceberg resources are optional
-            expect(envVars).toHaveProperty("ICEBERG_DATABASE");
-            expect(envVars).toHaveProperty("ICEBERG_WORKGROUP");
-
-            // Should be empty string if not configured
-            if (!mockConfig.quilt.icebergDatabase) {
-                expect(envVars.ICEBERG_DATABASE).toBe("");
-            }
-            if (!mockConfig.quilt.icebergWorkgroup) {
-                expect(envVars.ICEBERG_WORKGROUP).toBe("");
-            }
-        });
-
         it("should handle optional Athena configuration gracefully", () => {
             const envVars = buildEnvVars(mockConfig, "native", {
                 mode: "native",

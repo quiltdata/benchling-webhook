@@ -79,8 +79,6 @@ export async function runStackQuery(
         const benchlingIntegrationEnabled = inferenceResult.benchlingIntegrationEnabled;
         const athenaUserWorkgroup = inferenceResult.athenaUserWorkgroup;
         const athenaUserPolicy = inferenceResult.athenaUserPolicy;
-        const icebergWorkgroup = inferenceResult.icebergWorkgroup;
-        const icebergDatabase = inferenceResult.icebergDatabase;
         const athenaResultsBucket = inferenceResult.athenaResultsBucket;
         const athenaResultsBucketPolicy = inferenceResult.athenaResultsBucketPolicy;
         const readRoleArn = inferenceResult.readRoleArn;
@@ -111,14 +109,6 @@ export async function runStackQuery(
         console.log(athenaResultsBucketPolicy
             ? chalk.dim(`✓ Athena Results Bucket Policy: ${athenaResultsBucketPolicy}`)
             : chalk.yellow("⚠ Athena Results Bucket Policy: NOT FOUND"));
-
-        // Iceberg resources are optional (recent addition to Quilt stacks) - keep dimmed
-        console.log(icebergDatabase
-            ? chalk.dim(`✓ Iceberg Database: ${icebergDatabase}`)
-            : chalk.dim("  Iceberg Database: Not available (optional)"));
-        console.log(icebergWorkgroup
-            ? chalk.dim(`✓ Iceberg Workgroup: ${icebergWorkgroup}`)
-            : chalk.dim("  Iceberg Workgroup: Not available (optional)"));
 
         // IAM role ARNs are logged by inferQuiltConfig, so no need to log again here
 
@@ -220,8 +210,6 @@ export async function runStackQuery(
             benchlingIntegrationEnabled,
             athenaUserWorkgroup,
             athenaUserPolicy,
-            icebergWorkgroup,
-            icebergDatabase,
             athenaResultsBucket,
             athenaResultsBucketPolicy,
             readRoleArn,

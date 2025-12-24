@@ -273,8 +273,6 @@ describe("BenchlingWebhookStack", () => {
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123/queue",
                     region: "us-east-1",
-                    icebergDatabase: "iceberg_db",
-                    icebergWorkgroup: "iceberg_wg",
                     athenaUserWorkgroup: "athena_wg",
                     athenaResultsBucket: "s3://results-bucket",
                 },
@@ -290,12 +288,6 @@ describe("BenchlingWebhookStack", () => {
             const testTemplate = Template.fromStack(stack);
 
             // Verify optional parameters have correct defaults from config
-            testTemplate.hasParameter("IcebergDatabase", {
-                Default: "iceberg_db",
-            });
-            testTemplate.hasParameter("IcebergWorkgroup", {
-                Default: "iceberg_wg",
-            });
             testTemplate.hasParameter("AthenaUserWorkgroup", {
                 Default: "athena_wg",
             });
@@ -326,12 +318,6 @@ describe("BenchlingWebhookStack", () => {
             const testTemplate = Template.fromStack(stack);
 
             // Verify optional parameters default to empty string when not configured
-            testTemplate.hasParameter("IcebergDatabase", {
-                Default: "",
-            });
-            testTemplate.hasParameter("IcebergWorkgroup", {
-                Default: "",
-            });
             testTemplate.hasParameter("AthenaUserWorkgroup", {
                 Default: "",
             });
