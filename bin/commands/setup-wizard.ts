@@ -66,7 +66,6 @@ export interface SetupWizardOptions {
     benchlingClientId?: string;
     benchlingClientSecret?: string;
     benchlingAppDefinitionId?: string;
-    benchlingTestEntryId?: string;
     userBucket?: string;
     pkgPrefix?: string;
     pkgKey?: string;
@@ -260,7 +259,6 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         benchlingClientId: options.benchlingClientId,
         benchlingClientSecret: options.benchlingClientSecret,
         benchlingAppDefinitionId: options.benchlingAppDefinitionId,
-        benchlingTestEntryId: options.benchlingTestEntryId,
         userBucket: options.userBucket,
         pkgPrefix: options.pkgPrefix,
         pkgKey: options.pkgKey,

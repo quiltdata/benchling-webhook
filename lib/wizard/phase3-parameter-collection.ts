@@ -28,98 +28,30 @@ import { ParameterCollectionInput, ParameterCollectionResult } from "./types";
 export async function runParameterCollection(
     input: ParameterCollectionInput,
 ): Promise<ParameterCollectionResult> {
-    const { stackQuery, existingConfig, yes = false, profile = "default" } = input;
+    const { stackQuery, existingConfig, yes = false } = input;
 
     // =========================================================================
-    // VPC Configuration (FIRST - most important infrastructure decision)
+    // VPC Configuration (auto-use discovered VPC from Quilt stack)
     // =========================================================================
     console.log(chalk.cyan("VPC Configuration:"));
 
-    let vpcId: string | undefined;
-
-    // Use VPC discovered in Phase 2 (Stack Query)
     const discoveredVpc = stackQuery.discoveredVpc;
+    let vpcConfig = undefined as ParameterCollectionResult["deployment"]["vpc"];
 
     if (discoveredVpc && discoveredVpc.isValid) {
-        // Report discovered VPC
         const vpcDescription = discoveredVpc.name
             ? `${discoveredVpc.name} (${discoveredVpc.vpcId})`
             : discoveredVpc.vpcId;
         console.log(`  VPC: ${vpcDescription} - ${discoveredVpc.privateSubnetCount} private subnets in ${discoveredVpc.availabilityZoneCount} AZs`);
-
-        // Warn about potential connectivity issues
-        console.log(chalk.yellow("  ⚠ Warning: This VPC may block Benchling webhook access"));
-
-        if (yes) {
-            // In non-interactive mode, check if there's an existing VPC preference
-            if (existingConfig?.deployment?.vpc?.vpcId) {
-                vpcId = existingConfig.deployment.vpc.vpcId;
-                console.log(chalk.dim(`  Using VPC: ${vpcId} (from existing config)`));
-            } else {
-                // Default to creating new VPC in non-interactive mode (safer default)
-                vpcId = undefined;
-                console.log(chalk.dim("  Will create new standalone VPC (recommended, safer default)"));
-            }
-        } else {
-            // Interactive mode - ask if they want to create standalone VPC
-            // Default to YES (create new VPC) unless existing config uses this VPC
-            const defaultCreateStandalone = existingConfig?.deployment?.vpc?.vpcId !== discoveredVpc.vpcId;
-
-            const { createStandaloneVpc } = await inquirer.prompt([
-                {
-                    type: "confirm",
-                    name: "createStandaloneVpc",
-                    message: "Create standalone VPC? (No = use existing VPC from stack)",
-                    default: defaultCreateStandalone,
-                },
-            ]);
-
-            vpcId = createStandaloneVpc ? undefined : discoveredVpc.vpcId;
-
-            // Check if VPC selection changed from existing configuration
-            const existingVpcId = existingConfig?.deployment?.vpc?.vpcId;
-            const vpcChanged = existingVpcId && existingVpcId !== vpcId;
-
-            if (vpcChanged) {
-                // CRITICAL WARNING: Changing VPC requires stack destruction
-                // Use actual profile name for commands (omit --profile flag if default)
-                const profileFlag = profile !== "default" ? ` --profile ${profile}` : "";
-
-                console.log("\n" + chalk.red.bold("⚠️  IMPORTANT: VPC CONFIGURATION CHANGED"));
-                console.log(chalk.yellow(`   Previous VPC: ${existingVpcId}`));
-                console.log(chalk.yellow(`   New VPC:      ${vpcId || "new standalone VPC"}`));
-                console.log("");
-                console.log(chalk.red("   Changing VPC requires destroying and redeploying the stack."));
-                console.log(chalk.yellow("   You will likely need to run:"));
-                console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook@latest destroy${profileFlag}`));
-                console.log(chalk.cyan(`     npx @quiltdata/benchling-webhook@latest deploy${profileFlag}`));
-                console.log("");
-
-                const { confirmVpcChange } = await inquirer.prompt([
-                    {
-                        type: "confirm",
-                        name: "confirmVpcChange",
-                        message: "Do you understand that changing VPC requires stack destruction and redeployment?",
-                        default: false,
-                    },
-                ]);
-
-                if (!confirmVpcChange) {
-                    console.log(chalk.yellow("\nSetup cancelled. VPC configuration not changed.\n"));
-                    process.exit(0);
-                }
-            }
-
-            if (vpcId) {
-                console.log(chalk.dim(`  Using existing VPC: ${vpcId}`));
-            } else {
-                console.log(chalk.dim("  Will create new standalone VPC (2 AZs, private subnets, NAT Gateways)"));
-            }
-        }
+        vpcConfig = {
+            vpcId: discoveredVpc.vpcId,
+            privateSubnetIds: discoveredVpc.privateSubnetIds,
+            publicSubnetIds: discoveredVpc.publicSubnetIds,
+            availabilityZones: discoveredVpc.availabilityZones,
+            vpcCidrBlock: discoveredVpc.cidrBlock,
+        };
     } else {
-        // No valid VPC discovered - will auto-create
-        console.log("  VPC: Will create new standalone VPC (2 AZs, private subnets, NAT Gateways)");
-        vpcId = undefined;
+        console.log("  Using wizard-managed VPC (no stack VPC detected)");
     }
 
     // =========================================================================
@@ -366,38 +298,6 @@ export async function runParameterCollection(
             : credentialAnswers.clientSecret;
     }
 
-    // Test Entry ID (optional) - can be reused even when creating new app
-    let testEntryId: string | undefined;
-    if (input.benchlingTestEntryId) {
-        testEntryId = input.benchlingTestEntryId;
-        console.log(`  Test Entry ID: ${testEntryId} (from CLI)`);
-    } else if (yes) {
-        // In non-interactive mode, use existing config if available
-        testEntryId = existingConfig?.benchling?.testEntryId;
-        if (testEntryId) {
-            console.log(`  Test Entry ID: ${testEntryId} (from existing config)`);
-        }
-    } else {
-        // Always show prompt with default from existing config (even for new apps)
-        const existingTestEntryId = existingConfig?.benchling?.testEntryId;
-        const testEntryAnswer = await inquirer.prompt([
-            {
-                type: "input",
-                name: "testEntryId",
-                message: "Benchling Test Entry ID (optional)" +
-                    (existingTestEntryId ? " (press Enter to keep existing):" : ":"),
-                default: existingTestEntryId || "",
-            },
-        ]);
-        // Accept both empty (to keep existing) and new values
-        if (testEntryAnswer.testEntryId && testEntryAnswer.testEntryId.trim() !== "") {
-            testEntryId = testEntryAnswer.testEntryId.trim();
-        } else if (existingTestEntryId) {
-            // User pressed Enter with existing value - keep it
-            testEntryId = existingTestEntryId;
-        }
-    }
-
     // =========================================================================
     // Package Configuration
     // =========================================================================
@@ -523,7 +423,6 @@ export async function runParameterCollection(
             clientId,
             clientSecret,
             appDefinitionId,
-            testEntryId,
         },
         packages: {
             bucket,
@@ -533,13 +432,7 @@ export async function runParameterCollection(
         deployment: {
             region,
             account,
-            vpc: vpcId && discoveredVpc ? {
-                vpcId,
-                privateSubnetIds: discoveredVpc.privateSubnetIds,
-                publicSubnetIds: discoveredVpc.publicSubnetIds,
-                availabilityZones: discoveredVpc.availabilityZones,
-                vpcCidrBlock: discoveredVpc.cidrBlock,
-            } : undefined,
+            vpc: vpcConfig,
         },
         logging: {
             level: logLevel,
