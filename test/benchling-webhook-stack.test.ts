@@ -99,31 +99,20 @@ describe("BenchlingWebhookStack", () => {
         });
         const ipFilterTemplate = Template.fromStack(stack);
 
-        // Verify resource policy is created with TWO statements
-        // Statement 1: Health endpoints with no IP conditions
-        // Statement 2: Webhook endpoints with IP conditions
+        // Verify resource policy is created with SINGLE statement
+        // Single statement applies IP filtering to ALL endpoints
         const restApiTemplate = ipFilterTemplate.findResources("AWS::ApiGateway::RestApi");
         const restApi = Object.values(restApiTemplate)[0];
         const statements = restApi.Properties.Policy.Statement;
 
-        expect(statements).toHaveLength(2);
+        expect(statements).toHaveLength(1);
 
-        // Verify health statement has no IP conditions
-        const healthStatement = statements.find((stmt: any) =>
-            stmt.Resource && Array.isArray(stmt.Resource) &&
-            stmt.Resource.some((r: string) => r.includes("GET/health"))
-        );
-        expect(healthStatement).toBeDefined();
-        expect(healthStatement.Condition).toBeUndefined();
-
-        // Verify webhook statement has IP conditions
-        const webhookStatement = statements.find((stmt: any) =>
-            stmt.Resource && Array.isArray(stmt.Resource) &&
-            stmt.Resource.some((r: string) => r.includes("POST/event"))
-        );
-        expect(webhookStatement).toBeDefined();
-        expect(webhookStatement.Condition).toBeDefined();
-        expect(webhookStatement.Condition.IpAddress["aws:SourceIp"]).toEqual([
+        // Verify single statement has IP conditions and applies to all endpoints
+        const statement = statements[0];
+        expect(statement).toBeDefined();
+        expect(statement.Resource).toBe("execute-api:/*");
+        expect(statement.Condition).toBeDefined();
+        expect(statement.Condition.IpAddress["aws:SourceIp"]).toEqual([
             "192.168.1.0/24",
             "10.0.0.0/8",
         ]);

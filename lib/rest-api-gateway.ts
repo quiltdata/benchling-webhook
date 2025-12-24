@@ -63,8 +63,7 @@ export class RestApiGateway {
 
         // Build resource policy document with IP filtering
         // Resource ARN format: execute-api:/*/<stage>/<method>/<path>
-        // When no allowlist: Single statement allowing all IPs
-        // When allowlist configured: Two statements (health exempt, webhooks restricted)
+        // Creates a single statement that either allows all IPs or restricts to allowlist
         const policyStatements: iam.PolicyStatement[] = [];
 
         if (allowedIps.length === 0) {
@@ -80,43 +79,13 @@ export class RestApiGateway {
             console.log("Resource Policy IP filtering: DISABLED (no webhookAllowList configured)");
             console.log("All endpoints accessible from any IP");
         } else {
-            // IP filtering enabled - create two statements
-
-            // Statement 1: Health endpoints always accessible (no IP restriction)
+            // IP filtering enabled - single statement for ALL endpoints
             policyStatements.push(
                 new iam.PolicyStatement({
                     effect: iam.Effect.ALLOW,
                     principals: [new iam.AnyPrincipal()],
                     actions: ["execute-api:Invoke"],
-                    resources: [
-                        // Health check endpoints are always accessible
-                        "execute-api:/*/GET/health",
-                        "execute-api:/*/GET/health/ready",
-                        "execute-api:/*/GET/health/live",
-                        // Stage-prefixed health endpoints
-                        "execute-api:/*/GET/*/health",
-                        "execute-api:/*/GET/*/health/ready",
-                        "execute-api:/*/GET/*/health/live",
-                    ],
-                }),
-            );
-
-            // Statement 2: Webhook endpoints with IP restrictions
-            policyStatements.push(
-                new iam.PolicyStatement({
-                    effect: iam.Effect.ALLOW,
-                    principals: [new iam.AnyPrincipal()],
-                    actions: ["execute-api:Invoke"],
-                    resources: [
-                        // Webhook endpoints
-                        "execute-api:/*/POST/event",
-                        "execute-api:/*/POST/lifecycle",
-                        "execute-api:/*/POST/canvas",
-                        // Stage-prefixed webhook endpoints
-                        "execute-api:/*/POST/*/event",
-                        "execute-api:/*/POST/*/lifecycle",
-                        "execute-api:/*/POST/*/canvas",
-                    ],
+                    resources: ["execute-api:/*"], // Apply to ALL endpoints
                     conditions: {
                         IpAddress: {
                             "aws:SourceIp": allowedIps,
@@ -127,10 +96,7 @@ export class RestApiGateway {
 
             console.log("Resource Policy IP filtering: ENABLED");
             console.log(`Allowed IPs: ${allowedIps.join(", ")}`);
-            console.log("Health endpoints exempt from IP filtering (always accessible)");
-            console.log(`Created ${policyStatements.length} resource policy statements`);
-            console.log("  - Statement 1: Health endpoints (no IP restriction)");
-            console.log("  - Statement 2: Webhook endpoints (IP restricted)");
+            console.log("IP filtering applies to ALL endpoints (including health checks)");
         }
 
         const policyDoc = new iam.PolicyDocument({

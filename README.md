@@ -133,8 +133,10 @@ S3 + SQS → Quilt Package
 **Optional Network Filtering:**
 
 - **Resource Policy IP Filtering** - Free alternative to AWS WAF ($7/month saved)
-- Blocks unknown IPs at API Gateway edge
-- Health endpoints always exempt from IP filtering
+- Blocks unknown IPs at API Gateway edge (applies to all endpoints)
+- **BREAKING CHANGE (v1.1.0+)**: Health endpoints NO LONGER exempt from IP filtering
+- External monitoring services must be added to allowlist or IP filtering disabled
+- NLB health checks unaffected (bypass API Gateway)
 - IP filtering does NOT replace authentication (it's defense-in-depth)
 
 **Infrastructure Security:**

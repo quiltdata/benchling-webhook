@@ -205,92 +205,28 @@ describe("RestApiGateway", () => {
 
         const template = Template.fromStack(stack);
 
-        // Verify TWO statements are created
+        // Verify SINGLE statement is created
         const restApiTemplate = template.findResources("AWS::ApiGateway::RestApi");
         const restApi = Object.values(restApiTemplate)[0];
         const statements = restApi.Properties.Policy.Statement;
 
-        expect(statements).toHaveLength(2);
+        expect(statements).toHaveLength(1);
 
-        // Statement 1: Health endpoints with NO IP conditions
-        const healthStatement = statements.find((stmt: any) =>
-            stmt.Resource && Array.isArray(stmt.Resource) &&
-            stmt.Resource.some((r: string) => r.includes("GET/health"))
-        );
+        // Single statement: ALL endpoints WITH IP conditions
+        const statement = statements[0];
 
-        expect(healthStatement).toBeDefined();
-        expect(healthStatement.Effect).toBe("Allow");
-        expect(healthStatement.Action).toBe("execute-api:Invoke");
-        expect(healthStatement.Condition).toBeUndefined(); // No IP restriction
-
-        // Verify health endpoints include both direct and stage-prefixed paths
-        expect(healthStatement.Resource).toContain("execute-api:/*/GET/health");
-        expect(healthStatement.Resource).toContain("execute-api:/*/GET/health/ready");
-        expect(healthStatement.Resource).toContain("execute-api:/*/GET/health/live");
-        expect(healthStatement.Resource).toContain("execute-api:/*/GET/*/health");
-        expect(healthStatement.Resource).toContain("execute-api:/*/GET/*/health/ready");
-        expect(healthStatement.Resource).toContain("execute-api:/*/GET/*/health/live");
-
-        // Statement 2: Webhook endpoints WITH IP conditions
-        const webhookStatement = statements.find((stmt: any) =>
-            stmt.Resource && Array.isArray(stmt.Resource) &&
-            stmt.Resource.some((r: string) => r.includes("POST/event"))
-        );
-
-        expect(webhookStatement).toBeDefined();
-        expect(webhookStatement.Effect).toBe("Allow");
-        expect(webhookStatement.Action).toBe("execute-api:Invoke");
-        expect(webhookStatement.Condition).toBeDefined();
-        expect(webhookStatement.Condition.IpAddress).toBeDefined();
-        expect(webhookStatement.Condition.IpAddress["aws:SourceIp"]).toEqual([
+        expect(statement.Effect).toBe("Allow");
+        expect(statement.Action).toBe("execute-api:Invoke");
+        expect(statement.Resource).toBe("execute-api:/*"); // Single wildcard resource
+        expect(statement.Condition).toBeDefined();
+        expect(statement.Condition.IpAddress).toBeDefined();
+        expect(statement.Condition.IpAddress["aws:SourceIp"]).toEqual([
             "192.168.1.0/24",
             "10.0.0.0/8",
         ]);
-
-        // Verify webhook endpoints include both direct and stage-prefixed paths
-        expect(webhookStatement.Resource).toContain("execute-api:/*/POST/event");
-        expect(webhookStatement.Resource).toContain("execute-api:/*/POST/lifecycle");
-        expect(webhookStatement.Resource).toContain("execute-api:/*/POST/canvas");
-        expect(webhookStatement.Resource).toContain("execute-api:/*/POST/*/event");
-        expect(webhookStatement.Resource).toContain("execute-api:/*/POST/*/lifecycle");
-        expect(webhookStatement.Resource).toContain("execute-api:/*/POST/*/canvas");
     });
 
-    test("health endpoints always accessible regardless of IP allowlist", () => {
-        const configWithIpFilter = {
-            ...mockConfig,
-            security: {
-                webhookAllowList: "192.168.1.0/24",
-                enableVerification: true,
-            },
-        };
-
-        new RestApiGateway(stack, "TestApiGateway", {
-            vpc,
-            networkLoadBalancer,
-            nlbListener,
-            serviceSecurityGroup,
-            config: configWithIpFilter,
-            stage: "prod",
-        });
-
-        const template = Template.fromStack(stack);
-        const restApiTemplate = template.findResources("AWS::ApiGateway::RestApi");
-        const restApi = Object.values(restApiTemplate)[0];
-        const statements = restApi.Properties.Policy.Statement;
-
-        // Find health statement
-        const healthStatement = statements.find((stmt: any) =>
-            stmt.Resource && Array.isArray(stmt.Resource) &&
-            stmt.Resource.some((r: string) => r.includes("GET/health"))
-        );
-
-        // Health statement must NOT have IP conditions
-        expect(healthStatement).toBeDefined();
-        expect(healthStatement.Condition).toBeUndefined();
-    });
-
-    test("webhook endpoints are IP restricted when allowlist configured", () => {
+    test("all endpoints are IP restricted when allowlist configured", () => {
         const configWithIpFilter = {
             ...mockConfig,
             security: {
@@ -313,17 +249,14 @@ describe("RestApiGateway", () => {
         const restApi = Object.values(restApiTemplate)[0];
         const statements = restApi.Properties.Policy.Statement;
 
-        // Find webhook statement
-        const webhookStatement = statements.find((stmt: any) =>
-            stmt.Resource && Array.isArray(stmt.Resource) &&
-            stmt.Resource.some((r: string) => r.includes("POST/event"))
-        );
+        // Single statement covers ALL endpoints
+        expect(statements).toHaveLength(1);
 
-        // Webhook statement must HAVE IP conditions
-        expect(webhookStatement).toBeDefined();
-        expect(webhookStatement.Condition).toBeDefined();
-        expect(webhookStatement.Condition.IpAddress).toBeDefined();
-        expect(webhookStatement.Condition.IpAddress["aws:SourceIp"]).toEqual([
+        const statement = statements[0];
+        expect(statement.Resource).toBe("execute-api:/*");
+        expect(statement.Condition).toBeDefined();
+        expect(statement.Condition.IpAddress).toBeDefined();
+        expect(statement.Condition.IpAddress["aws:SourceIp"]).toEqual([
             "203.0.113.0/24",
             "198.51.100.0/24",
         ]);
@@ -352,13 +285,9 @@ describe("RestApiGateway", () => {
         const restApi = Object.values(restApiTemplate)[0];
         const statements = restApi.Properties.Policy.Statement;
 
-        const webhookStatement = statements.find((stmt: any) =>
-            stmt.Resource && Array.isArray(stmt.Resource) &&
-            stmt.Resource.some((r: string) => r.includes("POST/event"))
-        );
-
-        // Verify all CIDR blocks are parsed correctly (trimmed)
-        expect(webhookStatement.Condition.IpAddress["aws:SourceIp"]).toEqual([
+        // Verify single statement with all parsed IPs
+        expect(statements).toHaveLength(1);
+        expect(statements[0].Condition.IpAddress["aws:SourceIp"]).toEqual([
             "192.168.1.0/24",
             "10.0.0.0/8",
             "172.16.0.0/12",
