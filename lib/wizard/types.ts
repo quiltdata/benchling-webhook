@@ -75,9 +75,6 @@ export interface StackQueryResult {
     /** Athena user policy ARN (optional) */
     athenaUserPolicy?: string;
     /** Athena workgroup for Iceberg queries (optional) */
-    icebergWorkgroup?: string;
-    /** Iceberg database name - now from both outputs and resources */
-    icebergDatabase?: string;
     /** User Athena results bucket (S3 bucket for query results) */
     athenaResultsBucket?: string;
     /** User Athena results bucket policy ARN */
@@ -103,7 +100,6 @@ export interface ParameterCollectionInput {
     benchlingClientId?: string;
     benchlingClientSecret?: string;
     benchlingAppDefinitionId?: string;
-    benchlingTestEntryId?: string;
     userBucket?: string;
     pkgPrefix?: string;
     pkgKey?: string;
@@ -120,7 +116,6 @@ export interface ParameterCollectionResult {
         clientId: string;
         clientSecret: string;
         appDefinitionId: string;
-        testEntryId?: string;
     };
     packages: {
         bucket: string;
