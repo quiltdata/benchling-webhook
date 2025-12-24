@@ -1,15 +1,19 @@
 /**
- * Test Helper: Mock ProfileConfig
+ * Test Helper: Mock ProfileConfig and StackConfig
  *
- * Provides utility functions to create mock ProfileConfig objects for testing.
+ * Provides utility functions to create mock configuration objects for testing.
  * This centralizes test fixture creation and ensures consistency across tests.
  *
+ * v0.10.0: Added StackConfig helpers for testing CDK constructs
+ *
  * Use with test-profile.ts for complete test setup:
- * - mock-config.ts: Creates ProfileConfig objects
+ * - test-config.ts: Creates ProfileConfig and StackConfig objects
  * - test-profile.ts: Manages the 'test' profile lifecycle
  */
 
 import { ProfileConfig } from "../../lib/types/config";
+import { StackConfig } from "../../lib/types/stack-config";
+import { profileToStackConfig } from "../../lib/utils/config-transform";
 
 /**
  * Create a mock ProfileConfig for testing
@@ -50,7 +54,7 @@ export function createMockConfig(overrides?: Partial<ProfileConfig>): ProfileCon
             enableVerification: true,
         },
         _metadata: {
-            version: "0.7.0",
+            version: "0.10.0",
             createdAt: "2025-11-04T10:00:00Z",
             updatedAt: "2025-11-04T10:00:00Z",
             source: "cli",
@@ -58,6 +62,29 @@ export function createMockConfig(overrides?: Partial<ProfileConfig>): ProfileCon
     };
 
     return deepMerge(defaults, overrides || {});
+}
+
+/**
+ * Create a mock StackConfig for testing CDK constructs
+ *
+ * Transforms a ProfileConfig to StackConfig using the same logic as production.
+ * This ensures tests use the same transformation as the actual deployment.
+ *
+ * @param overrides - Partial ProfileConfig to override defaults before transformation
+ * @returns StackConfig ready for CDK construct testing
+ *
+ * @example
+ * ```typescript
+ * const stackConfig = createMockStackConfig({
+ *   quilt: { writeRoleArn: "arn:aws:iam::123456789012:role/test-role" }
+ * });
+ * new BenchlingWebhookStack(app, "TestStack", { config: stackConfig });
+ * ```
+ */
+export function createMockStackConfig(overrides?: Partial<ProfileConfig>): StackConfig {
+    const profileConfig = createMockConfig(overrides);
+    // Skip validation in tests to allow testing invalid configurations
+    return profileToStackConfig(profileConfig, { skipValidation: true });
 }
 
 /**
@@ -74,7 +101,7 @@ export function createDevConfig(overrides?: Partial<ProfileConfig>): ProfileConf
         benchling: {
             tenant: "dev-tenant",
             clientId: "client_dev123",
-            secretArn: "quiltdata/benchling-webhook/dev/tenant",
+            secretArn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:dev-benchling-secret",
             appDefinitionId: "app_dev456",
         },
         deployment: {
@@ -102,7 +129,7 @@ export function createProdConfig(overrides?: Partial<ProfileConfig>): ProfileCon
         benchling: {
             tenant: "prod-tenant",
             clientId: "client_prod123",
-            secretArn: "quiltdata/benchling-webhook/default/tenant",
+            secretArn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:prod-benchling-secret",
             appDefinitionId: "app_prod456",
         },
         deployment: {

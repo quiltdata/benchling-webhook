@@ -6,6 +6,7 @@ import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
 import { ProfileConfig } from "../lib/types/config";
+import { profileToStackConfig } from "../lib/utils/config-transform";
 
 describe("IAM Role ARN Propagation", () => {
     let app: cdk.App;
@@ -40,7 +41,7 @@ describe("IAM Role ARN Propagation", () => {
                 imageTag: "latest",
             },
             _metadata: {
-                version: "0.8.0",
+                version: "0.10.0",
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 source: "cli",
@@ -54,7 +55,7 @@ describe("IAM Role ARN Propagation", () => {
                 account: "123456789012",
                 region: "us-east-1",
             },
-            config,
+            config: profileToStackConfig(config),
         });
 
         const template = Template.fromStack(stack);
@@ -80,7 +81,7 @@ describe("IAM Role ARN Propagation", () => {
                 account: "123456789012",
                 region: "us-east-1",
             },
-            config,
+            config: profileToStackConfig(config),
         });
 
         const template = Template.fromStack(stack);
@@ -108,7 +109,7 @@ describe("IAM Role ARN Propagation", () => {
                 account: "123456789012",
                 region: "us-east-1",
             },
-            config,
+            config: profileToStackConfig(config),
         });
 
         const template = Template.fromStack(stack);
@@ -138,7 +139,7 @@ describe("IAM Role ARN Propagation", () => {
                 account: "123456789012",
                 region: "us-east-1",
             },
-            config,
+            config: profileToStackConfig(config),
         });
 
         const template = Template.fromStack(stack);
