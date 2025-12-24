@@ -5,9 +5,11 @@
 These 5 workflows define the system architecture and MUST continue to work:
 
 ### 1. Setup Wizard - Read/Write ALL Configuration
+
 **Entry:** `bin/cli.ts setup` → `bin/commands/setup-wizard.ts`
 
 Writes ALL discoverable/entered information to `~/.config/benchling-webhook/{profile}/config.json` (ProfileConfig):
+
 - Benchling OAuth credentials (tenant, clientId, appDefinitionId)
 - Quilt stack outputs (catalog, database, queueUrl, region)
 - VPC configuration discovered via EC2 API
@@ -16,39 +18,48 @@ Writes ALL discoverable/entered information to `~/.config/benchling-webhook/{pro
 - Security settings (enableVerification, webhookAllowList)
 
 ### 2. Secrets Manager - Store Dynamic Configuration
+
 **Entry:** `bin/commands/sync-secrets.ts`
 
 Creates/updates AWS Secrets Manager secrets **before stack deployment**:
+
 - Reads ProfileConfig from XDG
 - Stores Benchling OAuth credentials (clientId, clientSecret)
 - Writes secret ARN back to ProfileConfig (`benchling.secretArn`)
 - Stack only references existing secrets by ARN (doesn't read values)
 
 ### 3. Test Scripts - Launch Containers Locally
+
 **Entry:** `npm run test:local` → Docker Compose
 
 Runs FastAPI locally without CDK:
+
 - Reads ProfileConfig from XDG
 - Passes config to Docker as env vars
 - FastAPI reads env vars
 - **Never calls the CDK stack**
 
 ### 4. Deploy Script - Automatically Build CDK Stack
+
 **Entry:** `bin/cli.ts deploy` → `bin/commands/deploy.ts`
 
 Automates CDK deployment:
+
 - Reads ProfileConfig from XDG
 - Transforms to StackConfig (minimal interface)
 - **Calls `createStack()` directly (library API)**
 - Records deployment to `deployments.json`
 
 ### 5. Library API - Call Stack Manually
+
 **Entry:** Import `{ createStack } from "@quiltdata/benchling-webhook"`
 
 Programmatic CDK stack creation:
+
 ```typescript
 createStack(config: StackConfig): DeploymentResult
 ```
+
 - Direct TypeScript function call
 - No subprocess, no IPC complexity
 - Used by deploy script (#4)
@@ -176,65 +187,25 @@ Remove these from stack props:
 - [ ] Verify XDG config (ProfileConfig) unchanged
 - [ ] Run full test suite
 
-## Appendix: Required Use Cases
+## Appendix: Implementation Details
 
-These 5 workflows MUST continue to work:
+**Key insight:** The deploy script (#4) should use the library API (#5) directly instead of spawning a subprocess. This eliminates the need for environment variable IPC and ProfileConfig reconstruction.
 
-### 1. Setup Wizard (Read/Write Configuration)
+**Before:**
 
-**Entry:** `bin/cli.ts setup` → `bin/commands/setup-wizard.ts`
-
-- Prompts user for Benchling OAuth credentials
-- Discovers Quilt stack outputs via CloudFormation API
-- Discovers VPC resources via EC2 API
-- Validates Benchling credentials
-- **Creates secret in Secrets Manager**
-- Writes ALL discoverable/entered information to `~/.config/benchling-webhook/{profile}/config.json` (ProfileConfig)
-
-### 2. Secrets Manager (Store Dynamic Configuration)
-
-**Entry:** `bin/commands/sync-secrets.ts`
-
-- Reads ProfileConfig from XDG
-- Creates/updates AWS Secrets Manager secrets **before stack deployment**
-- Stores Benchling OAuth credentials (clientId, clientSecret)
-- Secret ARN written back to ProfileConfig (`benchling.secretArn`)
-- Stack only references existing secrets by ARN (doesn't read values)
-
-### 3. Test Scripts (Launch Containers Locally)
-
-**Entry:** `npm run test:local` → Docker Compose
-
-- Reads ProfileConfig from XDG
-- Passes config to Docker as env vars
-- FastAPI reads env vars
-- **Never calls the CDK stack**
-
-### 4. Deploy Script (Automatically Build CDK Stack)
-
-**Entry:** `bin/cli.ts deploy` → `bin/commands/deploy.ts`
-
-**Current:** Spawns `npx cdk deploy` subprocess with env vars
-**After refactor:** Import and call `createStack()` directly with StackConfig
-
-- Reads ProfileConfig from XDG
-- Transforms to StackConfig
-- Deploys stack to AWS
-- Records deployment to `deployments.json`
-
-### 5. Library API (Call Stack Manually)
-
-**Entry:** Import `{ createStack } from "@quiltdata/benchling-webhook"`
-
-**Current interface:**
-```typescript
-createStack(config: Config): DeploymentResult
+```text
+deploy.ts → env vars → npx cdk deploy → bin/benchling-webhook.ts → ProfileConfig reconstruction → createStack()
 ```
 
-**After refactor:**
-```typescript
-createStack(config: StackConfig): DeploymentResult
+**After:**
+
+```text
+deploy.ts → ProfileConfig → StackConfig transform → createStack() (direct function call)
 ```
 
-- Programmatic usage for advanced users
-- No subprocess, direct TypeScript function call
+This change:
+
+- Eliminates subprocess overhead
+- Removes environment variable serialization/deserialization
+- Simplifies testing (no need to mock env vars)
+- Makes the deploy script a thin wrapper around the library API
