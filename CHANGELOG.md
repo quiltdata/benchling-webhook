@@ -8,66 +8,14 @@ All notable changes to this project will be documented in this file, one line pe
 ### BREAKING CHANGES
 
 - **IP whitelisting now applies to ALL endpoints including health checks** (#297)
-  - Health endpoints are NO LONGER automatically exempted from resource policy IP filtering
-  - When `webhookAllowList` is configured, ALL endpoints require allowlisted IPs
-  - External monitoring services (Pingdom, Datadog, etc.) must be added to allowlist OR IP filtering disabled
-  - NLB health checks UNAFFECTED (bypass API Gateway, connect directly to ECS tasks)
-  - See [MIGRATION-v1.1.md](MIGRATION-v1.1.md) for migration guide
-  - See [spec/297-ip-whitelisting/02-remove-health-exemption.md](spec/297-ip-whitelisting/02-remove-health-exemption.md) for technical details
+  - Health endpoints NO LONGER exempted from resource policy IP filtering
+  - External monitoring services must be added to `webhookAllowList` OR IP filtering disabled
+  - NLB health checks UNAFFECTED (bypass API Gateway)
+  - **See [spec/297-ip-whitelisting/MIGRATION-v1.1.md](spec/297-ip-whitelisting/MIGRATION-v1.1.md) for complete migration guide**
 
 ### Changed
 
-- **Simplified resource policy logic** - Single statement instead of two
-  - When `webhookAllowList` empty: All endpoints accessible (unchanged behavior)
-  - When `webhookAllowList` configured: All endpoints restricted to allowlisted IPs
-  - Removed separate statement for health endpoint exemption
-  - Cleaner implementation with consistent security model
-
-### Migration Guide
-
-**If you use external health check services:**
-
-1. **Option A: Add monitoring IPs to allowlist (recommended for production)**
-
-   ```bash
-   # Edit your profile config
-   vim ~/.config/benchling-webhook/prod/config.json
-
-   # Add monitoring service IPs to security.webhookAllowList
-   "security": {
-     "webhookAllowList": "203.0.113.0/24,YOUR_MONITORING_IP/32"
-   }
-
-   # Redeploy
-   npm run deploy:prod -- --profile prod --yes
-   ```
-
-2. **Option B: Disable IP filtering (suitable for dev/staging)**
-
-   ```bash
-   # Edit your profile config
-   vim ~/.config/benchling-webhook/dev/config.json
-
-   # Remove or empty webhookAllowList
-   "security": {
-     "webhookAllowList": ""
-   }
-
-   # Redeploy
-   npm run deploy:dev -- --profile dev --yes
-   ```
-
-**If you don't use external health check services:**
-
-- No action required - NLB health checks continue working (bypass API Gateway)
-
-**See [MIGRATION-v1.1.md](MIGRATION-v1.1.md) for complete migration guide with troubleshooting.**
-
-### Security Improvements
-
-- Reduced attack surface: Health endpoints no longer expose service availability to any IP
-- Consistent security model: All endpoints treated equally under IP filtering
-- Defense in depth: Both network (IP) and application (HMAC) layers for all endpoints
+- Simplified resource policy logic - single statement applies consistently to all endpoints
 
 ## [0.9.8] - 2025-12-22
 
