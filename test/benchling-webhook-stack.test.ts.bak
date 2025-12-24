@@ -84,7 +84,7 @@ describe("BenchlingWebhookStack", () => {
 
     test("uses resource policy for IP filtering when webhookAllowList is configured", () => {
         const app = new cdk.App();
-        const configWithIpFilter = createMockStackConfig({
+        const configWithIpFilter = createMockConfig({
             security: {
                 webhookAllowList: "192.168.1.0/24,10.0.0.0/8",
                 enableVerification: true,
@@ -265,17 +265,16 @@ describe("BenchlingWebhookStack", () => {
             });
         });
 
-        test("optional Quilt fields always default to empty string (not part of StackConfig)", () => {
+        test("uses config values as parameter defaults for optional Quilt fields", () => {
             const app = new cdk.App();
-            // Note: athenaUserWorkgroup and athenaResultsBucket are NOT part of StackConfig
-            // They were removed during config streamlining. The stack creates parameters
-            // with empty string defaults, which can be overridden at deployment time.
             const config = createMockStackConfig({
                 quilt: {
                     catalog: "test.quiltdata.com",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123/queue",
                     region: "us-east-1",
+                    athenaUserWorkgroup: "athena_wg",
+                    athenaResultsBucket: "s3://results-bucket",
                 },
             });
             const stack = new BenchlingWebhookStack(app, "TestStackOptional", {
@@ -288,13 +287,12 @@ describe("BenchlingWebhookStack", () => {
 
             const testTemplate = Template.fromStack(stack);
 
-            // Optional Quilt parameters always default to empty string
-            // since they're not part of minimal StackConfig interface
+            // Verify optional parameters have correct defaults from config
             testTemplate.hasParameter("AthenaUserWorkgroup", {
-                Default: "",
+                Default: "athena_wg",
             });
             testTemplate.hasParameter("AthenaResultsBucket", {
-                Default: "",
+                Default: "s3://results-bucket",
             });
         });
 

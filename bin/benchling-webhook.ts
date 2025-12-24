@@ -5,6 +5,7 @@ import { execSync } from "child_process";
 import type { Config } from "../lib/utils/config";
 import type { ProfileConfig } from "../lib/types/config";
 import { getStackName } from "../lib/types/config";
+import { profileToStackConfig } from "../lib/utils/config-transform";
 
 /**
  * Result of CDK bootstrap check
@@ -80,6 +81,7 @@ export async function checkCdkBootstrap(
  * Accepts legacy Config for backward compatibility with existing deployment scripts.
  * v0.7.0: Uses ProfileConfig internally
  * v0.9.8: Supports profile-based stack names for multi-stack deployments
+ * v0.10.0: Transforms ProfileConfig to StackConfig before passing to stack
  */
 export function createStack(config: Config): DeploymentResult {
     const app = new cdk.App();
@@ -119,12 +121,15 @@ export function createStack(config: Config): DeploymentResult {
             enableVerification: config.enableWebhookVerification !== "false",
         },
         _metadata: {
-            version: "0.7.0-migration",
+            version: "0.10.0-migration",
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             source: "cli",
         },
     };
+
+    // Transform ProfileConfig to minimal StackConfig
+    const stackConfig = profileToStackConfig(profileConfig);
 
     // Determine stack name: use profile-based naming with optional custom name
     // For legacy compatibility, assume "default" profile unless specified in deployment config
@@ -136,7 +141,7 @@ export function createStack(config: Config): DeploymentResult {
             account: config.cdkAccount,
             region: config.cdkRegion,
         },
-        config: profileConfig,
+        config: stackConfig,
     });
 
     return {
@@ -149,6 +154,7 @@ export function createStack(config: Config): DeploymentResult {
 
 // Only run if called directly (not imported)
 // v0.7.0+: Uses ProfileConfig read from environment variables
+// v0.10.0+: Transforms ProfileConfig to StackConfig before passing to stack
 // This module is primarily used by CDK CLI (npx cdk deploy) which requires direct execution
 if (require.main === module) {
     const app = new cdk.App();
@@ -212,12 +218,15 @@ if (require.main === module) {
             enableVerification: process.env.ENABLE_WEBHOOK_VERIFICATION !== "false",
         },
         _metadata: {
-            version: "0.7.0",
+            version: "0.10.0",
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             source: "cli",
         },
     };
+
+    // Transform ProfileConfig to minimal StackConfig
+    const stackConfig = profileToStackConfig(profileConfig);
 
     // Determine stack name from environment or profile
     const profile = process.env.PROFILE || "default";
@@ -228,6 +237,6 @@ if (require.main === module) {
             account: process.env.CDK_DEFAULT_ACCOUNT,
             region: process.env.CDK_DEFAULT_REGION,
         },
-        config: profileConfig,
+        config: stackConfig,
     });
 }

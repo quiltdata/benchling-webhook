@@ -46,12 +46,17 @@ import type { StackConfig } from "../types/stack-config";
  * createStack(stackConfig); // Pass to CDK stack
  * ```
  */
-export function profileToStackConfig(profile: ProfileConfig): StackConfig {
-    // Validate required fields first
-    const validation = validateStackConfig(profile);
-    if (!validation.isValid) {
-        const errors = validation.errors.join("\n  - ");
-        throw new Error(`Invalid profile configuration for stack deployment:\n  - ${errors}`);
+export function profileToStackConfig(
+    profile: ProfileConfig,
+    options?: { skipValidation?: boolean },
+): StackConfig {
+    // Validate required fields first (unless skipped for testing)
+    if (!options?.skipValidation) {
+        const validation = validateStackConfig(profile);
+        if (!validation.isValid) {
+            const errors = validation.errors.join("\n  - ");
+            throw new Error(`Invalid profile configuration for stack deployment:\n  - ${errors}`);
+        }
     }
 
     // Build minimal StackConfig with only required fields
