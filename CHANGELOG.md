@@ -3,11 +3,47 @@
 
 All notable changes to this project will be documented in this file, one line per user-visible change.
 
-## [0.9.9] - UNRELEASED
+## [0.10.0] - 2025-12-24
 
 ### BREAKING CHANGES
 
-- **IP whitelisting now applies to ALL endpoints including health checks** (#297)
+- **Removed Iceberg configuration fields** - Simplified configuration by removing unused Iceberg-related fields (#317)
+  - Removed `quilt.athenaUserPolicy`, `quilt.athenaResultsBucketPolicy`, and `quilt.athenaResultsBucket` from configuration schema
+  - These fields were never used by the stack and only added complexity
+  - Existing configurations with these fields will continue to work (backwards compatible validation)
+
+### Changed
+
+- **Streamlined configuration architecture** - Decoupled CDK stack from wizard configuration (#317)
+  - Created minimal `StackConfig` interface with only fields required by CDK stack
+  - Eliminated subprocess environment variable round-trip (ProfileConfig → env vars → ProfileConfig)
+  - Stack constructors now use lightweight `StackConfig` instead of full `ProfileConfig`
+  - Simplified deployment flow: deploy.ts passes config directly via stdin instead of env vars
+  - Improved testability - no more mocking irrelevant wizard metadata fields
+  - Better separation of concerns between wizard (XDG config) and infrastructure (CDK)
+  - See [spec/317-streamline-config/01-config-diet.md](spec/317-streamline-config/01-config-diet.md) for detailed analysis
+
+- **Simplified setup wizard** - Removed Iceberg-related prompts and fields
+  - No longer prompts for Athena policies or results bucket configuration
+  - Focuses on essential Benchling, Quilt, and deployment settings
+  - Cleaner configuration files without unused metadata
+
+- **Updated documentation** - Clarified configuration requirements and removed obsolete fields
+  - README.md reflects current minimal configuration requirements
+  - Removed references to deprecated Iceberg integration
+
+### Added
+
+- **Configuration transformation utilities** - New `config-transform.ts` module
+  - `toStackConfig()` - Converts ProfileConfig to minimal StackConfig for CDK
+  - `validateStackConfig()` - Validates required fields before deployment
+  - Centralized transformation logic with comprehensive validation
+
+## [0.9.9] - 2025-12-23
+
+### BREAKING CHANGES
+
+- **IP whitelisting now applies to ALL endpoints including health checks** (#312)
   - Health endpoints NO LONGER exempted from resource policy IP filtering
   - External monitoring services must be added to `webhookAllowList` OR IP filtering disabled
   - NLB health checks UNAFFECTED (bypass API Gateway)
