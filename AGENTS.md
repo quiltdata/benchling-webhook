@@ -6,15 +6,75 @@
 - Always fix IDE diagnostics after edits
 - Docker images ALWAYS pull from centralized ECR: `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest`
 
+## Testing (Essential Guide)
+
+**Full details:** [spec/a08-test-scenarios.md](spec/a08-test-scenarios.md)
+
+### Quick Reference: When to Run What
+
+```bash
+# PRE-COMMIT (always run before committing)
+npm test                     # ~20s: TS + Python unit tests + lint + typecheck
+
+# BEFORE MERGING PR
+npm run test:integration     # ~2m: Full TypeScript integration tests
+npm run test:local           # ~45s: Local Docker dev build + webhook tests
+
+# AFTER MAKING DOCKER CHANGES (requires local build only)
+npm run test:local:prod      # ~60s: Test production Docker build locally
+
+# AFTER CI BUILDS IMAGE (requires git tag + CI completion)
+npm run test:dev             # ~5m: Deploy to dev + test (auto-deploys if needed)
+npm run test:prod            # ~10s: Health check prod deployment (non-invasive)
+cd docker && make test-ecr   # ~90s: Validate published ECR image
+```
+
+### Critical Dependencies
+
+**Docker Images:** All deployments pull from centralized ECR `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest`
+
+**CI Build Required For:**
+
+- `npm run test:dev` - Requires Docker image in ECR
+- `npm run test:prod` - Requires Docker image in ECR
+- `make test-ecr` - Requires Docker image in ECR
+
+**CI Build Trigger:**
+
+```bash
+npm run version:tag:dev      # Creates git tag → triggers CI → builds/pushes Docker image
+```
+
+### Test Categories Summary
+
+| Test | Duration | CI Dep | When |
+|------|----------|--------|------|
+| `npm test` | ~20s | ❌ | Pre-commit (always) |
+| `npm run test:integration` | ~2m | ❌ | Before merging PR |
+| `npm run test:local` | ~45s | ❌ | Docker dev changes |
+| `npm run test:local:prod` | ~60s | ❌ | Docker prod changes |
+| `npm run test:dev` | ~5m | ✅ | After CI builds image |
+| `npm run test:prod` | ~10s | ✅ | Validate prod deployment |
+
+**Legend:** CI Dep = Requires CI to have built Docker image
+
+### Common Test Issues
+
+| Error | Solution |
+|-------|----------|
+| `No profile found` | `npm run setup` |
+| `Image not found in ECR` | `npm run version:tag:dev` (triggers CI build) |
+| `ECR authentication failed` | `aws sso login` |
+| `Timeout waiting for health` | Check logs: `docker logs {container}` |
+
 ## Key Repository Commands
 
 ### Development Workflow
 
 ```bash
 npm run setup                # Interactive config wizard (one-time)
-npm run test                 # Fast unit tests (pre-commit)
-npm run test:local           # Local Docker integration tests
-npm run test:dev             # Test deployed dev stack
+npm test                     # Fast pre-commit tests
+npm run test:local           # Test local Docker build
 ```
 
 ### Release Workflow (Maintainers)
