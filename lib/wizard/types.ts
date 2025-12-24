@@ -74,7 +74,7 @@ export interface StackQueryResult {
     athenaUserWorkgroup?: string;
     /** Athena user policy ARN (optional) */
     athenaUserPolicy?: string;
-    /** Athena workgroup for Iceberg queries (optional) */
+    /** Athena workgroup */
     /** User Athena results bucket (S3 bucket for query results) */
     athenaResultsBucket?: string;
     /** User Athena results bucket policy ARN */
