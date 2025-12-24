@@ -199,9 +199,9 @@ See [docker/tests/test_flexible_routes.py](docker/tests/test_flexible_routes.py)
 **Optional Network Layer: Resource Policy IP Filtering**
 
 - Applied when `webhookAllowList` is configured (free, no additional cost)
-- Blocks unknown IPs at API Gateway edge
+- Blocks unknown IPs at API Gateway edge (including health endpoints)
 - Does NOT perform authentication (IP ≠ identity)
-- Health endpoints always exempt from IP filtering
+- NLB health checks unaffected (bypass API Gateway)
 - When not configured: All IPs allowed
 
 **Why REST API v1 instead of HTTP API v2?**
@@ -210,7 +210,7 @@ REST API v1 provides resource policies which:
 
 1. Enable free IP filtering (vs $7/month for WAF with HTTP API v2)
 2. Support fine-grained access control per endpoint
-3. Allow health endpoint exemption from IP filtering
+3. Apply consistently to all endpoints (no special exemptions)
 4. Are natively integrated with API Gateway (no separate service)
 
 See [spec/2025-11-26-architecture/11-arch-30.md](spec/2025-11-26-architecture/11-arch-30.md) for detailed architectural analysis.
@@ -774,6 +774,7 @@ npx @quiltdata/benchling-webhook logs --profile default
 | Legacy config detected | Upgrading from v0.6.x | Display migration message; see MIGRATION.md |
 | 403 Forbidden (HMAC) | Invalid signature | Check ECS logs for HMAC verification errors; verify Benchling secret |
 | 403 Forbidden (Resource Policy) | IP not in allowlist | Add IP to webhookAllowList or remove IP filtering |
+| 403 Forbidden on /health | IP filtering blocks health endpoint | Add monitoring service IP to webhookAllowList OR disable IP filtering for dev/staging |
 | NLB unhealthy targets | ECS health check failing | Check ECS logs and container health status |
 | Stack name conflict | Multiple profiles, same custom name | Use unique stackName per profile or rely on auto-generation |
 

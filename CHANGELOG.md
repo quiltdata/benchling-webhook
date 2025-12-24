@@ -3,6 +3,20 @@
 
 All notable changes to this project will be documented in this file, one line per user-visible change.
 
+## [0.9.9] - UNRELEASED
+
+### BREAKING CHANGES
+
+- **IP whitelisting now applies to ALL endpoints including health checks** (#297)
+  - Health endpoints NO LONGER exempted from resource policy IP filtering
+  - External monitoring services must be added to `webhookAllowList` OR IP filtering disabled
+  - NLB health checks UNAFFECTED (bypass API Gateway)
+  - **See [spec/297-ip-whitelisting/MIGRATION-v1.1.md](spec/297-ip-whitelisting/MIGRATION-v1.1.md) for complete migration guide**
+
+### Changed
+
+- Simplified resource policy logic - single statement applies consistently to all endpoints
+
 ## [0.9.8] - 2025-12-22
 
 ### Fixed

@@ -335,7 +335,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         });
 
         new cdk.CfnOutput(this, "ApiGatewayLogGroup", {
-            value: "/aws/apigateway/benchling-webhook-rest",
+            value: this.api.logGroup.logGroupName,
             description: "CloudWatch log group for API Gateway access logs",
         });
 
