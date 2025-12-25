@@ -14,6 +14,13 @@ All notable changes to this project will be documented in this file, one line pe
 
 ### Changed
 
+- **Simplified IAM permissions model** - Replaced role assumption with direct managed policy attachment (#317)
+  - ECS task role now has `BucketWritePolicy` and `UserAthenaNonManagedRolePolicy` attached directly
+  - Eliminates `sts:AssumeRole` calls and trust policy coordination complexity
+  - Removes need for credential caching in Python application (`role_manager.py` gracefully degrades)
+  - Replaced `quilt.writeRoleArn` with `quilt.bucketWritePolicyArn` and `quilt.athenaUserPolicyArn` in ProfileConfig
+  - Setup wizard now discovers IAM managed policies instead of IAM roles from Quilt stack resources
+
 - **Streamlined configuration architecture** - Decoupled CDK stack from wizard configuration (#317)
   - Created minimal `StackConfig` interface with only fields required by CDK stack
   - Eliminated subprocess environment variable round-trip (ProfileConfig → env vars → ProfileConfig)
