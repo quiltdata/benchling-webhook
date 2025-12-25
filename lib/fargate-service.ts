@@ -36,8 +36,9 @@ export interface FargateServiceProps {
     readonly athenaUserWorkgroup?: string;
     readonly athenaResultsBucket?: string;
 
-    // NEW: Optional IAM role ARN for cross-account S3 access (from Quilt stack discovery)
-    readonly writeRoleArn?: string;
+    // NEW: Optional IAM managed policy ARNs (from Quilt stack discovery)
+    readonly bucketWritePolicyArn?: string;
+    readonly athenaUserPolicyArn?: string;
 
     // Runtime-configurable parameters (from CloudFormation)
     readonly benchlingSecret: string;
@@ -171,18 +172,28 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Grant permission to assume Quilt stack IAM role for cross-account S3 access
-        // This role is discovered from the Quilt stack resources during setup
-        if (props.writeRoleArn) {
-            taskRole.addToPolicy(
-                new iam.PolicyStatement({
-                    actions: ["sts:AssumeRole"],
-                    resources: [
-                        // Use wildcard pattern to match any account/stack name
-                        // This supports cross-account deployments and different stack names
-                        "arn:aws:iam::*:role/*-T4BucketWriteRole-*",
-                    ],
-                }),
+        // Attach Quilt managed policies directly to task role
+        // This eliminates the need for role assumption and trust policy coordination
+
+        // Attach BucketWritePolicy for S3 access to all Quilt buckets
+        if (props.bucketWritePolicyArn) {
+            taskRole.addManagedPolicy(
+                iam.ManagedPolicy.fromManagedPolicyArn(
+                    this,
+                    "BucketWritePolicy",
+                    props.bucketWritePolicyArn,
+                ),
+            );
+        }
+
+        // Attach UserAthenaNonManagedRolePolicy for Athena query access
+        if (props.athenaUserPolicyArn) {
+            taskRole.addManagedPolicy(
+                iam.ManagedPolicy.fromManagedPolicyArn(
+                    this,
+                    "AthenaUserPolicy",
+                    props.athenaUserPolicyArn,
+                ),
             );
         }
 
@@ -303,8 +314,8 @@ export class FargateService extends Construct {
             ...(props.athenaResultsBucket ? { ATHENA_RESULTS_BUCKET: props.athenaResultsBucket } : {}),
             PACKAGER_SQS_URL: props.packagerQueueUrl,
 
-            // IAM Role ARN for cross-account S3 access (optional)
-            ...(props.writeRoleArn ? { QUILT_WRITE_ROLE_ARN: props.writeRoleArn } : {}),
+            // NOTE: IAM policies are now attached directly to task role
+            // No need to pass role ARN to container for assumption
 
             // Benchling Configuration (credentials from Secrets Manager, NOT environment)
             BenchlingSecret: this.extractSecretName(props.benchlingSecret),

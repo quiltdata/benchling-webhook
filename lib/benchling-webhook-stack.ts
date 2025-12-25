@@ -263,8 +263,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
             // NEW: Optional Athena resources (from Quilt stack discovery)
             athenaUserWorkgroup: athenaUserWorkgroupValue,
             athenaResultsBucket: athenaResultsBucketValue,
-            // IAM role ARN for cross-account S3 access (write role used for all operations)
-            writeRoleArn: config.quilt.writeRoleArn,
+            // IAM managed policy ARNs for S3 and Athena access
+            bucketWritePolicyArn: config.quilt.bucketWritePolicyArn,
+            athenaUserPolicyArn: config.quilt.athenaUserPolicyArn,
             // Legacy parameters
             benchlingSecret: benchlingSecretValue,
             packageBucket: packageBucketValue,
