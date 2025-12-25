@@ -23,7 +23,8 @@ describe("config-transform", () => {
                     database: "quilt_catalog",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
-                    writeRoleArn: "arn:aws:iam::123456789012:role/test-role",
+                    bucketWritePolicyArn: "arn:aws:iam::123456789012:policy/test-bucket-write-policy",
+                    athenaUserPolicyArn: "arn:aws:iam::123456789012:policy/test-athena-policy",
                 },
                 packages: {
                     bucket: "test-bucket",
@@ -126,8 +127,8 @@ describe("config-transform", () => {
             expect(result.errors.some((e) => e.includes("quilt.region"))).toBe(true);
         });
 
-        it("should warn when optional writeRoleArn is missing", () => {
-            const configWithoutWriteRole: ProfileConfig = {
+        it("should warn when optional managed policy ARNs are missing", () => {
+            const configWithoutPolicies: ProfileConfig = {
                 benchling: {
                     tenant: "test-tenant",
                     clientId: "client_123",
@@ -139,7 +140,7 @@ describe("config-transform", () => {
                     database: "quilt_catalog",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
-                    // Missing writeRoleArn
+                    // Missing bucketWritePolicyArn and athenaUserPolicyArn
                 },
                 packages: {
                     bucket: "test-bucket",
@@ -157,11 +158,11 @@ describe("config-transform", () => {
                 },
             };
 
-            const result = validateStackConfig(configWithoutWriteRole);
+            const result = validateStackConfig(configWithoutPolicies);
 
             expect(result.isValid).toBe(true);
             expect(result.warnings).toBeDefined();
-            expect(result.warnings?.some((w) => w.includes("writeRoleArn"))).toBe(true);
+            expect(result.warnings?.some((w) => w.includes("bucketWritePolicyArn") || w.includes("athenaUserPolicyArn"))).toBe(true);
         });
 
         it("should validate VPC configuration when present", () => {
@@ -258,7 +259,8 @@ describe("config-transform", () => {
                     database: "quilt_catalog",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
-                    writeRoleArn: "arn:aws:iam::123456789012:role/test-role",
+                    bucketWritePolicyArn: "arn:aws:iam::123456789012:policy/test-bucket-write-policy",
+                    athenaUserPolicyArn: "arn:aws:iam::123456789012:policy/test-athena-policy",
                 },
                 packages: {
                     bucket: "test-bucket",
@@ -292,7 +294,8 @@ describe("config-transform", () => {
                     database: "quilt_catalog",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
-                    writeRoleArn: "arn:aws:iam::123456789012:role/test-role",
+                    bucketWritePolicyArn: "arn:aws:iam::123456789012:policy/test-bucket-write-policy",
+                    athenaUserPolicyArn: "arn:aws:iam::123456789012:policy/test-athena-policy",
                 },
                 deployment: {
                     region: "us-east-1",
@@ -367,7 +370,7 @@ describe("config-transform", () => {
                     database: "quilt_catalog",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
-                    // No writeRoleArn
+                    // No bucketWritePolicyArn or athenaUserPolicyArn
                 },
                 packages: {
                     bucket: "test-bucket",
@@ -388,7 +391,8 @@ describe("config-transform", () => {
 
             const stackConfig = profileToStackConfig(minimalConfig);
 
-            expect(stackConfig.quilt.writeRoleArn).toBeUndefined();
+            expect(stackConfig.quilt.bucketWritePolicyArn).toBeUndefined();
+            expect(stackConfig.quilt.athenaUserPolicyArn).toBeUndefined();
             expect(stackConfig.deployment.imageTag).toBeUndefined();
             expect(stackConfig.deployment.vpc).toBeUndefined();
             expect(stackConfig.deployment.stackName).toBeUndefined();

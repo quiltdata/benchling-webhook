@@ -194,4 +194,3 @@ class TestSecretValidation:
 
             secret = fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
             assert secret.log_level == level
-
