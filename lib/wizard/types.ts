@@ -72,17 +72,14 @@ export interface StackQueryResult {
     stackQuerySucceeded: boolean;
     /** Athena workgroup for user queries (optional) */
     athenaUserWorkgroup?: string;
-    /** Athena user policy ARN (optional) */
-    athenaUserPolicy?: string;
-    /** Athena workgroup */
     /** User Athena results bucket (S3 bucket for query results) */
     athenaResultsBucket?: string;
     /** User Athena results bucket policy ARN */
     athenaResultsBucketPolicy?: string;
-    /** IAM role ARN for read-only S3 access (from T4BucketReadRole) */
-    readRoleArn?: string;
-    /** IAM role ARN for read-write S3 access (from T4BucketWriteRole) */
-    writeRoleArn?: string;
+    /** IAM managed policy ARN for S3 bucket write access (from BucketWritePolicy) */
+    bucketWritePolicyArn?: string;
+    /** IAM managed policy ARN for Athena query access (from UserAthenaNonManagedRolePolicy) */
+    athenaUserPolicyArn?: string;
     /** Discovered VPC from Quilt stack (optional) */
     discoveredVpc?: DiscoveredVpcInfo;
 }

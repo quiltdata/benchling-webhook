@@ -78,18 +78,17 @@ export async function runStackQuery(
         const benchlingSecretArn = inferenceResult.benchlingSecretArn;
         const benchlingIntegrationEnabled = inferenceResult.benchlingIntegrationEnabled;
         const athenaUserWorkgroup = inferenceResult.athenaUserWorkgroup;
-        const athenaUserPolicy = inferenceResult.athenaUserPolicy;
         const athenaResultsBucket = inferenceResult.athenaResultsBucket;
         const athenaResultsBucketPolicy = inferenceResult.athenaResultsBucketPolicy;
-        const readRoleArn = inferenceResult.readRoleArn;
-        const writeRoleArn = inferenceResult.writeRoleArn;
+        const bucketWritePolicyArn = inferenceResult.bucketWritePolicyArn;
+        const athenaUserPolicyArn = inferenceResult.athenaUserPolicyArn;
 
-        // Show IAM roles (these are logged by inferQuiltConfig)
-        if (readRoleArn) {
-            console.log(chalk.dim(`✓ T4BucketReadRole discovered: ${readRoleArn}`));
+        // Show IAM managed policies (these are logged by inferQuiltConfig)
+        if (bucketWritePolicyArn) {
+            console.log(chalk.dim(`✓ BucketWritePolicy discovered: ${bucketWritePolicyArn}`));
         }
-        if (writeRoleArn) {
-            console.log(chalk.dim(`✓ T4BucketWriteRole: ${writeRoleArn}`));
+        if (athenaUserPolicyArn) {
+            console.log(chalk.dim(`✓ UserAthenaNonManagedRolePolicy discovered: ${athenaUserPolicyArn}`));
         }
 
         // Log what we found
@@ -100,8 +99,8 @@ export async function runStackQuery(
         console.log(chalk.dim(`✓ Queue URL: ${queueUrl}`));
         console.log(chalk.dim(`✓ Database: ${database}`));
         console.log(chalk.dim(`✓ Workgroup: ${athenaUserWorkgroup}`));
-        console.log(athenaUserPolicy
-            ? chalk.dim(`✓ Athena User Policy: ${athenaUserPolicy}`)
+        console.log(athenaUserPolicyArn
+            ? chalk.dim(`✓ Athena User Policy: ${athenaUserPolicyArn}`)
             : chalk.yellow("⚠ Athena User Policy: NOT FOUND"));
         console.log(athenaResultsBucket
             ? chalk.dim(`✓ Athena Results Bucket: ${athenaResultsBucket}`)
@@ -209,11 +208,10 @@ export async function runStackQuery(
             benchlingSecretArn,
             benchlingIntegrationEnabled,
             athenaUserWorkgroup,
-            athenaUserPolicy,
             athenaResultsBucket,
             athenaResultsBucketPolicy,
-            readRoleArn,
-            writeRoleArn,
+            bucketWritePolicyArn,
+            athenaUserPolicyArn,
             discoveredVpc: discoveredVpcInfo,
             stackQuerySucceeded: true,
         };

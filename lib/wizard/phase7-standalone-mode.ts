@@ -67,18 +67,18 @@ function buildProfileConfig(input: StandaloneModeInput): ProfileConfig {
     if (stackQuery.athenaUserWorkgroup) {
         config.quilt.athenaUserWorkgroup = stackQuery.athenaUserWorkgroup;
     }
-    if (stackQuery.athenaUserPolicy) {
-        config.quilt.athenaUserPolicy = stackQuery.athenaUserPolicy;
-    }
     if (stackQuery.athenaResultsBucket) {
         config.quilt.athenaResultsBucket = stackQuery.athenaResultsBucket;
     }
     if (stackQuery.athenaResultsBucketPolicy) {
         config.quilt.athenaResultsBucketPolicy = stackQuery.athenaResultsBucketPolicy;
     }
-    // Add IAM role ARNs if discovered
-    if (stackQuery.writeRoleArn) {
-        config.quilt.writeRoleArn = stackQuery.writeRoleArn;
+    // Add IAM managed policy ARNs if discovered
+    if (stackQuery.bucketWritePolicyArn) {
+        config.quilt.bucketWritePolicyArn = stackQuery.bucketWritePolicyArn;
+    }
+    if (stackQuery.athenaUserPolicyArn) {
+        config.quilt.athenaUserPolicyArn = stackQuery.athenaUserPolicyArn;
     }
 
     return config;
