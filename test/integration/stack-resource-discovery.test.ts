@@ -102,8 +102,8 @@ describe("Stack Resource Discovery - Integration", () => {
             if (discovered.athenaUserWorkgroup) {
                 console.log(`    Found User Workgroup: ${discovered.athenaUserWorkgroup}`);
             }
-            if (discovered.athenaUserPolicy) {
-                console.log(`    Found User Policy: ${discovered.athenaUserPolicy}`);
+            if (discovered.athenaUserPolicyArn) {
+                console.log(`    Found User Policy: ${discovered.athenaUserPolicyArn}`);
             }
             // If workgroups exist, they should be non-empty strings
             if (discovered.athenaUserWorkgroup) {
@@ -111,9 +111,9 @@ describe("Stack Resource Discovery - Integration", () => {
                 expect(discovered.athenaUserWorkgroup.length).toBeGreaterThan(0);
             }
 
-            if (discovered.athenaUserPolicy) {
-                expect(typeof discovered.athenaUserPolicy).toBe("string");
-                expect(discovered.athenaUserPolicy.length).toBeGreaterThan(0);
+            if (discovered.athenaUserPolicyArn) {
+                expect(typeof discovered.athenaUserPolicyArn).toBe("string");
+                expect(discovered.athenaUserPolicyArn.length).toBeGreaterThan(0);
             }
         });
 
@@ -167,7 +167,7 @@ describe("Stack Resource Discovery - Integration", () => {
 
             expect(discovered).toBeDefined();
             expect(discovered.athenaUserWorkgroup).toBeUndefined();
-            expect(discovered.athenaUserPolicy).toBeUndefined();
+            expect(discovered.athenaUserPolicyArn).toBeUndefined();
             expect(discovered.athenaResultsBucket).toBeUndefined();
             expect(discovered.athenaResultsBucketPolicy).toBeUndefined();
             expect(discovered.benchlingSecretArn).toBeUndefined();
@@ -205,7 +205,7 @@ describe("Stack Resource Discovery - Integration", () => {
             // Count what was discovered
             let discoveredCount = 0;
             if (discovered.athenaUserWorkgroup) discoveredCount++;
-            if (discovered.athenaUserPolicy) discoveredCount++;
+            if (discovered.athenaUserPolicyArn) discoveredCount++;
             if (discovered.athenaResultsBucket) discoveredCount++;
             if (discovered.athenaResultsBucketPolicy) discoveredCount++;
             if (discovered.benchlingSecretArn) discoveredCount++;
