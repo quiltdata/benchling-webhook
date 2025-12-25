@@ -25,7 +25,7 @@ import type { StackConfig } from "../types/stack-config";
  *
  * **Transformation logic:**
  * - Benchling: Only secretArn (credentials stored in secret)
- * - Quilt: Service endpoints (catalog, database, queueUrl, region, writeRoleArn)
+ * - Quilt: Service endpoints (catalog, database, queueUrl, region, bucketWritePolicyArn, athenaUserPolicyArn)
  * - Deployment: Infrastructure settings (region, imageTag, vpc, stackName)
  * - Security: Optional IP allowlist
  *
@@ -77,9 +77,12 @@ export function profileToStackConfig(
 
     // Add optional fields if present
 
-    // Quilt write role ARN (for S3 access)
-    if (profile.quilt.writeRoleArn) {
-        stackConfig.quilt.writeRoleArn = profile.quilt.writeRoleArn;
+    // Quilt managed policy ARNs (for S3 and Athena access)
+    if (profile.quilt.bucketWritePolicyArn) {
+        stackConfig.quilt.bucketWritePolicyArn = profile.quilt.bucketWritePolicyArn;
+    }
+    if (profile.quilt.athenaUserPolicyArn) {
+        stackConfig.quilt.athenaUserPolicyArn = profile.quilt.athenaUserPolicyArn;
     }
 
     // Deployment image tag
@@ -122,7 +125,8 @@ export function profileToStackConfig(
  * - deployment.region (deployment region)
  *
  * **Optional fields:**
- * - quilt.writeRoleArn (IAM role for S3 access)
+ * - quilt.bucketWritePolicyArn (IAM managed policy for S3 access)
+ * - quilt.athenaUserPolicyArn (IAM managed policy for Athena access)
  * - deployment.imageTag (defaults to "latest")
  * - deployment.vpc (defaults to creating new VPC)
  * - deployment.stackName (auto-generated from profile name)
@@ -183,10 +187,14 @@ export function validateStackConfig(config: ProfileConfig): ValidationResult {
         }
 
         // Optional but recommended fields
-        if (!config.quilt.writeRoleArn) {
-            warnings.push("Missing 'quilt.writeRoleArn' - S3 write operations may fail");
-        } else if (!config.quilt.writeRoleArn.startsWith("arn:aws:iam::")) {
-            errors.push(`Invalid 'quilt.writeRoleArn' format: ${config.quilt.writeRoleArn}`);
+        if (!config.quilt.bucketWritePolicyArn) {
+            warnings.push("Missing 'quilt.bucketWritePolicyArn' - S3 write operations may fail");
+        } else if (!config.quilt.bucketWritePolicyArn.startsWith("arn:aws:iam::")) {
+            errors.push(`Invalid 'quilt.bucketWritePolicyArn' format: ${config.quilt.bucketWritePolicyArn}`);
+        }
+
+        if (config.quilt.athenaUserPolicyArn && !config.quilt.athenaUserPolicyArn.startsWith("arn:aws:iam::")) {
+            errors.push(`Invalid 'quilt.athenaUserPolicyArn' format: ${config.quilt.athenaUserPolicyArn}`);
         }
     }
 
