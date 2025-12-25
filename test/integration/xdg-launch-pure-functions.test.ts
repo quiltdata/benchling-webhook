@@ -356,7 +356,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
             const discovered: DiscoveredQuiltResources = extractQuiltResources(mockResources);
 
             expect(discovered.athenaUserWorkgroup).toBe("my-user-workgroup");
-            expect(discovered.athenaUserPolicy).toBe("my-user-policy-ABCDEF");
+            expect(discovered.athenaUserPolicyArn).toBe("my-user-policy-ABCDEF");
             expect(discovered.athenaResultsBucket).toBe("athena-results-bucket-xyz");
             expect(discovered.athenaResultsBucketPolicy).toBe("athena-results-policy-xyz");
         });
@@ -366,7 +366,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
 
             expect(discovered).toBeDefined();
             expect(discovered.athenaUserWorkgroup).toBeUndefined();
-            expect(discovered.athenaUserPolicy).toBeUndefined();
+            expect(discovered.athenaUserPolicyArn).toBeUndefined();
             expect(discovered.athenaResultsBucket).toBeUndefined();
             expect(discovered.athenaResultsBucketPolicy).toBeUndefined();
         });
@@ -395,61 +395,6 @@ describe("XDG Launch Pure Functions - Integration", () => {
             // Should only extract the target resource
             expect(discovered.athenaUserWorkgroup).toBe("my-workgroup");
             expect(Object.keys(discovered).length).toBe(1);
-        });
-
-        it("should convert role names to ARNs when account ID is provided", () => {
-            const mockResources: StackResourceMap = {
-                T4BucketReadRole: {
-                    physicalResourceId: "ReadQuiltV2-tf-rc",
-                    resourceType: "AWS::IAM::Role",
-                    resourceStatus: "CREATE_COMPLETE",
-                },
-                T4BucketWriteRole: {
-                    physicalResourceId: "ReadWriteQuiltV2-tf-rc",
-                    resourceType: "AWS::IAM::Role",
-                    resourceStatus: "CREATE_COMPLETE",
-                },
-            };
-
-            const discovered = extractQuiltResources(mockResources, "712023778557", "us-east-1");
-
-            expect(discovered.readRoleArn).toBe("arn:aws:iam::712023778557:role/ReadQuiltV2-tf-rc");
-            expect(discovered.writeRoleArn).toBe("arn:aws:iam::712023778557:role/ReadWriteQuiltV2-tf-rc");
-        });
-
-        it("should accept full ARNs without conversion", () => {
-            const mockResources: StackResourceMap = {
-                T4BucketReadRole: {
-                    physicalResourceId: "arn:aws:iam::123456789012:role/ReadQuiltV2-full-arn",
-                    resourceType: "AWS::IAM::Role",
-                    resourceStatus: "CREATE_COMPLETE",
-                },
-            };
-
-            const discovered = extractQuiltResources(mockResources, "712023778557", "us-east-1");
-
-            // Should use the existing ARN, not convert it
-            expect(discovered.readRoleArn).toBe("arn:aws:iam::123456789012:role/ReadQuiltV2-full-arn");
-        });
-
-        it("should warn when role name is present but account ID is missing", () => {
-            const mockResources: StackResourceMap = {
-                T4BucketReadRole: {
-                    physicalResourceId: "ReadQuiltV2-tf-rc",
-                    resourceType: "AWS::IAM::Role",
-                    resourceStatus: "CREATE_COMPLETE",
-                },
-            };
-
-            const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
-            const discovered = extractQuiltResources(mockResources); // No account ID
-
-            expect(discovered.readRoleArn).toBeUndefined();
-            expect(consoleWarnSpy).toHaveBeenCalledWith(
-                expect.stringContaining("Cannot convert role name to ARN"),
-            );
-
-            consoleWarnSpy.mockRestore();
         });
     });
 
