@@ -112,17 +112,29 @@ export interface StackConfig {
         region: string;
 
         /**
-         * IAM role ARN for read-write S3 access (optional)
+         * IAM managed policy ARN for S3 bucket write access (optional)
          *
-         * Container assumes this role for all S3 operations to access the Quilt S3 bucket.
-         * This single role is used for both read and write operations, simplifying credential management.
+         * This policy grants read-write permissions to all Quilt S3 buckets.
+         * Attached directly to the ECS task role, eliminating the need for role assumption.
          *
-         * Resolved from T4BucketWriteRole stack resource during setup.
-         * Passed to container as QUILT_WRITE_ROLE_ARN environment variable.
+         * Resolved from BucketWritePolicy stack resource during setup.
          *
-         * @example "arn:aws:iam::123456789012:role/quilt-stack-T4BucketWriteRole-XYZ789"
+         * @example "arn:aws:iam::123456789012:policy/quilt-staging-BucketWritePolicy-XXXXX"
          */
-        writeRoleArn?: string;
+        bucketWritePolicyArn?: string;
+
+        /**
+         * IAM managed policy ARN for Athena query access (optional)
+         *
+         * This policy grants permissions to execute Athena queries, access Glue catalog,
+         * and write query results to the Athena results bucket.
+         * Attached directly to the ECS task role.
+         *
+         * Resolved from UserAthenaNonManagedRolePolicy stack resource during setup.
+         *
+         * @example "arn:aws:iam::123456789012:policy/quilt-staging-UserAthenaNonManagedRolePolicy-XXXXX"
+         */
+        athenaUserPolicyArn?: string;
     };
 
     /**

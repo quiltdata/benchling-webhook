@@ -243,20 +243,33 @@ export interface QuiltConfig {
     athenaResultsBucketPolicy?: string;
 
     /**
-     * IAM role ARN for read-write S3 access (from T4BucketWriteRole)
+     * IAM managed policy ARN for S3 bucket write access (from BucketWritePolicy)
      *
-     * Container assumes this role for all S3 operations to access the Quilt S3 bucket.
-     * This single role is used for both read and write operations, simplifying credential management.
+     * This policy grants read-write permissions to all Quilt S3 buckets.
+     * Attached directly to the ECS task role, eliminating the need for role assumption.
      * Discovered from CloudFormation stack resources during setup.
      *
-     * Resolved from T4BucketWriteRole stack resource (AWS::IAM::Role)
+     * Resolved from BucketWritePolicy stack resource (AWS::IAM::ManagedPolicy)
      * This is a RESOURCE (not an output) - requires DescribeStackResources API
      *
-     * Passed to container as `QUILT_WRITE_ROLE_ARN` environment variable.
-     *
-     * @example "arn:aws:iam::123456789012:role/quilt-stack-T4BucketWriteRole-XYZ789"
+     * @example "arn:aws:iam::123456789012:policy/quilt-staging-BucketWritePolicy-XXXXX"
      */
-    writeRoleArn?: string;
+    bucketWritePolicyArn?: string;
+
+    /**
+     * IAM managed policy ARN for Athena query access (from UserAthenaNonManagedRolePolicy)
+     *
+     * This policy grants permissions to execute Athena queries, access Glue catalog,
+     * and write query results to the Athena results bucket.
+     * Attached directly to the ECS task role.
+     * Discovered from CloudFormation stack resources during setup.
+     *
+     * Resolved from UserAthenaNonManagedRolePolicy stack resource (AWS::IAM::ManagedPolicy)
+     * This is a RESOURCE (not an output) - requires DescribeStackResources API
+     *
+     * @example "arn:aws:iam::123456789012:policy/quilt-staging-UserAthenaNonManagedRolePolicy-XXXXX"
+     */
+    athenaUserPolicyArn?: string;
 }
 
 /**
@@ -758,7 +771,8 @@ export const ProfileConfigSchema = {
                 queueUrl: { type: "string", pattern: "^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/\\d{12}/.+" },
                 region: { type: "string", pattern: "^[a-z]{2}-[a-z]+-[0-9]$" },
                 athenaUserWorkgroup: { type: "string", minLength: 1 },
-                writeRoleArn: { type: "string", pattern: "^arn:aws:iam::\\d{12}:role/.+" },
+                bucketWritePolicyArn: { type: "string", pattern: "^arn:aws:iam::\\d{12}:policy/.+" },
+                athenaUserPolicyArn: { type: "string", pattern: "^arn:aws:iam::\\d{12}:policy/.+" },
             },
         },
         benchling: {
