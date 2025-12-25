@@ -202,12 +202,13 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         ATHENA_USER_DATABASE: config.quilt.database,
         ATHENA_USER_WORKGROUP: config.quilt.athenaUserWorkgroup || "primary",
         ATHENA_RESULTS_BUCKET: config.quilt.athenaResultsBucket || "",
-        ICEBERG_DATABASE: config.quilt.icebergDatabase || "",
-        ICEBERG_WORKGROUP: config.quilt.icebergWorkgroup || "",
         PACKAGER_SQS_URL: config.quilt.queueUrl,
 
-        // IAM Role ARN for cross-account S3 access (optional, write role used for all operations)
-        QUILT_WRITE_ROLE_ARN: config.quilt.writeRoleArn || "",
+        // IAM Policy ARNs for ECS task role (attached directly, no role assumption needed)
+        // Note: These are attached to the task role in the CDK stack, not passed as env vars
+        // Kept here for backward compatibility with older container versions
+        QUILT_BUCKET_WRITE_POLICY_ARN: config.quilt.bucketWritePolicyArn || "",
+        QUILT_ATHENA_USER_POLICY_ARN: config.quilt.athenaUserPolicyArn || "",
 
         // AWS Configuration
         AWS_REGION: config.quilt.region || config.deployment.region,

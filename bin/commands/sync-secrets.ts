@@ -303,11 +303,6 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
         enable_webhook_verification: config.security?.enableVerification !== false ? "true" : "false",
     };
 
-    // Add optional fields
-    if (config.quilt.queueUrl) {
-        Object.assign(secretData, { queue_url: config.quilt.queueUrl });
-    }
-
     return JSON.stringify(secretData, null, 2);
 }
 

@@ -49,7 +49,7 @@ class BenchlingSecretData:
     """All runtime parameters from Benchling secret.
 
     All fields are REQUIRED. Missing fields cause startup failure.
-    This dataclass contains all 10 runtime configuration parameters
+    This dataclass contains all 9 runtime configuration parameters
     that must be stored in AWS Secrets Manager.
 
     Attributes:
@@ -62,7 +62,6 @@ class BenchlingSecretData:
         user_bucket: S3 bucket name for Benchling exports
         log_level: Application logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         enable_webhook_verification: Enable Lambda authorizer webhook verification (boolean)
-        webhook_allow_list: Comma-separated IP allowlist (empty string for no restrictions)
         queue_url: SQS queue URL for package creation (optional, v0.8.0+ gets from env)
     """
 
@@ -80,7 +79,6 @@ class BenchlingSecretData:
     # Application Behavior
     log_level: str
     enable_webhook_verification: bool
-    webhook_allow_list: str
 
     # Optional: SQS queue URL (v0.8.0+ gets from environment variable instead)
     queue_url: str = ""
@@ -156,9 +154,7 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
             "user_bucket",
             "log_level",
             "enable_webhook_verification",
-            "webhook_allow_list",
         ]
-        # Check if parameters exist in data (not checking for truthy values yet, as webhook_allow_list can be "")
         missing = [f for f in required if f not in data]
 
         if missing:
@@ -172,7 +168,6 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
                 "user_bucket": "my-s3-bucket",
                 "log_level": "INFO",
                 "enable_webhook_verification": "true",
-                "webhook_allow_list": "",
             }
 
             raise SecretsManagerError(
@@ -233,7 +228,6 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
             user_bucket=data["user_bucket"],
             log_level=data["log_level"],
             enable_webhook_verification=enable_webhook_verification,
-            webhook_allow_list=data["webhook_allow_list"],
             queue_url=queue_url,
         )
 

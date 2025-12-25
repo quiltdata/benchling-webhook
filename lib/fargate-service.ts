@@ -6,21 +6,21 @@ import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
-import { ProfileConfig } from "./types/config";
+import { StackConfig } from "./types/stack-config";
 
 /**
  * Properties for FargateService construct
  *
- * Uses ProfileConfig for structured configuration access.
+ * Uses StackConfig for minimal structured configuration access.
  * Runtime-configurable parameters can be overridden via CloudFormation parameters.
  *
  * **Breaking Change (v0.9.0)**: Removed stackArn in favor of explicit service environment variables.
- * The explicit service parameters (packagerQueueUrl, athenaUserDatabase, quiltWebHost, icebergDatabase)
+ * The explicit service parameters (packagerQueueUrl, athenaUserDatabase, quiltWebHost)
  * are resolved at deployment time and passed directly to the container, eliminating runtime CloudFormation calls.
  */
 export interface FargateServiceProps {
     readonly vpc: ec2.IVpc;
-    readonly config: ProfileConfig;
+    readonly config: StackConfig;
     readonly ecrRepository: ecr.IRepository;
     readonly targetGroup: elbv2.INetworkTargetGroup;  // NEW: NLB target group for v0.9.0
     readonly imageTag?: string;
@@ -31,15 +31,14 @@ export interface FargateServiceProps {
     readonly packagerQueueUrl: string;
     readonly athenaUserDatabase: string;
     readonly quiltWebHost: string;
-    readonly icebergDatabase: string;
 
     // NEW: Optional Athena resources (from Quilt stack discovery)
-    readonly icebergWorkgroup?: string;
     readonly athenaUserWorkgroup?: string;
     readonly athenaResultsBucket?: string;
 
-    // NEW: Optional IAM role ARN for cross-account S3 access (from Quilt stack discovery)
-    readonly writeRoleArn?: string;
+    // NEW: Optional IAM managed policy ARNs (from Quilt stack discovery)
+    readonly bucketWritePolicyArn?: string;
+    readonly athenaUserPolicyArn?: string;
 
     // Runtime-configurable parameters (from CloudFormation)
     readonly benchlingSecret: string;
@@ -173,18 +172,28 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Grant permission to assume Quilt stack IAM role for cross-account S3 access
-        // This role is discovered from the Quilt stack resources during setup
-        if (props.writeRoleArn) {
-            taskRole.addToPolicy(
-                new iam.PolicyStatement({
-                    actions: ["sts:AssumeRole"],
-                    resources: [
-                        // Use wildcard pattern to match any account/stack name
-                        // This supports cross-account deployments and different stack names
-                        "arn:aws:iam::*:role/*-T4BucketWriteRole-*",
-                    ],
-                }),
+        // Attach Quilt managed policies directly to task role
+        // This eliminates the need for role assumption and trust policy coordination
+
+        // Attach BucketWritePolicy for S3 access to all Quilt buckets
+        if (props.bucketWritePolicyArn) {
+            taskRole.addManagedPolicy(
+                iam.ManagedPolicy.fromManagedPolicyArn(
+                    this,
+                    "BucketWritePolicy",
+                    props.bucketWritePolicyArn,
+                ),
+            );
+        }
+
+        // Attach UserAthenaNonManagedRolePolicy for Athena query access
+        if (props.athenaUserPolicyArn) {
+            taskRole.addManagedPolicy(
+                iam.ManagedPolicy.fromManagedPolicyArn(
+                    this,
+                    "AthenaUserPolicy",
+                    props.athenaUserPolicyArn,
+                ),
             );
         }
 
@@ -197,13 +206,12 @@ export class FargateService extends Construct {
                     "sqs:GetQueueAttributes",
                 ],
                 resources: [
-                    `arn:aws:sqs:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:*`,
+                    `arn:aws:sqs:${config.deployment.region}:*:*`,
                 ],
             }),
         );
 
         // Grant Glue access for the specific Quilt database
-        const account = config.deployment.account || cdk.Aws.ACCOUNT_ID;
         const region = config.deployment.region;
         taskRole.addToPolicy(
             new iam.PolicyStatement({
@@ -213,9 +221,9 @@ export class FargateService extends Construct {
                     "glue:GetPartitions",
                 ],
                 resources: [
-                    `arn:aws:glue:${region}:${account}:catalog`,
-                    `arn:aws:glue:${region}:${account}:database/${props.quiltDatabase}`,
-                    `arn:aws:glue:${region}:${account}:table/${props.quiltDatabase}/*`,
+                    `arn:aws:glue:${region}:*:catalog`,
+                    `arn:aws:glue:${region}:*:database/${props.quiltDatabase}`,
+                    `arn:aws:glue:${region}:*:table/${props.quiltDatabase}/*`,
                 ],
             }),
         );
@@ -225,13 +233,13 @@ export class FargateService extends Construct {
         const athenaWorkgroups = props.athenaUserWorkgroup
             ? [
                 // Discovered workgroup from Quilt stack
-                `arn:aws:athena:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:workgroup/${props.athenaUserWorkgroup}`,
+                `arn:aws:athena:${config.deployment.region}:*:workgroup/${props.athenaUserWorkgroup}`,
                 // Fallback to primary workgroup
-                `arn:aws:athena:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:workgroup/primary`,
+                `arn:aws:athena:${config.deployment.region}:*:workgroup/primary`,
             ]
             : [
                 // Only primary workgroup if no discovered workgroup
-                `arn:aws:athena:${config.deployment.region}:${config.deployment.account || cdk.Aws.ACCOUNT_ID}:workgroup/primary`,
+                `arn:aws:athena:${config.deployment.region}:*:workgroup/primary`,
             ];
 
         taskRole.addToPolicy(
@@ -254,14 +262,14 @@ export class FargateService extends Construct {
                 // Discovered results bucket from Quilt stack
                 `arn:aws:s3:::${props.athenaResultsBucket}`,
                 `arn:aws:s3:::${props.athenaResultsBucket}/*`,
-                // Fallback to default bucket
-                `arn:aws:s3:::aws-athena-query-results-${account}-${region}`,
-                `arn:aws:s3:::aws-athena-query-results-${account}-${region}/*`,
+                // Fallback to default bucket (use wildcard since we don't have account ID)
+                `arn:aws:s3:::aws-athena-query-results-*-${region}`,
+                `arn:aws:s3:::aws-athena-query-results-*-${region}/*`,
             ]
             : [
-                // Only default bucket if no discovered bucket
-                `arn:aws:s3:::aws-athena-query-results-${account}-${region}`,
-                `arn:aws:s3:::aws-athena-query-results-${account}-${region}/*`,
+                // Only default bucket if no discovered bucket (use wildcard since we don't have account ID)
+                `arn:aws:s3:::aws-athena-query-results-*-${region}`,
+                `arn:aws:s3:::aws-athena-query-results-*-${region}/*`,
             ];
 
         taskRole.addToPolicy(
@@ -304,22 +312,20 @@ export class FargateService extends Construct {
             ATHENA_USER_WORKGROUP: props.athenaUserWorkgroup || "primary",
             // Only set optional variables if they have values (don't pass empty strings)
             ...(props.athenaResultsBucket ? { ATHENA_RESULTS_BUCKET: props.athenaResultsBucket } : {}),
-            ...(props.icebergDatabase ? { ICEBERG_DATABASE: props.icebergDatabase } : {}),
-            ...(props.icebergWorkgroup ? { ICEBERG_WORKGROUP: props.icebergWorkgroup } : {}),
             PACKAGER_SQS_URL: props.packagerQueueUrl,
 
-            // IAM Role ARN for cross-account S3 access (optional)
-            ...(props.writeRoleArn ? { QUILT_WRITE_ROLE_ARN: props.writeRoleArn } : {}),
+            // NOTE: IAM policies are now attached directly to task role
+            // No need to pass role ARN to container for assumption
 
             // Benchling Configuration (credentials from Secrets Manager, NOT environment)
             BenchlingSecret: this.extractSecretName(props.benchlingSecret),
 
-            // Security Configuration (verification can be disabled for dev/test)
-            ENABLE_WEBHOOK_VERIFICATION: String(config.security?.enableVerification !== false),
+            // Security Configuration (verification enabled by default)
+            ENABLE_WEBHOOK_VERIFICATION: "true",  // StackConfig doesn't include security settings - default to enabled
 
             // Application Configuration
             APP_ENV: "production",
-            LOG_LEVEL: props.logLevel || config.logging?.level || "INFO",
+            LOG_LEVEL: props.logLevel || "INFO",  // StackConfig doesn't include logging level - use parameter default
         };
 
         // Add container with configured environment

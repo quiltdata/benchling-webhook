@@ -25,7 +25,6 @@ class TestFastAPIApp:
             False  # Lambda authorizer handles verification; flag retained for compatibility
         )
         config.quilt_write_role_arn = ""
-        config.webhook_allow_list = ""
         config.pkg_key = "experiment_id"
         config.pkg_prefix = "benchling"
         config.log_level = "INFO"
@@ -369,7 +368,6 @@ class TestFastAPIApp:
             user_bucket="test-bucket",
             log_level="INFO",
             enable_webhook_verification=True,
-            webhook_allow_list="",
         )
         mock_config.get_benchling_secrets = MagicMock(return_value=mock_secret)
         mock_config.enable_webhook_verification = True

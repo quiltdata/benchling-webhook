@@ -41,13 +41,10 @@ interface QuiltStackInfo {
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
     athenaUserWorkgroup?: string;
-    athenaUserPolicy?: string;
-    icebergWorkgroup?: string;
-    icebergDatabase?: string;
     athenaResultsBucket?: string;
     athenaResultsBucketPolicy?: string;
-    readRoleArn?: string;
-    writeRoleArn?: string;
+    bucketWritePolicyArn?: string;
+    athenaUserPolicyArn?: string;
 }
 
 /**
@@ -63,13 +60,10 @@ interface InferenceResult {
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
     athenaUserWorkgroup?: string;
-    athenaUserPolicy?: string;
-    icebergWorkgroup?: string;
-    icebergDatabase?: string;
     athenaResultsBucket?: string;
     athenaResultsBucketPolicy?: string;
-    readRoleArn?: string;
-    writeRoleArn?: string;
+    bucketWritePolicyArn?: string;
+    athenaUserPolicyArn?: string;
     source: string;
 }
 
@@ -187,9 +181,6 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
                     } else if (key === "BenchlingSecretArn" || key === "BenchlingSecret") {
                         // Check for BenchlingSecret output from T4 template
                         stackInfo.benchlingSecretArn = value;
-                    } else if (key === "IcebergDatabase") {
-                        // Extract IcebergDatabase from outputs (fallback)
-                        stackInfo.icebergDatabase = value;
                     }
                 }
 
@@ -511,15 +502,8 @@ export async function inferQuiltConfig(options: {
     if (selectedStack.athenaUserWorkgroup) {
         result.athenaUserWorkgroup = selectedStack.athenaUserWorkgroup;
     }
-    if (selectedStack.athenaUserPolicy) {
-        result.athenaUserPolicy = selectedStack.athenaUserPolicy;
-    }
-    if (selectedStack.icebergWorkgroup) {
-        result.icebergWorkgroup = selectedStack.icebergWorkgroup;
-    }
-    // icebergDatabase already handled (prefer resource over output)
-    if (selectedStack.icebergDatabase) {
-        result.icebergDatabase = selectedStack.icebergDatabase;
+    if (selectedStack.athenaUserPolicyArn) {
+        result.athenaUserPolicyArn = selectedStack.athenaUserPolicyArn;
     }
     if (selectedStack.athenaResultsBucket) {
         result.athenaResultsBucket = selectedStack.athenaResultsBucket;
@@ -527,20 +511,13 @@ export async function inferQuiltConfig(options: {
     if (selectedStack.athenaResultsBucketPolicy) {
         result.athenaResultsBucketPolicy = selectedStack.athenaResultsBucketPolicy;
     }
-    // NEW: Add IAM role ARNs to result
-    // IAM role ARNs for cross-account S3 access
-    // Keep read role discovery logic but only save write role to configuration
-    // Read role is still discovered for informational purposes but not configured
-    if (selectedStack.readRoleArn) {
-        console.log(`✓ T4BucketReadRole discovered: ${selectedStack.readRoleArn}`);
+    // NEW: Add IAM managed policy ARNs to result
+    // IAM managed policies for S3 and Athena access (attached directly to task role)
+    if (selectedStack.bucketWritePolicyArn) {
+        result.bucketWritePolicyArn = selectedStack.bucketWritePolicyArn;
+        console.log(`✓ BucketWritePolicy discovered: ${selectedStack.bucketWritePolicyArn}`);
     } else {
-        console.log(chalk.yellow("⚠ T4BucketReadRole: NOT FOUND (valid Quilt stack resource)"));
-    }
-    if (selectedStack.writeRoleArn) {
-        result.writeRoleArn = selectedStack.writeRoleArn;
-        console.log(`✓ T4BucketWriteRole: ${selectedStack.writeRoleArn}`);
-    } else {
-        console.log(chalk.yellow("⚠ T4BucketWriteRole: NOT FOUND (optional - will use task role for S3 access)"));
+        console.log(chalk.yellow("⚠ BucketWritePolicy: NOT FOUND (S3 write operations may fail)"));
     }
     if (result.source === "quilt3-cli") {
         result.source = "quilt3-cli+cloudformation";
@@ -586,8 +563,8 @@ async function main(): Promise<void> {
     if (result.region) console.log(`Region: ${result.region}`);
     if (result.account) console.log(`AWS Account ID: ${result.account}`);
     if (result.queueUrl) console.log(`Queue URL: ${result.queueUrl}`);
-    if (result.readRoleArn) console.log(`Read Role ARN: ${result.readRoleArn}`);
-    if (result.writeRoleArn) console.log(`Write Role ARN: ${result.writeRoleArn}`);
+    if (result.bucketWritePolicyArn) console.log(`Bucket Write Policy ARN: ${result.bucketWritePolicyArn}`);
+    if (result.athenaUserPolicyArn) console.log(`Athena User Policy ARN: ${result.athenaUserPolicyArn}`);
 }
 
 // Run main if executed directly

@@ -183,7 +183,6 @@ class BenchlingSecret(BaseModel):
     enable_webhook_verification: str = Field(
         "true", description="Enable Lambda authorizer for webhook signature verification (API Gateway)"
     )
-    webhook_allow_list: str = Field("", description="Comma-separated IP allowlist")
     queue_url: Optional[str] = Field(None, description="SQS queue URL (optional)")
 
     class Config:

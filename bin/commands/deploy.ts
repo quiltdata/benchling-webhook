@@ -9,13 +9,12 @@ import {
     ServiceResolverError,
     parseStackArn,
 } from "../../lib/utils/service-resolver";
-import { checkCdkBootstrap } from "../benchling-webhook";
+import { checkCdkBootstrap, createStack } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig, getStackName } from "../../lib/types/config";
+import { profileToStackConfig } from "../../lib/utils/config-transform";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 import { syncSecretsToAWS } from "./sync-secrets";
-import * as fs from "fs";
-import * as path from "path";
 
 /**
  * Helper function to display setup command suggestion
@@ -25,112 +24,6 @@ function suggestSetup(profileName: string, message: string): void {
     console.log();
     console.log(chalk.cyan(`  npm run setup -- --profile ${profileName}`));
     console.log();
-}
-
-/**
- * Build CDK app path
- */
-function getCdkAppPath(): string {
-    let moduleDir: string;
-    if (__dirname.includes("/dist/")) {
-        moduleDir = path.resolve(__dirname, "../../..");
-    } else {
-        moduleDir = path.resolve(__dirname, "../..");
-    }
-
-    const tsSourcePath = path.join(moduleDir, "bin/benchling-webhook.ts");
-    const jsDistPath = path.join(moduleDir, "dist/bin/benchling-webhook.js");
-
-    if (fs.existsSync(tsSourcePath)) {
-        return `npx ts-node --prefer-ts-exts "${tsSourcePath}"`;
-    } else if (fs.existsSync(jsDistPath)) {
-        return `node "${jsDistPath}"`;
-    }
-    return "";
-}
-
-/**
- * Build CDK environment variables from config
- */
-function buildCdkEnv(
-    config: ProfileConfig,
-    options: {
-        stackArn: string;
-        benchlingSecret: string;
-        profileName: string;
-        stackName: string;
-        imageTag: string;
-        deployAccount: string;
-        deployRegion: string;
-    },
-): Record<string, string> {
-    const env: Record<string, string> = {
-        ...process.env,
-        CDK_DEFAULT_ACCOUNT: options.deployAccount,
-        CDK_DEFAULT_REGION: options.deployRegion,
-        QUILT_STACK_ARN: options.stackArn,
-        BENCHLING_SECRET: options.benchlingSecret,
-        PROFILE: options.profileName,
-        STACK_NAME: options.stackName,
-        QUILT_CATALOG: config.quilt.catalog,
-        QUILT_DATABASE: config.quilt.database,
-        QUEUE_URL: config.quilt.queueUrl,
-        QUILT_USER_BUCKET: config.packages.bucket,
-        PKG_PREFIX: config.packages.prefix || "benchling",
-        PKG_KEY: config.packages.metadataKey || "experiment_id",
-        BENCHLING_TENANT: config.benchling.tenant,
-        BENCHLING_CLIENT_ID: config.benchling.clientId || "",
-        BENCHLING_APP_DEFINITION_ID: config.benchling.appDefinitionId || "",
-        LOG_LEVEL: config.logging?.level || "INFO",
-        IMAGE_TAG: options.imageTag,
-    };
-
-    // Add optional Quilt fields if present
-    if (config.quilt.icebergDatabase) {
-        env.ICEBERG_DATABASE = config.quilt.icebergDatabase;
-    }
-    if (config.quilt.icebergWorkgroup) {
-        env.ICEBERG_WORKGROUP = config.quilt.icebergWorkgroup;
-    }
-    if (config.quilt.athenaUserWorkgroup) {
-        env.ATHENA_USER_WORKGROUP = config.quilt.athenaUserWorkgroup;
-    }
-    if (config.quilt.athenaResultsBucket) {
-        env.ATHENA_RESULTS_BUCKET = config.quilt.athenaResultsBucket;
-    }
-
-    // Pass VPC configuration if specified in profile
-    if (config.deployment.vpc?.vpcId) {
-        env.VPC_ID = config.deployment.vpc.vpcId;
-
-        if (config.deployment.vpc.privateSubnetIds) {
-            env.VPC_PRIVATE_SUBNET_IDS = JSON.stringify(config.deployment.vpc.privateSubnetIds);
-        }
-        if (config.deployment.vpc.publicSubnetIds) {
-            env.VPC_PUBLIC_SUBNET_IDS = JSON.stringify(config.deployment.vpc.publicSubnetIds);
-        }
-        if (config.deployment.vpc.availabilityZones) {
-            env.VPC_AVAILABILITY_ZONES = JSON.stringify(config.deployment.vpc.availabilityZones);
-        }
-        if (config.deployment.vpc.vpcCidrBlock) {
-            env.VPC_CIDR_BLOCK = config.deployment.vpc.vpcCidrBlock;
-        }
-    }
-
-    // Pass security configuration if specified in profile
-    if (config.security?.webhookAllowList) {
-        env.WEBHOOK_ALLOW_LIST = config.security.webhookAllowList;
-    }
-    if (config.security?.enableVerification !== undefined) {
-        env.ENABLE_WEBHOOK_VERIFICATION = config.security.enableVerification.toString();
-    }
-
-    // Pass ECR repository if specified
-    if (config.deployment.ecrRepository) {
-        env.ECR_REPOSITORY_NAME = config.deployment.ecrRepository;
-    }
-
-    return env;
 }
 
 type StackCheck = {
@@ -232,8 +125,11 @@ function getLatestDevVersion(): string | null {
  * Uses new profile-based configuration with deployment tracking.
  * Supports independent --profile and --stage options.
  *
+ * v0.10.0: Refactored to call createStack() directly instead of spawning subprocess.
+ * This eliminates environment variable IPC complexity and simplifies testing.
+ *
  * @module commands/deploy
- * @version 0.7.0
+ * @version 0.10.0
  */
 export async function deployCommand(options: {
     yes?: boolean;
@@ -345,6 +241,9 @@ export async function deployCommand(options: {
 
 /**
  * Deploy the Benchling webhook stack
+ *
+ * v0.10.0: Refactored to call createStack() directly instead of using environment variable IPC.
+ * Configuration is passed programmatically through function calls, not subprocess environment.
  */
 export async function deploy(
     stackArn: string,
@@ -654,15 +553,13 @@ export async function deploy(
         process.exit(1);
     }
 
-    // Convert to QuiltServices format for deployment
+    // Convert to QuiltServices format for display
     const services: QuiltServices = {
         packagerQueueUrl: config.quilt.queueUrl,
         athenaUserDatabase: config.quilt.database,
         quiltWebHost: config.quilt.catalog,
-        icebergDatabase: config.quilt.icebergDatabase,
         athenaUserWorkgroup: config.quilt.athenaUserWorkgroup,
         athenaResultsBucket: config.quilt.athenaResultsBucket,
-        icebergWorkgroup: config.quilt.icebergWorkgroup,
     };
 
     spinner.succeed("Quilt configuration loaded");
@@ -688,13 +585,11 @@ export async function deploy(
     console.log(`    ${chalk.bold("Catalog Host:")}            ${services.quiltWebHost}`);
     console.log(`    ${chalk.bold("Packager Queue:")}          ${services.packagerQueueUrl}`);
     console.log(`    ${chalk.bold("Athena Database:")}         ${services.athenaUserDatabase}`);
-    console.log(`    ${chalk.bold("Athena Workgroup:")}        ${services.athenaUserWorkgroup}`);
-    console.log(`    ${chalk.bold("Athena Results Bucket:")}   ${services.athenaResultsBucket}`);
-    if (services.icebergDatabase) {
-        console.log(`    ${chalk.bold("Iceberg Database:")}        ${services.icebergDatabase}`);
+    if (services.athenaUserWorkgroup) {
+        console.log(`    ${chalk.bold("Athena Workgroup:")}        ${services.athenaUserWorkgroup}`);
     }
-    if (services.icebergWorkgroup) {
-        console.log(`    ${chalk.bold("Iceberg Workgroup:")}       ${services.icebergWorkgroup}`);
+    if (services.athenaResultsBucket) {
+        console.log(`    ${chalk.bold("Athena Results Bucket:")}   ${services.athenaResultsBucket}`);
     }
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
@@ -747,7 +642,8 @@ export async function deploy(
         console.log();
     }
 
-    // Deploy using CDK CLI
+    // Deploy using createStack() + cdk deploy (v0.10.0+)
+    // No environment variable IPC - configuration passed programmatically
     console.log();
     console.log(chalk.blue.bold("▶ Starting deployment..."));
     console.log();
@@ -755,19 +651,43 @@ export async function deploy(
     // Track deployment success - we'll verify actual stack status even if CDK command fails
     let deploymentSucceeded = false;
     let cdkError: Error | null = null;
-
     try {
-        // Build CloudFormation parameters
+        // Call createStack() directly to synthesize the CDK app (NO subprocess, NO env vars)
+        // Configuration is passed programmatically through the function call
+
+        // Update profile config with CLI overrides
+        const deployConfig: ProfileConfig = {
+            ...config,
+            benchling: {
+                ...config.benchling,
+                secretArn: benchlingSecret,  // Use CLI-provided or profile secret ARN
+            },
+            deployment: {
+                ...config.deployment,
+                imageTag: options.imageTag,
+            },
+        };
+
+        // Transform ProfileConfig → StackConfig (minimal interface)
+        const stackConfig = profileToStackConfig(deployConfig);
+        const result = createStack(stackConfig, {
+            account: deployAccount,
+            region: deployRegion,
+            profileName: options.profileName,
+        });
+
+        // Synthesize the CDK app to generate CloudFormation template
+        const cloudAssembly = result.app.synth();
+
+        // Build CloudFormation parameters for deployment
         // Parameter names must match the CfnParameter IDs in BenchlingWebhookStack
         const parameters = [
             // Explicit service parameters
             `PackagerQueueUrl=${services.packagerQueueUrl}`,
             `AthenaUserDatabase=${services.athenaUserDatabase}`,
             `QuiltWebHost=${services.quiltWebHost}`,
-            `IcebergDatabase=${services.icebergDatabase || ""}`,
 
-            // NEW: Optional Athena resources (from Quilt stack discovery)
-            `IcebergWorkgroup=${services.icebergWorkgroup || ""}`,
+            // Optional Athena resources (from Quilt stack discovery)
             `AthenaUserWorkgroup=${services.athenaUserWorkgroup || ""}`,
             `AthenaResultsBucket=${services.athenaResultsBucket || ""}`,
 
@@ -781,25 +701,18 @@ export async function deploy(
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");
 
-        const appPath = getCdkAppPath();
-        const appArg = appPath ? `--app "${appPath}"` : "";
-        // Use --method=direct to skip changeset creation (avoids REVIEW_IN_PROGRESS state for new stacks)
-        const cdkCommand = `npx cdk deploy ${appArg} --require-approval ${options.requireApproval || "never"} --method=direct ${parametersArg}`;
-
-        // Build environment variables for CDK synthesis
-        const env = buildCdkEnv(config, {
-            stackArn,
-            benchlingSecret,
-            profileName: options.profileName,
-            stackName,
-            imageTag: options.imageTag,
-            deployAccount,
-            deployRegion,
-        });
+        // Deploy the synthesized template using CDK deploy
+        // Use cloud assembly directory instead of app path - NO environment variable configuration needed
+        const cdkCommand = `npx cdk deploy --app "${cloudAssembly.directory}" --require-approval ${options.requireApproval || "never"} --method=direct ${parametersArg}`;
 
         execSync(cdkCommand, {
             stdio: "inherit",
-            env,
+            env: {
+                ...process.env,
+                // Only pass essential AWS credentials, NO application configuration
+                CDK_DEFAULT_ACCOUNT: deployAccount,
+                CDK_DEFAULT_REGION: deployRegion,
+            },
         });
 
         deploymentSucceeded = true;

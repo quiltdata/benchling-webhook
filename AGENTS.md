@@ -1,849 +1,161 @@
-# Benchling Webhook - Developer & Agent Guide
+# Benchling Webhook - Agent Guide
 
-## Quick Start: Daily Development Workflow
+## Policy
 
-### Essential Commands
+- Always allow: `npm install`, `npm test`, `npm run setup`, git operations, `gh` commands
+- Always fix IDE diagnostics after edits
+- Docker images ALWAYS pull from centralized ECR: `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest`
 
-#### Setup (one-time)
+## Testing (Essential Guide)
+
+**Full details:** [spec/a08-test-scenarios.md](spec/a08-test-scenarios.md)
+
+### Quick Reference: When to Run What
 
 ```bash
-git clone https://github.com/quiltdata/benchling-webhook.git
-cd benchling-webhook
-npm run setup                # Interactive wizard: deps + XDG config + secrets
+# PRE-COMMIT (always run before committing)
+npm test                     # ~20s: TS + Python unit tests + lint + typecheck
+
+# BEFORE MERGING PR
+npm run test:integration     # ~2m: Full TypeScript integration tests
+npm run test:local           # ~45s: Local Docker dev build + webhook tests
+
+# AFTER MAKING DOCKER CHANGES (requires local build only)
+npm run test:local:prod      # ~60s: Test production Docker build locally
+
+# AFTER CI BUILDS IMAGE (requires git tag + CI completion)
+npm run test:dev             # ~5m: Deploy to dev + test (auto-deploys if needed)
+npm run test:prod            # ~10s: Health check prod deployment (non-invasive)
+cd docker && make test-ecr   # ~90s: Validate published ECR image
 ```
 
-#### Daily development
+### Critical Dependencies
+
+**Docker Images:** All deployments pull from centralized ECR `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest`
+
+**CI Build Required For:**
+
+- `npm run test:dev` - Requires Docker image in ECR
+- `npm run test:prod` - Requires Docker image in ECR
+- `make test-ecr` - Requires Docker image in ECR
+
+**CI Build Trigger:**
 
 ```bash
-npm run test                 # Fast unit tests (lint + typecheck + mocked tests)
-npm run test:native          # Local FastAPI (mocked) integration tests
+npm run version:tag:dev      # Creates git tag → triggers CI → builds/pushes Docker image
 ```
 
-#### Before creating PR
+### Test Categories Summary
+
+| Test | Duration | CI Dep | When |
+|------|----------|--------|------|
+| `npm test` | ~20s | ❌ | Pre-commit (always) |
+| `npm run test:integration` | ~2m | ❌ | Before merging PR |
+| `npm run test:local` | ~45s | ❌ | Docker dev changes |
+| `npm run test:local:prod` | ~60s | ❌ | Docker prod changes |
+| `npm run test:dev` | ~5m | ✅ | After CI builds image |
+| `npm run test:prod` | ~10s | ✅ | Validate prod deployment |
+
+**Legend:** CI Dep = Requires CI to have built Docker image
+
+### Common Test Issues
+
+| Error | Solution |
+|-------|----------|
+| `No profile found` | `npm run setup` |
+| `Image not found in ECR` | `npm run version:tag:dev` (triggers CI build) |
+| `ECR authentication failed` | `aws sso login` |
+| `Timeout waiting for health` | Check logs: `docker logs {container}` |
+
+## Key Repository Commands
+
+### Development Workflow
 
 ```bash
-npm run test:native           # Verify integration works
+npm run setup                # Interactive config wizard (one-time)
+npm test                     # Fast pre-commit tests
+npm run test:local           # Test local Docker build
+```
+
+### Release Workflow (Maintainers)
+
+```bash
+npm run version:tag          # Create git tag → triggers CI → builds Docker image
+npm run deploy:prod          # Deploy to production
+```
+
+### Key Files
+
+- [lib/types/stack-config.ts](lib/types/stack-config.ts) - Minimal CDK stack configuration interface
+- [lib/utils/config-transform.ts](lib/utils/config-transform.ts) - ProfileConfig → StackConfig transformation
+- [lib/benchling-webhook-stack.ts](lib/benchling-webhook-stack.ts) - Main CDK stack
+- [bin/commands/deploy.ts](bin/commands/deploy.ts) - Deployment orchestration
+- [docker/](docker/) - FastAPI webhook processor (Python)
+
+## High-Level Architecture
+
+**Flow:** API Gateway (REST v1) → VPC Link → Network Load Balancer → ECS Fargate (FastAPI) → S3 + SQS
+
+**Configuration:** Profile-based XDG config in `~/.config/benchling-webhook/{profile}/config.json`
+
+**Key Concepts:**
+
+- **Profile** - Named config set (e.g., `default`, `sales`, `dev`)
+- **Stage** - API Gateway deployment target (e.g., `dev`, `prod`)
+- **StackConfig** - Minimal interface for CDK stack (v0.10.0+, decoupled from ProfileConfig)
+
+**Security:**
+
+- Primary: HMAC signature verification in FastAPI
+- Optional: Resource Policy IP filtering (free, when `webhookAllowList` configured)
+
+## Configuration v0.10.0+
+
+**Breaking Change:** Removed unused Iceberg fields (`quilt.athenaUserPolicy`, `quilt.athenaResultsBucketPolicy`, `quilt.athenaResultsBucket`)
+
+**New Architecture:**
+
+- CDK stack uses minimal `StackConfig` interface (only required fields)
+- `config-transform.ts` converts ProfileConfig → StackConfig
+- Eliminated subprocess env var round-trip
+- Deployment flow: deploy.ts passes config via stdin to CDK
+
+## Common Patterns
+
+### Creating a PR
+
+```bash
+npm run test                 # Ensure tests pass
 git commit -m "type(scope): description"
-gh pr create
-npm run test:dev             # Verify dev deployment works
+gh pr create                 # Creates PR with conventional format
 ```
 
-#### Release (maintainers only)
+### Checking Logs
 
 ```bash
-npm run version:tag          # Create version tag (triggers CI)
-# Wait for CI to build and test
-npm run deploy:prod --quilt-stack-arn <arn> --benchling-secret <name> --yes
-# Production tests run automatically after deploy:prod completes
+npm run logs -- --profile default
+# Checks both API Gateway and ECS container logs
 ```
 
-### Git & GitHub (via `gh` CLI)
+### Multi-Stack Deployments
 
 ```bash
-gh pr create                 # Create pull request
-gh pr list                   # List your PRs
-gh pr view                   # View PR details
-gh pr checks                 # Check CI status
-
-gh issue create -t "TITLE" -b "BODY"                     # Create an issue
-gh issue list --label "bug"                              # List issues (filterable)
-gh issue view <number>                                   # View issue details
-gh issue comment <number> -b "COMMENT"                   # Add a comment to an issue
-gh issue close <number>                                  # Close an issue
-
-gh workflow list                                          # List GitHub Actions workflows
-gh workflow view <workflow.yml>                          # Show workflow details
-gh workflow run <workflow.yml> --ref main                # Trigger a workflow run
-gh run list --workflow=<workflow.yml> --branch main      # List recent runs for a workflow
-gh run view <run-id>                                     # View run status and logs
-gh run rerun <run-id>                                    # Rerun a workflow run
-gh run watch <run-id>                                    # Stream run logs
-gh run download <run-id> --dir ./artifacts               # Download run artifacts
-```
-
----
-
-## Code Organization
-
-### Infrastructure & Build
-
-#### `lib/` — CDK infrastructure constructs (TypeScript)
-
-- [lib/benchling-webhook-stack.ts](lib/benchling-webhook-stack.ts) - Main orchestration
-- [lib/fargate-service.ts](lib/fargate-service.ts) - ECS Fargate service
-- [lib/rest-api-gateway.ts](lib/rest-api-gateway.ts) - REST API v1 + VPC Link + Resource Policy
-- [lib/network-load-balancer.ts](lib/network-load-balancer.ts) - Network Load Balancer with health checks
-- [lib/ecr-repository.ts](lib/ecr-repository.ts) - Docker registry
-- [lib/xdg-config.ts](lib/xdg-config.ts) - XDG configuration management
-- [lib/types/](lib/types/) - TypeScript type definitions
-
-### CLI & Automation
-
-#### `bin/` — Executable CLI tools & automation scripts (JavaScript/TypeScript)
-
-- [bin/cli.ts](bin/cli.ts) - Main CLI entry point (`benchling-webhook` command)
-- [bin/version.ts](bin/version.ts) - Version management and release tagging (`npm run version`)
-- [bin/dev-deploy.ts](bin/dev-deploy.ts) - Dev deployment workflow
-- [bin/send-event.js](bin/send-event.js) - Test event sender
-- [bin/commands/](bin/commands/) - CLI command implementations
-
-### Setup & Configuration
-
-#### `scripts/` — Interactive setup & configuration scripts (TypeScript, run via ts-node)
-
-- [scripts/install-wizard.ts](scripts/install-wizard.ts) - Interactive setup wizard (`npm run setup`)
-- [scripts/config/wizard.ts](scripts/config/wizard.ts) - Interactive prompts module
-- [scripts/config/validator.ts](scripts/config/validator.ts) - Configuration validation module
-- [scripts/infer-quilt-config.ts](scripts/infer-quilt-config.ts) - Quilt catalog inference (`npm run setup:infer`)
-- [scripts/sync-secrets.ts](scripts/sync-secrets.ts) - AWS Secrets Manager sync (`npm run setup:sync-secrets`)
-- [scripts/config-health-check.ts](scripts/config-health-check.ts) - Configuration validation (`npm run setup:health`)
-
-### Application
-
-#### `docker/` — FastAPI webhook processor (Python)
-
-- See [docker/README.md](docker/README.md) for details
-
-#### Key Distinction
-
-##### `bin/` — CLI tools & compiled scripts (production runtime, often `.js`)
-
-##### `scripts/` — Development-time setup scripts (TypeScript, via ts-node)
-
----
-
-## Architecture (v1.0.0)
-
-AWS CDK application deploying auto-scaling webhook processor:
-
-### Components
-
-- **REST API Gateway v1** → Public HTTPS endpoint with CloudWatch logging and resource policy
-- **Resource Policy** → IP allowlisting (free, applied when `webhookAllowList` configured)
-- **VPC Link** → Private connection between API Gateway and VPC
-- **Network Load Balancer** → Internal load balancer with health checks
-- **ECS Fargate** → FastAPI application on port 8080 (auto-scales 2-10 tasks)
-- **S3** → Payload and package storage
-- **SQS** → Quilt package creation queue
-- **Secrets Manager** → Benchling OAuth credentials
-- **CloudWatch** → Centralized logging and monitoring
-
-### Flow Diagram
-
-```text
-Internet
-  ↓
-REST API Gateway v1 + Resource Policy (IP filtering)
-  ↓
-VPC Link
-  ↓
-Network Load Balancer (internal)
-  ↓
-ECS Fargate Tasks (FastAPI on port 8080)
-  |
-  | HMAC signature verification
-  | Process webhook payload
-  ↓
-S3 + SQS → Quilt Package Creation
-```
-
-### Request Path Handling (Flexible Routes)
-
-**Problem:** REST API v1 with HTTP_PROXY integration forwards the complete request path including the stage prefix to FastAPI (e.g., `GET /prod/health` → `GET /prod/health`), but NLB health checks use direct paths without stage prefixes (e.g., `GET /health`).
-
-**Solution:** FastAPI supports both path styles simultaneously using duplicate route definitions (Option A from [spec/2025-11-26-architecture/13-fastapi-flexible-routes.md](spec/2025-11-26-architecture/13-fastapi-flexible-routes.md)):
-
-```python
-# Direct paths (for NLB health checks)
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
-
-# Stage-prefixed paths (for API Gateway)
-@app.get("/{stage}/health")
-async def health_with_stage(stage: str):
-    return {"status": "healthy"}
-```
-
-**Path examples:**
-- API Gateway request: `GET /prod/health` → Matches `/{stage}/health` route
-- NLB health check: `GET /health` → Matches `/health` route
-- Both return identical responses
-
-**Benefits:**
-- Maintains NLB cost efficiency ($16/month vs $23/month for ALB)
-- No middleware complexity or path rewriting
-- Explicit route matching easy to debug
-- Works with any stage name dynamically
-- Future migration to ALB requires minimal changes
-
-**Supported endpoints:**
-- Health: `/health`, `/{stage}/health`
-- Readiness: `/health/ready`, `/{stage}/health/ready`
-- Liveness: `/health/live`, `/{stage}/health/live`
-- Webhooks: `/event`, `/{stage}/event`
-- Lifecycle: `/lifecycle`, `/{stage}/lifecycle`
-- Canvas: `/canvas`, `/{stage}/canvas`
-
-See [docker/tests/test_flexible_routes.py](docker/tests/test_flexible_routes.py) for comprehensive test coverage.
-
-### Security Model
-
-**Single Authentication Layer: FastAPI HMAC Verification**
-
-- All webhook requests MUST have valid HMAC signatures computed over raw request body
-- FastAPI uses Benchling SDK to verify signatures against secret from Secrets Manager
-- This is the ONLY layer that validates webhook authenticity
-- Invalid signatures return 403 Forbidden
-
-**Optional Network Layer: Resource Policy IP Filtering**
-
-- Applied when `webhookAllowList` is configured (free, no additional cost)
-- Blocks unknown IPs at API Gateway edge (including health endpoints)
-- Does NOT perform authentication (IP ≠ identity)
-- NLB health checks unaffected (bypass API Gateway)
-- When not configured: All IPs allowed
-
-**Why REST API v1 instead of HTTP API v2?**
-
-REST API v1 provides resource policies which:
-
-1. Enable free IP filtering (vs $7/month for WAF with HTTP API v2)
-2. Support fine-grained access control per endpoint
-3. Apply consistently to all endpoints (no special exemptions)
-4. Are natively integrated with API Gateway (no separate service)
-
-See [spec/2025-11-26-architecture/11-arch-30.md](spec/2025-11-26-architecture/11-arch-30.md) for detailed architectural analysis.
-
-### Cost Analysis
-
-**Monthly Fixed Costs (us-east-1):**
-
-| Component | Cost |
-| ----------- | ------ |
-| REST API v1 | $0.00 |
-| Resource Policy | $0.00 |
-| VPC Link | $0.00 |
-| Network Load Balancer | $16.20 |
-| ECS Fargate (2 tasks) | $14.50 |
-| NAT Gateway | $32.40 |
-| **Total** | **$63.10** |
-
-**Variable Costs (per million requests):**
-
-| Component | Cost |
-| ----------- | ------ |
-| REST API v1 | ~$3.50 |
-| Resource Policy | $0.00 |
-| ECS Fargate | Included in fixed cost |
-| **Total Variable** | **~$3.50** |
-
-**Trade-offs:**
-
-- -$5.10/month vs previous WAF-based architecture (eliminates WAF cost)
-- +$2.50/million requests vs HTTP API v2 (REST API is more expensive per request)
-- Resource Policy is free and provides same IP filtering as WAF
-- Break-even point: ~2 million requests/month (most deployments use < 100k/month)
-
----
-
-## Testing Strategy
-
-### Primary Workflow
-
-```bash
-# 1. Fast feedback during development (30 seconds)
-npm run test                 # Lint + typecheck + unit tests (no Docker, mocked AWS)
-
-# 2. Local integration testing (2 minutes)
-npm run test:local           # Build + run Docker dev container + test webhooks
-
-# 3. Remote deployment testing (via CI or manual)
-npm run test:dev             # Test deployed dev stack via API Gateway (auto-deploys if needed)
-```
-
-### Available Test Commands
-
-```bash
-# Local testing (no deployment)
-npm run test                 # Unit tests: lint + typecheck + TS + Python
-npm run test:local           # Docker dev container (hot-reload, port 8082)
-npm run test:local:prod      # Docker prod container (production mode, port 8083)
-npm run test:native          # Native FastAPI with mocked AWS (no Docker, port 8080)
-
-# Remote deployment testing
-npm run test:dev             # Deployed dev stack via API Gateway (auto-deploys if needed)
-npm run test:prod            # Deployed prod stack via API Gateway
-
-# Component testing (debugging)
-npm run test:ts              # TypeScript tests only
-npm run test:python          # Python unit tests only
-npm run lint                 # Auto-fix formatting
-```
-
-### Quick Reference
-
-| Command | Docker? | AWS? | When to Use |
-| --------- | --------- | ------ | ------------- |
-| `test` | No | Mocked | Daily development, pre-commit |
-| `test:local` | Yes (dev) | Real | Before PR, local integration testing |
-| `test:local:prod` | Yes (prod) | Real | Test prod Docker config locally |
-| `test:native` | No | Mocked | Quick FastAPI testing without Docker |
-| `test:dev` | Remote | Real | CI/CD, verify deployed dev stack |
-| `test:prod` | Remote | Real | After production deployment |
-
----
-
-## Configuration (v0.7.0+)
-
-### XDG Configuration Model
-
-#### Profile-Based Configuration
-
-Version 0.7.0 introduces a completely redesigned configuration architecture with profile-based configuration and per-profile deployment tracking.
-
-**Directory structure:**
-
-```text
-~/.config/benchling-webhook/
-├── default/
-│   ├── config.json          # All configuration for default profile
-│   └── deployments.json     # Deployment history for default profile
-├── dev/
-│   ├── config.json          # All configuration for dev profile
-│   └── deployments.json     # Deployment history for dev profile
-└── prod/
-    ├── config.json          # All configuration for prod profile
-    └── deployments.json     # Deployment history for prod profile
-```
-
-#### Key Concepts
-
-**Profile**: A named set of configuration values (credentials, Quilt settings, Benchling settings)
-
-- Examples: `default`, `dev`, `prod`, `staging`
-- Stored in `~/.config/benchling-webhook/{profile}/config.json`
-- Each profile has its own deployment tracking
-
-**Stage**: An API Gateway deployment target
-
-- Examples: `dev`, `prod`, `staging`, `test`
-- Multiple stages can be deployed per profile
-- Tracked in `~/.config/benchling-webhook/{profile}/deployments.json`
-
-**Independence**: Profiles and stages are independent - you can deploy any profile to any stage
-
-#### Multi-Stack Support (v0.9.8+)
-
-Starting with version 0.9.8, the webhook supports **multiple CloudFormation stacks per AWS account/region**. This enables parallel deployments for different customers, environments, or configurations.
-
-**Stack Naming Strategy:**
-
-1. **Default profile** → `BenchlingWebhookStack` (backwards compatible, legacy name)
-2. **Named profiles** → `BenchlingWebhookStack-{profile}` (auto-generated)
-3. **Custom name** → Use `deployment.stackName` in config.json (explicit override)
-
-**Examples:**
-
-```bash
-# Default profile uses legacy stack name
-npm run deploy:prod -- --profile default
-# Creates: BenchlingWebhookStack
-
-# Sales profile uses profile-suffixed name
-npm run deploy:prod -- --profile sales
+npm run deploy:prod -- --profile sales --yes
 # Creates: BenchlingWebhookStack-sales
-
-# Customer profile with custom name
-# In ~/.config/benchling-webhook/customer-acme/config.json:
-{
-  "deployment": {
-    "stackName": "AcmeWebhookStack",
-    ...
-  }
-}
-npm run deploy:prod -- --profile customer-acme
-# Creates: AcmeWebhookStack
 ```
 
-**Use Cases:**
-
-- **Multi-tenant deployments** - Separate stacks for each customer
-- **Environment isolation** - Dev, staging, prod in same account
-- **A/B testing** - Parallel stacks with different configurations
-- **Regional deployments** - Multiple stacks in different regions
-
-**Commands support profile-based stacks:**
-
-```bash
-# Deploy with profile (auto-generated stack name)
-npm run deploy:prod -- --profile sales
-
-# Check status of profile's stack
-npm run status -- --profile sales
-
-# View logs from profile's stack
-npm run logs -- --profile sales
-
-# Destroy profile's stack
-npm run destroy -- --profile sales
-```
-
-**Stack name resolution logic:**
-
-```typescript
-import { getStackName } from "./lib/types/config";
-
-// Returns "BenchlingWebhookStack" (backwards compatible)
-getStackName("default")
-
-// Returns "BenchlingWebhookStack-sales"
-getStackName("sales")
-
-// Returns custom name if specified in config
-getStackName("sales", "CustomStack") // "CustomStack"
-```
-
-**Deployment tracking:**
-
-Each profile's `deployments.json` stores the stack name used for each deployment:
-
-```json
-{
-  "active": {
-    "prod": {
-      "stackName": "BenchlingWebhookStack-sales",
-      "endpoint": "https://xyz.execute-api.us-east-1.amazonaws.com/prod",
-      ...
-    }
-  }
-}
-```
-
-**Migration from single stack:**
-
-Existing "default" profile deployments continue to use `BenchlingWebhookStack` with no changes required. New profiles automatically get unique stack names.
-
-#### Configuration File Structure
-
-Each profile's `config.json` contains:
-
-```json
-{
-  "quilt": {
-    "stackArn": "arn:aws:cloudformation:...",
-    "catalog": "https://example.quiltdata.com",
-    "bucket": "quilt-example",
-    "database": "quilt_example",
-    "queueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/quilt-queue",
-    "region": "us-east-1"
-  },
-  "benchling": {
-    "tenant": "example",
-    "clientId": "...",
-    "secretArn": "arn:aws:secretsmanager:...",
-    "appDefinitionId": "app_...",
-    "testEntryId": "etr_..."
-  },
-  "packages": {
-    "bucket": "benchling-packages",
-    "prefix": "benchling",
-    "metadataKey": "experiment_id"
-  },
-  "deployment": {
-    "region": "us-east-1",
-    "account": "123456789012",
-    "imageTag": "latest",
-    "stackName": "BenchlingWebhookStack-sales"
-  },
-  "logging": {
-    "level": "INFO"
-  },
-  "security": {
-    "enableVerification": true
-  },
-  "_metadata": {
-    "version": "0.9.8",
-    "createdAt": "2025-11-04T10:00:00Z",
-    "updatedAt": "2025-11-04T10:00:00Z",
-    "source": "wizard"
-  }
-}
-```
-
-#### Profile Inheritance
-
-Profiles can inherit from other profiles to reduce duplication:
-
-```json
-{
-  "_inherits": "default",
-  "benchling": {
-    "appDefinitionId": "app_dev_123"
-  },
-  "deployment": {
-    "imageTag": "latest"
-  }
-}
-```
-
-When read with inheritance, the profile is deep-merged with its parent profile.
-
-#### Deployment Tracking
-
-Each profile's `deployments.json` tracks deployment history:
-
-```json
-{
-  "active": {
-    "dev": {
-      "endpoint": "https://xxx.execute-api.us-east-1.amazonaws.com/dev",
-      "imageTag": "latest",
-      "deployedAt": "2025-11-04T10:30:00Z",
-      "stackName": "BenchlingWebhookStack-sales"
-    },
-    "prod": {
-      "endpoint": "https://xxx.execute-api.us-east-1.amazonaws.com/prod",
-      "imageTag": "0.9.8",
-      "deployedAt": "2025-11-03T14:20:00Z",
-      "stackName": "BenchlingWebhookStack-sales"
-    }
-  },
-  "history": [
-    {
-      "stage": "dev",
-      "timestamp": "2025-11-04T10:30:00Z",
-      "imageTag": "latest",
-      "endpoint": "https://...",
-      "stackName": "BenchlingWebhookStack-sales",
-      "region": "us-east-1"
-    }
-  ]
-}
-```
-
-### Configuration Flow
-
-1. `npm run setup` prompts for settings → stores in `~/.config/benchling-webhook/default/config.json`
-2. npm scripts read profile configuration via `XDGConfig.readProfile(profile)`
-3. Secrets synced to AWS Secrets Manager
-4. Deployment outputs written to `~/.config/benchling-webhook/{profile}/deployments.json`
-
-### Setup Wizard Behavior
-
-#### Initial Setup
-
-When running `npm run setup` for the first time:
-
-- Wizard prompts for all required configuration
-- Attempts to infer Quilt configuration from AWS
-- Validates Benchling credentials in real-time
-- Saves all settings to `~/.config/benchling-webhook/{profile}/config.json`
-
-#### Re-running Setup (Idempotent)
-
-When running `npm run setup` on an existing profile:
-
-- **Loads existing configuration** from `{profile}/config.json`
-- **Uses previous values as defaults** for all prompts
-- Allows you to accept existing values (press Enter) or override them
-- Updates only the fields you change
-- Preserves `_metadata.createdAt` but updates `_metadata.updatedAt`
-
-**Example workflow:**
-
-```bash
-# First run - enter all values
-npm run setup
-
-# Later - change only deployment region
-npm run setup
-# (Press Enter to accept existing values until "AWS Deployment Region" prompt)
-# (Enter new region, then accept remaining defaults)
-
-```
-
-This idempotent behavior means you can safely re-run `npm run setup` to:
-
-- Update a single configuration value
-- Fix validation errors
-- Re-sync secrets after rotation
-- Add optional fields like `testEntryId`
-
-### Setup Commands
-
-```bash
-npm run setup                # Interactive wizard (creates/updates default profile)
-npm run setup:infer          # Infer Quilt config from catalog
-npm run setup:sync-secrets   # Sync secrets to AWS Secrets Manager
-npm run setup:health         # Validate configuration
-```
-
-### XDGConfig API (v0.7.0)
-
-The new XDGConfig API is profile-first:
-
-```typescript
-class XDGConfig {
-  // Configuration Management
-  readProfile(profile: string): ProfileConfig
-  writeProfile(profile: string, config: ProfileConfig): void
-  deleteProfile(profile: string): void
-  listProfiles(): string[]
-  profileExists(profile: string): boolean
-
-  // Deployment Tracking
-  getDeployments(profile: string): DeploymentHistory
-  recordDeployment(profile: string, deployment: DeploymentRecord): void
-  getActiveDeployment(profile: string, stage: string): DeploymentRecord | null
-
-  // Profile Inheritance
-  readProfileWithInheritance(profile: string, baseProfile?: string): ProfileConfig
-
-  // Validation
-  validateProfile(config: ProfileConfig): ValidationResult
-}
-```
-
-### Required Configuration
-
-Stored in AWS Secrets Manager and referenced in profile config:
-
-| Field | Required | Default | Description |
-| ------- | ---------- | --------- | ------------- |
-| `benchling.tenant` | Yes | - | Benchling tenant name |
-| `benchling.clientId` | Yes | - | OAuth client ID |
-| `benchling.clientSecret` | Via Secrets Manager | - | OAuth client secret |
-| `benchling.secretArn` | Yes | - | AWS Secrets Manager ARN |
-| `benchling.appDefinitionId` | Yes | - | Benchling app identifier |
-| `benchling.testEntryId` | No | - | Test entry ID for validation |
-| `quilt.stackArn` | Yes | - | CloudFormation stack ARN |
-| `quilt.catalog` | Yes | - | Quilt catalog URL |
-| `quilt.bucket` | Yes | - | S3 bucket for packages |
-| `quilt.database` | Yes | - | Glue Data Catalog database |
-| `quilt.queueUrl` | Yes | - | SQS queue URL |
-| `packages.bucket` | Yes | - | S3 bucket for package storage |
-| `packages.prefix` | No | `benchling` | S3 key prefix |
-| `packages.metadataKey` | No | `experiment_id` | Package metadata key |
-| `deployment.stackName` | No | Auto-generated | CloudFormation stack name |
-| `security.enableVerification` | No | `true` | Enable webhook signature verification |
-| `security.webhookAllowList` | No | `""` | IP allowlist (comma-separated) |
-| `logging.level` | No | `INFO` | Python logging level |
-
----
-
-## Deployment Workflows
-
-### Docker Image Build Process
-
-**Where Docker images are built:**
-
-- **Local development**: Images built on your machine via `docker/Makefile`
-- **CI/CD (production)**: Images built by GitHub Actions in the cloud
-- **ECR destination**: Always pushes to centralized Quilt ECR:
-  - Account: `712023778557`
-  - Region: `us-east-1`
-  - Repository: `quiltdata/benchling`
-  - Full URI: `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:<tag>`
-
-**Build commands:**
-
-```bash
-# Local Docker builds (for testing)
-npm run docker:build:local   # Builds dev image, runs on port 8082
-npm run test:local           # Builds + tests dev image
-
-# CI-triggered builds (for deployment)
-npm run version:tag:dev      # Creates git tag → triggers CI to build + push to ECR
-npm run version:tag          # Creates release tag → triggers CI to build + push to ECR
-```
-
-**Important: `version:tag:dev` does NOT build locally** - it only creates a git tag and pushes it to GitHub, which triggers CI to build and push the Docker image to ECR.
-
-### Development Deployment
-
-**IMPORTANT: You must create a dev tag BEFORE running `test:dev`**
-
-```bash
-# Step 1: Create dev tag and trigger CI build (REQUIRED FIRST)
-npm run version:tag:dev      # Creates git tag, CI builds + pushes to ECR
-
-# Step 2: Wait for CI to complete, then test the deployment
-npm run test:dev             # Tests deployed dev stack via API Gateway
-```
-
-**Why this order matters:**
-
-- `test:dev` expects a Docker image to exist in ECR with the dev tag
-- `version:tag:dev` triggers CI to build and push that image to ECR
-- Without running `version:tag:dev` first, `test:dev` will fail because no image exists
-
-**Alternative: Local development deployment**
-
-```bash
-npm run deploy:dev           # Test + build + deploy dev stack + verify
-```
-
-This runs:
-
-1. `npm run test` - Fast unit tests
-2. Build and push dev Docker image (locally)
-3. Deploy to dev stack
-4. Run integration tests
-
-### Production Release
-
-#### Step 1: Tag and trigger CI
-
-```bash
-npm run version:tag          # Creates version tag, pushes to GitHub
-```
-
-This triggers CI to:
-
-- Run all tests
-- Build production Docker image (x86_64)
-- Push to ECR with version tag
-- Publish to npm
-- Create GitHub release
-
-#### Step 2: Deploy to production
-
-```bash
-npm run deploy:prod -- \
-  --profile default \
-  --stage prod \
-  --image-tag <version> \
-  --yes
-```
-
----
-
-## Monitoring & Debugging
-
-### Logs
-
-**CloudWatch Log Groups:**
-
-- `/aws/apigateway/benchling-webhook-rest` - API Gateway access logs
-- `/ecs/benchling-webhook` - ECS container logs (FastAPI application with HMAC verification)
-
-**View logs:**
-
-```bash
-# API Gateway access logs
-aws logs tail /aws/apigateway/benchling-webhook-rest --follow
-
-# ECS application logs (includes HMAC verification)
-aws logs tail /ecs/benchling-webhook --follow
-
-# All logs (integrated command)
-npx @quiltdata/benchling-webhook logs --profile default
-```
-
-### Health Checks
-
-- `/health` - General health
-- `/health/ready` - Readiness probe
-- `/health/live` - Liveness probe
-
-### Metrics
-
-- **CloudWatch Metrics:**
-  - ECS tasks running/desired
-  - API Gateway 4xx/5xx errors
-  - NLB healthy/unhealthy targets
-  - ECS CPU/memory utilization
-  - Resource policy blocked requests (403 responses)
-
-- **Deployment outputs:** `~/.config/benchling-webhook/{profile}/deployments.json`
-
----
-
-## Configuration Failure Modes
-
-| Failure | Cause | Mitigation |
-| ---------- | -------- | ------------- |
-| Missing profile | Profile not found | Run `npm run setup` to create profile |
-| Missing Quilt catalog | Quilt3 not configured | Run `quilt3 config` and retry |
-| Profile config corrupted | Manual file edit | Validate JSON schema; re-run `npm run setup` |
-| AWS auth error | Invalid credentials | Check `AWS_PROFILE` and region |
-| Docker build failure | Outdated base image | Auto-pull latest base before build |
-| Secrets not synced | Secrets Manager unreachable | Validate IAM permissions; retry sync with backoff |
-| CDK stack drift | Manual AWS changes | Run `cdk diff` preflight; warn on drift detection |
-| Legacy config detected | Upgrading from v0.6.x | Display migration message; see MIGRATION.md |
-| 403 Forbidden (HMAC) | Invalid signature | Check ECS logs for HMAC verification errors; verify Benchling secret |
-| 403 Forbidden (Resource Policy) | IP not in allowlist | Add IP to webhookAllowList or remove IP filtering |
-| 403 Forbidden on /health | IP filtering blocks health endpoint | Add monitoring service IP to webhookAllowList OR disable IP filtering for dev/staging |
-| NLB unhealthy targets | ECS health check failing | Check ECS logs and container health status |
-| Stack name conflict | Multiple profiles, same custom name | Use unique stackName per profile or rely on auto-generation |
-
----
-
-## Coding Standards
-
-- **TypeScript**: 4-space indent, double quotes, trailing commas, required semicolons
-- **Types**: Avoid `any`; explicit return types on exports
-- **Commits**: Conventional format `type(scope): summary`
-- **PRs**: Include test results and deployment notes
-
----
-
-## Operational Principles
-
-- **Profile-Based Configuration**: Each profile is self-contained with its own settings and deployment tracking
-- **Profile/Stage Independence**: Deploy any profile to any stage for maximum flexibility
-- **Multi-Stack Support**: Multiple CloudFormation stacks per AWS account/region (v0.9.8+)
-- **Single Source of Truth**: Profile's `config.json` defines all configuration
-- **Per-Profile Deployment Tracking**: Each profile tracks its own deployments independently
-- **Fail Fast**: Validation before deployment prevents partial stacks
-- **Idempotence**: Re-running `npm run setup` updates existing profile
-- **Observability**: Every stage logs explicit diagnostics to CloudWatch
-- **Separation of Concerns**: npm orchestrates, TypeScript/Python implement
-- **Simplicity Over Complexity**: Single authentication layer (FastAPI HMAC), optional network filtering (Resource Policy)
-- **Flexible Route Handling**: Support both direct and stage-prefixed paths for maximum compatibility
-
----
-
-## Security
-
-- **HMAC Signature Verification**: Single authentication layer in FastAPI (raw body access required)
-- **Optional Resource Policy IP Filtering**: Block unknown IPs at API Gateway edge (free, no additional cost)
-- **Secrets in AWS Secrets Manager**: Credentials never stored in code
-- **Private Network**: ECS tasks in private subnets, no public IPs
-- **VPC Link**: Encrypted connection between API Gateway and NLB
-- **Container Scanning**: ECR image scanning enabled
-- **Least-Privilege IAM**: Task roles limited to required permissions
-- **TLS 1.2+ Encryption**: All API Gateway endpoints
-- **CloudWatch Logging**: Audit trail for HMAC verification and resource policy decisions
-
----
-
-## Prerequisites
-
-- AWS Account with IAM permissions
-- AWS CLI v2.x configured
-- Node.js >= 18.0.0
-- Docker
-- Quilt Stack (S3 bucket + SQS queue)
-- Benchling Account with app creation permissions
-
----
-
-## Migration from v0.6.x
-
-Version 0.7.0 is a BREAKING CHANGE release. See [MIGRATION.md](./MIGRATION.md) for detailed upgrade instructions.
-
-**Key changes:**
-
-- Configuration moved from `~/.config/benchling-webhook/default.json` to `~/.config/benchling-webhook/default/config.json`
-- Deployment tracking moved from shared `deploy.json` to per-profile `deployments.json`
-- Profiles moved from `profiles/{name}/default.json` to `{name}/config.json`
-- Three-tier config system (user/derived/deploy) simplified to single `config.json`
-- Profile inheritance now explicit via `_inherits` field
-
----
-
-## License
-
-Apache-2.0 - See [LICENSE](LICENSE) file for details
+## Troubleshooting
+
+| Issue                  | Solution                                                   |
+| ---------------------- | ---------------------------------------------------------- |
+| Missing profile        | Run `npm run setup`                                        |
+| 403 Forbidden (HMAC)   | Check ECS logs for signature errors                        |
+| 403 Forbidden (IP)     | Add IP to `webhookAllowList` or disable filtering          |
+| Stack name conflict    | Use unique `stackName` per profile in config.json          |
+
+## Documentation
+
+- [CLAUDE.md](CLAUDE.md) - Comprehensive project documentation
+- [CHANGELOG.md](CHANGELOG.md) - Release notes and migration guides
+- [spec/](spec/) - Architecture specs and implementation details
+- [docker/README.md](docker/README.md) - FastAPI application documentation

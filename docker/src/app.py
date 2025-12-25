@@ -581,7 +581,6 @@ def create_app() -> FastAPI:
                     "pkg_key": None,
                     "user_bucket": None,
                     "log_level": os.getenv("LOG_LEVEL", "INFO"),
-                    "webhook_allow_list": "",
                     "enable_webhook_verification": False,
                 }
                 return degraded
@@ -643,7 +642,6 @@ def create_app() -> FastAPI:
                     "pkg_key": config.package_key,
                     "user_bucket": config.s3_bucket_name,
                     "log_level": config.log_level,
-                    "webhook_allow_list": config.webhook_allow_list if config.webhook_allow_list else "",
                     "enable_webhook_verification": config.enable_webhook_verification,
                 },
             }

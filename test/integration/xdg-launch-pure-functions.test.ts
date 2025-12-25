@@ -135,28 +135,6 @@ describe("XDG Launch Pure Functions - Integration", () => {
             expect(envVars.BENCHLING_TEST_MODE).toBe("true");
         });
 
-        it("should handle optional Iceberg resources gracefully", () => {
-            const envVars = buildEnvVars(mockConfig, "native", {
-                mode: "native",
-                profile: "default",
-                verbose: false,
-                test: false,
-                noSecret: false,
-            });
-
-            // Iceberg resources are optional
-            expect(envVars).toHaveProperty("ICEBERG_DATABASE");
-            expect(envVars).toHaveProperty("ICEBERG_WORKGROUP");
-
-            // Should be empty string if not configured
-            if (!mockConfig.quilt.icebergDatabase) {
-                expect(envVars.ICEBERG_DATABASE).toBe("");
-            }
-            if (!mockConfig.quilt.icebergWorkgroup) {
-                expect(envVars.ICEBERG_WORKGROUP).toBe("");
-            }
-        });
-
         it("should handle optional Athena configuration gracefully", () => {
             const envVars = buildEnvVars(mockConfig, "native", {
                 mode: "native",
@@ -363,16 +341,6 @@ describe("XDG Launch Pure Functions - Integration", () => {
                     resourceType: "AWS::IAM::Policy",
                     resourceStatus: "CREATE_COMPLETE",
                 },
-                IcebergWorkGroup: {
-                    physicalResourceId: "my-iceberg-workgroup",
-                    resourceType: "AWS::Athena::WorkGroup",
-                    resourceStatus: "CREATE_COMPLETE",
-                },
-                IcebergDatabase: {
-                    physicalResourceId: "iceberg-catalog-db",
-                    resourceType: "AWS::Glue::Database",
-                    resourceStatus: "CREATE_COMPLETE",
-                },
                 UserAthenaResultsBucket: {
                     physicalResourceId: "athena-results-bucket-xyz",
                     resourceType: "AWS::S3::Bucket",
@@ -389,27 +357,8 @@ describe("XDG Launch Pure Functions - Integration", () => {
 
             expect(discovered.athenaUserWorkgroup).toBe("my-user-workgroup");
             expect(discovered.athenaUserPolicy).toBe("my-user-policy-ABCDEF");
-            expect(discovered.icebergWorkgroup).toBe("my-iceberg-workgroup");
-            expect(discovered.icebergDatabase).toBe("iceberg-catalog-db");
             expect(discovered.athenaResultsBucket).toBe("athena-results-bucket-xyz");
             expect(discovered.athenaResultsBucketPolicy).toBe("athena-results-policy-xyz");
-        });
-
-        it("should handle partial resource sets gracefully", () => {
-            const mockResources: StackResourceMap = {
-                UserAthenaNonManagedRoleWorkgroup: {
-                    physicalResourceId: "my-workgroup",
-                    resourceType: "AWS::Athena::WorkGroup",
-                    resourceStatus: "CREATE_COMPLETE",
-                },
-                // Iceberg resources not present
-            };
-
-            const discovered: DiscoveredQuiltResources = extractQuiltResources(mockResources);
-
-            expect(discovered.athenaUserWorkgroup).toBe("my-workgroup");
-            expect(discovered.icebergWorkgroup).toBeUndefined();
-            expect(discovered.icebergDatabase).toBeUndefined();
         });
 
         it("should handle empty resource map gracefully", () => {
@@ -418,8 +367,6 @@ describe("XDG Launch Pure Functions - Integration", () => {
             expect(discovered).toBeDefined();
             expect(discovered.athenaUserWorkgroup).toBeUndefined();
             expect(discovered.athenaUserPolicy).toBeUndefined();
-            expect(discovered.icebergWorkgroup).toBeUndefined();
-            expect(discovered.icebergDatabase).toBeUndefined();
             expect(discovered.athenaResultsBucket).toBeUndefined();
             expect(discovered.athenaResultsBucketPolicy).toBeUndefined();
         });
@@ -448,21 +395,6 @@ describe("XDG Launch Pure Functions - Integration", () => {
             // Should only extract the target resource
             expect(discovered.athenaUserWorkgroup).toBe("my-workgroup");
             expect(Object.keys(discovered).length).toBe(1);
-        });
-
-        it("should be a pure function (same input produces same output)", () => {
-            const mockResources: StackResourceMap = {
-                IcebergDatabase: {
-                    physicalResourceId: "iceberg-db",
-                    resourceType: "AWS::Glue::Database",
-                    resourceStatus: "CREATE_COMPLETE",
-                },
-            };
-
-            const result1 = extractQuiltResources(mockResources);
-            const result2 = extractQuiltResources(mockResources);
-
-            expect(result1).toEqual(result2);
         });
 
         it("should convert role names to ARNs when account ID is provided", () => {

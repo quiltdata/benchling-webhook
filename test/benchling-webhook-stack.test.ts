@@ -1,14 +1,14 @@
 import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
-import { createMockConfig } from "./helpers/test-config";
+import { createMockStackConfig } from "./helpers/test-config";
 
 describe("BenchlingWebhookStack", () => {
     let template: Template;
 
     beforeEach(() => {
         const app = new cdk.App();
-        const config = createMockConfig();
+        const config = createMockStackConfig();
         const stack = new BenchlingWebhookStack(app, "TestStack", {
             config,
             env: {
@@ -84,7 +84,7 @@ describe("BenchlingWebhookStack", () => {
 
     test("uses resource policy for IP filtering when webhookAllowList is configured", () => {
         const app = new cdk.App();
-        const configWithIpFilter = createMockConfig({
+        const configWithIpFilter = createMockStackConfig({
             security: {
                 webhookAllowList: "192.168.1.0/24,10.0.0.0/8",
                 enableVerification: true,
@@ -142,7 +142,7 @@ describe("BenchlingWebhookStack", () => {
 
     test("throws error when missing required parameters", () => {
         const app = new cdk.App();
-        const config = createMockConfig({
+        const config = createMockStackConfig({
             benchling: {
                 secretArn: "",
                 tenant: "test-tenant",
@@ -235,7 +235,7 @@ describe("BenchlingWebhookStack", () => {
     describe("CloudFormation Parameter Defaults (Option A)", () => {
         test("uses config values as parameter defaults for required Quilt fields", () => {
             const app = new cdk.App();
-            const config = createMockConfig({
+            const config = createMockStackConfig({
                 quilt: {
                     catalog: "test-catalog.quiltdata.com",
                     database: "test_database",
@@ -265,18 +265,17 @@ describe("BenchlingWebhookStack", () => {
             });
         });
 
-        test("uses config values as parameter defaults for optional Quilt fields", () => {
+        test("optional Quilt fields always default to empty string (not part of StackConfig)", () => {
             const app = new cdk.App();
-            const config = createMockConfig({
+            // Note: athenaUserWorkgroup and athenaResultsBucket are NOT part of StackConfig
+            // They were removed during config streamlining. The stack creates parameters
+            // with empty string defaults, which can be overridden at deployment time.
+            const config = createMockStackConfig({
                 quilt: {
                     catalog: "test.quiltdata.com",
                     database: "test_db",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123/queue",
                     region: "us-east-1",
-                    icebergDatabase: "iceberg_db",
-                    icebergWorkgroup: "iceberg_wg",
-                    athenaUserWorkgroup: "athena_wg",
-                    athenaResultsBucket: "s3://results-bucket",
                 },
             });
             const stack = new BenchlingWebhookStack(app, "TestStackOptional", {
@@ -289,24 +288,19 @@ describe("BenchlingWebhookStack", () => {
 
             const testTemplate = Template.fromStack(stack);
 
-            // Verify optional parameters have correct defaults from config
-            testTemplate.hasParameter("IcebergDatabase", {
-                Default: "iceberg_db",
-            });
-            testTemplate.hasParameter("IcebergWorkgroup", {
-                Default: "iceberg_wg",
-            });
+            // Optional Quilt parameters always default to empty string
+            // since they're not part of minimal StackConfig interface
             testTemplate.hasParameter("AthenaUserWorkgroup", {
-                Default: "athena_wg",
+                Default: "",
             });
             testTemplate.hasParameter("AthenaResultsBucket", {
-                Default: "s3://results-bucket",
+                Default: "",
             });
         });
 
         test("uses empty string as default when optional config fields are missing", () => {
             const app = new cdk.App();
-            const config = createMockConfig({
+            const config = createMockStackConfig({
                 quilt: {
                     catalog: "test.quiltdata.com",
                     database: "test_db",
@@ -326,12 +320,6 @@ describe("BenchlingWebhookStack", () => {
             const testTemplate = Template.fromStack(stack);
 
             // Verify optional parameters default to empty string when not configured
-            testTemplate.hasParameter("IcebergDatabase", {
-                Default: "",
-            });
-            testTemplate.hasParameter("IcebergWorkgroup", {
-                Default: "",
-            });
             testTemplate.hasParameter("AthenaUserWorkgroup", {
                 Default: "",
             });
@@ -342,7 +330,7 @@ describe("BenchlingWebhookStack", () => {
 
         test("validates required Quilt config fields are present", () => {
             const app = new cdk.App();
-            const config = createMockConfig({
+            const config = createMockStackConfig({
                 quilt: {
                     catalog: "",  // Missing required field
                     database: "test_db",
@@ -378,7 +366,7 @@ describe("BenchlingWebhookStack", () => {
 
         test("validates all required Quilt fields and shows all missing fields", () => {
             const app = new cdk.App();
-            const config = createMockConfig({
+            const config = createMockStackConfig({
                 benchling: {
                     secretArn: "",  // Missing required Benchling field
                     tenant: "test",
@@ -425,7 +413,7 @@ describe("BenchlingWebhookStack", () => {
             process.env.SKIP_CONFIG_VALIDATION = "true";
 
             const app = new cdk.App();
-            const config = createMockConfig({
+            const config = createMockStackConfig({
                 benchling: {
                     secretArn: "",  // Would normally fail
                     tenant: "test",

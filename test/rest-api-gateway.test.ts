@@ -4,6 +4,7 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { RestApiGateway } from "../lib/rest-api-gateway";
 import { ProfileConfig } from "../lib/types/config";
+import { profileToStackConfig } from "../lib/utils/config-transform";
 
 describe("RestApiGateway", () => {
     let stack: cdk.Stack;
@@ -66,7 +67,7 @@ describe("RestApiGateway", () => {
                 region: "us-west-2",
             },
             _metadata: {
-                version: "0.7.0",
+                version: "0.10.0",
                 createdAt: "2025-11-04T12:00:00Z",
                 updatedAt: "2025-11-04T12:00:00Z",
                 source: "cli",
@@ -80,7 +81,7 @@ describe("RestApiGateway", () => {
             networkLoadBalancer,
             nlbListener,
             serviceSecurityGroup,
-            config: mockConfig,
+            config: profileToStackConfig(mockConfig),
             stage: "prod",
         });
 
@@ -102,7 +103,7 @@ describe("RestApiGateway", () => {
             networkLoadBalancer,
             nlbListener,
             serviceSecurityGroup,
-            config: mockConfig,
+            config: profileToStackConfig(mockConfig),
             stage: "prod",
         });
 
@@ -125,7 +126,7 @@ describe("RestApiGateway", () => {
             networkLoadBalancer,
             nlbListener,
             serviceSecurityGroup,
-            config: mockConfig,
+            config: profileToStackConfig(mockConfig),
             stage: "prod",
         });
 
@@ -156,7 +157,7 @@ describe("RestApiGateway", () => {
             networkLoadBalancer,
             nlbListener,
             serviceSecurityGroup,
-            config: mockConfig,
+            config: profileToStackConfig(mockConfig),
             stage: "prod",
         });
 
@@ -199,7 +200,7 @@ describe("RestApiGateway", () => {
             networkLoadBalancer,
             nlbListener,
             serviceSecurityGroup,
-            config: configWithIpFilter,
+            config: profileToStackConfig(configWithIpFilter),
             stage: "prod",
         });
 
@@ -240,7 +241,7 @@ describe("RestApiGateway", () => {
             networkLoadBalancer,
             nlbListener,
             serviceSecurityGroup,
-            config: configWithIpFilter,
+            config: profileToStackConfig(configWithIpFilter),
             stage: "prod",
         });
 
@@ -276,7 +277,7 @@ describe("RestApiGateway", () => {
             networkLoadBalancer,
             nlbListener,
             serviceSecurityGroup,
-            config: configWithMultipleIps,
+            config: profileToStackConfig(configWithMultipleIps),
             stage: "prod",
         });
 
@@ -308,7 +309,7 @@ describe("RestApiGateway", () => {
             networkLoadBalancer,
             nlbListener,
             serviceSecurityGroup,
-            config: configWithIpFilter,
+            config: profileToStackConfig(configWithIpFilter),
             stage: "prod",
         });
 
@@ -326,7 +327,7 @@ describe("RestApiGateway", () => {
             networkLoadBalancer,
             nlbListener,
             serviceSecurityGroup,
-            config: mockConfig,
+            config: profileToStackConfig(mockConfig),
             stage: "dev",
         });
 
@@ -343,7 +344,7 @@ describe("RestApiGateway", () => {
             networkLoadBalancer,
             nlbListener,
             serviceSecurityGroup,
-            config: mockConfig,
+            config: profileToStackConfig(mockConfig),
             stage: "prod",
         });
 

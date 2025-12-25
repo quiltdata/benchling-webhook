@@ -1,7 +1,8 @@
 import * as cdk from "aws-cdk-lib";
 import { Template, Match } from "aws-cdk-lib/assertions";
 import { BenchlingWebhookStack } from "../lib/benchling-webhook-stack";
-import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/test-config";
+import { createMockConfig, createDevConfig, createProdConfig, createMockStackConfig } from "./helpers/test-config";
+import { profileToStackConfig } from "../lib/utils/config-transform";
 
 /**
  * Multi-Environment Stack Tests
@@ -19,7 +20,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("Profile Handling", () => {
         test("creates stack with prod profile only", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {
@@ -40,7 +41,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates stack with image tag parameter", () => {
-            const config = createMockConfig({
+            const config = createMockStackConfig({
                 deployment: {
                     region: "us-east-1",
                     imageTag: "v0.6.3",
@@ -64,7 +65,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("throws error when missing required parameters", () => {
-            const config = createMockConfig({
+            const config = createMockStackConfig({
                 benchling: {
                     secretArn: "",
                     tenant: "test-tenant",
@@ -85,7 +86,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("throws error when missing benchling secret", () => {
-            const config = createMockConfig({
+            const config = createMockStackConfig({
                 benchling: {
                     tenant: "test-tenant",
                     clientId: "client_123",
@@ -108,7 +109,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("CloudFormation Parameters", () => {
         test("does not create QuiltStackARN parameter (removed in v1.0.0)", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {
@@ -125,11 +126,11 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates BenchlingSecret parameter", () => {
-            const config = createMockConfig({
+            const config = createMockStackConfig({
                 benchling: {
                     tenant: "test-tenant",
                     clientId: "client_123",
-                    secretArn: "quiltdata/benchling-webhook/default/tenant",
+                    secretArn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-secret",
                     appDefinitionId: "app_456",
                 },
             });
@@ -151,7 +152,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates LogLevel parameter with allowed values", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {
@@ -171,7 +172,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates ImageTag parameter", () => {
-            const config = createMockConfig({
+            const config = createMockStackConfig({
                 deployment: {
                     region: "us-east-1",
                     imageTag: "latest",
@@ -197,7 +198,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("Infrastructure Components", () => {
         test("creates single ECS cluster", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {
@@ -213,7 +214,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates Network Load Balancer (uses NLB)", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {
@@ -231,7 +232,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates HTTP API v2 for webhooks", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {
@@ -260,7 +261,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("uses hardcoded quiltdata ECR repository", () => {
-            const config = createMockConfig({
+            const config = createMockStackConfig({
                 deployment: {
                     region: "us-east-1",
                     ecrRepository: "quiltdata/benchling",
@@ -298,12 +299,12 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("Environment-Specific Configuration", () => {
         test("prod configuration uses semantic versioning", () => {
-            const config = createProdConfig({
+            const config = profileToStackConfig(createProdConfig({
                 deployment: {
                     region: "us-east-1",
                     imageTag: "v0.6.3",
                 },
-            });
+            }));
 
             const stack = new BenchlingWebhookStack(app, "ProdStack", {
                 config,
@@ -320,12 +321,12 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("dev configuration can use latest tag", () => {
-            const config = createDevConfig({
+            const config = profileToStackConfig(createDevConfig({
                 deployment: {
                     region: "us-east-1",
                     imageTag: "latest",
                 },
-            });
+            }));
 
             const stack = new BenchlingWebhookStack(app, "DevStack", {
                 config,
@@ -344,8 +345,8 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("Service Isolation", () => {
         test("separate stacks can coexist", () => {
-            const devConfig = createDevConfig();
-            const prodConfig = createProdConfig();
+            const devConfig = profileToStackConfig(createDevConfig());
+            const prodConfig = profileToStackConfig(createProdConfig());
 
             // Create dev stack
             const devStack = new BenchlingWebhookStack(app, "DevStack", {
@@ -376,7 +377,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("IAM Permissions", () => {
         test("task role has required permissions", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {
@@ -423,7 +424,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("CloudFormation Outputs", () => {
         test("exports webhook endpoint", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {
@@ -439,7 +440,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("exports API Gateway ID", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {
@@ -456,7 +457,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("exports API Gateway log group", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {
@@ -475,7 +476,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("Auto-scaling", () => {
         test("configures auto-scaling for service", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {
@@ -495,7 +496,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
 
     describe("Monitoring", () => {
         test("enables Container Insights", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {
@@ -515,7 +516,7 @@ describe("BenchlingWebhookStack - Multi-Environment Support", () => {
         });
 
         test("creates CloudWatch log groups", () => {
-            const config = createMockConfig();
+            const config = createMockStackConfig();
             const stack = new BenchlingWebhookStack(app, "TestStack", {
                 config,
                 env: {

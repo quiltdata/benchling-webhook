@@ -105,10 +105,6 @@ describe("Stack Resource Discovery - Integration", () => {
             if (discovered.athenaUserPolicy) {
                 console.log(`    Found User Policy: ${discovered.athenaUserPolicy}`);
             }
-            if (discovered.icebergWorkgroup) {
-                console.log(`    Found Iceberg Workgroup: ${discovered.icebergWorkgroup}`);
-            }
-
             // If workgroups exist, they should be non-empty strings
             if (discovered.athenaUserWorkgroup) {
                 expect(typeof discovered.athenaUserWorkgroup).toBe("string");
@@ -118,25 +114,6 @@ describe("Stack Resource Discovery - Integration", () => {
             if (discovered.athenaUserPolicy) {
                 expect(typeof discovered.athenaUserPolicy).toBe("string");
                 expect(discovered.athenaUserPolicy.length).toBeGreaterThan(0);
-            }
-
-            if (discovered.icebergWorkgroup) {
-                expect(typeof discovered.icebergWorkgroup).toBe("string");
-                expect(discovered.icebergWorkgroup.length).toBeGreaterThan(0);
-            }
-        });
-
-        it("should extract Iceberg database if present", () => {
-            if (skipTests) {
-                console.log("    Skipping - no profile configured");
-                return;
-            }
-            const discovered = extractQuiltResources(resources);
-
-            if (discovered.icebergDatabase) {
-                console.log(`    Found Iceberg Database: ${discovered.icebergDatabase}`);
-                expect(typeof discovered.icebergDatabase).toBe("string");
-                expect(discovered.icebergDatabase.length).toBeGreaterThan(0);
             }
         });
 
@@ -191,8 +168,6 @@ describe("Stack Resource Discovery - Integration", () => {
             expect(discovered).toBeDefined();
             expect(discovered.athenaUserWorkgroup).toBeUndefined();
             expect(discovered.athenaUserPolicy).toBeUndefined();
-            expect(discovered.icebergWorkgroup).toBeUndefined();
-            expect(discovered.icebergDatabase).toBeUndefined();
             expect(discovered.athenaResultsBucket).toBeUndefined();
             expect(discovered.athenaResultsBucketPolicy).toBeUndefined();
             expect(discovered.benchlingSecretArn).toBeUndefined();
@@ -231,13 +206,11 @@ describe("Stack Resource Discovery - Integration", () => {
             let discoveredCount = 0;
             if (discovered.athenaUserWorkgroup) discoveredCount++;
             if (discovered.athenaUserPolicy) discoveredCount++;
-            if (discovered.icebergWorkgroup) discoveredCount++;
-            if (discovered.icebergDatabase) discoveredCount++;
             if (discovered.athenaResultsBucket) discoveredCount++;
             if (discovered.athenaResultsBucketPolicy) discoveredCount++;
             if (discovered.benchlingSecretArn) discoveredCount++;
 
-            console.log(`    Discovered ${discoveredCount}/7 target resources`);
+            console.log(`    Discovered ${discoveredCount}/5 target resources`);
 
             // At least one resource should be found (depends on stack configuration)
             // This is informational, not a hard requirement
