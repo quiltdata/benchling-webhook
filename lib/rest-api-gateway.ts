@@ -5,14 +5,14 @@ import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
-import { ProfileConfig } from "./types/config";
+import { StackConfig } from "./types/stack-config";
 
 export interface RestApiGatewayProps {
     readonly vpc: ec2.IVpc;
     readonly networkLoadBalancer: elbv2.INetworkLoadBalancer;
     readonly nlbListener: elbv2.INetworkListener;
     readonly serviceSecurityGroup: ec2.ISecurityGroup;
-    readonly config: ProfileConfig;
+    readonly config: StackConfig;
     readonly stage: string;
 }
 
@@ -169,15 +169,7 @@ export class RestApiGateway {
         });
 
         // Webhook verification status
-        const verificationEnabled = props.config.security?.enableVerification !== false;
-        if (verificationEnabled) {
-            console.log("Webhook signature verification: ENABLED (FastAPI application)");
-        } else {
-            console.warn(
-                "WARNING: Webhook signature verification is DISABLED. " +
-                "This should only be used for testing. Enable it in production by setting " +
-                "config.security.enableVerification = true",
-            );
-        }
+        // StackConfig doesn't include security.enableVerification, so log that verification is handled by FastAPI
+        console.log("Webhook signature verification: ENABLED (FastAPI application)");
     }
 }

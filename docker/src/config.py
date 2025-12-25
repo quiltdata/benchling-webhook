@@ -40,10 +40,7 @@ class Config:
     queue_url: str = ""
     athena_user_workgroup: str = ""
     athena_results_bucket: str = ""
-    iceberg_database: str = ""
-    iceberg_workgroup: str = ""
     enable_webhook_verification: bool = True
-    webhook_allow_list: str = ""
     pkg_prefix: str = ""
     quilt_write_role_arn: str = ""
 
@@ -72,12 +69,9 @@ class Config:
             - BENCHLING_TEST_MODE: Disable verification for testing workflows (default: false)
             - ATHENA_USER_WORKGROUP: Athena workgroup (default: primary, v0.8.0+)
             - ATHENA_RESULTS_BUCKET: Athena results S3 bucket (default: "", v0.8.0+)
-            - ICEBERG_DATABASE: Iceberg database name (default: "", v0.8.0+)
-            - ICEBERG_WORKGROUP: Iceberg Athena workgroup (default: "", v0.8.0+)
             - QUILT_WRITE_ROLE_ARN: IAM role ARN for S3 access (default: "", v1.1.0+)
 
         Package configuration (bucket, prefix, metadata_key) comes from Secrets Manager.
-        Security configuration (webhook_allow_list) comes from Secrets Manager.
         """
         # Read Quilt service environment variables (NO CLOUDFORMATION!)
         self.quilt_catalog = os.getenv("QUILT_WEB_HOST", "")
@@ -89,11 +83,9 @@ class Config:
         self.quilt_write_role_arn = os.getenv("QUILT_WRITE_ROLE_ARN", "")
 
         # Optional Quilt service configuration (v0.8.0+)
-        # These are used by PackageQuery for Athena/Iceberg queries
+        # These are used by PackageQuery for Athena queries
         self.athena_user_workgroup = os.getenv("ATHENA_USER_WORKGROUP", "primary")
         self.athena_results_bucket = os.getenv("ATHENA_RESULTS_BUCKET", "")
-        self.iceberg_database = os.getenv("ICEBERG_DATABASE", "")
-        self.iceberg_workgroup = os.getenv("ICEBERG_WORKGROUP", "")
 
         # Package configuration - initialized to defaults, will be set from on-demand secret fetch
         self.s3_bucket_name = ""
@@ -108,13 +100,11 @@ class Config:
         # Security configuration - propagated to API Gateway Lambda authorizer
         enable_verification = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "true").lower()
         self.enable_webhook_verification = enable_verification in ("true", "1", "yes")
-        self.webhook_allow_list = ""  # Will be set from on-demand secret fetch
 
         # Test mode override: disable webhook verification for local integration tests
         self._test_mode = os.getenv("BENCHLING_TEST_MODE", "").lower() in ("true", "1", "yes")
         if self._test_mode:
             self.enable_webhook_verification = False
-            self.webhook_allow_list = ""
 
         # Store secret name and client for on-demand fetching
         self._benchling_secret_name = os.getenv("BenchlingSecret", "")
@@ -135,8 +125,7 @@ class Config:
                 '  "pkg_key": "experiment_id",\n'
                 '  "user_bucket": "s3-bucket-name",\n'
                 '  "log_level": "INFO",\n'
-                '  "enable_webhook_verification": "true",\n'
-                '  "webhook_allow_list": ""\n'
+                '  "enable_webhook_verification": "true"\n'
                 "}\n"
             )
 
@@ -237,7 +226,6 @@ class Config:
 
             # Security configuration ALWAYS comes from secret
             self.enable_webhook_verification = secret_data.enable_webhook_verification
-            self.webhook_allow_list = secret_data.webhook_allow_list
 
             # Log level from secret
             if secret_data.log_level:

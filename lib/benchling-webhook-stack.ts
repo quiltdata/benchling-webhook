@@ -5,21 +5,22 @@ import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
 import { RestApiGateway } from "./rest-api-gateway";
 import { NetworkLoadBalancer } from "./network-load-balancer";
-import { ProfileConfig } from "./types/config";
+import { StackConfig } from "./types/stack-config";
 import packageJson from "../package.json";
 
 /**
- * Stack properties for BenchlingWebhookStack (v0.7.0+)
+ * Stack properties for BenchlingWebhookStack (v0.10.0+)
  *
- * Configuration is provided via ProfileConfig interface, which contains
- * all necessary settings for deployment in a structured format.
+ * Configuration is provided via StackConfig interface, which contains
+ * ONLY the fields required by the CDK stack infrastructure.
+ * This is a minimal interface derived from ProfileConfig via transformation.
  */
 export interface BenchlingWebhookStackProps extends cdk.StackProps {
     /**
-     * Profile configuration containing all deployment settings
-     * This replaces the previous secrets-only mode parameters.
+     * Minimal stack configuration containing only infrastructure-related settings
+     * Transformed from ProfileConfig by bin/commands/deploy.ts
      */
-    readonly config: ProfileConfig;
+    readonly config: StackConfig;
 }
 
 export class BenchlingWebhookStack extends cdk.Stack {
@@ -68,8 +69,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             }
         }
 
-        console.log(`Deploying with profile configuration (v${packageJson.version})`);
-        console.log(`  Benchling Tenant: ${config.benchling.tenant}`);
+        console.log(`Deploying with stack configuration (v${packageJson.version})`);
         console.log(`  Region: ${config.deployment.region}`);
 
         // Create CloudFormation parameters for runtime-configurable values
@@ -95,29 +95,16 @@ export class BenchlingWebhookStack extends cdk.Stack {
             default: config.quilt.catalog || "",  // Use config value as default
         });
 
-        const icebergDatabaseParam = new cdk.CfnParameter(this, "IcebergDatabase", {
-            type: "String",
-            description: "Iceberg database name (optional, leave empty if not used)",
-            default: config.quilt.icebergDatabase || "",  // Use config value as default
-        });
-
-        // NEW: Optional Athena resources (from Quilt stack discovery)
-        const icebergWorkgroupParam = new cdk.CfnParameter(this, "IcebergWorkgroup", {
-            type: "String",
-            description: "Iceberg workgroup name (optional, from Quilt stack discovery)",
-            default: config.quilt.icebergWorkgroup || "",  // Use config value as default
-        });
-
         const athenaUserWorkgroupParam = new cdk.CfnParameter(this, "AthenaUserWorkgroup", {
             type: "String",
             description: "Athena workgroup for user queries (optional, from Quilt stack discovery)",
-            default: config.quilt.athenaUserWorkgroup || "",  // Use config value as default
+            default: "",  // StackConfig doesn't include this field - only passed via env vars
         });
 
         const athenaResultsBucketParam = new cdk.CfnParameter(this, "AthenaResultsBucket", {
             type: "String",
             description: "S3 bucket for Athena query results (optional, from Quilt stack discovery)",
-            default: config.quilt.athenaResultsBucket || "",  // Use config value as default
+            default: "",  // StackConfig doesn't include this field - only passed via env vars
         });
 
         const benchlingSecretParam = new cdk.CfnParameter(this, "BenchlingSecretARN", {
@@ -129,7 +116,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const logLevelParam = new cdk.CfnParameter(this, "LogLevel", {
             type: "String",
             description: "Application log level (DEBUG, INFO, WARNING, ERROR)",
-            default: config.logging?.level || "INFO",
+            default: "INFO",  // StackConfig doesn't include logging level - only passed via env vars
             allowedValues: ["DEBUG", "INFO", "WARNING", "ERROR"],
         });
 
@@ -142,7 +129,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const packageBucketParam = new cdk.CfnParameter(this, "PackageBucket", {
             type: "String",
             description: "S3 bucket name for Quilt packages (resolved from Quilt stack outputs at runtime)",
-            default: config.packages.bucket,
+            default: "",  // StackConfig doesn't include package bucket - only passed via env vars
         });
 
         const quiltDatabaseParam = new cdk.CfnParameter(this, "QuiltDatabase", {
@@ -156,8 +143,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const packagerQueueUrlValue = packagerQueueUrlParam.valueAsString;
         const athenaUserDatabaseValue = athenaUserDatabaseParam.valueAsString;
         const quiltWebHostValue = quiltWebHostParam.valueAsString;
-        const icebergDatabaseValue = icebergDatabaseParam.valueAsString;
-        const icebergWorkgroupValue = icebergWorkgroupParam.valueAsString;
         const athenaUserWorkgroupValue = athenaUserWorkgroupParam.valueAsString;
         const athenaResultsBucketValue = athenaResultsBucketParam.valueAsString;
         const benchlingSecretValue = benchlingSecretParam.valueAsString;
@@ -245,7 +230,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         // HARDCODED: Always use the quiltdata AWS account for ECR images
         const account = "712023778557";
         const region = "us-east-1";
-        const repoName = config.deployment.ecrRepository || "quiltdata/benchling";
+        const repoName = "quiltdata/benchling";  // StackConfig doesn't include ecrRepository - hardcoded
         const ecrArn = `arn:aws:ecr:${region}:${account}:repository/${repoName}`;
         const ecrRepo = ecr.Repository.fromRepositoryArn(this, "ExistingEcrRepository", ecrArn);
         const ecrImageUri = `${account}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTagValue}`;
@@ -275,13 +260,12 @@ export class BenchlingWebhookStack extends cdk.Stack {
             packagerQueueUrl: packagerQueueUrlValue,
             athenaUserDatabase: athenaUserDatabaseValue,
             quiltWebHost: quiltWebHostValue,
-            icebergDatabase: icebergDatabaseValue,
             // NEW: Optional Athena resources (from Quilt stack discovery)
-            icebergWorkgroup: icebergWorkgroupValue,
             athenaUserWorkgroup: athenaUserWorkgroupValue,
             athenaResultsBucket: athenaResultsBucketValue,
-            // IAM role ARN for cross-account S3 access (write role used for all operations)
-            writeRoleArn: config.quilt.writeRoleArn,
+            // IAM managed policy ARNs for S3 and Athena access
+            bucketWritePolicyArn: config.quilt.bucketWritePolicyArn,
+            athenaUserPolicyArn: config.quilt.athenaUserPolicyArn,
             // Legacy parameters
             benchlingSecret: benchlingSecretValue,
             packageBucket: packageBucketValue,
@@ -358,17 +342,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
         new cdk.CfnOutput(this, "TargetGroupArn", {
             value: this.nlb.targetGroup.targetGroupArn,
             description: "NLB Target Group ARN for ECS tasks",
-        });
-
-        // Export configuration metadata
-        new cdk.CfnOutput(this, "ConfigVersion", {
-            value: config._metadata.version,
-            description: "Configuration schema version",
-        });
-
-        new cdk.CfnOutput(this, "ConfigSource", {
-            value: config._metadata.source,
-            description: "Configuration source (wizard, manual, cli)",
         });
     }
 

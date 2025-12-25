@@ -5,7 +5,6 @@ import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { FargateService } from "../lib/fargate-service";
 import { createMockConfig, createDevConfig, createProdConfig } from "./helpers/test-config";
-import { profileToStackConfig } from "../lib/utils/config-transform";
 
 /**
  * Multi-Environment Fargate Service Tests
@@ -53,15 +52,14 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Single Service (Current Behavior)", () => {
         test("creates single ECS cluster", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 // New explicit service parameters
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
@@ -76,15 +74,14 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("creates single Fargate service", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 // New explicit service parameters
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
@@ -101,15 +98,14 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("registers with NLB target group", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             const service = new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 // New explicit service parameters
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
@@ -128,17 +124,16 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Environment Variable Configuration", () => {
         test("sets STAGE environment variable for production", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -158,12 +153,11 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("includes LOG_LEVEL environment variable", () => {
-            const profileConfig = createMockConfig({
+            const config = profileToStackConfig(createMockConfig({
                 logging: {
                     level: "DEBUG",
                 },
             });
-            const config = profileToStackConfig(profileConfig);
 
             new FargateService(stack, "TestFargateService", {
                 vpc,
@@ -171,7 +165,7 @@ describe("FargateService - Multi-Environment Support", () => {
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
                 // New explicit service parameters
@@ -194,13 +188,12 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Image Tag Configuration", () => {
         test("uses provided image tag", () => {
-            const profileConfig = createMockConfig({
+            const config = profileToStackConfig(createMockConfig({
                 deployment: {
                     region: "us-east-1",
                     imageTag: "v0.6.3",
                 },
             });
-            const config = profileToStackConfig(profileConfig);
 
             new FargateService(stack, "TestFargateService", {
                 vpc,
@@ -209,10 +202,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
                 imageTag: "v0.6.3",
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -228,17 +221,16 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("defaults to latest when no tag provided", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -254,15 +246,14 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Secret Management", () => {
         test("references Secrets Manager secret", () => {
-            const profileConfig = createMockConfig({
+            const config = profileToStackConfig(createMockConfig({
                 benchling: {
                     tenant: "test-tenant",
                     clientId: "client_123",
-                    secretArn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-secret",
+                    secretArn: "quiltdata/benchling-webhook/default/tenant",
                     appDefinitionId: "app_456",
                 },
             });
-            const config = profileToStackConfig(profileConfig);
 
             new FargateService(stack, "TestFargateService", {
                 vpc,
@@ -270,9 +261,9 @@ describe("FargateService - Multi-Environment Support", () => {
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -299,10 +290,8 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("different secrets for different environments", () => {
-            const devProfileConfig = createDevConfig();
-            const prodProfileConfig = createProdConfig();
-            const devConfig = profileToStackConfig(devProfileConfig);
-            const prodConfig = profileToStackConfig(prodProfileConfig);
+            const devConfig = createDevConfig();
+            const prodConfig = createProdConfig();
 
             // Create dev service
             const devService = new FargateService(stack, "DevFargateService", {
@@ -311,10 +300,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: devConfig.benchling.secretArn!,
-                packageBucket: devProfileConfig.packages.bucket,
+                packageBucket: devConfig.packages.bucket,
                 quiltDatabase: devConfig.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -327,10 +316,10 @@ describe("FargateService - Multi-Environment Support", () => {
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: prodConfig.benchling.secretArn!,
-                packageBucket: prodProfileConfig.packages.bucket,
+                packageBucket: prodConfig.packages.bucket,
                 quiltDatabase: prodConfig.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -344,18 +333,17 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Service networking", () => {
         test("allows VPC traffic to container port 8080", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -377,18 +365,17 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Auto-scaling Configuration", () => {
         test("configures auto-scaling for service", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -405,18 +392,17 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("configures CPU-based scaling policy", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -436,18 +422,17 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("configures memory-based scaling policy", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -469,18 +454,17 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("IAM Permissions", () => {
         test("task role does not have CloudFormation permissions (removed in v1.0.0)", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
                 logLevel: "DEBUG",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -506,17 +490,16 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("task role has S3 permissions", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -541,17 +524,16 @@ describe("FargateService - Multi-Environment Support", () => {
         });
 
         test("task role has SQS send permissions", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -578,17 +560,16 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("Container Insights", () => {
         test("enables Container Insights on cluster", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",
@@ -607,17 +588,16 @@ describe("FargateService - Multi-Environment Support", () => {
 
     describe("CloudWatch Logging", () => {
         test("creates log group for container logs", () => {
-            const profileConfig = createMockConfig();
-            const config = profileToStackConfig(profileConfig);
+            const config = profileToStackConfig(createMockConfig();
             new FargateService(stack, "TestFargateService", {
                 vpc,
                 config,
                 ecrRepository,
                 targetGroup,
                 benchlingSecret: config.benchling.secretArn!,
-                packageBucket: profileConfig.packages.bucket,
+                packageBucket: config.packages.bucket,
                 quiltDatabase: config.quilt.database || "test-database",
-                // New explicit service parameters
+                // New explicit service parameters 
                 packagerQueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                 athenaUserDatabase: "test-database",
                 quiltWebHost: "quilt.example.com",

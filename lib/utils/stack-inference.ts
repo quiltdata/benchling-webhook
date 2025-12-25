@@ -62,24 +62,18 @@ export interface StackResourceMap {
  *
  * Target resources:
  * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
- * - UserAthenaNonManagedRolePolicy (AWS::IAM::Policy)
- * - IcebergWorkGroup (AWS::Athena::WorkGroup)
- * - IcebergDatabase (AWS::Glue::Database)
+ * - UserAthenaNonManagedRolePolicy (AWS::IAM::ManagedPolicy)
  * - UserAthenaResultsBucket (AWS::S3::Bucket)
  * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
- * - T4BucketReadRole (AWS::IAM::Role)
- * - T4BucketWriteRole (AWS::IAM::Role)
+ * - BucketWritePolicy (AWS::IAM::ManagedPolicy)
  * - BenchlingSecret (AWS::SecretsManager::Secret)
  */
 export interface DiscoveredQuiltResources {
     athenaUserWorkgroup?: string;
-    athenaUserPolicy?: string;
-    icebergWorkgroup?: string;
-    icebergDatabase?: string;
+    athenaUserPolicyArn?: string;
     athenaResultsBucket?: string;
     athenaResultsBucketPolicy?: string;
-    readRoleArn?: string;
-    writeRoleArn?: string;
+    bucketWritePolicyArn?: string;
     benchlingSecretArn?: string;
 }
 
@@ -159,17 +153,14 @@ export function toRoleArn(roleNameOrArn: string, account: string): string {
 }
 
 /**
- * Extract Athena workgroups, IAM policies, Glue databases, S3 buckets, IAM roles, and Secrets Manager secrets from stack resources
+ * Extract Athena workgroups, IAM policies, S3 buckets, and Secrets Manager secrets from stack resources
  *
  * Target resources:
  * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
- * - UserAthenaNonManagedRolePolicy (AWS::IAM::Policy)
- * - IcebergWorkGroup (AWS::Athena::WorkGroup)
- * - IcebergDatabase (AWS::Glue::Database)
+ * - UserAthenaNonManagedRolePolicy (AWS::IAM::ManagedPolicy)
  * - UserAthenaResultsBucket (AWS::S3::Bucket)
  * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
- * - T4BucketReadRole (AWS::IAM::Role)
- * - T4BucketWriteRole (AWS::IAM::Role)
+ * - BucketWritePolicy (AWS::IAM::ManagedPolicy)
  * - BenchlingSecret (AWS::SecretsManager::Secret)
  *
  * @param resources Stack resource map from getStackResources
@@ -185,13 +176,10 @@ export function extractQuiltResources(
     // Map logical resource IDs to discovered resource properties
     const resourceMapping: Record<string, keyof DiscoveredQuiltResources> = {
         UserAthenaNonManagedRoleWorkgroup: "athenaUserWorkgroup",
-        UserAthenaNonManagedRolePolicy: "athenaUserPolicy",
-        IcebergWorkGroup: "icebergWorkgroup",
-        IcebergDatabase: "icebergDatabase",
+        UserAthenaNonManagedRolePolicy: "athenaUserPolicyArn",
         UserAthenaResultsBucket: "athenaResultsBucket",
         UserAthenaResultsBucketPolicy: "athenaResultsBucketPolicy",
-        T4BucketReadRole: "readRoleArn",
-        T4BucketWriteRole: "writeRoleArn",
+        BucketWritePolicy: "bucketWritePolicyArn",
         BenchlingSecret: "benchlingSecretArn",
     };
 
@@ -202,18 +190,10 @@ export function extractQuiltResources(
         if (resources[logicalId]) {
             const physicalId = resources[logicalId].physicalResourceId;
 
-            // For IAM roles, convert role names to ARNs if account ID is available
-            if (propertyName === "readRoleArn" || propertyName === "writeRoleArn") {
-                if (validateRoleArn(physicalId)) {
-                    // Already a valid ARN
-                    discovered[propertyName] = physicalId;
-                } else if (account) {
-                    // Convert role name to ARN using account ID
-                    discovered[propertyName] = toRoleArn(physicalId, account);
-                } else {
-                    // Log warning if we can't convert - need account ID
-                    console.warn(`Warning: Cannot convert role name to ARN for ${logicalId}: ${physicalId} (missing account ID)`);
-                }
+            // For IAM managed policies, the physical ID is already the ARN
+            if (propertyName === "athenaUserPolicyArn" || propertyName === "bucketWritePolicyArn") {
+                // Policy ARNs are returned directly as physical resource IDs
+                discovered[propertyName] = physicalId;
             } else if (propertyName === "benchlingSecretArn") {
                 // For Secrets Manager secrets, convert secret name to ARN if needed
                 if (physicalId.startsWith("arn:aws:secretsmanager:")) {
