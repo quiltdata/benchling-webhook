@@ -69,7 +69,7 @@ class TestSecretValidation:
 
     @pytest.fixture
     def valid_secret_data(self):
-        """Return valid secret data with all 10 parameters."""
+        """Return valid secret data with all 9 parameters."""
         return {
             "tenant": "test-tenant",
             "client_id": "test-client-id",
@@ -80,11 +80,10 @@ class TestSecretValidation:
             "user_bucket": "test-bucket",
             "log_level": "INFO",
             "enable_webhook_verification": "true",
-            "webhook_allow_list": "",
         }
 
     def test_valid_secret_all_parameters(self, mock_sm_client, valid_secret_data):
-        """Test that secret with all 10 parameters validates successfully."""
+        """Test that secret with all 9 parameters validates successfully."""
         mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
         secret = fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
@@ -98,7 +97,6 @@ class TestSecretValidation:
         assert secret.user_bucket == "test-bucket"
         assert secret.log_level == "INFO"
         assert secret.enable_webhook_verification is True
-        assert secret.webhook_allow_list == ""
 
     def test_missing_single_parameter(self, mock_sm_client, valid_secret_data):
         """Test that missing single parameter raises clear error."""
@@ -197,20 +195,3 @@ class TestSecretValidation:
             secret = fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
             assert secret.log_level == level
 
-    def test_webhook_allow_list_empty_string(self, mock_sm_client, valid_secret_data):
-        """Test that empty webhook_allow_list is valid (no restrictions)."""
-        valid_secret_data["webhook_allow_list"] = ""
-
-        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
-
-        secret = fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
-        assert secret.webhook_allow_list == ""
-
-    def test_webhook_allow_list_with_ips(self, mock_sm_client, valid_secret_data):
-        """Test that webhook_allow_list with IPs is valid."""
-        valid_secret_data["webhook_allow_list"] = "192.168.1.0/24,10.0.0.1"
-
-        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
-
-        secret = fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
-        assert secret.webhook_allow_list == "192.168.1.0/24,10.0.0.1"

@@ -41,7 +41,6 @@ class Config:
     athena_user_workgroup: str = ""
     athena_results_bucket: str = ""
     enable_webhook_verification: bool = True
-    webhook_allow_list: str = ""
     pkg_prefix: str = ""
     quilt_write_role_arn: str = ""
 
@@ -73,7 +72,6 @@ class Config:
             - QUILT_WRITE_ROLE_ARN: IAM role ARN for S3 access (default: "", v1.1.0+)
 
         Package configuration (bucket, prefix, metadata_key) comes from Secrets Manager.
-        Security configuration (webhook_allow_list) comes from Secrets Manager.
         """
         # Read Quilt service environment variables (NO CLOUDFORMATION!)
         self.quilt_catalog = os.getenv("QUILT_WEB_HOST", "")
@@ -102,13 +100,11 @@ class Config:
         # Security configuration - propagated to API Gateway Lambda authorizer
         enable_verification = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "true").lower()
         self.enable_webhook_verification = enable_verification in ("true", "1", "yes")
-        self.webhook_allow_list = ""  # Will be set from on-demand secret fetch
 
         # Test mode override: disable webhook verification for local integration tests
         self._test_mode = os.getenv("BENCHLING_TEST_MODE", "").lower() in ("true", "1", "yes")
         if self._test_mode:
             self.enable_webhook_verification = False
-            self.webhook_allow_list = ""
 
         # Store secret name and client for on-demand fetching
         self._benchling_secret_name = os.getenv("BenchlingSecret", "")
@@ -129,8 +125,7 @@ class Config:
                 '  "pkg_key": "experiment_id",\n'
                 '  "user_bucket": "s3-bucket-name",\n'
                 '  "log_level": "INFO",\n'
-                '  "enable_webhook_verification": "true",\n'
-                '  "webhook_allow_list": ""\n'
+                '  "enable_webhook_verification": "true"\n'
                 "}\n"
             )
 
@@ -231,7 +226,6 @@ class Config:
 
             # Security configuration ALWAYS comes from secret
             self.enable_webhook_verification = secret_data.enable_webhook_verification
-            self.webhook_allow_list = secret_data.webhook_allow_list
 
             # Log level from secret
             if secret_data.log_level:

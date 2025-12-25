@@ -34,7 +34,6 @@ class TestFlexibleRoutes:
         config.benchling_app_definition_id = ""
         config.enable_webhook_verification = False
         config.quilt_write_role_arn = ""
-        config.webhook_allow_list = ""
         config.pkg_key = "experiment_id"
         config.pkg_prefix = "benchling"
         config.log_level = "INFO"
