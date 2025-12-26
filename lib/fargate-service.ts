@@ -32,9 +32,9 @@ export interface FargateServiceProps {
     readonly athenaUserDatabase: string;
     readonly quiltWebHost: string;
 
-    // NEW: Optional Athena resources (from Quilt stack discovery)
+    // NEW: Optional Athena workgroup (from Quilt stack discovery)
+    // Query results are managed automatically by the workgroup's AWS-managed configuration
     readonly athenaUserWorkgroup?: string;
-    readonly athenaResultsBucket?: string;
 
     // NEW: Optional IAM managed policy ARNs (from Quilt stack discovery)
     readonly bucketWritePolicyArn?: string;
@@ -255,37 +255,9 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Grant S3 access for Athena query results
-        // Support both discovered results bucket (from Quilt stack) and fallback to default
-        const athenaResultsBuckets = props.athenaResultsBucket
-            ? [
-                // Discovered results bucket from Quilt stack
-                `arn:aws:s3:::${props.athenaResultsBucket}`,
-                `arn:aws:s3:::${props.athenaResultsBucket}/*`,
-                // Fallback to default bucket (use wildcard since we don't have account ID)
-                `arn:aws:s3:::aws-athena-query-results-*-${region}`,
-                `arn:aws:s3:::aws-athena-query-results-*-${region}/*`,
-            ]
-            : [
-                // Only default bucket if no discovered bucket (use wildcard since we don't have account ID)
-                `arn:aws:s3:::aws-athena-query-results-*-${region}`,
-                `arn:aws:s3:::aws-athena-query-results-*-${region}/*`,
-            ];
-
-        taskRole.addToPolicy(
-            new iam.PolicyStatement({
-                actions: [
-                    "s3:GetBucketLocation",
-                    "s3:GetObject",
-                    "s3:ListBucket",
-                    "s3:ListBucketVersions",
-                    "s3:PutObject",
-                    "s3:PutBucketPublicAccessBlock",
-                    "s3:CreateBucket",
-                ],
-                resources: athenaResultsBuckets,
-            }),
-        );
+        // Note: Athena query results are handled by AWS-managed workgroup configuration
+        // The athena:GetQueryResults API returns data directly without requiring S3 access
+        // S3 permissions for results bucket are NOT needed for get_query_results()
 
         // Create Fargate Task Definition
         const taskDefinition = new ecs.FargateTaskDefinition(this, "TaskDefinition", {
@@ -310,8 +282,7 @@ export class FargateService extends Construct {
             QUILT_WEB_HOST: props.quiltWebHost,
             ATHENA_USER_DATABASE: props.athenaUserDatabase,
             ATHENA_USER_WORKGROUP: props.athenaUserWorkgroup || "primary",
-            // Only set optional variables if they have values (don't pass empty strings)
-            ...(props.athenaResultsBucket ? { ATHENA_RESULTS_BUCKET: props.athenaResultsBucket } : {}),
+            // Query results managed automatically by workgroup's AWS-managed configuration
             PACKAGER_SQS_URL: props.packagerQueueUrl,
 
             // NOTE: IAM policies are now attached directly to task role

@@ -149,12 +149,6 @@ describe("XDG Launch Pure Functions - Integration", () => {
             if (!mockConfig.quilt.athenaUserWorkgroup) {
                 expect(envVars.ATHENA_USER_WORKGROUP).toBe("primary");
             }
-
-            // Athena results bucket is optional
-            expect(envVars).toHaveProperty("ATHENA_RESULTS_BUCKET");
-            if (!mockConfig.quilt.athenaResultsBucket) {
-                expect(envVars.ATHENA_RESULTS_BUCKET).toBe("");
-            }
         });
 
         it("should preserve existing process.env variables", () => {
@@ -331,7 +325,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
     describe("extractQuiltResources()", () => {
         it("should extract all target resources when present", () => {
             const mockResources: StackResourceMap = {
-                UserAthenaNonManagedRoleWorkgroup: {
+                BenchlingAthenaWorkgroup: {
                     physicalResourceId: "my-user-workgroup",
                     resourceType: "AWS::Athena::WorkGroup",
                     resourceStatus: "CREATE_COMPLETE",
@@ -341,24 +335,12 @@ describe("XDG Launch Pure Functions - Integration", () => {
                     resourceType: "AWS::IAM::Policy",
                     resourceStatus: "CREATE_COMPLETE",
                 },
-                UserAthenaResultsBucket: {
-                    physicalResourceId: "athena-results-bucket-xyz",
-                    resourceType: "AWS::S3::Bucket",
-                    resourceStatus: "CREATE_COMPLETE",
-                },
-                UserAthenaResultsBucketPolicy: {
-                    physicalResourceId: "athena-results-policy-xyz",
-                    resourceType: "AWS::S3::BucketPolicy",
-                    resourceStatus: "CREATE_COMPLETE",
-                },
             };
 
             const discovered: DiscoveredQuiltResources = extractQuiltResources(mockResources);
 
             expect(discovered.athenaUserWorkgroup).toBe("my-user-workgroup");
             expect(discovered.athenaUserPolicyArn).toBe("my-user-policy-ABCDEF");
-            expect(discovered.athenaResultsBucket).toBe("athena-results-bucket-xyz");
-            expect(discovered.athenaResultsBucketPolicy).toBe("athena-results-policy-xyz");
         });
 
         it("should handle empty resource map gracefully", () => {
@@ -367,13 +349,11 @@ describe("XDG Launch Pure Functions - Integration", () => {
             expect(discovered).toBeDefined();
             expect(discovered.athenaUserWorkgroup).toBeUndefined();
             expect(discovered.athenaUserPolicyArn).toBeUndefined();
-            expect(discovered.athenaResultsBucket).toBeUndefined();
-            expect(discovered.athenaResultsBucketPolicy).toBeUndefined();
         });
 
         it("should ignore unrelated resources", () => {
             const mockResources: StackResourceMap = {
-                UserAthenaNonManagedRoleWorkgroup: {
+                BenchlingAthenaWorkgroup: {
                     physicalResourceId: "my-workgroup",
                     resourceType: "AWS::Athena::WorkGroup",
                     resourceStatus: "CREATE_COMPLETE",

@@ -72,10 +72,6 @@ export interface StackQueryResult {
     stackQuerySucceeded: boolean;
     /** Athena workgroup for user queries (optional) */
     athenaUserWorkgroup?: string;
-    /** User Athena results bucket (S3 bucket for query results) */
-    athenaResultsBucket?: string;
-    /** User Athena results bucket policy ARN */
-    athenaResultsBucketPolicy?: string;
     /** IAM managed policy ARN for S3 bucket write access (from BucketWritePolicy) */
     bucketWritePolicyArn?: string;
     /** IAM managed policy ARN for Athena query access (from UserAthenaNonManagedRolePolicy) */

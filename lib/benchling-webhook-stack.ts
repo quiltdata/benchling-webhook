@@ -97,13 +97,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         const athenaUserWorkgroupParam = new cdk.CfnParameter(this, "AthenaUserWorkgroup", {
             type: "String",
-            description: "Athena workgroup for user queries (optional, from Quilt stack discovery)",
-            default: "",  // StackConfig doesn't include this field - only passed via env vars
-        });
-
-        const athenaResultsBucketParam = new cdk.CfnParameter(this, "AthenaResultsBucket", {
-            type: "String",
-            description: "S3 bucket for Athena query results (optional, from Quilt stack discovery)",
+            description: "Athena workgroup for user queries (optional, from Quilt stack discovery). Query results are managed automatically by the workgroup's AWS-managed configuration.",
             default: "",  // StackConfig doesn't include this field - only passed via env vars
         });
 
@@ -144,7 +138,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const athenaUserDatabaseValue = athenaUserDatabaseParam.valueAsString;
         const quiltWebHostValue = quiltWebHostParam.valueAsString;
         const athenaUserWorkgroupValue = athenaUserWorkgroupParam.valueAsString;
-        const athenaResultsBucketValue = athenaResultsBucketParam.valueAsString;
         const benchlingSecretValue = benchlingSecretParam.valueAsString;
         const logLevelValue = logLevelParam.valueAsString;
         const imageTagValue = imageTagParam.valueAsString;
@@ -260,9 +253,9 @@ export class BenchlingWebhookStack extends cdk.Stack {
             packagerQueueUrl: packagerQueueUrlValue,
             athenaUserDatabase: athenaUserDatabaseValue,
             quiltWebHost: quiltWebHostValue,
-            // NEW: Optional Athena resources (from Quilt stack discovery)
+            // NEW: Optional Athena workgroup (from Quilt stack discovery)
+            // Query results are managed automatically by the workgroup's AWS-managed configuration
             athenaUserWorkgroup: athenaUserWorkgroupValue,
-            athenaResultsBucket: athenaResultsBucketValue,
             // IAM managed policy ARNs for S3 and Athena access
             bucketWritePolicyArn: config.quilt.bucketWritePolicyArn,
             athenaUserPolicyArn: config.quilt.athenaUserPolicyArn,

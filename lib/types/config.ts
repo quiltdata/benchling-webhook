@@ -205,7 +205,7 @@ export interface QuiltConfig {
     /**
      * Athena workgroup for user queries (non-managed role)
      *
-     * Resolved from UserAthenaNonManagedRoleWorkgroup stack resource
+     * Resolved from BenchlingAthenaWorkgroup stack resource
      * This is a RESOURCE (not an output) - requires DescribeStackResources API
      *
      * @example "quilt-user-workgroup-prod"
@@ -221,26 +221,6 @@ export interface QuiltConfig {
      * @example "quilt-prod-UserAthenaNonManagedRolePolicy-ABC123"
      */
     athenaUserPolicy?: string;
-
-    /**
-     * User Athena results bucket (S3 bucket for query results)
-     *
-     * Resolved from UserAthenaResultsBucket stack resource
-     * This is a RESOURCE (not an output) - requires DescribeStackResources API
-     *
-     * @example "my-stack-userathenar-abc123"
-     */
-    athenaResultsBucket?: string;
-
-    /**
-     * User Athena results bucket policy ARN
-     *
-     * Resolved from UserAthenaResultsBucketPolicy stack resource
-     * This is a RESOURCE (not an output) - requires DescribeStackResources API
-     *
-     * @example "arn:aws:s3:::my-stack-userathenar-abc123"
-     */
-    athenaResultsBucketPolicy?: string;
 
     /**
      * IAM managed policy ARN for S3 bucket write access (from BucketWritePolicy)

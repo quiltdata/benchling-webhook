@@ -293,9 +293,6 @@ describe("BenchlingWebhookStack", () => {
             testTemplate.hasParameter("AthenaUserWorkgroup", {
                 Default: "",
             });
-            testTemplate.hasParameter("AthenaResultsBucket", {
-                Default: "",
-            });
         });
 
         test("uses empty string as default when optional config fields are missing", () => {
@@ -321,9 +318,6 @@ describe("BenchlingWebhookStack", () => {
 
             // Verify optional parameters default to empty string when not configured
             testTemplate.hasParameter("AthenaUserWorkgroup", {
-                Default: "",
-            });
-            testTemplate.hasParameter("AthenaResultsBucket", {
                 Default: "",
             });
         });
