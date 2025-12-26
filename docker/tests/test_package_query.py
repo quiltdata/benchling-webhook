@@ -29,15 +29,10 @@ class TestPackageQuery:
     """Tests for PackageQuery class."""
 
     @patch("src.package_query.RoleManager")
-    @patch("src.package_query.boto3")
-    def test_init(self, mock_boto3, mock_role_manager_class):
+    def test_init(self, mock_role_manager_class):
         """Test PackageQuery initialization."""
         # Mock AWS clients
         mock_athena = Mock()
-        mock_sts = Mock()
-        mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
-
-        mock_boto3.client.side_effect = lambda service, **kwargs: (mock_athena if service == "athena" else mock_sts)
 
         # Mock RoleManager to return a session that creates the mock Athena client
         mock_role_manager = Mock()
@@ -61,9 +56,9 @@ class TestPackageQuery:
         assert query.database == "test_db"
         assert query.region == "us-west-2"
 
+    @patch("src.package_query.RoleManager")
     @patch("src.package_query.os.getenv")
-    @patch("src.package_query.boto3")
-    def test_init_without_database_raises(self, mock_boto3, mock_getenv):
+    def test_init_without_database_raises(self, mock_getenv, mock_role_manager_class):
         """Test that initialization without database raises ValueError."""
         # Mock os.getenv to return None for QUILT_DATABASE
         mock_getenv.side_effect = lambda key, default=None: (
@@ -77,13 +72,10 @@ class TestPackageQuery:
             )
 
     @patch("src.package_query.RoleManager")
-    @patch("src.package_query.boto3")
-    def test_find_unique_packages_returns_package_instances(self, mock_boto3, mock_role_manager_class):
+    def test_find_unique_packages_returns_package_instances(self, mock_role_manager_class):
         """Test that find_unique_packages returns Package instances."""
         # Mock AWS clients
         mock_athena = Mock()
-        mock_sts = Mock()
-        mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
 
         # Mock query execution
         mock_athena.start_query_execution.return_value = {"QueryExecutionId": "test-query-id"}
@@ -112,8 +104,6 @@ class TestPackageQuery:
                 ]
             }
         }
-
-        mock_boto3.client.side_effect = lambda service, **kwargs: (mock_athena if service == "athena" else mock_sts)
 
         # Mock RoleManager to return a session that creates the mock Athena client
         mock_role_manager = Mock()
