@@ -215,10 +215,6 @@ describe("resolveQuiltServices", () => {
                         OutputKey: "UserAthenaWorkgroupName",
                         OutputValue: "user-wg",
                     },
-                    {
-                        OutputKey: "AthenaResultsBucketName",
-                        OutputValue: "athena-results-bucket",
-                    },
                 ]),
             ],
         });
@@ -230,7 +226,6 @@ describe("resolveQuiltServices", () => {
         });
 
         expect(services.athenaUserWorkgroup).toBe("user-wg");
-        expect(services.athenaResultsBucket).toBe("athena-results-bucket");
     });
 
     test("omits optional Athena metadata when not available", async () => {
@@ -261,7 +256,6 @@ describe("resolveQuiltServices", () => {
         });
 
         expect(services.athenaUserWorkgroup).toBeUndefined();
-        expect(services.athenaResultsBucket).toBeUndefined();
     });
 
     test("throws error for missing PackagerQueueUrl output", async () => {

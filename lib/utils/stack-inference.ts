@@ -63,16 +63,12 @@ export interface StackResourceMap {
  * Target resources:
  * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
  * - UserAthenaNonManagedRolePolicy (AWS::IAM::ManagedPolicy)
- * - UserAthenaResultsBucket (AWS::S3::Bucket)
- * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
  * - BucketWritePolicy (AWS::IAM::ManagedPolicy)
  * - BenchlingSecret (AWS::SecretsManager::Secret)
  */
 export interface DiscoveredQuiltResources {
     athenaUserWorkgroup?: string;
     athenaUserPolicyArn?: string;
-    athenaResultsBucket?: string;
-    athenaResultsBucketPolicy?: string;
     bucketWritePolicyArn?: string;
     benchlingSecretArn?: string;
 }
@@ -158,8 +154,6 @@ export function toRoleArn(roleNameOrArn: string, account: string): string {
  * Target resources:
  * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
  * - UserAthenaNonManagedRolePolicy (AWS::IAM::ManagedPolicy)
- * - UserAthenaResultsBucket (AWS::S3::Bucket)
- * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
  * - BucketWritePolicy (AWS::IAM::ManagedPolicy)
  * - BenchlingSecret (AWS::SecretsManager::Secret)
  *
@@ -177,8 +171,6 @@ export function extractQuiltResources(
     const resourceMapping: Record<string, keyof DiscoveredQuiltResources> = {
         UserAthenaNonManagedRoleWorkgroup: "athenaUserWorkgroup",
         UserAthenaNonManagedRolePolicy: "athenaUserPolicyArn",
-        UserAthenaResultsBucket: "athenaResultsBucket",
-        UserAthenaResultsBucketPolicy: "athenaResultsBucketPolicy",
         BucketWritePolicy: "bucketWritePolicyArn",
         BenchlingSecret: "benchlingSecretArn",
     };

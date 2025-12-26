@@ -78,8 +78,6 @@ export async function runStackQuery(
         const benchlingSecretArn = inferenceResult.benchlingSecretArn;
         const benchlingIntegrationEnabled = inferenceResult.benchlingIntegrationEnabled;
         const athenaUserWorkgroup = inferenceResult.athenaUserWorkgroup;
-        const athenaResultsBucket = inferenceResult.athenaResultsBucket;
-        const athenaResultsBucketPolicy = inferenceResult.athenaResultsBucketPolicy;
         const bucketWritePolicyArn = inferenceResult.bucketWritePolicyArn;
         const athenaUserPolicyArn = inferenceResult.athenaUserPolicyArn;
 
@@ -102,12 +100,6 @@ export async function runStackQuery(
         console.log(athenaUserPolicyArn
             ? chalk.dim(`✓ Athena User Policy: ${athenaUserPolicyArn}`)
             : chalk.yellow("⚠ Athena User Policy: NOT FOUND"));
-        console.log(athenaResultsBucket
-            ? chalk.dim(`✓ Athena Results Bucket: ${athenaResultsBucket}`)
-            : chalk.yellow("⚠ Athena Results Bucket: NOT FOUND"));
-        console.log(athenaResultsBucketPolicy
-            ? chalk.dim(`✓ Athena Results Bucket Policy: ${athenaResultsBucketPolicy}`)
-            : chalk.yellow("⚠ Athena Results Bucket Policy: NOT FOUND"));
 
         // IAM role ARNs are logged by inferQuiltConfig, so no need to log again here
 
@@ -208,8 +200,6 @@ export async function runStackQuery(
             benchlingSecretArn,
             benchlingIntegrationEnabled,
             athenaUserWorkgroup,
-            athenaResultsBucket,
-            athenaResultsBucketPolicy,
             bucketWritePolicyArn,
             athenaUserPolicyArn,
             discoveredVpc: discoveredVpcInfo,

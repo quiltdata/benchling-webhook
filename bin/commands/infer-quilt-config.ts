@@ -41,8 +41,6 @@ interface QuiltStackInfo {
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
     athenaUserWorkgroup?: string;
-    athenaResultsBucket?: string;
-    athenaResultsBucketPolicy?: string;
     bucketWritePolicyArn?: string;
     athenaUserPolicyArn?: string;
 }
@@ -60,8 +58,6 @@ interface InferenceResult {
     benchlingSecretArn?: string;
     benchlingIntegrationEnabled?: boolean;
     athenaUserWorkgroup?: string;
-    athenaResultsBucket?: string;
-    athenaResultsBucketPolicy?: string;
     bucketWritePolicyArn?: string;
     athenaUserPolicyArn?: string;
     source: string;
@@ -504,12 +500,6 @@ export async function inferQuiltConfig(options: {
     }
     if (selectedStack.athenaUserPolicyArn) {
         result.athenaUserPolicyArn = selectedStack.athenaUserPolicyArn;
-    }
-    if (selectedStack.athenaResultsBucket) {
-        result.athenaResultsBucket = selectedStack.athenaResultsBucket;
-    }
-    if (selectedStack.athenaResultsBucketPolicy) {
-        result.athenaResultsBucketPolicy = selectedStack.athenaResultsBucketPolicy;
     }
     // NEW: Add IAM managed policy ARNs to result
     // IAM managed policies for S3 and Athena access (attached directly to task role)
