@@ -61,7 +61,7 @@ export interface StackResourceMap {
  * Discovered Quilt resources from stack
  *
  * Target resources:
- * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
+ * - BenchlingAthenaWorkgroup (AWS::Athena::WorkGroup)
  * - UserAthenaNonManagedRolePolicy (AWS::IAM::ManagedPolicy)
  * - BucketWritePolicy (AWS::IAM::ManagedPolicy)
  * - BenchlingSecret (AWS::SecretsManager::Secret)
@@ -152,7 +152,7 @@ export function toRoleArn(roleNameOrArn: string, account: string): string {
  * Extract Athena workgroups, IAM policies, S3 buckets, and Secrets Manager secrets from stack resources
  *
  * Target resources:
- * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
+ * - BenchlingAthenaWorkgroup (AWS::Athena::WorkGroup)
  * - UserAthenaNonManagedRolePolicy (AWS::IAM::ManagedPolicy)
  * - BucketWritePolicy (AWS::IAM::ManagedPolicy)
  * - BenchlingSecret (AWS::SecretsManager::Secret)
@@ -169,7 +169,7 @@ export function extractQuiltResources(
 ): DiscoveredQuiltResources {
     // Map logical resource IDs to discovered resource properties
     const resourceMapping: Record<string, keyof DiscoveredQuiltResources> = {
-        UserAthenaNonManagedRoleWorkgroup: "athenaUserWorkgroup",
+        BenchlingAthenaWorkgroup: "athenaUserWorkgroup",
         UserAthenaNonManagedRolePolicy: "athenaUserPolicyArn",
         BucketWritePolicy: "bucketWritePolicyArn",
         BenchlingSecret: "benchlingSecretArn",
