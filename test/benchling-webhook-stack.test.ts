@@ -322,6 +322,47 @@ describe("BenchlingWebhookStack", () => {
             });
         });
 
+        test("creates fallback Athena workgroup only when no Quilt workgroup is provided", () => {
+            const app = new cdk.App();
+            const config = createMockStackConfig({
+                quilt: {
+                    catalog: "test.quiltdata.com",
+                    database: "test_db",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123/queue",
+                    region: "us-east-1",
+                },
+            });
+            const stack = new BenchlingWebhookStack(app, "TestStackWorkgroupCondition", {
+                config,
+                env: {
+                    account: "123456789012",
+                    region: "us-east-1",
+                },
+            });
+
+            const testTemplate = Template.fromStack(stack);
+
+            testTemplate.hasCondition("CreateAthenaWorkgroup", {
+                "Fn::Equals": [
+                    { Ref: "AthenaUserWorkgroup" },
+                    "",
+                ],
+            });
+
+            testTemplate.hasResourceProperties("AWS::Athena::WorkGroup", {
+                Name: { "Fn::Sub": "${AWS::StackName}-athena-workgroup" },
+                WorkGroupConfiguration: {
+                    EnforceWorkGroupConfiguration: true,
+                    PublishCloudWatchMetricsEnabled: true,
+                },
+                State: "ENABLED",
+            });
+
+            const resources = testTemplate.findResources("AWS::Athena::WorkGroup");
+            const resource = Object.values(resources)[0] as { Condition?: string };
+            expect(resource?.Condition).toBe("CreateAthenaWorkgroup");
+        });
+
         test("validates required Quilt config fields are present", () => {
             const app = new cdk.App();
             const config = createMockStackConfig({

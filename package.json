@@ -58,7 +58,7 @@
     "version:verify": "ts-node scripts/version.ts verify-clean-git",
     "version:tag": "npm run version:verify && npm test && ts-node scripts/version.ts tag",
     "version:tag:dev": "npm run version:verify && npm test && ts-node scripts/version.ts tag dev",
-    "test:integration": "cross-env NODE_ENV=test NODE_OPTIONS='--experimental-vm-modules'  jest --testMatch='**/test/integration/**/*.test.ts' --runInBand",
+    "test:integration": "cross-env NODE_ENV=test NODE_OPTIONS='--experimental-vm-modules' jest --config jest.integration.config.js --testMatch='**/test/integration/**/*.test.ts' --runInBand",
     "test:integration:verbose": "npm run test:integration -- --verbose"
   },
   "keywords": [
