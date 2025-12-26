@@ -325,7 +325,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
     describe("extractQuiltResources()", () => {
         it("should extract all target resources when present", () => {
             const mockResources: StackResourceMap = {
-                UserAthenaNonManagedRoleWorkgroup: {
+                BenchlingAthenaWorkgroup: {
                     physicalResourceId: "my-user-workgroup",
                     resourceType: "AWS::Athena::WorkGroup",
                     resourceStatus: "CREATE_COMPLETE",
@@ -353,7 +353,7 @@ describe("XDG Launch Pure Functions - Integration", () => {
 
         it("should ignore unrelated resources", () => {
             const mockResources: StackResourceMap = {
-                UserAthenaNonManagedRoleWorkgroup: {
+                BenchlingAthenaWorkgroup: {
                     physicalResourceId: "my-workgroup",
                     resourceType: "AWS::Athena::WorkGroup",
                     resourceStatus: "CREATE_COMPLETE",

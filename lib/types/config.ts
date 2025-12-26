@@ -205,7 +205,7 @@ export interface QuiltConfig {
     /**
      * Athena workgroup for user queries (non-managed role)
      *
-     * Resolved from UserAthenaNonManagedRoleWorkgroup stack resource
+     * Resolved from BenchlingAthenaWorkgroup stack resource
      * This is a RESOURCE (not an output) - requires DescribeStackResources API
      *
      * @example "quilt-user-workgroup-prod"
