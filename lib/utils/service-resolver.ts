@@ -43,12 +43,6 @@ export interface QuiltServices {
      * @example "quilt-user-workgroup"
      */
     athenaUserWorkgroup?: string;
-
-    /**
-     * S3 bucket for Athena query results (optional, from Quilt stack discovery)
-     * @example "aws-athena-query-results-123456789012-us-east-1"
-     */
-    athenaResultsBucket?: string;
 }
 
 /**
@@ -189,7 +183,6 @@ export function validateQueueUrl(url: string): boolean {
  *
  * **Optional Stack Outputs**:
  * - `UserAthenaWorkgroupName`: Athena workgroup for user queries
- * - `AthenaResultsBucketName`: S3 bucket for Athena query results
  *
  * @param options - Service resolver options
  * @returns Resolved service endpoints
@@ -205,7 +198,6 @@ export function validateQueueUrl(url: string): boolean {
  * //   athenaUserDatabase: 'quilt_catalog',
  * //   quiltWebHost: 'quilt.example.com',
  * //   athenaUserWorkgroup: 'quilt-user-workgroup' (optional),
- * //   athenaResultsBucket: 'aws-athena-query-results-...' (optional)
  * // }
  */
 export async function resolveQuiltServices(
@@ -287,13 +279,11 @@ export async function resolveQuiltServices(
 
     // Step 6: Extract optional Athena resources (NEW - from Quilt stack discovery)
     const athenaUserWorkgroup = outputs.UserAthenaWorkgroupName;
-    const athenaResultsBucket = outputs.AthenaResultsBucketName;
 
     return {
         packagerQueueUrl,
         athenaUserDatabase,
         quiltWebHost,
         ...(athenaUserWorkgroup && { athenaUserWorkgroup }),
-        ...(athenaResultsBucket && { athenaResultsBucket }),
     };
 }

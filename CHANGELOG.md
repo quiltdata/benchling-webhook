@@ -3,6 +3,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] - 2025-12-26
+
+### BREAKING CHANGES
+
+- **Removed ATHENA_RESULTS_BUCKET dependency for AWS-managed workgroups**
+  - Removed `ATHENA_RESULTS_BUCKET` environment variable and related infrastructure
+  - AWS-managed Athena workgroups handle query results automatically
+  - No longer need explicit S3 bucket permissions for Athena query results
+  - Removed `ResultConfiguration` from Athena API calls
+  - Removed `quilt.athenaResultsBucket` runtime usage (field preserved for config discovery)
+
+### Changed
+
+- **Updated Athena workgroup discovery** - Changed CloudFormation resource logical ID from `UserAthenaNonManagedRoleWorkgroup` to `BenchlingAthenaWorkgroup` to align with new Quilt stack naming convention
+- **Simplified PackageQuery** - Removed unused `boto3` import and `athena_output_bucket` parameter
+
+### Fixed
+
+- **Test compatibility** - Fixed `test_package_query.py` tests after removing `boto3` module dependency
+
+### Why This Works
+
+AWS-managed workgroups handle query results automatically:
+
+1. Query results location is managed by the workgroup configuration
+2. `athena:GetQueryResults` API returns data directly (no S3 access needed)
+3. Workgroup configuration takes precedence over client-side `ResultConfiguration`
+
+When workgroups have AWS-managed query results enabled, you cannot specify `ResultConfiguration` in API calls - AWS handles the result location automatically.
+
 ## [0.10.0] - 2025-12-24
 
 ### BREAKING CHANGES

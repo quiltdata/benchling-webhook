@@ -67,12 +67,6 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
     if (stackQuery.athenaUserWorkgroup) {
         config.quilt.athenaUserWorkgroup = stackQuery.athenaUserWorkgroup;
     }
-    if (stackQuery.athenaResultsBucket) {
-        config.quilt.athenaResultsBucket = stackQuery.athenaResultsBucket;
-    }
-    if (stackQuery.athenaResultsBucketPolicy) {
-        config.quilt.athenaResultsBucketPolicy = stackQuery.athenaResultsBucketPolicy;
-    }
     // Add IAM managed policy ARNs if discovered
     if (stackQuery.bucketWritePolicyArn) {
         config.quilt.bucketWritePolicyArn = stackQuery.bucketWritePolicyArn;

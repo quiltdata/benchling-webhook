@@ -61,18 +61,14 @@ export interface StackResourceMap {
  * Discovered Quilt resources from stack
  *
  * Target resources:
- * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
+ * - BenchlingAthenaWorkgroup (AWS::Athena::WorkGroup)
  * - UserAthenaNonManagedRolePolicy (AWS::IAM::ManagedPolicy)
- * - UserAthenaResultsBucket (AWS::S3::Bucket)
- * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
  * - BucketWritePolicy (AWS::IAM::ManagedPolicy)
  * - BenchlingSecret (AWS::SecretsManager::Secret)
  */
 export interface DiscoveredQuiltResources {
     athenaUserWorkgroup?: string;
     athenaUserPolicyArn?: string;
-    athenaResultsBucket?: string;
-    athenaResultsBucketPolicy?: string;
     bucketWritePolicyArn?: string;
     benchlingSecretArn?: string;
 }
@@ -156,10 +152,8 @@ export function toRoleArn(roleNameOrArn: string, account: string): string {
  * Extract Athena workgroups, IAM policies, S3 buckets, and Secrets Manager secrets from stack resources
  *
  * Target resources:
- * - UserAthenaNonManagedRoleWorkgroup (AWS::Athena::WorkGroup)
+ * - BenchlingAthenaWorkgroup (AWS::Athena::WorkGroup)
  * - UserAthenaNonManagedRolePolicy (AWS::IAM::ManagedPolicy)
- * - UserAthenaResultsBucket (AWS::S3::Bucket)
- * - UserAthenaResultsBucketPolicy (AWS::S3::BucketPolicy)
  * - BucketWritePolicy (AWS::IAM::ManagedPolicy)
  * - BenchlingSecret (AWS::SecretsManager::Secret)
  *
@@ -175,10 +169,8 @@ export function extractQuiltResources(
 ): DiscoveredQuiltResources {
     // Map logical resource IDs to discovered resource properties
     const resourceMapping: Record<string, keyof DiscoveredQuiltResources> = {
-        UserAthenaNonManagedRoleWorkgroup: "athenaUserWorkgroup",
+        BenchlingAthenaWorkgroup: "athenaUserWorkgroup",
         UserAthenaNonManagedRolePolicy: "athenaUserPolicyArn",
-        UserAthenaResultsBucket: "athenaResultsBucket",
-        UserAthenaResultsBucketPolicy: "athenaResultsBucketPolicy",
         BucketWritePolicy: "bucketWritePolicyArn",
         BenchlingSecret: "benchlingSecretArn",
     };

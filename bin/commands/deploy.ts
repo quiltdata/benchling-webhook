@@ -559,7 +559,6 @@ export async function deploy(
         athenaUserDatabase: config.quilt.database,
         quiltWebHost: config.quilt.catalog,
         athenaUserWorkgroup: config.quilt.athenaUserWorkgroup,
-        athenaResultsBucket: config.quilt.athenaResultsBucket,
     };
 
     spinner.succeed("Quilt configuration loaded");
@@ -587,9 +586,6 @@ export async function deploy(
     console.log(`    ${chalk.bold("Athena Database:")}         ${services.athenaUserDatabase}`);
     if (services.athenaUserWorkgroup) {
         console.log(`    ${chalk.bold("Athena Workgroup:")}        ${services.athenaUserWorkgroup}`);
-    }
-    if (services.athenaResultsBucket) {
-        console.log(`    ${chalk.bold("Athena Results Bucket:")}   ${services.athenaResultsBucket}`);
     }
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
@@ -687,9 +683,9 @@ export async function deploy(
             `AthenaUserDatabase=${services.athenaUserDatabase}`,
             `QuiltWebHost=${services.quiltWebHost}`,
 
-            // Optional Athena resources (from Quilt stack discovery)
+            // Optional Athena workgroup (from Quilt stack discovery)
+            // Query results are managed automatically by the workgroup's AWS-managed configuration
             `AthenaUserWorkgroup=${services.athenaUserWorkgroup || ""}`,
-            `AthenaResultsBucket=${services.athenaResultsBucket || ""}`,
 
             // Legacy parameters
             `BenchlingSecretARN=${benchlingSecret}`,
