@@ -1,23 +1,21 @@
 #!/usr/bin/env node
 /**
- * Interactive Configuration Wizard (v0.8.0)
+ * Interactive Configuration Wizard (v0.10.0)
  *
- * Phase-based modular setup wizard that orchestrates:
+ * Unified setup wizard that orchestrates:
  * 1. Catalog discovery and confirmation
  * 2. Stack query for infrastructure details
- * 3. Parameter collection from user
- * 4. Configuration validation
- * 5. Deployment mode decision (integrated vs standalone)
- * 6. Mode-specific setup (integrated or standalone)
+ * 3. Context display and flow decision
+ * 4. Parameter collection (only when needed)
+ * 5. Execution (update secrets, enable/disable integration, deploy)
  *
  * Architecture:
- * - Each phase is a separate, testable module
- * - Explicit data flow between phases via TypeScript types
- * - Cannot skip phases or execute out of order
- * - Integrated mode has explicit return (no deployment)
+ * - Context first, then targeted questions
+ * - Parameter collection is deferred until required
+ * - Integrated and standalone paths share execution helpers
  *
  * @module commands/setup-wizard
- * @version 0.8.0
+ * @version 0.10.0
  */
 
 import chalk from "chalk";
@@ -33,9 +31,13 @@ import { runCatalogDiscovery } from "../../lib/wizard/phase1-catalog-discovery";
 import { runStackQuery } from "../../lib/wizard/phase2-stack-query";
 import { runParameterCollection } from "../../lib/wizard/phase3-parameter-collection";
 import { runValidation } from "../../lib/wizard/phase4-validation";
-import { runModeDecision } from "../../lib/wizard/phase5-mode-decision";
-import { runIntegratedMode } from "../../lib/wizard/phase6-integrated-mode";
-import { runStandaloneMode } from "../../lib/wizard/phase7-standalone-mode";
+import { runUnifiedFlowDecision } from "../../lib/wizard/phase5-unified-flow";
+import { buildProfileConfigFromExisting, buildProfileConfigFromParameters } from "../../lib/wizard/profile-config-builder";
+import { pollStackStatus, waitForBenchlingSecretArn } from "../../lib/wizard/stack-waiter";
+import { syncSecretsToAWS } from "./sync-secrets";
+import { deployCommand } from "./deploy";
+import { CFN_PARAMS } from "../../lib/types/config";
+import { updateStackParameter } from "../../lib/utils/stack-parameter-update";
 
 /**
  * Setup wizard options
@@ -91,11 +93,10 @@ export interface SetupWizardResult {
 const STEP_TITLES = {
     catalogDiscovery: "Quilt Catalog Discovery",
     stackQuery: "Quilt Stack Configuration",
-    parameterCollection: "Configuration Parameters",
+    flowDecision: "Context & Flow Selection",
+    parameterCollection: "Benchling Parameters",
     validation: "Validation",
-    modeDecision: "Deployment Mode",
-    integratedMode: "Integrated Setup",
-    standaloneMode: "Standalone Setup",
+    execution: "Execution",
 };
 
 /**
@@ -246,127 +247,394 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
     }
 
     // =========================================================================
-    // PHASE 3: PARAMETER COLLECTION
+    // PHASE 3: CONTEXT + FLOW DECISION
     // =========================================================================
-    // Collect user inputs, using existing config and stack query results as defaults
-    printStepHeader(3, STEP_TITLES.parameterCollection);
-    const parameters = await runParameterCollection({
+    printStepHeader(3, STEP_TITLES.flowDecision);
+    const flowDecision = await runUnifiedFlowDecision({
         stackQuery,
         existingConfig,
-        yes,
+        configStorage: xdg,
         profile,
-        benchlingTenant: options.benchlingTenant,
-        benchlingClientId: options.benchlingClientId,
-        benchlingClientSecret: options.benchlingClientSecret,
-        benchlingAppDefinitionId: options.benchlingAppDefinitionId,
-        userBucket: options.userBucket,
-        pkgPrefix: options.pkgPrefix,
-        pkgKey: options.pkgKey,
-        logLevel: options.logLevel,
-        webhookAllowList: options.webhookAllowList,
+        yes,
+        awsProfile,
     });
 
-    // =========================================================================
-    // PHASE 4: VALIDATION
-    // =========================================================================
-    // Validate all collected parameters BEFORE making mode decision
-    if (!skipValidation) {
-        printStepHeader(4, STEP_TITLES.validation);
-        const validation = await runValidation({
+    if (flowDecision.action === "exit") {
+        console.log(chalk.green("✓ Exit without changes"));
+        if (existingConfig) {
+            return {
+                success: true,
+                profile,
+                config: existingConfig,
+                deploymentHandled: true,
+            };
+        }
+        process.exit(0);
+    }
+
+    const actionsRequiringParameters = new Set([
+        "update-integration-secret",
+        "enable-integration",
+        "deploy-standalone",
+        "update-standalone-redeploy",
+    ]);
+
+    let parameters = undefined as Awaited<ReturnType<typeof runParameterCollection>> | undefined;
+
+    const collectParameters = async (): Promise<void> => {
+        printStepHeader(4, STEP_TITLES.parameterCollection);
+        parameters = await runParameterCollection({
             stackQuery,
-            parameters,
-            awsProfile,
+            existingConfig,
+            yes,
+            profile,
+            benchlingTenant: options.benchlingTenant,
+            benchlingClientId: options.benchlingClientId,
+            benchlingClientSecret: options.benchlingClientSecret,
+            benchlingAppDefinitionId: options.benchlingAppDefinitionId,
+            userBucket: options.userBucket,
+            pkgPrefix: options.pkgPrefix,
+            pkgKey: options.pkgKey,
+            logLevel: options.logLevel,
+            webhookAllowList: options.webhookAllowList,
         });
 
-        if (!validation.success) {
-            if (yes) {
-                throw new Error(`Validation failed: ${validation.errors.join(", ")}`);
-            }
+        if (!skipValidation) {
+            printStepHeader(5, STEP_TITLES.validation);
+            const validation = await runValidation({
+                stackQuery,
+                parameters,
+                awsProfile,
+            });
 
-            const { proceed } = await inquirer.prompt([
-                {
-                    type: "confirm",
-                    name: "proceed",
-                    message: "Save configuration anyway?",
-                    default: false,
-                },
-            ]);
+            if (!validation.success) {
+                if (yes) {
+                    throw new Error(`Validation failed: ${validation.errors.join(", ")}`);
+                }
 
-            if (!proceed) {
-                throw new Error("Setup aborted by user");
+                const { proceed } = await inquirer.prompt([
+                    {
+                        type: "confirm",
+                        name: "proceed",
+                        message: "Save configuration anyway?",
+                        default: false,
+                    },
+                ]);
+
+                if (!proceed) {
+                    throw new Error("Setup aborted by user");
+                }
             }
         }
+    };
+
+    if (actionsRequiringParameters.has(flowDecision.action)) {
+        await collectParameters();
     }
 
-    // =========================================================================
-    // PHASE 5: MODE DECISION
-    // =========================================================================
-    // Decide between integrated mode (use existing BenchlingSecret) or
-    // standalone mode (create new dedicated secret)
-    printStepHeader(5, STEP_TITLES.modeDecision);
-    const modeDecision = await runModeDecision({
-        stackQuery,
-        yes,
-    });
+    const saveConfig = (config: ProfileConfig): void => {
+        console.log(`Saving configuration to profile: ${profile}...\n`);
+        xdg.writeProfile(profile, config);
+        console.log(chalk.green(`✓ Configuration saved to: ~/.config/benchling-webhook/${profile}/config.json\n`));
+    };
 
-    // =========================================================================
-    // PHASE 6 OR 7: MODE-SPECIFIC EXECUTION
-    // =========================================================================
-    if (modeDecision.mode === "integrated") {
-        // =====================================================================
-        // PHASE 6: INTEGRATED MODE
-        // =====================================================================
-        // Update existing BenchlingSecret in Quilt stack
-        // NO deployment - Quilt stack handles webhook
-        // MUST return here to prevent fall-through
-        printStepHeader(6, STEP_TITLES.integratedMode);
-        await runIntegratedMode({
-            profile,
-            catalogDns: catalogResult.catalogDns,
+    const requireConfig = async (integratedStack: boolean): Promise<ProfileConfig> => {
+        try {
+            return buildProfileConfigFromExisting({
+                stackQuery,
+                existingConfig,
+                secretDetails: flowDecision.secretDetails,
+                catalogDns: catalogResult.catalogDns,
+                integratedStack,
+                benchlingSecretArn: flowDecision.benchlingSecretArn,
+            });
+        } catch (_error) {
+            if (!parameters) {
+                await collectParameters();
+            }
+            return buildProfileConfigFromParameters({
+                stackQuery,
+                parameters: parameters!,
+                catalogDns: catalogResult.catalogDns,
+                integratedStack,
+                benchlingSecretArn: flowDecision.benchlingSecretArn,
+            });
+        }
+    };
+
+    printStepHeader(6, STEP_TITLES.execution);
+
+    switch (flowDecision.action) {
+    case "update-integration-secret": {
+        const benchlingSecretArn = flowDecision.benchlingSecretArn;
+        if (!benchlingSecretArn) {
+            throw new Error("BenchlingSecret ARN not found for integrated update.");
+        }
+        const config = buildProfileConfigFromParameters({
             stackQuery,
-            parameters,
-            benchlingSecretArn: modeDecision.benchlingSecretArn!,
-            configStorage: xdg,
-            awsProfile,
-            yes,
+            parameters: parameters!,
+            catalogDns: catalogResult.catalogDns,
+            integratedStack: true,
+            benchlingSecretArn,
         });
 
-        // CRITICAL: Explicit return for integrated mode
-        // Cannot fall through to deployment
-        const finalConfig = xdg.readProfile(profile);
-        return {
-            success: true,
+        saveConfig(config);
+        await syncSecretsToAWS({
             profile,
-            config: finalConfig,
-            deploymentHandled: true, // Integrated mode completes in phase 6, no deployment needed
-        };
-    } else {
-        // =====================================================================
-        // PHASE 7: STANDALONE MODE
-        // =====================================================================
-        // Create new dedicated secret
-        // Optionally deploy as separate stack
-        printStepHeader(6, STEP_TITLES.standaloneMode);
-        const standaloneResult = await runStandaloneMode({
-            profile,
-            catalogDns: catalogResult.catalogDns,
-            stackQuery,
-            parameters,
-            configStorage: xdg,
-            yes,
-            setupOnly,
             awsProfile,
+            region: config.deployment.region,
+            force: true,
+            configStorage: xdg,
         });
-
-        // CRITICAL: Explicit return for standalone mode
-        const finalConfig = xdg.readProfile(profile);
-        return {
-            success: true,
-            profile,
-            config: finalConfig,
-            deploymentHandled: standaloneResult.deploymentHandled,
-        };
+        break;
     }
+    case "review-only": {
+        const integratedStack = flowDecision.flow !== "standalone-existing";
+        const config = await requireConfig(integratedStack);
+        saveConfig(config);
+        break;
+    }
+    case "disable-integration": {
+        const confirmDisable = yes || (await inquirer.prompt([
+            {
+                type: "confirm",
+                name: "confirmDisable",
+                message: "Stop webhook? (can re-enable later)",
+                default: false,
+            },
+        ])).confirmDisable;
+
+        if (!confirmDisable) {
+            console.log(chalk.green("✓ Exit without changes"));
+            return {
+                success: true,
+                profile,
+                config: existingConfig || (await requireConfig(true)),
+                deploymentHandled: true,
+            };
+        }
+
+        const updateResult = await updateStackParameter({
+            stackArn: stackQuery.stackArn,
+            region: stackQuery.region,
+            parameterKey: CFN_PARAMS.BENCHLING_WEBHOOK,
+            parameterValue: "Disabled",
+            awsProfile,
+        });
+
+        if (updateResult.success) {
+            console.log(chalk.green("✓ Stack update initiated"));
+            await pollStackStatus({
+                stackArn: stackQuery.stackArn,
+                region: stackQuery.region,
+                awsProfile,
+            });
+        } else {
+            throw new Error(updateResult.error || "Failed to disable BenchlingIntegration");
+        }
+
+        const config = await requireConfig(true);
+        saveConfig(config);
+        break;
+    }
+    case "switch-standalone": {
+        const confirmSwitch = yes || (await inquirer.prompt([
+            {
+                type: "confirm",
+                name: "confirmSwitch",
+                message: "Create separate infrastructure? (~8-10 min)",
+                default: false,
+            },
+        ])).confirmSwitch;
+
+        if (!confirmSwitch) {
+            console.log(chalk.green("✓ Exit without changes"));
+            return {
+                success: true,
+                profile,
+                config: existingConfig || (await requireConfig(true)),
+                deploymentHandled: true,
+            };
+        }
+
+        const updateResult = await updateStackParameter({
+            stackArn: stackQuery.stackArn,
+            region: stackQuery.region,
+            parameterKey: CFN_PARAMS.BENCHLING_WEBHOOK,
+            parameterValue: "Disabled",
+            awsProfile,
+        });
+
+        if (updateResult.success) {
+            console.log(chalk.green("✓ Stack update initiated"));
+            await pollStackStatus({
+                stackArn: stackQuery.stackArn,
+                region: stackQuery.region,
+                awsProfile,
+            });
+        } else {
+            throw new Error(updateResult.error || "Failed to disable BenchlingIntegration");
+        }
+
+        const config = await requireConfig(false);
+        saveConfig(config);
+
+        await syncSecretsToAWS({
+            profile,
+            awsProfile,
+            region: config.deployment.region,
+            force: true,
+            configStorage: xdg,
+        });
+
+        if (!setupOnly) {
+            await deployCommand({
+                profile,
+                stage: profile === "prod" ? "prod" : "dev",
+                yes: true,
+            });
+        }
+        break;
+    }
+    case "enable-integration": {
+        const confirmEnable = yes || (await inquirer.prompt([
+            {
+                type: "confirm",
+                name: "confirmEnable",
+                message: "Enable integration?",
+                default: true,
+            },
+        ])).confirmEnable;
+
+        if (!confirmEnable) {
+            console.log(chalk.green("✓ Exit without changes"));
+            return {
+                success: true,
+                profile,
+                config: existingConfig || (await requireConfig(true)),
+                deploymentHandled: true,
+            };
+        }
+
+        const updateResult = await updateStackParameter({
+            stackArn: stackQuery.stackArn,
+            region: stackQuery.region,
+            parameterKey: CFN_PARAMS.BENCHLING_WEBHOOK,
+            parameterValue: "Enabled",
+            awsProfile,
+        });
+
+        if (updateResult.success) {
+            console.log(chalk.green("✓ Stack update initiated"));
+            await pollStackStatus({
+                stackArn: stackQuery.stackArn,
+                region: stackQuery.region,
+                awsProfile,
+            });
+        } else {
+            throw new Error(updateResult.error || "Failed to enable BenchlingIntegration");
+        }
+
+        const benchlingSecretArn = await waitForBenchlingSecretArn({
+            stackArn: stackQuery.stackArn,
+            region: stackQuery.region,
+            awsProfile,
+        });
+
+        const config = buildProfileConfigFromParameters({
+            stackQuery,
+            parameters: parameters!,
+            catalogDns: catalogResult.catalogDns,
+            integratedStack: true,
+            benchlingSecretArn,
+        });
+
+        saveConfig(config);
+        await syncSecretsToAWS({
+            profile,
+            awsProfile,
+            region: config.deployment.region,
+            force: true,
+            configStorage: xdg,
+        });
+        break;
+    }
+    case "deploy-standalone": {
+        const config = buildProfileConfigFromParameters({
+            stackQuery,
+            parameters: parameters!,
+            catalogDns: catalogResult.catalogDns,
+            integratedStack: false,
+        });
+
+        saveConfig(config);
+        await syncSecretsToAWS({
+            profile,
+            awsProfile,
+            region: config.deployment.region,
+            force: true,
+            configStorage: xdg,
+        });
+
+        if (!setupOnly) {
+            await deployCommand({
+                profile,
+                stage: profile === "prod" ? "prod" : "dev",
+                yes: true,
+            });
+        }
+        break;
+    }
+    case "update-standalone-redeploy": {
+        const config = buildProfileConfigFromParameters({
+            stackQuery,
+            parameters: parameters!,
+            catalogDns: catalogResult.catalogDns,
+            integratedStack: false,
+        });
+
+        saveConfig(config);
+
+        if (!setupOnly) {
+            await deployCommand({
+                profile,
+                stage: profile === "prod" ? "prod" : "dev",
+                yes: true,
+            });
+        }
+
+        await syncSecretsToAWS({
+            profile,
+            awsProfile,
+            region: config.deployment.region,
+            force: true,
+            configStorage: xdg,
+        });
+        break;
+    }
+    case "update-standalone-secret": {
+        const config = await requireConfig(false);
+        saveConfig(config);
+        await syncSecretsToAWS({
+            profile,
+            awsProfile,
+            region: config.deployment.region,
+            force: true,
+            configStorage: xdg,
+        });
+        break;
+    }
+    default:
+        break;
+    }
+
+    const finalConfig = xdg.readProfile(profile);
+    return {
+        success: true,
+        profile,
+        config: finalConfig,
+        deploymentHandled: true,
+    };
 }
 
 /**
