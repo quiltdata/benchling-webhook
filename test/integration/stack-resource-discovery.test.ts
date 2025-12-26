@@ -123,18 +123,6 @@ describe("Stack Resource Discovery - Integration", () => {
                 return;
             }
             const discovered = extractQuiltResources(resources);
-
-            if (discovered.athenaResultsBucket) {
-                console.log(`    Found Athena Results Bucket: ${discovered.athenaResultsBucket}`);
-                expect(typeof discovered.athenaResultsBucket).toBe("string");
-                expect(discovered.athenaResultsBucket.length).toBeGreaterThan(0);
-            }
-
-            if (discovered.athenaResultsBucketPolicy) {
-                console.log(`    Found Athena Results Bucket Policy: ${discovered.athenaResultsBucketPolicy}`);
-                expect(typeof discovered.athenaResultsBucketPolicy).toBe("string");
-                expect(discovered.athenaResultsBucketPolicy.length).toBeGreaterThan(0);
-            }
         });
 
         it("should extract BenchlingSecret if present", () => {
@@ -168,8 +156,6 @@ describe("Stack Resource Discovery - Integration", () => {
             expect(discovered).toBeDefined();
             expect(discovered.athenaUserWorkgroup).toBeUndefined();
             expect(discovered.athenaUserPolicyArn).toBeUndefined();
-            expect(discovered.athenaResultsBucket).toBeUndefined();
-            expect(discovered.athenaResultsBucketPolicy).toBeUndefined();
             expect(discovered.benchlingSecretArn).toBeUndefined();
         });
     });
@@ -206,8 +192,6 @@ describe("Stack Resource Discovery - Integration", () => {
             let discoveredCount = 0;
             if (discovered.athenaUserWorkgroup) discoveredCount++;
             if (discovered.athenaUserPolicyArn) discoveredCount++;
-            if (discovered.athenaResultsBucket) discoveredCount++;
-            if (discovered.athenaResultsBucketPolicy) discoveredCount++;
             if (discovered.benchlingSecretArn) discoveredCount++;
 
             console.log(`    Discovered ${discoveredCount}/5 target resources`);

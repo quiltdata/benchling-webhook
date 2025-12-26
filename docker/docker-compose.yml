@@ -16,7 +16,6 @@ services:
       - QUILT_WEB_HOST=${QUILT_WEB_HOST}
       - ATHENA_USER_DATABASE=${ATHENA_USER_DATABASE}
       - ATHENA_USER_WORKGROUP=${ATHENA_USER_WORKGROUP:-primary}
-      - ATHENA_RESULTS_BUCKET=${ATHENA_RESULTS_BUCKET:-}
       - PACKAGER_SQS_URL=${PACKAGER_SQS_URL}
 
       # Benchling Configuration (credentials from Secrets Manager)
@@ -62,7 +61,6 @@ services:
       - QUILT_WEB_HOST=${QUILT_WEB_HOST}
       - ATHENA_USER_DATABASE=${ATHENA_USER_DATABASE}
       - ATHENA_USER_WORKGROUP=${ATHENA_USER_WORKGROUP:-primary}
-      - ATHENA_RESULTS_BUCKET=${ATHENA_RESULTS_BUCKET:-}
       - PACKAGER_SQS_URL=${PACKAGER_SQS_URL}
 
       # Benchling Configuration (credentials from Secrets Manager)

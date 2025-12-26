@@ -127,7 +127,6 @@ def mock_config():
     mock.quilt_catalog = "test.quiltdata.com"
     mock.quilt_database = "test-athena-db"
     mock.package_key = "experiment_id"
-    mock.athena_results_bucket = "athena-results"
     mock.athena_user_workgroup = "test-workgroup"
     mock.region = "us-east-1"
     mock.quilt_role_arn = None

@@ -201,7 +201,6 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         QUILT_WEB_HOST: config.quilt.catalog,
         ATHENA_USER_DATABASE: config.quilt.database,
         ATHENA_USER_WORKGROUP: config.quilt.athenaUserWorkgroup || "primary",
-        ATHENA_RESULTS_BUCKET: config.quilt.athenaResultsBucket || "",
         PACKAGER_SQS_URL: config.quilt.queueUrl,
 
         // IAM Policy ARNs for ECS task role (attached directly, no role assumption needed)

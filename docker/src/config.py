@@ -39,7 +39,6 @@ class Config:
     quilt_database: str = ""
     queue_url: str = ""
     athena_user_workgroup: str = ""
-    athena_results_bucket: str = ""
     enable_webhook_verification: bool = True
     pkg_prefix: str = ""
     quilt_write_role_arn: str = ""
@@ -68,7 +67,7 @@ class Config:
             - ENABLE_WEBHOOK_VERIFICATION: Enable Lambda authorizer verification (default: true)
             - BENCHLING_TEST_MODE: Disable verification for testing workflows (default: false)
             - ATHENA_USER_WORKGROUP: Athena workgroup (default: primary, v0.8.0+)
-            - ATHENA_RESULTS_BUCKET: Athena results S3 bucket (default: "", v0.8.0+)
+              Query results are managed automatically by the workgroup's AWS-managed configuration.
             - QUILT_WRITE_ROLE_ARN: IAM role ARN for S3 access (default: "", v1.1.0+)
 
         Package configuration (bucket, prefix, metadata_key) comes from Secrets Manager.
@@ -83,9 +82,9 @@ class Config:
         self.quilt_write_role_arn = os.getenv("QUILT_WRITE_ROLE_ARN", "")
 
         # Optional Quilt service configuration (v0.8.0+)
-        # These are used by PackageQuery for Athena queries
+        # Used by PackageQuery for Athena queries
+        # Query results are managed automatically by the workgroup's AWS-managed configuration
         self.athena_user_workgroup = os.getenv("ATHENA_USER_WORKGROUP", "primary")
-        self.athena_results_bucket = os.getenv("ATHENA_RESULTS_BUCKET", "")
 
         # Package configuration - initialized to defaults, will be set from on-demand secret fetch
         self.s3_bucket_name = ""
