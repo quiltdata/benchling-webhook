@@ -81,6 +81,22 @@ export interface StackQueryResult {
 }
 
 /**
+ * Benchling secret details (optional context data)
+ */
+export interface BenchlingSecretDetails {
+    tenant?: string;
+    clientId?: string;
+    clientSecret?: string;
+    appDefinitionId?: string;
+    userBucket?: string;
+    pkgPrefix?: string;
+    pkgKey?: string;
+    logLevel?: string;
+    webhookAllowList?: string;
+    enableVerification?: boolean;
+}
+
+/**
  * Phase 3: Parameter Collection Input
  */
 export interface ParameterCollectionInput {
@@ -174,6 +190,43 @@ export interface ModeDecisionResult {
     mode: "integrated" | "standalone";
     /** BenchlingSecret ARN (for integrated mode) */
     benchlingSecretArn?: string;
+}
+
+/**
+ * Unified flow action choices
+ */
+export type UnifiedFlowAction =
+    | "update-integration-secret"
+    | "review-only"
+    | "disable-integration"
+    | "switch-standalone"
+    | "enable-integration"
+    | "deploy-standalone"
+    | "update-standalone-redeploy"
+    | "update-standalone-secret"
+    | "exit";
+
+/**
+ * Unified flow decision input
+ */
+export interface UnifiedFlowDecisionInput {
+    stackQuery: StackQueryResult;
+    existingConfig?: ProfileConfig | null;
+    configStorage: XDGBase;
+    profile: string;
+    yes?: boolean;
+    awsProfile?: string;
+}
+
+/**
+ * Unified flow decision result
+ */
+export interface UnifiedFlowDecisionResult {
+    action: UnifiedFlowAction;
+    flow: "integration-running" | "integration-disabled" | "integration-missing" | "standalone-existing";
+    benchlingSecretArn?: string;
+    secretDetails?: BenchlingSecretDetails | null;
+    hasStandaloneDeployment: boolean;
 }
 
 /**

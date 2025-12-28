@@ -3,6 +3,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.1] - 2025-12-27
+
+### Added
+
+- **Custom Athena workgroup for standalone deployments** - Creates webhook-managed workgroup instead of using AWS default, matching the integrated stack behavior and ensuring consistent query results handling
+
+### Fixed
+
+- **Setup wizard UX improvements**
+  - Removed duplicate standalone deployment prompt
+  - Removed duplicate disable confirmation and clarified impact
+  - Clear deployment tracking when configuring integrated mode
+- **Status command** - Now waits for ECS rollout completion before exiting
+- **Athena workgroup configuration** - Enabled AWS-managed query results in fallback workgroup (fixes "No output location provided" errors)
+
+### Changed
+
+- **Integrated flow** - Improved user experience with clearer prompts and better state management
+- **Workgroup resolution** - Automatically uses Quilt-managed workgroup when integrated, creates custom webhook-managed workgroup for standalone deployments (replaces AWS default workgroup)
+
 ## [0.11.0] - 2025-12-26
 
 ### BREAKING CHANGES
