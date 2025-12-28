@@ -381,7 +381,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         saveConfig(config);
 
         // Clear deployment tracking for integrated mode (no separate deployments)
-        xdg.clearDeployments(profile);
+        const deploymentsC = xdg.getDeployments(profile);
+        Object.keys(deploymentsC.active).forEach(stage => {
+            xdg.clearDeployment(profile, stage);
+        });
 
         await syncSecretsToAWS({
             profile,
@@ -587,7 +590,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         saveConfig(config);
 
         // Clear deployment tracking for integrated mode (no separate deployments)
-        xdg.clearDeployments(profile);
+        const deploymentsB = xdg.getDeployments(profile);
+        Object.keys(deploymentsB.active).forEach(stage => {
+            xdg.clearDeployment(profile, stage);
+        });
 
         await syncSecretsToAWS({
             profile,
