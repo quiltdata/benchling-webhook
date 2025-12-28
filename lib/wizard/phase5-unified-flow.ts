@@ -149,7 +149,11 @@ export async function runUnifiedFlowDecision(
 
     if (flow === "integration-running") {
         // Offer disable integration as first option when running
-        const disableIntegration = await confirmPrompt("Disable integration?", false, yes);
+        const disableIntegration = await confirmPrompt(
+            "Disable integrated webhook? (destroys webhook resources, re-run wizard to recreate)",
+            false,
+            yes
+        );
         if (disableIntegration) {
             return { action: "disable-integration", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
         }

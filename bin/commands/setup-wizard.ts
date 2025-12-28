@@ -427,24 +427,8 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         break;
     }
     case "disable-integration": {
-        const confirmDisable = yes || (await inquirer.prompt([
-            {
-                type: "confirm",
-                name: "confirmDisable",
-                message: "Stop webhook? (can re-enable later)",
-                default: false,
-            },
-        ])).confirmDisable;
-
-        if (!confirmDisable) {
-            console.log(chalk.green("✓ Exit without changes"));
-            return {
-                success: true,
-                profile,
-                config: existingConfig || (await requireConfig(true)),
-                deploymentHandled: true,
-            };
-        }
+        // User already confirmed in Phase 5 - proceed with disabling
+        console.log(chalk.dim("Disabling integrated webhook..."));
 
         const updateResult = await updateStackParameter({
             stackArn: stackQuery.stackArn,
