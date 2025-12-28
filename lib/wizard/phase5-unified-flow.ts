@@ -152,7 +152,7 @@ export async function runUnifiedFlowDecision(
         const disableIntegration = await confirmPrompt(
             "Disable integrated webhook? (destroys webhook resources, re-run wizard to recreate)",
             false,
-            yes
+            yes,
         );
         if (disableIntegration) {
             return { action: "disable-integration", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };

@@ -157,6 +157,11 @@ export class BenchlingWebhookStack extends cdk.Stack {
             workGroupConfiguration: {
                 enforceWorkGroupConfiguration: true,
                 publishCloudWatchMetricsEnabled: true,
+                // Use AWS-managed query results (no S3 bucket required)
+                // Athena automatically manages storage and cleanup
+                managedQueryResultsConfiguration: {
+                    enabled: true,
+                },
             },
             state: "ENABLED",
         });
