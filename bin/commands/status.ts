@@ -42,6 +42,7 @@ export interface StatusResult {
     stackArn?: string;
     region?: string;
     error?: string;
+    athenaWorkgroup?: string;
     stackOutputs?: {
         webhookEndpoint?: string;
         benchlingUrl?: string;
@@ -250,6 +251,23 @@ async function getStackStatus(
             apiGatewayLogGroup: outputs.find((o) => o.OutputKey === "ApiGatewayLogGroup")?.OutputValue,
         };
 
+        // Query Athena workgroup (standalone only - for integrated, comes from Quilt stack)
+        let athenaWorkgroup: string | undefined;
+        if (mode === "standalone") {
+            try {
+                const resourcesCommand = new DescribeStackResourcesCommand({
+                    StackName: stackName,
+                });
+                const resourcesResponse = await client.send(resourcesCommand);
+                const workgroupResource = resourcesResponse.StackResources?.find(
+                    (r) => r.LogicalResourceId === "BenchlingAthenaWorkgroup",
+                );
+                athenaWorkgroup = workgroupResource?.PhysicalResourceId;
+            } catch {
+                // Workgroup query failed - non-fatal, continue without it
+            }
+        }
+
         return {
             success: true,
             stackStatus: stack.StackStatus,
@@ -258,6 +276,7 @@ async function getStackStatus(
             stackArn: stack.StackId, // Use actual ARN from response
             region,
             stackOutputs,
+            athenaWorkgroup,
         };
     } catch (error) {
         const errorMessage = (error as Error).message;
@@ -877,21 +896,25 @@ function displayStatusResult(
         console.log(`${chalk.bold("Webhook:")} ${chalk.cyan(result.stackOutputs.webhookEndpoint)}`);
     }
 
-    console.log(`${chalk.bold("Stack:")} ${chalk.cyan(stackName)} ${chalk.dim(`(${region})`)}`);
-
-    // Show stack status
-    let statusLine = `${chalk.bold("Status:")} ${formatStackStatus(result.stackStatus!)}`;
+    // Combine Stack and Status on one line
+    let stackLine = `${chalk.bold("Stack:")} ${chalk.cyan(stackName)} ${chalk.dim(`(${region})`)} - ${formatStackStatus(result.stackStatus!)}`;
 
     // Only show BenchlingIntegration for integrated stacks
     if (mode === "integrated" && result.benchlingIntegrationEnabled !== undefined) {
-        statusLine += `  ${chalk.bold("Integration:")} ${
+        stackLine += `  ${chalk.bold("Integration:")} ${
             result.benchlingIntegrationEnabled
                 ? chalk.green("✓ Enabled")
                 : chalk.yellow("⚠ Disabled")
         }`;
     }
 
-    console.log(statusLine);
+    console.log(stackLine);
+
+    // Show Athena workgroup
+    const workgroupToShow = result.athenaWorkgroup || quiltConfig?.athenaUserWorkgroup;
+    if (workgroupToShow) {
+        console.log(`${chalk.bold("Workgroup:")} ${chalk.cyan(workgroupToShow)}`);
+    }
 
     // Display stack outputs (skip if redundant with webhook URL)
     if (result.stackOutputs?.dockerImage) {
@@ -930,11 +953,6 @@ function displayStatusResult(
             secretLine += `${chalk.red("✗")} ${chalk.red(result.secretInfo.name)} - ${chalk.dim(result.secretInfo.error || "Inaccessible")}`;
         }
         console.log(secretLine);
-    }
-
-    // Display Quilt stack resources (ONLY for integrated mode) - compact single line
-    if (mode === "integrated" && quiltConfig?.athenaUserWorkgroup) {
-        console.log(`${chalk.bold("Workgroup:")} ${chalk.cyan(quiltConfig.athenaUserWorkgroup)}`);
     }
 
     console.log("");

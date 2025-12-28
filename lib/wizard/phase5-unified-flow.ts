@@ -182,12 +182,8 @@ export async function runUnifiedFlowDecision(
             return { action: "enable-integration", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
         }
 
-        const deployStandalone = await confirmPrompt("Deploy standalone instead?", true, yes);
-        if (deployStandalone) {
-            return { action: "deploy-standalone", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
-        }
-
-        return { action: "exit", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
+        console.log(chalk.yellow("Switching to standalone deployment..."));
+        return { action: "deploy-standalone", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
     }
 
     if (flow === "integration-missing") {
