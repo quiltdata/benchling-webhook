@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **Automatic Athena workgroup creation for standalone deployments** - Webhook stack now creates its own AWS-managed workgroup when not integrated with a Quilt stack, eliminating the need for manual workgroup setup
+- **Custom Athena workgroup for standalone deployments** - Creates webhook-managed workgroup instead of using AWS default, matching the integrated stack behavior and ensuring consistent query results handling
 
 ### Fixed
 
@@ -21,7 +21,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - **Integrated flow** - Improved user experience with clearer prompts and better state management
-- **Workgroup resolution** - Automatically detects and uses Quilt-managed workgroup when available, creates webhook-managed workgroup as fallback
+- **Workgroup resolution** - Automatically uses Quilt-managed workgroup when integrated, creates custom webhook-managed workgroup for standalone deployments (replaces AWS default workgroup)
 
 ## [0.11.0] - 2025-12-26
 
