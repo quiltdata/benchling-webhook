@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
+import * as athena from "aws-cdk-lib/aws-athena";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
 import { RestApiGateway } from "./rest-api-gateway";
@@ -144,6 +145,34 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const packageBucketValue = packageBucketParam.valueAsString;
         const quiltDatabaseValue = quiltDatabaseParam.valueAsString;
 
+        const createAthenaWorkgroupCondition = new cdk.CfnCondition(this, "CreateAthenaWorkgroup", {
+            expression: cdk.Fn.conditionEquals(athenaUserWorkgroupValue, ""),
+        });
+
+        const fallbackAthenaWorkgroupName = cdk.Fn.sub("${AWS::StackName}-athena-workgroup");
+
+        const athenaWorkgroup = new athena.CfnWorkGroup(this, "BenchlingAthenaWorkgroup", {
+            name: fallbackAthenaWorkgroupName,
+            description: "Athena workgroup for Benchling webhook package queries",
+            workGroupConfiguration: {
+                enforceWorkGroupConfiguration: true,
+                publishCloudWatchMetricsEnabled: true,
+                // Use AWS-managed query results (no S3 bucket required)
+                // Athena automatically manages storage and cleanup
+                managedQueryResultsConfiguration: {
+                    enabled: true,
+                },
+            },
+            state: "ENABLED",
+        });
+        athenaWorkgroup.cfnOptions.condition = createAthenaWorkgroupCondition;
+
+        const resolvedAthenaUserWorkgroup = cdk.Fn.conditionIf(
+            createAthenaWorkgroupCondition.logicalId,
+            fallbackAthenaWorkgroupName,
+            athenaUserWorkgroupValue,
+        ).toString();
+
         // Bucket name will be resolved at runtime from CloudFormation outputs
         // For CDK purposes, we use a placeholder for IAM permissions
 
@@ -255,7 +284,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             quiltWebHost: quiltWebHostValue,
             // NEW: Optional Athena workgroup (from Quilt stack discovery)
             // Query results are managed automatically by the workgroup's AWS-managed configuration
-            athenaUserWorkgroup: athenaUserWorkgroupValue,
+            athenaUserWorkgroup: resolvedAthenaUserWorkgroup,
             // IAM managed policy ARNs for S3 and Athena access
             bucketWritePolicyArn: config.quilt.bucketWritePolicyArn,
             athenaUserPolicyArn: config.quilt.athenaUserPolicyArn,

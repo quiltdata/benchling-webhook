@@ -9,6 +9,7 @@ import {
     ServiceResolverError,
     parseStackArn,
 } from "../../lib/utils/service-resolver";
+import { extractQuiltResources, getStackResources } from "../../lib/utils/stack-inference";
 import { checkCdkBootstrap, createStack } from "../benchling-webhook";
 import { XDGConfig } from "../../lib/xdg-config";
 import { ProfileConfig, getStackName } from "../../lib/types/config";
@@ -83,6 +84,41 @@ async function checkStackStatus(region: string, stackName: string): Promise<Stac
             stackExists: false,
             statusCategory: "none",
         };
+    }
+}
+
+async function resolveQuiltAthenaWorkgroup(
+    stackArn: string,
+    region: string,
+    quiltStackName: string,
+): Promise<string | undefined> {
+    try {
+        const resources = await getStackResources(region, stackArn);
+        const discovered = extractQuiltResources(resources);
+        const workgroup = discovered.athenaUserWorkgroup;
+
+        if (!workgroup) {
+            return undefined;
+        }
+
+        const expectedPrefix = `${quiltStackName}-`;
+        if (!workgroup.startsWith(expectedPrefix)) {
+            console.log(
+                chalk.yellow(
+                    `⚠️  Ignoring Athena workgroup '${workgroup}' (expected prefix '${expectedPrefix}')`,
+                ),
+            );
+            return undefined;
+        }
+
+        return workgroup;
+    } catch (error) {
+        console.log(
+            chalk.yellow(
+                `⚠️  Failed to discover Athena workgroup from Quilt stack: ${(error as Error).message}`,
+            ),
+        );
+        return undefined;
     }
 }
 
@@ -553,15 +589,27 @@ export async function deploy(
         process.exit(1);
     }
 
+    spinner.succeed("Quilt configuration loaded");
+
+    spinner.start("Resolving Quilt Athena workgroup...");
+    const discoveredAthenaWorkgroup = await resolveQuiltAthenaWorkgroup(
+        stackArn,
+        deployRegion,
+        parsed.stackName,
+    );
+    if (discoveredAthenaWorkgroup) {
+        spinner.succeed(`Resolved Athena workgroup: ${discoveredAthenaWorkgroup}`);
+    } else {
+        spinner.succeed("No Quilt-managed Athena workgroup found; will create one in webhook stack");
+    }
+
     // Convert to QuiltServices format for display
     const services: QuiltServices = {
         packagerQueueUrl: config.quilt.queueUrl,
         athenaUserDatabase: config.quilt.database,
         quiltWebHost: config.quilt.catalog,
-        athenaUserWorkgroup: config.quilt.athenaUserWorkgroup,
+        athenaUserWorkgroup: discoveredAthenaWorkgroup,
     };
-
-    spinner.succeed("Quilt configuration loaded");
 
     // Build ECR image URI for display
     // HARDCODED: Always use the quiltdata AWS account for ECR images
@@ -586,6 +634,8 @@ export async function deploy(
     console.log(`    ${chalk.bold("Athena Database:")}         ${services.athenaUserDatabase}`);
     if (services.athenaUserWorkgroup) {
         console.log(`    ${chalk.bold("Athena Workgroup:")}        ${services.athenaUserWorkgroup}`);
+    } else {
+        console.log(`    ${chalk.bold("Athena Workgroup:")}        ${stackName}-athena-workgroup ${chalk.dim("(webhook-managed)")}`);
     }
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
