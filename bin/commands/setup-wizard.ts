@@ -379,6 +379,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         });
 
         saveConfig(config);
+
+        // Clear deployment tracking for integrated mode (no separate deployments)
+        xdg.clearDeployments(profile);
+
         await syncSecretsToAWS({
             profile,
             awsProfile,
@@ -402,8 +406,13 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         const config = await requireConfig(integratedStack);
         saveConfig(config);
 
-        // Show status with webhook URL for integrated mode
+        // Clear deployment tracking for integrated mode (no separate deployments)
         if (integratedStack) {
+            const deployments = xdg.getDeployments(profile);
+            Object.keys(deployments.active).forEach(stage => {
+                xdg.clearDeployment(profile, stage);
+            });
+
             const { statusCommand } = await import("./status");
             await statusCommand({
                 profile,
@@ -455,6 +464,12 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
 
         const config = await requireConfig(true);
         saveConfig(config);
+
+        // Clear deployment tracking for integrated mode (no separate deployments)
+        const deploymentsToCleanup = xdg.getDeployments(profile);
+        Object.keys(deploymentsToCleanup.active).forEach(stage => {
+            xdg.clearDeployment(profile, stage);
+        });
         break;
     }
     case "switch-standalone": {
@@ -570,6 +585,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         });
 
         saveConfig(config);
+
+        // Clear deployment tracking for integrated mode (no separate deployments)
+        xdg.clearDeployments(profile);
+
         await syncSecretsToAWS({
             profile,
             awsProfile,

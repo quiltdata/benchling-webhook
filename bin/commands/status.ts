@@ -391,10 +391,32 @@ export function formatStackStatus(status: string): string {
 
 /**
  * Checks if stack status is terminal (no further updates expected)
+ * A stack is only terminal when both:
+ * 1. CloudFormation stack is in a terminal state (COMPLETE or FAILED)
+ * 2. All ECS service rollouts are complete (no IN_PROGRESS deployments)
  */
-function isTerminalStatus(status?: string): boolean {
+function isTerminalStatus(status?: string, ecsServices?: StatusResult["ecsServices"]): boolean {
     if (!status) return false;
-    return status.endsWith("_COMPLETE") || status.endsWith("_FAILED");
+
+    // Check CloudFormation status
+    const cfnTerminal = status.endsWith("_COMPLETE") || status.endsWith("_FAILED");
+    if (!cfnTerminal) return false;
+
+    // Check ECS rollout status - if any service is IN_PROGRESS, not terminal
+    if (ecsServices && ecsServices.length > 0) {
+        const hasInProgressRollout = ecsServices.some(
+            svc => svc.rolloutState === "IN_PROGRESS",
+        );
+        if (hasInProgressRollout) return false;
+
+        // Check for pending tasks
+        const hasPendingTasks = ecsServices.some(
+            svc => svc.pendingCount > 0,
+        );
+        if (hasPendingTasks) return false;
+    }
+
+    return true;
 }
 
 /**
@@ -1166,7 +1188,7 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
             }
 
             // If terminal status, announce completion and exit (unless --no-exit is set)
-            if (isTerminalStatus(result.stackStatus)) {
+            if (isTerminalStatus(result.stackStatus, result.ecsServices)) {
                 if (exit) {
                     if (result.stackStatus?.includes("COMPLETE") && !result.stackStatus.includes("ROLLBACK")) {
                         console.log(chalk.green("✓ Stack reached stable state. Monitoring complete.\n"));
