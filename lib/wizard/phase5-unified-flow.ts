@@ -93,12 +93,42 @@ export async function runUnifiedFlowDecision(
 
     const benchlingSummary = resolveBenchlingSummary(existingConfig, secretDetails);
 
+    // Determine flow FIRST before displaying context
+    const integrationEnabled = stackQuery.benchlingIntegrationEnabled;
+    const hasBenchlingSecret = Boolean(benchlingSecretArn);
+
+    let flow: UnifiedFlowDecisionResult["flow"];
+    // Priority: Current stack state > standalone deployment detection
+    // If the stack has integration enabled/disabled, that takes precedence over local config
+    if (integrationEnabled === true && hasBenchlingSecret) {
+        flow = "integration-running";
+    } else if (integrationEnabled === false) {
+        flow = "integration-disabled";
+    } else if (integrationEnabled === undefined && hasStandaloneDeployment) {
+        // Only treat as standalone if integration is NOT available in stack
+        flow = "standalone-existing";
+    } else {
+        flow = "integration-missing";
+    }
+
     console.log(chalk.bold("Context"));
     console.log(chalk.dim("─".repeat(70)));
     console.log(chalk.green(`✓ Quilt Stack: ${stackName}`));
     console.log(chalk.dim(`  Region: ${stackQuery.region}`));
     console.log(chalk.dim(`  Account: ${stackQuery.account}`));
     console.log("");
+
+    // Determine deployment mode for display
+    const isIntegratedMode = flow === "integration-running" || flow === "integration-disabled";
+
+    if (isIntegratedMode) {
+        console.log(chalk.bold.cyan("🔗 Deployment Mode: INTEGRATED"));
+        console.log(chalk.dim("  Webhook runs within the Quilt stack (no separate deployment)\n"));
+    } else {
+        console.log(chalk.bold.yellow("📦 Deployment Mode: STANDALONE"));
+        console.log(chalk.dim("  Webhook runs as separate infrastructure\n"));
+    }
+
     console.log(chalk.bold("Integration Status"));
     console.log(chalk.dim(`  Integration: ${formatIntegrationStatus(stackQuery.benchlingIntegrationEnabled)}`));
 
@@ -117,21 +147,13 @@ export async function runUnifiedFlowDecision(
 
     console.log("");
 
-    let flow: UnifiedFlowDecisionResult["flow"];
-    const integrationEnabled = stackQuery.benchlingIntegrationEnabled;
-    const hasBenchlingSecret = Boolean(benchlingSecretArn);
-
-    if (hasStandaloneDeployment) {
-        flow = "standalone-existing";
-    } else if (integrationEnabled === true && hasBenchlingSecret) {
-        flow = "integration-running";
-    } else if (integrationEnabled === false) {
-        flow = "integration-disabled";
-    } else {
-        flow = "integration-missing";
-    }
-
     if (flow === "integration-running") {
+        // Offer disable integration as first option when running
+        const disableIntegration = await confirmPrompt("Disable integration?", false, yes);
+        if (disableIntegration) {
+            return { action: "disable-integration", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
+        }
+
         const updateCredentials = await confirmPrompt("Update Benchling credentials?", true, yes);
         if (updateCredentials) {
             return { action: "update-integration-secret", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
@@ -140,11 +162,6 @@ export async function runUnifiedFlowDecision(
         const reviewOnly = await confirmPrompt("Review config without changes?", true, yes);
         if (reviewOnly) {
             return { action: "review-only", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
-        }
-
-        const disableIntegration = await confirmPrompt("Disable integration?", false, yes);
-        if (disableIntegration) {
-            return { action: "disable-integration", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
         }
 
         const switchStandalone = await confirmPrompt("Switch to standalone?", false, yes);

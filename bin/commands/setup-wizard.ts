@@ -119,9 +119,9 @@ function printWelcomeBanner(): void {
     const version = getVersion();
     const prefix = "   Benchling Webhook Setup (v";
     const suffix = ")";
-    const totalWidth = 63; // Width between the ║ symbols
+    const totalWidth = 59; // Width between the ║ symbols (border is 61 chars total - 2 for ║║)
     const contentLength = prefix.length + version.length + suffix.length;
-    const padding = " ".repeat(totalWidth - contentLength);
+    const padding = " ".repeat(Math.max(0, totalWidth - contentLength));
 
     console.log("\n╔═══════════════════════════════════════════════════════════╗");
     console.log(`║${prefix}${version}${suffix}${padding}║`);
@@ -386,12 +386,32 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             force: true,
             configStorage: xdg,
         });
+
+        // Show status with webhook URL
+        const { statusCommand } = await import("./status");
+        await statusCommand({
+            profile,
+            awsProfile,
+            configStorage: xdg,
+            // Use default timer - will auto-refresh during updates and exit when stable
+        });
         break;
     }
     case "review-only": {
         const integratedStack = flowDecision.flow !== "standalone-existing";
         const config = await requireConfig(integratedStack);
         saveConfig(config);
+
+        // Show status with webhook URL for integrated mode
+        if (integratedStack) {
+            const { statusCommand } = await import("./status");
+            await statusCommand({
+                profile,
+                awsProfile,
+                configStorage: xdg,
+                // Use default timer - will auto-refresh during updates and exit when stable
+            });
+        }
         break;
     }
     case "disable-integration": {
@@ -556,6 +576,15 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             region: config.deployment.region,
             force: true,
             configStorage: xdg,
+        });
+
+        // Show status with webhook URL
+        const { statusCommand } = await import("./status");
+        await statusCommand({
+            profile,
+            awsProfile,
+            configStorage: xdg,
+            // Use default timer - will auto-refresh during updates and exit when stable
         });
         break;
     }

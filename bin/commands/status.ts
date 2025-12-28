@@ -845,28 +845,24 @@ function displayStatusResult(
         ? chalk.blue("[Integrated]")
         : chalk.cyan("[Standalone]");
 
-    console.log(chalk.bold(`\nStack Status for Profile: ${profile} ${modeLabel}${lastUpdatedStr}\n`));
-    console.log(chalk.dim("─".repeat(80)));
+    console.log(chalk.bold(`\n${profile} ${modeLabel}${lastUpdatedStr}\n`));
 
     // Show catalog DNS and webhook URL prominently at the top
     if (quiltConfig?.catalog) {
-        console.log(`${chalk.bold("Catalog DNS:")} ${chalk.cyan(quiltConfig.catalog)}`);
+        console.log(`${chalk.bold("Catalog:")} ${chalk.cyan(quiltConfig.catalog)}`);
     }
     if (result.stackOutputs?.webhookEndpoint) {
-        console.log(`${chalk.bold("Webhook URL:")} ${chalk.cyan(result.stackOutputs.webhookEndpoint)}`);
-    }
-    if (quiltConfig?.catalog || result.stackOutputs?.webhookEndpoint) {
-        console.log(chalk.dim("─".repeat(80)));
+        console.log(`${chalk.bold("Webhook:")} ${chalk.cyan(result.stackOutputs.webhookEndpoint)}`);
     }
 
-    console.log(`${chalk.bold("Stack:")} ${chalk.cyan(stackName)}  ${chalk.bold("Region:")} ${chalk.cyan(region)}`);
+    console.log(`${chalk.bold("Stack:")} ${chalk.cyan(stackName)} ${chalk.dim(`(${region})`)}`);
 
     // Show stack status
-    let statusLine = `${chalk.bold("Stack Status:")} ${formatStackStatus(result.stackStatus!)}`;
+    let statusLine = `${chalk.bold("Status:")} ${formatStackStatus(result.stackStatus!)}`;
 
     // Only show BenchlingIntegration for integrated stacks
     if (mode === "integrated" && result.benchlingIntegrationEnabled !== undefined) {
-        statusLine += `  ${chalk.bold("BenchlingIntegration:")} ${
+        statusLine += `  ${chalk.bold("Integration:")} ${
             result.benchlingIntegrationEnabled
                 ? chalk.green("✓ Enabled")
                 : chalk.yellow("⚠ Disabled")
@@ -874,25 +870,20 @@ function displayStatusResult(
     }
 
     console.log(statusLine);
-    console.log("");
 
-    // Display stack outputs and secret info on one line each
-    if (result.stackOutputs) {
-        if (result.stackOutputs.benchlingUrl) {
-            console.log(`${chalk.bold("Benchling URL:")} ${chalk.cyan(result.stackOutputs.benchlingUrl)}`);
-        }
-        if (result.stackOutputs.dockerImage) {
-            console.log(`${chalk.bold("Docker Image:")} ${chalk.dim(result.stackOutputs.dockerImage)}`);
-        }
+    // Display stack outputs (skip if redundant with webhook URL)
+    if (result.stackOutputs?.dockerImage) {
+        console.log(`${chalk.bold("Image:")} ${chalk.dim(result.stackOutputs.dockerImage)}`);
     }
 
     // Display secret info on one line
     if (result.secretInfo) {
-        let secretLine = `${chalk.bold("Secrets Manager:")} `;
+        let secretLine = `${chalk.bold("Secret:")} `;
         if (result.secretInfo.accessible) {
             if (result.secretInfo.lastModified) {
-                // Secret has been modified - show with green checkmark
-                secretLine += `${chalk.green("✓")} ${chalk.cyan(result.secretInfo.name)}`;
+                // Secret has been modified - show with green checkmark and compact name
+                const secretShortName = result.secretInfo.name.split("-")[0]; // e.g., "BenchlingSecret" from "BenchlingSecret-6C55elX4eP8f-iylLmr"
+                secretLine += `${chalk.green("✓")} ${chalk.cyan(secretShortName)}`;
                 const deltaMs = Date.now() - result.secretInfo.lastModified.getTime();
                 const minutes = Math.floor(deltaMs / 60000);
                 const hours = Math.floor(minutes / 60);
@@ -900,18 +891,18 @@ function displayStatusResult(
 
                 let timeStr: string;
                 if (days > 0) {
-                    timeStr = `${days} day${days !== 1 ? "s" : ""} ago`;
+                    timeStr = `${days}d ago`;
                 } else if (hours > 0) {
-                    timeStr = `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+                    timeStr = `${hours}h ago`;
                 } else if (minutes > 0) {
-                    timeStr = `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
+                    timeStr = `${minutes}m ago`;
                 } else {
                     timeStr = "just now";
                 }
-                secretLine += chalk.dim(` (Last modified: ${timeStr})`);
+                secretLine += chalk.dim(` (updated ${timeStr})`);
             } else {
                 // Secret never modified - needs attention!
-                secretLine += `${chalk.red(result.secretInfo.name)} ${chalk.red("(NEVER MODIFIED - needs updating)")}`;
+                secretLine += chalk.red(`${result.secretInfo.name} (NEVER MODIFIED)`);
             }
         } else {
             secretLine += `${chalk.red("✗")} ${chalk.red(result.secretInfo.name)} - ${chalk.dim(result.secretInfo.error || "Inaccessible")}`;
@@ -919,29 +910,9 @@ function displayStatusResult(
         console.log(secretLine);
     }
 
-    // Display log groups
-    if (result.stackOutputs?.ecsLogGroup || result.stackOutputs?.apiGatewayLogGroup) {
-        console.log(`${chalk.bold("CloudWatch Logs:")}`);
-        if (result.stackOutputs.ecsLogGroup) {
-            console.log(`  ${chalk.cyan("ECS:")} ${chalk.dim(result.stackOutputs.ecsLogGroup)}`);
-        }
-        if (result.stackOutputs.apiGatewayLogGroup) {
-            console.log(`  ${chalk.cyan("API Gateway:")} ${chalk.dim(result.stackOutputs.apiGatewayLogGroup)}`);
-        }
-    }
-
-    // Display Quilt stack resources (ONLY for integrated mode)
-    if (mode === "integrated" && quiltConfig) {
-        const resources = [];
-        if (quiltConfig.athenaUserWorkgroup) resources.push({ label: "User Workgroup", value: quiltConfig.athenaUserWorkgroup });
-        if (quiltConfig.athenaUserPolicy) resources.push({ label: "User Policy", value: quiltConfig.athenaUserPolicy });
-
-        if (resources.length > 0) {
-            console.log(`${chalk.bold("Quilt Stack Resources:")}`);
-            for (const res of resources) {
-                console.log(`  ${chalk.cyan(res.label + ":")} ${chalk.dim(res.value)}`);
-            }
-        }
+    // Display Quilt stack resources (ONLY for integrated mode) - compact single line
+    if (mode === "integrated" && quiltConfig?.athenaUserWorkgroup) {
+        console.log(`${chalk.bold("Workgroup:")} ${chalk.cyan(quiltConfig.athenaUserWorkgroup)}`);
     }
 
     console.log("");
