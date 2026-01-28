@@ -26,7 +26,7 @@ import type { XDGBase } from "../../lib/xdg-base";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { ProfileConfig, ProfileName } from "../../lib/types/config";
 import { generateSecretName } from "../../lib/utils/secrets";
-import { restartECSServices } from "../../lib/utils/ecs-service-discovery";
+import { restartECSServicesUsingSecret } from "../../lib/utils/ecs-service-discovery";
 
 /**
  * Secrets sync options
@@ -494,22 +494,23 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
             }
 
             if (stackNameOrArn) {
-                console.log("Restarting ECS services to pick up updated secret...");
+                console.log("Restarting ECS services that use this secret...");
 
-                const restartedServices = await restartECSServices(
+                const restartedServices = await restartECSServicesUsingSecret(
                     stackNameOrArn,
                     region,
+                    secretArn,
                     awsProfile,
                 );
 
                 if (restartedServices.length > 0) {
                     console.log(`✓ Restarted ${restartedServices.length} ECS service(s):`);
-                    restartedServices.forEach(svc => console.log(`  - ${svc}`));
+                    restartedServices.forEach((svc: string) => console.log(`  - ${svc}`));
                     console.log("\nNote: New containers will start with the updated secret values.");
                     console.log("Container restart may take 1-2 minutes to complete.");
                 } else {
-                    console.log("⚠ No ECS services found in the stack to restart.");
-                    console.log("If you have running containers, you may need to restart them manually.");
+                    console.log("⚠ No ECS services using this secret were found in the stack.");
+                    console.log("If you have running containers using this secret, you may need to restart them manually.");
                 }
             } else {
                 console.log("⚠ No stack found for this profile.");

@@ -458,6 +458,132 @@ export async function discoverAPIGatewayLogGroups(
 }
 
 /**
+ * Restart ECS services that use a specific secret ARN
+ *
+ * Only restarts services whose task definitions reference the given secret ARN,
+ * avoiding unnecessary disruption to unrelated services.
+ *
+ * @param stackNameOrArn - CloudFormation stack name or ARN
+ * @param region - AWS region
+ * @param secretArn - Secret Manager ARN to filter by
+ * @param awsProfile - Optional AWS profile name
+ * @returns Array of restarted service names
+ */
+export async function restartECSServicesUsingSecret(
+    stackNameOrArn: string,
+    region: string,
+    secretArn: string,
+    awsProfile?: string,
+): Promise<string[]> {
+    try {
+        const { CloudFormationClient, DescribeStackResourcesCommand } = await import("@aws-sdk/client-cloudformation");
+        const { ECSClient, DescribeServicesCommand, DescribeTaskDefinitionCommand, UpdateServiceCommand } = await import("@aws-sdk/client-ecs");
+
+        // Configure AWS SDK clients
+        const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
+        if (awsProfile) {
+            const { fromIni: fromIniImport } = await import("@aws-sdk/credential-providers");
+            clientConfig.credentials = fromIniImport({ profile: awsProfile });
+        }
+
+        const cfClient = new CloudFormationClient(clientConfig);
+        const ecsClient = new ECSClient(clientConfig);
+
+        // Find ECS resources in stack
+        const resourcesCommand = new DescribeStackResourcesCommand({
+            StackName: stackNameOrArn,
+        });
+        const resourcesResponse = await cfClient.send(resourcesCommand);
+
+        const ecsServiceResources = resourcesResponse.StackResources?.filter(
+            (r) => r.ResourceType === "AWS::ECS::Service",
+        ) || [];
+
+        if (ecsServiceResources.length === 0) {
+            return [];
+        }
+
+        // Get cluster name
+        const clusterResource = resourcesResponse.StackResources?.find(
+            (r) => r.ResourceType === "AWS::ECS::Cluster",
+        );
+        const clusterName = clusterResource?.PhysicalResourceId;
+
+        if (!clusterName) {
+            console.warn("Could not find ECS cluster in stack");
+            return [];
+        }
+
+        // Get service ARNs
+        const serviceArns = ecsServiceResources
+            .map((s) => s.PhysicalResourceId)
+            .filter((arn): arn is string => !!arn);
+
+        if (serviceArns.length === 0) {
+            return [];
+        }
+
+        // Describe all services to get their task definitions
+        const servicesCommand = new DescribeServicesCommand({
+            cluster: clusterName,
+            services: serviceArns,
+        });
+        const servicesResponse = await ecsClient.send(servicesCommand);
+
+        const restartedServices: string[] = [];
+
+        // Check each service's task definition for the secret
+        for (const svc of servicesResponse.services || []) {
+            if (!svc.serviceName) continue;
+
+            const taskDefArn = svc.deployments?.[0]?.taskDefinition;
+            if (!taskDefArn) continue;
+
+            try {
+                // Get task definition to check if it uses the secret
+                const taskDefCommand = new DescribeTaskDefinitionCommand({
+                    taskDefinition: taskDefArn,
+                });
+                const taskDefResponse = await ecsClient.send(taskDefCommand);
+
+                // Check if any container uses this secret
+                const usesSecret = taskDefResponse.taskDefinition?.containerDefinitions?.some(container => {
+                    // Check secrets in container definition
+                    const hasSecret = container.secrets?.some(secret =>
+                        secret.valueFrom?.includes(secretArn) ||
+                        secret.valueFrom?.startsWith(secretArn.split('-').slice(0, -1).join('-'))
+                    );
+
+                    // Also check environment variables that might reference the secret
+                    const hasEnvSecret = container.environment?.some(env =>
+                        env.value?.includes(secretArn)
+                    );
+
+                    return hasSecret || hasEnvSecret;
+                });
+
+                if (usesSecret) {
+                    // This service uses the secret, restart it
+                    await ecsClient.send(new UpdateServiceCommand({
+                        cluster: clusterName,
+                        service: svc.serviceName,
+                        forceNewDeployment: true,
+                    }));
+                    restartedServices.push(svc.serviceName);
+                }
+            } catch (error) {
+                console.warn(`Failed to check/restart service ${svc.serviceName}: ${(error as Error).message}`);
+            }
+        }
+
+        return restartedServices;
+    } catch (error) {
+        console.warn(`Could not restart ECS services: ${(error as Error).message}`);
+        return [];
+    }
+}
+
+/**
  * Restart all ECS services in a CloudFormation stack to pick up updated secrets
  *
  * @param stackNameOrArn - CloudFormation stack name or ARN
