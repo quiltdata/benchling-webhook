@@ -21,7 +21,7 @@ import { XDGConfig } from "../../lib/xdg-config";
 import type { XDGBase } from "../../lib/xdg-base";
 import { getStackName } from "../../lib/types/config";
 import { discoverECSServiceLogGroups, discoverAPIGatewayLogGroups } from "../../lib/utils/ecs-service-discovery";
-import { parseTimeRange, formatTimeRange, formatLocalDateTime, formatLocalTime, getLocalTimezone } from "../../lib/utils/time-format";
+import { parseTimeRange, formatTimeRange, formatLocalDateTime, formatRelativeTime, getLocalTimezone } from "../../lib/utils/time-format";
 import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers";
 import { getEcsRolloutStatus } from "./status";
 
@@ -236,6 +236,57 @@ function isHealthCheck(message: string): boolean {
 }
 
 /**
+ * Strip redundant timestamps from log messages
+ * Removes common timestamp patterns at the start of messages
+ */
+function stripTimestamp(message: string): string {
+    // Match common timestamp patterns:
+    // [2026-01-28 00:59:23 +0000]
+    // [2026-01-28T00:59:23.123Z]
+    // 2026-01-28 00:59:23
+    const timestampPatterns = [
+        /^\[\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{4})?\]\s*/,
+        /^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{4})?\s+/,
+    ];
+
+    for (const pattern of timestampPatterns) {
+        message = message.replace(pattern, "");
+    }
+
+    return message;
+}
+
+/**
+ * Parse log stream name to extract service/container identifier
+ * ECS log streams typically follow patterns like:
+ * - ecs/service-name/task-id
+ * - prefix/container-name/task-id
+ * - service-name/container-name/task-id
+ */
+function parseLogStreamName(logStreamName?: string): string | undefined {
+    if (!logStreamName) return undefined;
+
+    // Split by / and try to extract meaningful identifier
+    const parts = logStreamName.split("/");
+
+    // Handle common ECS patterns
+    if (parts.length >= 2) {
+        // Try to find the service/container name (usually second part)
+        const identifier = parts[1];
+
+        // If it looks like a task ID (long hex string), use the first part instead
+        if (/^[a-f0-9]{32}/.test(identifier)) {
+            return parts[0];
+        }
+
+        return identifier;
+    }
+
+    // Fallback to first part if structure is unclear
+    return parts[0];
+}
+
+/**
  * Fetch logs from a single log group
  */
 async function fetchLogsFromGroup(
@@ -355,8 +406,10 @@ function displayLogs(
         for (const entry of logGroup.entries) {
             if (!entry.timestamp || !entry.message) continue;
 
-            const timeDisplay = formatLocalTime(entry.timestamp);
-            let message = entry.message.trim();
+            const timeDisplay = formatRelativeTime(entry.timestamp);
+            const streamName = parseLogStreamName(entry.logStreamName);
+            const streamDisplay = streamName ? chalk.magenta(`[${streamName}]`) : "";
+            let message = stripTimestamp(entry.message.trim());
 
             // Try to parse as JSON (API Gateway access logs are JSON formatted)
             let isJsonLog = false;
@@ -402,7 +455,7 @@ function displayLogs(
                 if (protocol) parts.push(chalk.dim(protocol));
                 if (requestTime) parts.push(chalk.dim(`(${requestTime})`));
 
-                console.log(`  ${chalk.dim(timeDisplay)} ${parts.join(" ")}`);
+                console.log(`  ${chalk.dim(timeDisplay)} ${streamDisplay ? streamDisplay + " " : ""}${parts.join(" ")}`);
             } else {
                 // Plain text log - color code by log level if detectable
                 let messageColor = chalk.white;
@@ -417,7 +470,7 @@ function displayLogs(
                     messageColor = chalk.dim;
                 }
 
-                console.log(`  ${chalk.dim(timeDisplay)} ${messageColor(message)}`);
+                console.log(`  ${chalk.dim(timeDisplay)} ${streamDisplay ? streamDisplay + " " : ""}${messageColor(message)}`);
             }
         }
 

@@ -372,3 +372,77 @@ class TestResolutionOrchestrator:
             SecretsResolutionError, match="Legacy mode with individual environment variables.*is no longer supported"
         ):
             resolve_benchling_secrets("us-east-2")
+
+
+class TestTenantNormalization:
+    """Test suite for tenant field normalization."""
+
+    def test_normalize_subdomain_only(self):
+        """Test that subdomain-only format is preserved."""
+        from src.secrets_manager import normalize_tenant
+
+        assert normalize_tenant("acme") == "acme"
+        assert normalize_tenant("quotient-tx-test") == "quotient-tx-test"
+
+    def test_normalize_full_domain(self):
+        """Test that full domain is normalized to subdomain."""
+        from src.secrets_manager import normalize_tenant
+
+        assert normalize_tenant("acme.benchling.com") == "acme"
+        assert normalize_tenant("quotient-tx-test.benchling.com") == "quotient-tx-test"
+
+    def test_normalize_multi_level_subdomain(self):
+        """Test that multi-level subdomains are preserved."""
+        from src.secrets_manager import normalize_tenant
+
+        assert normalize_tenant("test.demo.benchling.com") == "test.demo"
+        assert normalize_tenant("staging.acme.benchling.com") == "staging.acme"
+
+    def test_normalize_case_insensitive(self):
+        """Test that normalization is case-insensitive for suffix."""
+        from src.secrets_manager import normalize_tenant
+
+        assert normalize_tenant("acme.BENCHLING.COM") == "acme"
+        assert normalize_tenant("acme.Benchling.Com") == "acme"
+
+    def test_normalize_with_whitespace(self):
+        """Test that leading/trailing whitespace is stripped."""
+        from src.secrets_manager import normalize_tenant
+
+        assert normalize_tenant("  acme  ") == "acme"
+        assert normalize_tenant("  acme.benchling.com  ") == "acme"
+
+    def test_normalize_with_trailing_dot(self):
+        """Test that trailing dot is handled (malformed input)."""
+        from src.secrets_manager import normalize_tenant
+
+        assert normalize_tenant("acme.benchling.com.") == "acme"
+        assert normalize_tenant("acme.") == "acme"
+
+    def test_secret_fetch_normalizes_tenant(self):
+        """Test that fetch_benchling_secret normalizes tenant field."""
+        import json
+        from unittest.mock import Mock
+
+        # Mock secret with full domain
+        secret_data = {
+            "tenant": "acme.benchling.com",
+            "client_id": "test-id",
+            "client_secret": "test-secret",
+            "app_definition_id": "appdef_test",
+            "pkg_prefix": "benchling",
+            "pkg_key": "experiment_id",
+            "user_bucket": "test-bucket",
+            "log_level": "INFO",
+            "enable_webhook_verification": "true",
+        }
+
+        mock_client = Mock()
+        mock_client.get_secret_value.return_value = {"SecretString": json.dumps(secret_data)}
+
+        from src.secrets_manager import fetch_benchling_secret
+
+        result = fetch_benchling_secret(mock_client, "us-east-1", "test-secret")
+
+        # Verify tenant was normalized
+        assert result.tenant == "acme"

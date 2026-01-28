@@ -53,7 +53,9 @@ class BenchlingSecretData:
     that must be stored in AWS Secrets Manager.
 
     Attributes:
-        tenant: Benchling subdomain (e.g., 'quilt-dtt' from 'quilt-dtt.benchling.com')
+        tenant: Benchling subdomain (e.g., 'quilt-dtt'). Can also be provided as
+                full domain (e.g., 'quilt-dtt.benchling.com') - will be automatically
+                normalized to subdomain format.
         client_id: OAuth client ID from Benchling app
         client_secret: OAuth client secret from Benchling app (sensitive)
         app_definition_id: App definition ID for webhook signature verification
@@ -108,6 +110,42 @@ def parse_bool(value: Any) -> bool:
         if value.lower() in ["false", "0"]:
             return False
     raise ValueError(f"Invalid boolean value: {value!r}. Expected: true, false, 'true', 'false', '1', or '0'")
+
+
+def normalize_tenant(tenant: str) -> str:
+    """Normalize tenant field to subdomain format.
+
+    Strips '.benchling.com' suffix if present to handle customer confusion
+    about whether to provide subdomain or full domain.
+
+    Args:
+        tenant: Raw tenant value (e.g., 'acme' or 'acme.benchling.com')
+
+    Returns:
+        Normalized subdomain (e.g., 'acme')
+
+    Examples:
+        >>> normalize_tenant('acme')
+        'acme'
+        >>> normalize_tenant('acme.benchling.com')
+        'acme'
+        >>> normalize_tenant('test.demo.benchling.com')
+        'test.demo'
+        >>> normalize_tenant('acme.benchling.com.')
+        'acme'
+    """
+    # Strip whitespace
+    tenant = tenant.strip()
+
+    # Strip trailing dot if present (malformed input)
+    tenant = tenant.rstrip(".")
+
+    # Strip '.benchling.com' suffix (case-insensitive)
+    benchling_suffix = ".benchling.com"
+    if tenant.lower().endswith(benchling_suffix):
+        tenant = tenant[: -len(benchling_suffix)]
+
+    return tenant
 
 
 def fetch_benchling_secret(client, region: str, secret_identifier: str) -> BenchlingSecretData:
@@ -219,7 +257,7 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
         queue_url = data.get("queue_url", "")
 
         return BenchlingSecretData(
-            tenant=data["tenant"],
+            tenant=normalize_tenant(data["tenant"]),
             client_id=data["client_id"],
             client_secret=data["client_secret"],
             app_definition_id=data["app_definition_id"],
