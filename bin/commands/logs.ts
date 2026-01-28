@@ -257,6 +257,36 @@ function stripTimestamp(message: string): string {
 }
 
 /**
+ * Parse log stream name to extract service/container identifier
+ * ECS log streams typically follow patterns like:
+ * - ecs/service-name/task-id
+ * - prefix/container-name/task-id
+ * - service-name/container-name/task-id
+ */
+function parseLogStreamName(logStreamName?: string): string | undefined {
+    if (!logStreamName) return undefined;
+
+    // Split by / and try to extract meaningful identifier
+    const parts = logStreamName.split("/");
+
+    // Handle common ECS patterns
+    if (parts.length >= 2) {
+        // Try to find the service/container name (usually second part)
+        const identifier = parts[1];
+
+        // If it looks like a task ID (long hex string), use the first part instead
+        if (/^[a-f0-9]{32}/.test(identifier)) {
+            return parts[0];
+        }
+
+        return identifier;
+    }
+
+    // Fallback to first part if structure is unclear
+    return parts[0];
+}
+
+/**
  * Fetch logs from a single log group
  */
 async function fetchLogsFromGroup(
@@ -377,6 +407,8 @@ function displayLogs(
             if (!entry.timestamp || !entry.message) continue;
 
             const timeDisplay = formatRelativeTime(entry.timestamp);
+            const streamName = parseLogStreamName(entry.logStreamName);
+            const streamDisplay = streamName ? chalk.magenta(`[${streamName}]`) : "";
             let message = stripTimestamp(entry.message.trim());
 
             // Try to parse as JSON (API Gateway access logs are JSON formatted)
@@ -423,7 +455,7 @@ function displayLogs(
                 if (protocol) parts.push(chalk.dim(protocol));
                 if (requestTime) parts.push(chalk.dim(`(${requestTime})`));
 
-                console.log(`  ${chalk.dim(timeDisplay)} ${parts.join(" ")}`);
+                console.log(`  ${chalk.dim(timeDisplay)} ${streamDisplay ? streamDisplay + " " : ""}${parts.join(" ")}`);
             } else {
                 // Plain text log - color code by log level if detectable
                 let messageColor = chalk.white;
@@ -438,7 +470,7 @@ function displayLogs(
                     messageColor = chalk.dim;
                 }
 
-                console.log(`  ${chalk.dim(timeDisplay)} ${messageColor(message)}`);
+                console.log(`  ${chalk.dim(timeDisplay)} ${streamDisplay ? streamDisplay + " " : ""}${messageColor(message)}`);
             }
         }
 
