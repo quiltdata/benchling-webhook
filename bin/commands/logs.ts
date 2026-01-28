@@ -21,7 +21,7 @@ import { XDGConfig } from "../../lib/xdg-config";
 import type { XDGBase } from "../../lib/xdg-base";
 import { getStackName } from "../../lib/types/config";
 import { discoverECSServiceLogGroups, discoverAPIGatewayLogGroups } from "../../lib/utils/ecs-service-discovery";
-import { parseTimeRange, formatTimeRange, formatLocalDateTime, formatLocalTime, getLocalTimezone } from "../../lib/utils/time-format";
+import { parseTimeRange, formatTimeRange, formatLocalDateTime, formatRelativeTime, getLocalTimezone } from "../../lib/utils/time-format";
 import { sleep, clearScreen, parseTimerValue } from "../../lib/utils/cli-helpers";
 import { getEcsRolloutStatus } from "./status";
 
@@ -236,6 +236,27 @@ function isHealthCheck(message: string): boolean {
 }
 
 /**
+ * Strip redundant timestamps from log messages
+ * Removes common timestamp patterns at the start of messages
+ */
+function stripTimestamp(message: string): string {
+    // Match common timestamp patterns:
+    // [2026-01-28 00:59:23 +0000]
+    // [2026-01-28T00:59:23.123Z]
+    // 2026-01-28 00:59:23
+    const timestampPatterns = [
+        /^\[\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{4})?\]\s*/,
+        /^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{4})?\s+/,
+    ];
+
+    for (const pattern of timestampPatterns) {
+        message = message.replace(pattern, "");
+    }
+
+    return message;
+}
+
+/**
  * Fetch logs from a single log group
  */
 async function fetchLogsFromGroup(
@@ -355,8 +376,8 @@ function displayLogs(
         for (const entry of logGroup.entries) {
             if (!entry.timestamp || !entry.message) continue;
 
-            const timeDisplay = formatLocalTime(entry.timestamp);
-            let message = entry.message.trim();
+            const timeDisplay = formatRelativeTime(entry.timestamp);
+            let message = stripTimestamp(entry.message.trim());
 
             // Try to parse as JSON (API Gateway access logs are JSON formatted)
             let isJsonLog = false;
