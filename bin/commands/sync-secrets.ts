@@ -26,6 +26,7 @@ import type { XDGBase } from "../../lib/xdg-base";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { ProfileConfig, ProfileName } from "../../lib/types/config";
 import { generateSecretName } from "../../lib/utils/secrets";
+import { restartECSServicesUsingSecret } from "../../lib/utils/ecs-service-discovery";
 
 /**
  * Secrets sync options
@@ -467,6 +468,61 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
     xdgConfig.writeProfile(profile, config);
 
     console.log("✓ XDG configuration updated with secret ARN");
+
+    // Step 7: Restart ECS services if secret was updated (not just created or skipped)
+    if (action === "updated") {
+        try {
+            console.log("\n=== Restarting ECS Services ===");
+            console.log("Secret was updated. Checking for running containers that need to be restarted...");
+
+            let stackNameOrArn: string | undefined;
+
+            // Determine stack to restart based on deployment mode
+            if (config.integratedStack && config.quilt.stackArn) {
+                // Integrated mode: Use Quilt stack ARN
+                stackNameOrArn = config.quilt.stackArn;
+                console.log(`Integrated mode: Using Quilt stack: ${stackNameOrArn}`);
+            } else {
+                // Standalone mode: Try to find active deployment to get stack name
+                const activeDeployment = xdgConfig.getActiveDeployment(profile, "prod") ||
+                                        xdgConfig.getActiveDeployment(profile, "dev");
+
+                if (activeDeployment && activeDeployment.stackName) {
+                    stackNameOrArn = activeDeployment.stackName;
+                    console.log(`Standalone mode: Found deployment in stack: ${stackNameOrArn}`);
+                }
+            }
+
+            if (stackNameOrArn) {
+                console.log("Restarting ECS services that use this secret...");
+
+                const restartedServices = await restartECSServicesUsingSecret(
+                    stackNameOrArn,
+                    region,
+                    secretArn,
+                    awsProfile,
+                );
+
+                if (restartedServices.length > 0) {
+                    console.log(`✓ Restarted ${restartedServices.length} ECS service(s):`);
+                    restartedServices.forEach((svc: string) => console.log(`  - ${svc}`));
+                    console.log("\nNote: New containers will start with the updated secret values.");
+                    console.log("Container restart may take 1-2 minutes to complete.");
+                } else {
+                    console.log("⚠ No ECS services using this secret were found in the stack.");
+                    console.log("If you have running containers using this secret, you may need to restart them manually.");
+                }
+            } else {
+                console.log("⚠ No stack found for this profile.");
+                console.log("If you have running containers, you may need to restart them manually.");
+                console.log("Containers will not pick up the updated secret until they are restarted.");
+            }
+        } catch (error) {
+            console.warn(`\n⚠ Warning: Could not restart ECS services: ${(error as Error).message}`);
+            console.warn("The secret was updated successfully, but running containers may not have picked it up.");
+            console.warn("You may need to manually restart your containers or redeploy your stack.");
+        }
+    }
 
     return results;
 }

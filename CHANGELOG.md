@@ -3,6 +3,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.2] - 2026-01-27
+
+### Added
+
+- Logs now show which service generated each message with `[service-name]` labels
+- Logs display relative timestamps (e.g., "4 minutes ago") for easier reading
+
+### Fixed
+
+- Containers automatically restart after secret updates to pick up new values
+- Only services using the updated secret restart (not all services in the stack)
+- Improved tenant name validation in secrets manager
+
 ## [0.11.1] - 2025-12-27
 
 ### Added
