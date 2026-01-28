@@ -551,12 +551,12 @@ export async function restartECSServicesUsingSecret(
                     // Check secrets in container definition
                     const hasSecret = container.secrets?.some(secret =>
                         secret.valueFrom?.includes(secretArn) ||
-                        secret.valueFrom?.startsWith(secretArn.split('-').slice(0, -1).join('-'))
+                        secret.valueFrom?.startsWith(secretArn.split("-").slice(0, -1).join("-")),
                     );
 
                     // Also check environment variables that might reference the secret
                     const hasEnvSecret = container.environment?.some(env =>
-                        env.value?.includes(secretArn)
+                        env.value?.includes(secretArn),
                     );
 
                     return hasSecret || hasEnvSecret;
