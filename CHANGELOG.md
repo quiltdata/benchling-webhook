@@ -3,6 +3,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Handle `v2.entry.updated.reviewRecord` events by triggering the standard entry export workflow (previously ignored)
+
 ## [0.11.2] - 2026-01-27
 
 ### Added

@@ -707,6 +707,7 @@ def create_app() -> FastAPI:
 
             supported_event_types = {
                 "v2.entry.updated.fields",
+                "v2.entry.updated.reviewRecord",
                 "v2.entry.created",
             }
             if payload.event_type not in supported_event_types:
