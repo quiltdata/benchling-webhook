@@ -7,7 +7,16 @@
     },
     {
       "groupName": "AWS",
-      "matchPackagePatterns": ["aws", "cdk"]
+      "matchPackagePatterns": ["aws", "cdk", "constructs"]
+    },
+    {
+      "groupName": "Python dependencies",
+      "matchManagers": ["uv", "pip_requirements", "pip-compile"],
+      "matchPackagePatterns": [".*"]
+    },
+    {
+      "groupName": "JS tools",
+      "matchPackageNames": ["globals", "ora", "commander", "ajv"]
     }
   ]
 }
