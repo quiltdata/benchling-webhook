@@ -3,6 +3,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- `logs` command now finds **all** log streams starting with `benchling` across all containers in ECS task definitions (previously only inspected the first container)
+- Each distinct `benchling-*` stream prefix is shown as a separate labeled section
+- Log group headers condensed to a single line: `Name (ECS) -> stream-prefix (N entries)`
+
 ## [0.12.0] - 2026-02-23
 
 ### Added

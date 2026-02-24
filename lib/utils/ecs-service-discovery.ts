@@ -28,13 +28,13 @@ export interface APIGatewayLogInfo {
  * @param stackName - CloudFormation stack name
  * @param region - AWS region
  * @param awsProfile - Optional AWS profile name
- * @returns Map of service names to log group names
+ * @returns Map of service names to log group info (logGroup + optional streamPrefix)
  */
 export async function discoverECSServiceLogGroups(
     stackName: string,
     region: string,
     awsProfile?: string,
-): Promise<Record<string, string>> {
+): Promise<Record<string, { logGroup: string; streamPrefix?: string }>> {
     try {
         const { CloudFormationClient, DescribeStackResourcesCommand } = await import("@aws-sdk/client-cloudformation");
         const { ECSClient, DescribeServicesCommand, DescribeTaskDefinitionCommand } = await import("@aws-sdk/client-ecs");
@@ -86,7 +86,7 @@ export async function discoverECSServiceLogGroups(
         const servicesResponse = await ecsClient.send(servicesCommand);
 
         // Get log groups from ALL services
-        const logGroups: Record<string, string> = {};
+        const logGroups: Record<string, { logGroup: string; streamPrefix?: string }> = {};
 
         for (const svc of servicesResponse.services || []) {
             const taskDefArn = svc.deployments?.[0]?.taskDefinition;
@@ -98,12 +98,13 @@ export async function discoverECSServiceLogGroups(
                 });
                 const taskDefResponse = await ecsClient.send(taskDefCommand);
 
-                const logConfig = taskDefResponse.taskDefinition?.containerDefinitions?.[0]?.logConfiguration;
-                if (logConfig?.logDriver === "awslogs") {
+                for (const container of taskDefResponse.taskDefinition?.containerDefinitions ?? []) {
+                    const logConfig = container.logConfiguration;
+                    if (logConfig?.logDriver !== "awslogs") continue;
                     const logGroupName = logConfig.options?.["awslogs-group"];
-                    if (logGroupName) {
-                        const serviceName = svc.serviceName || "unknown";
-                        logGroups[serviceName] = logGroupName;
+                    const streamPrefix = logConfig.options?.["awslogs-stream-prefix"];
+                    if (logGroupName && streamPrefix?.startsWith("benchling")) {
+                        logGroups[streamPrefix] = { logGroup: logGroupName, streamPrefix };
                     }
                 }
             } catch {
