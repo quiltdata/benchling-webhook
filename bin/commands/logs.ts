@@ -53,6 +53,7 @@ export interface LogGroupInfo {
     name: string;
     displayName: string;
     entries: FilteredLogEvent[];
+    streamPrefix?: string;
 }
 
 /**
@@ -174,7 +175,7 @@ async function getLogGroupsFromStack(
     region: string,
     integratedMode: boolean,
     awsProfile?: string,
-): Promise<Record<string, string>> {
+): Promise<Record<string, { logGroup: string; streamPrefix?: string }>> {
     try {
         // For integrated mode, discover both ECS services and API Gateway logs
         if (integratedMode) {
@@ -183,8 +184,12 @@ async function getLogGroupsFromStack(
                 discoverAPIGatewayLogGroups(stackName, region, awsProfile),
             ]);
 
-            // Merge both log group collections
-            return { ...ecsLogGroups, ...apiGatewayLogGroups };
+            // Merge: ECS entries already have { logGroup, streamPrefix }; API Gateway entries are plain strings
+            const merged: Record<string, { logGroup: string; streamPrefix?: string }> = { ...ecsLogGroups };
+            for (const [k, v] of Object.entries(apiGatewayLogGroups)) {
+                merged[k] = { logGroup: v };
+            }
+            return merged;
         }
 
         // For standalone mode, use stack outputs
@@ -203,17 +208,17 @@ async function getLogGroupsFromStack(
         }
 
         const outputs = stack.Outputs || [];
-        const logGroups: Record<string, string> = {};
+        const logGroups: Record<string, { logGroup: string; streamPrefix?: string }> = {};
 
         const ecsLogGroup = outputs.find((o) => o.OutputKey === "EcsLogGroup")?.OutputValue;
         const apiLogGroup = outputs.find((o) => o.OutputKey === "ApiGatewayLogGroup")?.OutputValue;
         const apiExecLogGroup = outputs.find((o) => o.OutputKey === "ApiGatewayExecutionLogGroup")?.OutputValue;
         const authorizerLogGroup = outputs.find((o) => o.OutputKey === "AuthorizerLogGroup")?.OutputValue;
 
-        if (ecsLogGroup) logGroups["ecs"] = ecsLogGroup;
-        if (apiLogGroup) logGroups["api"] = apiLogGroup;
-        if (apiExecLogGroup) logGroups["api-exec"] = apiExecLogGroup;
-        if (authorizerLogGroup) logGroups["authorizer"] = authorizerLogGroup;
+        if (ecsLogGroup) logGroups["ecs"] = { logGroup: ecsLogGroup };
+        if (apiLogGroup) logGroups["api"] = { logGroup: apiLogGroup };
+        if (apiExecLogGroup) logGroups["api-exec"] = { logGroup: apiExecLogGroup };
+        if (authorizerLogGroup) logGroups["authorizer"] = { logGroup: authorizerLogGroup };
 
         return logGroups;
     } catch (error) {
@@ -297,6 +302,7 @@ async function fetchLogsFromGroup(
     includeHealth: boolean,
     filterPattern?: string,
     awsProfile?: string,
+    logStreamNamePrefix?: string,
 ): Promise<FilteredLogEvent[]> {
     try {
         const clientConfig: { region: string; credentials?: ReturnType<typeof fromIni> } = { region };
@@ -315,6 +321,7 @@ async function fetchLogsFromGroup(
             startTime,
             filterPattern,
             limit: fetchLimit,
+            ...(logStreamNamePrefix ? { logStreamNamePrefix } : {}),
         });
 
         const response = await logsClient.send(command);
@@ -392,15 +399,16 @@ function displayLogs(
 
     // Display each log group in its own section
     for (const logGroup of logGroups) {
-        console.log(chalk.bold(`${logGroup.displayName}:`));
-        console.log(chalk.dim(`  Log Group: ${logGroup.name}`));
+        const streamSuffix = logGroup.streamPrefix ? ` -> ${logGroup.streamPrefix}` : "";
+        const entryCount = logGroup.entries.length;
+        console.log(chalk.bold(`${logGroup.displayName}${streamSuffix}`) + chalk.dim(` (${entryCount} entries)`));
 
-        if (logGroup.entries.length === 0) {
-            console.log(chalk.dim("  No log entries found\n"));
+        if (entryCount === 0) {
+            console.log("");
             continue;
         }
 
-        console.log(chalk.dim(`  Showing ${logGroup.entries.length} entries:\n`));
+        console.log("");
 
         // Display log entries
         for (const entry of logGroup.entries) {
@@ -502,19 +510,17 @@ async function fetchAllLogs(
 
     // For integrated mode, query all discovered log groups
     if (integratedMode) {
-        // Deduplicate log groups (multiple ECS services may share the same log group)
-        const uniqueLogGroups = new Map<string, string>();
-        for (const [serviceName, logGroupName] of Object.entries(discoveredLogGroups)) {
-            // Keep the first service name for each unique log group
-            if (!uniqueLogGroups.has(logGroupName)) {
-                uniqueLogGroups.set(logGroupName, serviceName);
+        // Deduplicate by (logGroup + streamPrefix) so services sharing a log group but
+        // with different stream prefixes are shown as separate entries.
+        const uniqueLogGroups = new Map<string, { logGroup: string; streamPrefix?: string; serviceName: string }>();
+        for (const [serviceName, info] of Object.entries(discoveredLogGroups)) {
+            const dedupKey = `${info.logGroup}::${info.streamPrefix ?? ""}`;
+            if (!uniqueLogGroups.has(dedupKey)) {
+                uniqueLogGroups.set(dedupKey, { ...info, serviceName });
             }
         }
 
-        // If type is specified and not "all", filter to only matching services
-        const logGroupEntries = Array.from(uniqueLogGroups.entries()).map(([logGroupName, serviceName]) => [serviceName, logGroupName]);
-
-        for (const [serviceName, logGroupName] of logGroupEntries) {
+        for (const { logGroup: logGroupName, streamPrefix, serviceName } of uniqueLogGroups.values()) {
             // Determine log type
             let logType: "ecs" | "api-gateway" = "ecs";
             if (serviceName.includes("api-gateway")) {
@@ -551,6 +557,7 @@ async function fetchAllLogs(
                 includeHealth,
                 filterPattern,
                 awsProfile,
+                streamPrefix,
             );
 
             // Create friendly display name
@@ -583,6 +590,7 @@ async function fetchAllLogs(
                 name: logGroupName,
                 displayName,
                 entries,
+                streamPrefix,
             });
         }
 
@@ -593,12 +601,14 @@ async function fetchAllLogs(
     const typesToQuery = type === "all" ? ["ecs", "api", "api-exec", "authorizer"] : [type];
 
     for (const logType of typesToQuery) {
-        const logGroupName = discoveredLogGroups[logType];
+        const logGroupInfo = discoveredLogGroups[logType];
 
-        if (!logGroupName) {
+        if (!logGroupInfo) {
             // Don't warn on first attempt, we'll handle it at the result level
             continue;
         }
+
+        const logGroupName = logGroupInfo.logGroup;
 
         let displayName: string;
         switch (logType) {

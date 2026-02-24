@@ -3,6 +3,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- `logs` command now finds **all** log streams starting with `benchling` across all containers in ECS task definitions (previously only inspected the first container)
+- Each distinct `benchling-*` stream prefix is shown as a separate labeled section
+- Log group headers condensed to a single line: `Name (ECS) -> stream-prefix (N entries)`
+
+## [0.12.0] - 2026-02-23
+
+### Added
+
+- Handle `v2.entry.updated.reviewRecord` events by triggering the standard entry export workflow (previously ignored)
+
 ## [0.11.2] - 2026-01-27
 
 ### Added
