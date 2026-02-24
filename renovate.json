@@ -1,19 +1,38 @@
 {
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended"
+  ],
   "packageRules": [
     {
       "groupName": "TypeScript and JS tools",
-      "matchPackagePatterns": ["typescript", "eslint", "node"],
-      "matchPackageNames": ["globals", "ora", "commander", "ajv"]
+      "matchPackageNames": [
+        "globals",
+        "ora",
+        "commander",
+        "ajv",
+        "/typescript/",
+        "/eslint/",
+        "/node/"
+      ]
     },
     {
       "groupName": "AWS",
-      "matchPackagePatterns": ["aws", "cdk", "constructs"]
+      "matchPackageNames": [
+        "/aws/",
+        "/cdk/",
+        "/constructs/"
+      ]
     },
     {
       "groupName": "Python dependencies",
-      "matchManagers": ["uv", "pip_requirements", "pip-compile"],
-      "matchPackagePatterns": [".*"]
+      "matchManagers": [
+        "uv",
+        "pip_requirements",
+        "pip-compile"
+      ],
+      "matchPackageNames": [
+        "/.*/"
+      ]
     }
   ]
 }
