@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-03-02
+
 ### Added
 
 - **Deployment tags** - AWS resources are now tagged with `deployed-by`, `deployed-at`, `profile`, and `git-sha` for traceability in the AWS console
