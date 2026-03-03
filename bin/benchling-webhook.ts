@@ -106,6 +106,7 @@ export function createStack(
         account: string;
         region: string;
         profileName: string;
+        tags?: Record<string, string>;
     },
 ): DeploymentResult {
     const app = new cdk.App();
@@ -119,6 +120,7 @@ export function createStack(
             region: options.region,
         },
         config: config,
+        tags: options.tags,
     });
 
     return {

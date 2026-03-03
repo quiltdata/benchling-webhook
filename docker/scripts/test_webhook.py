@@ -11,6 +11,7 @@ This script:
 
 import json
 import sys
+import time
 from pathlib import Path
 
 import requests
@@ -159,6 +160,28 @@ def test_webhook(server_url, event_type, payload):
         return False
 
 
+def wait_for_ready(server_url, max_wait=120, interval=10):
+    """Wait for /health to return 200, retrying on errors or non-200 responses."""
+    deadline = time.time() + max_wait
+    attempt = 0
+    while time.time() < deadline:
+        attempt += 1
+        try:
+            response = requests.get(f"{server_url}/health", timeout=5)
+            if response.status_code == 200:
+                if attempt > 1:
+                    print(f"✅ Health endpoint ready after {attempt} attempt(s)")
+                return True
+            remaining = int(deadline - time.time())
+            print(f"⏳ /health returned {response.status_code}, retrying in {interval}s... ({remaining}s remaining)")
+        except Exception as e:
+            remaining = int(deadline - time.time())
+            print(f"⏳ /health unreachable ({e}), retrying in {interval}s... ({remaining}s remaining)")
+        time.sleep(interval)
+    print(f"❌ Health endpoint not ready after {max_wait}s")
+    return False
+
+
 def test_health_endpoints(server_url="http://localhost:5001"):
     """Test all health endpoints."""
     endpoints = ["/health", "/health/ready", "/health/live"]
@@ -193,6 +216,7 @@ if __name__ == "__main__":
     server_url = "http://localhost:5001"
     health_only = False
     profile = "dev"
+    wait_secs = 0
 
     # Parse arguments
     for i, arg in enumerate(sys.argv[1:]):
@@ -203,12 +227,21 @@ if __name__ == "__main__":
         elif arg == "--profile":
             if i + 1 < len(sys.argv[1:]):
                 profile = sys.argv[i + 2]
+        elif arg.startswith("--wait="):
+            wait_secs = int(arg.split("=", 1)[1])
 
     print(f"🔧 Testing server: {server_url}")
     print(f"📋 Profile: {profile}")
     if health_only:
         print("🏥 Health check mode (skipping webhook tests)")
     print()
+
+    # Wait for service to be ready (useful after fresh deployments)
+    if wait_secs > 0:
+        print(f"⏱️  Waiting up to {wait_secs}s for service to be ready...")
+        if not wait_for_ready(server_url, max_wait=wait_secs):
+            sys.exit(1)
+        print()
 
     # Track all test results
     all_results = []
