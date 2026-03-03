@@ -714,12 +714,28 @@ export async function deploy(
             },
         };
 
+        // Build deployment tags so the stack is traceable in the AWS console
+        const deployedAt = new Date().toISOString();
+        const deployedBy = process.env.USER || process.env.USERNAME || "unknown";
+        let gitSha = "unknown";
+        try {
+            gitSha = execSync("git rev-parse --short HEAD", { encoding: "utf-8" }).trim();
+        } catch { /* not a git repo or git unavailable */ }
+
+        const stackTags: Record<string, string> = {
+            "deployed-by": deployedBy,
+            "deployed-at": deployedAt,
+            "profile": options.profileName,
+            "git-sha": gitSha,
+        };
+
         // Transform ProfileConfig → StackConfig (minimal interface)
         const stackConfig = profileToStackConfig(deployConfig);
         const result = createStack(stackConfig, {
             account: deployAccount,
             region: deployRegion,
             profileName: options.profileName,
+            tags: stackTags,
         });
 
         // Synthesize the CDK app to generate CloudFormation template

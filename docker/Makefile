@@ -378,7 +378,7 @@ test-deployed-dev-direct: check-xdg
 	if [ -n "$$DEPLOYED_AT" ]; then \
 		echo "📅 Deployed at: $$DEPLOYED_AT"; \
 	fi; \
-	uv run python scripts/test_webhook.py "$$DEV_ENDPOINT" --health-only
+	uv run python scripts/test_webhook.py "$$DEV_ENDPOINT" --health-only --wait=120
 
 # Test deployed prod stack via API Gateway endpoint
 # v0.7.0: Updated to use deployments.json with profile/stage structure
@@ -399,7 +399,7 @@ test-deployed-prod: check-xdg
 	if [ -n "$$DEPLOYED_AT" ]; then \
 		echo "📅 Deployed at: $$DEPLOYED_AT"; \
 	fi; \
-	uv run python scripts/test_webhook.py "$$PROD_ENDPOINT" --health-only
+	uv run python scripts/test_webhook.py "$$PROD_ENDPOINT" --health-only --wait=120
 
 # Auto-fix code formatting (black + isort) and type check (pyright)
 lint:

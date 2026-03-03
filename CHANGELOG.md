@@ -5,11 +5,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-03-02
+
+### Added
+
+- **Deployment tags** - AWS resources are now tagged with `deployed-by`, `deployed-at`, `profile`, and `git-sha` for traceability in the AWS console
+
 ### Fixed
 
 - `logs` command now finds **all** log streams starting with `benchling` across all containers in ECS task definitions (previously only inspected the first container)
 - Each distinct `benchling-*` stream prefix is shown as a separate labeled section
 - Log group headers condensed to a single line: `Name (ECS) -> stream-prefix (N entries)`
+- Health check targets for deployed dev/prod environments now retry until the service is ready (`--wait=120`), instead of failing immediately on a non-200 or unreachable response
+- Docker image validation (`docker manifest inspect`) now fails fast with a clear error if ECR is temporarily unreachable, preventing indefinite hangs
+
+### Changed
+
+- Updated pyright to v1.1.408
 
 ## [0.12.0] - 2026-02-23
 

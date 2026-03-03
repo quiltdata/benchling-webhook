@@ -450,12 +450,16 @@ class DockerManager:
         full_uri = f"{self.registry}/{self.image_name}:{tag}"
 
         # Use docker manifest inspect to get image details
-        result = subprocess.run(
-            ["docker", "manifest", "inspect", full_uri],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                ["docker", "manifest", "inspect", full_uri],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"Timed out inspecting image {full_uri}")
 
         if result.returncode != 0:
             raise RuntimeError(f"Failed to inspect image {full_uri}: {result.stderr}")
