@@ -148,42 +148,45 @@ export async function runUnifiedFlowDecision(
     console.log("");
 
     if (flow === "integration-running") {
-        // Offer disable integration as first option when running
-        const disableIntegration = await confirmPrompt(
-            "Disable integrated webhook? (destroys webhook resources, re-run wizard to recreate)",
-            false,
-            yes,
-        );
-        if (disableIntegration) {
-            return { action: "disable-integration", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
-        }
-
-        const updateCredentials = await confirmPrompt("Update Benchling credentials?", true, yes);
-        if (updateCredentials) {
+        if (yes) {
             return { action: "update-integration-secret", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
         }
 
-        const reviewOnly = await confirmPrompt("Review config without changes?", true, yes);
-        if (reviewOnly) {
-            return { action: "review-only", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
-        }
+        const { chosen } = await inquirer.prompt([{
+            type: "list",
+            name: "chosen",
+            message: "What would you like to do?",
+            choices: [
+                { name: "Update Benchling credentials", value: "update-integration-secret" },
+                { name: "Deploy standalone webhook alongside integrated (e.g. for testing)", value: "deploy-standalone" },
+                { name: "Disable integrated webhook (manage via IAC)", value: "disable-integration" },
+                { name: "Review config without changes", value: "review-only" },
+                { name: "Exit", value: "exit" },
+            ],
+        }]);
 
-        const switchStandalone = await confirmPrompt("Switch to standalone?", false, yes);
-        if (switchStandalone) {
-            return { action: "switch-standalone", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
-        }
-
-        return { action: "exit", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
+        return { action: chosen, flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
     }
 
     if (flow === "integration-disabled") {
-        const enableIntegration = await confirmPrompt("Enable integrated webhook in Quilt?", true, yes);
-        if (enableIntegration) {
-            return { action: "enable-integration", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
+        if (yes) {
+            return { action: "deploy-standalone", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
         }
 
-        console.log(chalk.yellow("Switching to standalone deployment..."));
-        return { action: "deploy-standalone", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
+        console.log(chalk.dim("  ℹ To enable the integrated webhook, set BenchlingWebhook=Enabled via IAC.\n"));
+
+        const { chosen } = await inquirer.prompt([{
+            type: "list",
+            name: "chosen",
+            message: "What would you like to do?",
+            choices: [
+                { name: "Deploy standalone webhook", value: "deploy-standalone" },
+                { name: "Review config without changes", value: "review-only" },
+                { name: "Exit", value: "exit" },
+            ],
+        }]);
+
+        return { action: chosen, flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
     }
 
     if (flow === "integration-missing") {

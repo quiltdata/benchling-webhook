@@ -297,15 +297,14 @@ export async function deploy(
         force?: boolean;
     },
 ): Promise<void> {
-    // Check if this is an integrated stack - NO deployment allowed
+    // Warn if deploying standalone alongside a known integrated stack
     if (config.integratedStack === true) {
         console.log();
         console.log(boxen(
-            chalk.yellow.bold("⚠️  Integrated Stack Mode") + "\n\n" +
-            chalk.dim("The webhook handler is already deployed as part of the Quilt stack.\n") +
-            chalk.dim("No separate deployment is needed or allowed.\n\n") +
-            chalk.cyan("To update credentials, run:\n") +
-            chalk.cyan(`  npm run setup -- --profile ${options.profileName}`),
+            chalk.yellow.bold("⚠️  Integrated Webhook Detected") + "\n\n" +
+            chalk.dim("This profile is associated with a Quilt stack that has an integrated webhook.\n") +
+            chalk.dim("Deploying a standalone webhook alongside it may cause duplicate event processing.\n\n") +
+            chalk.cyan("Proceeding with standalone deployment..."),
             {
                 padding: 1,
                 margin: 1,
@@ -314,7 +313,6 @@ export async function deploy(
             },
         ));
         console.log();
-        process.exit(0);
     }
 
     const spinner = ora("Validating parameters...").start();

@@ -33,11 +33,9 @@ import { runParameterCollection } from "../../lib/wizard/phase3-parameter-collec
 import { runValidation } from "../../lib/wizard/phase4-validation";
 import { runUnifiedFlowDecision } from "../../lib/wizard/phase5-unified-flow";
 import { buildProfileConfigFromExisting, buildProfileConfigFromParameters } from "../../lib/wizard/profile-config-builder";
-import { pollStackStatus, waitForBenchlingSecretArn } from "../../lib/wizard/stack-waiter";
+import { waitForBenchlingSecretArn } from "../../lib/wizard/stack-waiter";
 import { syncSecretsToAWS } from "./sync-secrets";
 import { deployCommand } from "./deploy";
-import { CFN_PARAMS } from "../../lib/types/config";
-import { updateStackParameter } from "../../lib/utils/stack-parameter-update";
 
 /**
  * Setup wizard options
@@ -427,27 +425,9 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         break;
     }
     case "disable-integration": {
-        // User already confirmed in Phase 5 - proceed with disabling
-        console.log(chalk.dim("Disabling integrated webhook..."));
-
-        const updateResult = await updateStackParameter({
-            stackArn: stackQuery.stackArn,
-            region: stackQuery.region,
-            parameterKey: CFN_PARAMS.BENCHLING_WEBHOOK,
-            parameterValue: "Disabled",
-            awsProfile,
-        });
-
-        if (updateResult.success) {
-            console.log(chalk.green("✓ Stack update initiated"));
-            await pollStackStatus({
-                stackArn: stackQuery.stackArn,
-                region: stackQuery.region,
-                awsProfile,
-            });
-        } else {
-            throw new Error(updateResult.error || "Failed to disable BenchlingIntegration");
-        }
+        console.log(chalk.yellow("ℹ  BenchlingWebhook is managed via IAC."));
+        console.log(chalk.dim("   To disable the integrated webhook, set BenchlingWebhook=Disabled in your"));
+        console.log(chalk.dim("   CloudFormation/Terraform configuration and redeploy the Quilt stack.\n"));
 
         const config = await requireConfig(true);
         saveConfig(config);
@@ -479,24 +459,9 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             };
         }
 
-        const updateResult = await updateStackParameter({
-            stackArn: stackQuery.stackArn,
-            region: stackQuery.region,
-            parameterKey: CFN_PARAMS.BENCHLING_WEBHOOK,
-            parameterValue: "Disabled",
-            awsProfile,
-        });
-
-        if (updateResult.success) {
-            console.log(chalk.green("✓ Stack update initiated"));
-            await pollStackStatus({
-                stackArn: stackQuery.stackArn,
-                region: stackQuery.region,
-                awsProfile,
-            });
-        } else {
-            throw new Error(updateResult.error || "Failed to disable BenchlingIntegration");
-        }
+        console.log(chalk.yellow("ℹ  BenchlingWebhook is managed via IAC."));
+        console.log(chalk.dim("   To disable the integrated webhook, set BenchlingWebhook=Disabled in your"));
+        console.log(chalk.dim("   CloudFormation/Terraform configuration and redeploy the Quilt stack.\n"));
 
         const config = await requireConfig(false);
         saveConfig(config);
@@ -538,24 +503,9 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             };
         }
 
-        const updateResult = await updateStackParameter({
-            stackArn: stackQuery.stackArn,
-            region: stackQuery.region,
-            parameterKey: CFN_PARAMS.BENCHLING_WEBHOOK,
-            parameterValue: "Enabled",
-            awsProfile,
-        });
-
-        if (updateResult.success) {
-            console.log(chalk.green("✓ Stack update initiated"));
-            await pollStackStatus({
-                stackArn: stackQuery.stackArn,
-                region: stackQuery.region,
-                awsProfile,
-            });
-        } else {
-            throw new Error(updateResult.error || "Failed to enable BenchlingIntegration");
-        }
+        console.log(chalk.yellow("ℹ  BenchlingWebhook is managed via IAC."));
+        console.log(chalk.dim("   Ensure BenchlingWebhook=Enabled is set in your CloudFormation/Terraform"));
+        console.log(chalk.dim("   configuration and the Quilt stack has been redeployed before continuing.\n"));
 
         const benchlingSecretArn = await waitForBenchlingSecretArn({
             stackArn: stackQuery.stackArn,
