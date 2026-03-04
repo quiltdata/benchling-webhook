@@ -159,7 +159,7 @@ export async function runUnifiedFlowDecision(
             choices: [
                 { name: "Update Benchling credentials", value: "update-integration-secret" },
                 { name: "Deploy standalone webhook alongside integrated (e.g. for testing)", value: "deploy-standalone" },
-                { name: "Disable integrated webhook (manage via IAC)", value: "disable-integration" },
+                { name: "Disable integrated webhook", value: "disable-integration" },
                 { name: "Review config without changes", value: "review-only" },
                 { name: "Exit", value: "exit" },
             ],
@@ -170,17 +170,16 @@ export async function runUnifiedFlowDecision(
 
     if (flow === "integration-disabled") {
         if (yes) {
-            return { action: "deploy-standalone", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
+            return { action: "enable-integration", flow, benchlingSecretArn, secretDetails, hasStandaloneDeployment };
         }
-
-        console.log(chalk.dim("  ℹ To enable the integrated webhook, set BenchlingWebhook=Enabled via IAC.\n"));
 
         const { chosen } = await inquirer.prompt([{
             type: "list",
             name: "chosen",
             message: "What would you like to do?",
             choices: [
-                { name: "Deploy standalone webhook", value: "deploy-standalone" },
+                { name: "Enable integrated webhook in Quilt stack", value: "enable-integration" },
+                { name: "Deploy standalone webhook instead", value: "deploy-standalone" },
                 { name: "Review config without changes", value: "review-only" },
                 { name: "Exit", value: "exit" },
             ],

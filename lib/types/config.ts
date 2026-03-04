@@ -98,14 +98,10 @@ export interface ProfileConfig {
     deployment: DeploymentConfig;
 
     /**
-     * Informational flag indicating this profile was configured against a Quilt stack
-     * with an integrated webhook.
+     * Deployment mode flag
      *
-     * - `true`: Profile was set up in integrated mode (BenchlingSecret lives in the Quilt stack)
-     * - `false` or undefined: Profile uses a standalone secret
-     *
-     * This flag does NOT gate standalone deployments. The BenchlingWebhook CloudFormation
-     * parameter is managed exclusively via IAC (Terraform/CloudFormation) — not by this CLI.
+     * - `true`: Integrated mode - uses existing BenchlingSecret in Quilt stack
+     * - `false` or undefined: Standalone mode - creates dedicated secret
      *
      * @default false
      */
