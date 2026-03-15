@@ -4,31 +4,13 @@
   ],
   "packageRules": [
     {
-      "groupName": "TypeScript and JS tools",
-      "matchPackageNames": [
-        "globals",
-        "ora",
-        "commander",
-        "ajv",
-        "esbuild",
-        "dotenv",
-        "dotenv-expand",
-        "/typescript/",
-        "/eslint/",
-        "/node/"
-      ]
+      "groupName": "all minor and patch updates",
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchPackageNames": ["/./"]
     },
     {
-      "groupName": "AWS",
-      "matchPackageNames": [
-        "/aws/",
-        "/cdk/",
-        "/constructs/"
-      ]
-    },
-    {
-      "groupName": "Python dependencies",
-      "matchFileNames": ["docker/**"],
+      "groupName": "all major updates",
+      "matchUpdateTypes": ["major"],
       "matchPackageNames": ["/./"]
     }
   ]
