@@ -12,6 +12,10 @@
       "groupName": "all major updates",
       "matchUpdateTypes": ["major"],
       "matchPackageNames": ["/./"]
+    },
+    {
+      "matchPackageNames": ["dataclasses-json"],
+      "allowedVersions": "<0.6.0"
     }
   ]
 }
