@@ -6,7 +6,8 @@ module.exports = {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: {
         module: 'commonjs',
-        resolveJsonModule: true
+        resolveJsonModule: true,
+        types: ['jest', 'node']
       }
     }]
   },
@@ -14,7 +15,8 @@ module.exports = {
     'node_modules/(?!(.*)\\.ts$)'
   ],
   moduleNameMapper: {
-    '^chalk$': '<rootDir>/test/__mocks__/chalk.ts'
+    '^chalk$': '<rootDir>/test/__mocks__/chalk.ts',
+    '^inquirer$': '<rootDir>/test/__mocks__/inquirer.ts'
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   cacheDirectory: '<rootDir>/.jest-cache',
