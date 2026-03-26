@@ -118,12 +118,27 @@ All you need to do is use `npx` to run the package:
 npx @quiltdata/benchling-webhook@latest
 ```
 
+If you need to choose AWS credentials explicitly, prefer `--aws-profile`:
+
+```bash
+npx @quiltdata/benchling-webhook@latest --aws-profile myaws
+```
+
+You can also use `AWS_PROFILE`:
+
+```bash
+AWS_PROFILE=myaws npx @quiltdata/benchling-webhook@latest
+```
+
+`--profile` is different: it selects a local `benchling-webhook` config profile under `~/.config/benchling-webhook/`, not your AWS credential profile.
+
 The wizard will guide you through:
 
 1. **Catalog discovery** - Detect your Quilt catalog configuration
 2. **Stack validation** - Extract settings from your CloudFormation stack
 3. **Credential collection** - Enter Benchling app credentials
-4. **Deployment mode selection**:
+4. **Package settings** - Configure bucket, metadata key, and optional Quilt workflow
+5. **Deployment mode selection**:
    - **Integrated**: Uses your Quilt stack's built-in webhook, if any
    - **Standalone**: Deploys a separate webhook stack for testing
 
@@ -134,6 +149,8 @@ The wizard will guide you through:
 Add the webhook URL (displayed after setup) to your [Benchling app settings](https://docs.benchling.com/docs/getting-started-benchling-apps#installing-your-app).
 
 **Important**: The endpoint URL format is `https://{api-id}.execute-api.{region}.amazonaws.com/{stage}/webhook` (includes stage prefix like `/prod/webhook` or `/dev/webhook`).
+
+If your integration reads or writes within a specific Benchling project, share that project with the service account behind the Benchling App Client ID. This integration uses the app/service-account identity, not an end-user OAuth session. If project access appears broken, verify the service account can perform a simple read or list API call for the target project.
 
 ### 4. Test Integration
 
