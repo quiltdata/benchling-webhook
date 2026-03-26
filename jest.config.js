@@ -15,8 +15,7 @@ module.exports = {
     'node_modules/(?!(.*)\\.ts$)'
   ],
   moduleNameMapper: {
-    '^chalk$': '<rootDir>/test/__mocks__/chalk.ts',
-    '^inquirer$': '<rootDir>/test/__mocks__/inquirer.ts'
+    '^chalk$': '<rootDir>/test/__mocks__/chalk.ts'
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   cacheDirectory: '<rootDir>/.jest-cache',

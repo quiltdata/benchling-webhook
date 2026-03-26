@@ -18,6 +18,11 @@
       "allowedVersions": "<0.6.0"
     },
     {
+      "description": "inquirer v13+ is ESM-only; project compiles to CJS for aws-cdk-lib compatibility",
+      "matchPackageNames": ["inquirer", "@types/inquirer"],
+      "allowedVersions": "<13.0.0"
+    },
+    {
       "groupName": "eslint packages",
       "matchPackageNames": ["eslint", "@eslint/js"]
     }
