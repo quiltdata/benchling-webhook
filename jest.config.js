@@ -6,7 +6,8 @@ module.exports = {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: {
         module: 'commonjs',
-        resolveJsonModule: true
+        resolveJsonModule: true,
+        types: ['jest', 'node']
       }
     }]
   },
