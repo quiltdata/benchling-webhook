@@ -1,4 +1,5 @@
 import inquirer from "inquirer";
+import { normalizeBenchlingTenant } from "./utils/benchling";
 
 /**
  * Configuration wizard options
@@ -187,8 +188,14 @@ export class ConfigurationWizard {
      * Validate Benchling tenant format
      */
     public static validateTenant(value: string): boolean | string {
-        if (!value || value.trim() === "") {
+        const normalized = normalizeBenchlingTenant(value);
+
+        if (!normalized) {
             return "Benchling tenant cannot be empty";
+        }
+
+        if (!/^[a-zA-Z0-9._-]+$/.test(normalized)) {
+            return "Benchling tenant contains invalid characters";
         }
         return true;
     }

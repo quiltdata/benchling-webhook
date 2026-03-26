@@ -72,6 +72,7 @@ export async function fetchBenchlingSecretDetails(
             userBucket: normalizeString(payload.user_bucket ?? payload.userBucket),
             pkgPrefix: normalizeString(payload.pkg_prefix ?? payload.pkgPrefix),
             pkgKey: normalizeString(payload.pkg_key ?? payload.pkgKey),
+            workflow: normalizeString(payload.workflow),
             logLevel: normalizeString(payload.log_level ?? payload.logLevel),
             webhookAllowList: normalizeString(payload.webhook_allow_list ?? payload.webhookAllowList),
             enableVerification: parseBoolean(payload.enable_webhook_verification ?? payload.enableWebhookVerification),

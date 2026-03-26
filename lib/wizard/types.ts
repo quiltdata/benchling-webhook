@@ -91,6 +91,7 @@ export interface BenchlingSecretDetails {
     userBucket?: string;
     pkgPrefix?: string;
     pkgKey?: string;
+    workflow?: string;
     logLevel?: string;
     webhookAllowList?: string;
     enableVerification?: boolean;
@@ -112,6 +113,7 @@ export interface ParameterCollectionInput {
     userBucket?: string;
     pkgPrefix?: string;
     pkgKey?: string;
+    workflow?: string;
     logLevel?: string;
     webhookAllowList?: string;
 }
@@ -130,6 +132,7 @@ export interface ParameterCollectionResult {
         bucket: string;
         prefix: string;
         metadataKey: string;
+        workflow?: string;
     };
     deployment: {
         region: string;
