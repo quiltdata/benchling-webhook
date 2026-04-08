@@ -145,9 +145,12 @@ program
     .option("--inherit-from <name>", "Base profile to inherit from")
     .option("--region <region>", "AWS region")
     .option("--aws-profile <name>", "AWS credentials profile")
-    .action(async (options) => {
+    .action(async (options, command) => {
         try {
-            await setupWizardCommand(options);
+            await setupWizardCommand({
+                ...options,
+                explicitProfile: command.getOptionValueSource("profile") === "cli",
+            });
             process.exit(0);
         } catch (error) {
             console.error(chalk.red((error as Error).message));
@@ -486,6 +489,7 @@ if (
     const options: {
     yes?: boolean;
     profile?: string;
+    explicitProfile?: boolean;
     inheritFrom?: string;
     awsRegion?: string;
     awsProfile?: string;
@@ -500,6 +504,7 @@ if (
             options.setupOnly = true;
         } else if (args[i] === "--profile" && i + 1 < args.length) {
             options.profile = args[i + 1];
+            options.explicitProfile = true;
             i++;
         } else if (args[i] === "--inherit-from" && i + 1 < args.length) {
             options.inheritFrom = args[i + 1];

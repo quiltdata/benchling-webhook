@@ -704,6 +704,8 @@ For questions about the data, refer to the original Benchling entry.
             "metadata_uri": "entry.json",
             "commit_message": f"Benchling webhook payload - {timestamp}",
         }
+        if getattr(self.config, "workflow", ""):
+            message_body["workflow"] = self.config.workflow
 
         try:
             queue_url = self.config.queue_url

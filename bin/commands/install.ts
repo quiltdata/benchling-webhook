@@ -44,6 +44,7 @@ export interface InstallCommandOptions {
      * @default "default"
      */
     profile?: string;
+    explicitProfile?: boolean;
 
     /**
      * Base profile to inherit from
@@ -87,6 +88,7 @@ export interface InstallCommandOptions {
 export async function installCommand(options: InstallCommandOptions = {}): Promise<void> {
     const {
         profile = "default",
+        explicitProfile = false,
         inheritFrom,
         awsProfile,
         awsRegion,
@@ -105,6 +107,7 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
     try {
         setupResult = await setupWizardCommand({
             profile,
+            explicitProfile,
             inheritFrom,
             awsProfile,
             awsRegion,

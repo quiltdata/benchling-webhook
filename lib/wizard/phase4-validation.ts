@@ -12,6 +12,7 @@ import { S3Client, HeadBucketCommand, ListObjectsV2Command, GetBucketLocationCom
 import { fromIni } from "@aws-sdk/credential-providers";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { ValidationInput, ValidationResult } from "./types";
+import { normalizeBenchlingTenant } from "../utils/benchling";
 
 /**
  * Detects the actual region of an S3 bucket
@@ -43,18 +44,19 @@ async function detectBucketRegion(bucketName: string, awsProfile?: string): Prom
  */
 async function validateBenchlingTenant(tenant: string): Promise<{ isValid: boolean; errors: string[]; warnings: string[] }> {
     const result = { isValid: false, errors: [] as string[], warnings: [] as string[] };
+    const normalizedTenant = normalizeBenchlingTenant(tenant);
 
-    if (!tenant || tenant.trim().length === 0) {
+    if (!normalizedTenant) {
         result.errors.push("Tenant name cannot be empty");
         return result;
     }
 
-    if (!/^[a-zA-Z0-9-_]+$/.test(tenant)) {
+    if (!/^[a-zA-Z0-9._-]+$/.test(normalizedTenant)) {
         result.errors.push("Tenant name contains invalid characters (only alphanumeric, dash, underscore allowed)");
         return result;
     }
 
-    const tenantUrl = `https://${tenant}.benchling.com`;
+    const tenantUrl = `https://${normalizedTenant}.benchling.com`;
     console.log(`  Testing Benchling tenant URL: ${tenantUrl}`);
 
     return new Promise((resolve) => {
@@ -97,7 +99,7 @@ async function validateBenchlingCredentials(
         return result;
     }
 
-    const tokenUrl = `https://${tenant}.benchling.com/api/v2/token`;
+    const tokenUrl = `https://${normalizeBenchlingTenant(tenant)}.benchling.com/api/v2/token`;
     const authString = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
     console.log(`  Testing OAuth credentials: ${tokenUrl} (Client ID: ${clientId.substring(0, 8)}...)`);
 
