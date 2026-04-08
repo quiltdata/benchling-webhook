@@ -156,6 +156,84 @@ class TestFastAPIApp:
 
             mock_manager_instance.handle_async.assert_called_once()
             mock_manager_instance.get_canvas_response.assert_not_called()
+            workflow_payload = mock_entry_packager.execute_workflow_async.call_args.args[0]
+            assert workflow_payload.canvas_id == "canvas_123"
+
+    def test_package_event_endpoint_refreshes_canvas_in_background(self, client):
+        """Test package-event endpoint returns immediately and refreshes canvas asynchronously."""
+        event_payload = {
+            "detail": {
+                "bucket": "test-bucket",
+                "handle": "benchling/EXP0001",
+                "topHash": "abc123",
+            }
+        }
+
+        thread_targets = []
+
+        def thread_factory(*args, **kwargs):
+            thread = Mock()
+            thread.start.side_effect = lambda: kwargs["target"](*kwargs.get("args", ()))
+            thread_targets.append(kwargs)
+            return thread
+
+        with (
+            patch("src.app.threading.Thread", side_effect=thread_factory),
+            patch("src.app.PackageFileFetcher") as mock_fetcher_class,
+            patch("src.app.CanvasManager") as mock_canvas_manager,
+        ):
+            mock_fetcher = Mock()
+            mock_fetcher.get_package_metadata.return_value = {
+                "canvas_id": "canvas_123",
+                "entry_id": "etr_123456",
+            }
+            mock_fetcher_class.return_value = mock_fetcher
+
+            mock_manager = Mock()
+            mock_manager.update_canvas.return_value = {"success": True, "canvas_id": "canvas_123"}
+            mock_canvas_manager.return_value = mock_manager
+
+            response = client.post("/package-event", json=event_payload)
+
+            assert response.status_code == 200
+            assert response.json()["status"] == "ACCEPTED"
+            assert thread_targets
+            mock_fetcher.get_package_metadata.assert_called_once_with("benchling/EXP0001")
+            payload = mock_canvas_manager.call_args.args[2]
+            assert payload.canvas_id == "canvas_123"
+            assert payload.entry_id == "etr_123456"
+            mock_manager.update_canvas.assert_called_once()
+
+    def test_package_event_endpoint_noops_without_canvas_id(self, client):
+        """Test package-event endpoint returns success when metadata has no canvas target."""
+        event_payload = {"detail": {"bucket": "test-bucket", "handle": "benchling/EXP0001"}}
+
+        def thread_factory(*args, **kwargs):
+            thread = Mock()
+            thread.start.side_effect = lambda: kwargs["target"](*kwargs.get("args", ()))
+            return thread
+
+        with (
+            patch("src.app.threading.Thread", side_effect=thread_factory),
+            patch("src.app.PackageFileFetcher") as mock_fetcher_class,
+            patch("src.app.CanvasManager") as mock_canvas_manager,
+        ):
+            mock_fetcher = Mock()
+            mock_fetcher.get_package_metadata.return_value = {"entry_id": "etr_123456"}
+            mock_fetcher_class.return_value = mock_fetcher
+
+            response = client.post("/package-event", json=event_payload)
+
+            assert response.status_code == 200
+            assert response.json()["status"] == "ACCEPTED"
+            mock_canvas_manager.assert_not_called()
+
+    def test_package_event_endpoint_rejects_invalid_payload(self, client):
+        """Test package-event endpoint validates required event fields."""
+        response = client.post("/package-event", json={"detail": {}})
+
+        assert response.status_code == 400
+        assert "detail.handle" in response.json()["error"]
 
     @pytest.mark.local
     def test_canvas_endpoint_handles_browse_files_button(self, client, mock_benchling_client):

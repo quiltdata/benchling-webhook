@@ -1,7 +1,7 @@
 import logging
 import os
 import threading
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, cast
 
 import httpx
 import structlog
@@ -18,6 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .canvas import CanvasManager
 from .config import Config, get_config
 from .entry_packager import EntryPackager
+from .package_files import PackageFileFetcher
 from .payload import Payload
 from .secrets_manager import SecretsManagerError
 from .version import __version__
@@ -741,6 +742,101 @@ def create_app() -> FastAPI:
             logger.error("Webhook processing failed", error=error_msg, exc_info=True)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
 
+    def _refresh_canvas_for_package_event(package_name: str, top_hash: str | None = None) -> None:
+        """Refresh a canvas after Quilt publishes a package revision event."""
+        try:
+            assert config is not None
+            create_benchling_client = getattr(app.state, "create_benchling_client", None)
+            active_benchling = create_benchling_client() if callable(create_benchling_client) else benchling
+            if active_benchling is None:
+                raise RuntimeError("Benchling client unavailable")
+            active_benchling = cast(Benchling, active_benchling)
+
+            package_fetcher = PackageFileFetcher(
+                catalog_url=config.quilt_catalog,
+                bucket=config.s3_bucket_name,
+                role_arn=config.quilt_write_role_arn or None,
+                region=config.aws_region,
+            )
+            metadata = package_fetcher.get_package_metadata(package_name)
+            canvas_id = metadata.get("canvas_id")
+            entry_id = metadata.get("entry_id")
+
+            if not canvas_id or not entry_id:
+                logger.info(
+                    "Package event skipped - package metadata missing canvas target",
+                    package_name=package_name,
+                    has_canvas_id=bool(canvas_id),
+                    has_entry_id=bool(entry_id),
+                    top_hash=top_hash,
+                )
+                return
+
+            payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
+            result = CanvasManager(active_benchling, config, payload).update_canvas()
+            logger.info(
+                "Package event canvas refresh completed",
+                package_name=package_name,
+                canvas_id=canvas_id,
+                entry_id=entry_id,
+                top_hash=top_hash,
+                success=result.get("success"),
+            )
+        except Exception as exc:
+            logger.error(
+                "Package event canvas refresh failed",
+                package_name=package_name,
+                top_hash=top_hash,
+                error=str(exc),
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+
+    async def _handle_package_event_impl(request: Request):
+        """Shared EventBridge package event handling implementation."""
+        try:
+            blocked_response = _runtime_guard_response(request.url.path)
+            if blocked_response:
+                return blocked_response
+
+            event = await request.json()
+            if not isinstance(event, dict):
+                raise ValueError("Invalid JSON payload provided in request")
+
+            detail = event.get("detail")
+            if not isinstance(detail, dict):
+                raise ValueError("package event detail is required")
+
+            package_name = detail.get("handle")
+            if not isinstance(package_name, str) or not package_name:
+                raise ValueError("package event detail.handle is required")
+
+            top_hash = detail.get("topHash")
+            if top_hash is not None and not isinstance(top_hash, str):
+                raise ValueError("package event detail.topHash must be a string when present")
+
+            logger.info(
+                "Package event received",
+                path=request.url.path,
+                package_name=package_name,
+                bucket=detail.get("bucket"),
+                top_hash=top_hash,
+            )
+
+            threading.Thread(
+                target=_refresh_canvas_for_package_event,
+                args=(package_name, top_hash),
+                daemon=True,
+            ).start()
+
+            return JSONResponse({"status": "ACCEPTED"}, status_code=200)
+        except ValueError as exc:
+            logger.warning("Invalid package event payload", error=str(exc))
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        except Exception as exc:
+            logger.error("Package event processing failed", error=str(exc), exc_info=True)
+            return JSONResponse({"error": "Internal server error"}, status_code=500)
+
     @app.post("/event")
     async def handle_event(request: Request, _verified: None = Depends(verify_webhook_dependency)):
         """Handle Benchling webhook events with HMAC signature verification - direct path."""
@@ -752,6 +848,16 @@ def create_app() -> FastAPI:
     ):
         """Handle Benchling webhook events with HMAC signature verification - stage-prefixed path."""
         return await _handle_event_impl(request, _verified)
+
+    @app.post("/package-event")
+    async def handle_package_event(request: Request):
+        """Handle EventBridge package revision events - direct path."""
+        return await _handle_package_event_impl(request)
+
+    @app.post("/{stage}/package-event")
+    async def handle_package_event_with_stage(stage: str, request: Request):
+        """Handle EventBridge package revision events - stage-prefixed path."""
+        return await _handle_package_event_impl(request)
 
     async def _handle_lifecycle_impl(request: Request, _verified: None = None):
         """Shared lifecycle event handling implementation."""
