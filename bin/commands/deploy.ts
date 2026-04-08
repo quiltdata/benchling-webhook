@@ -617,6 +617,8 @@ export async function deploy(
     const ecrRegion = "us-east-1";
     const ecrRepository = config.deployment.ecrRepository || "quiltdata/benchling";
     const ecrImageUri = `${ecrAccount}.dkr.ecr.${ecrRegion}.amazonaws.com/${ecrRepository}:${options.imageTag}`;
+    const packagePrefix = config.packages.prefix || "benchling";
+    const eventSummary = `bucket=${config.packages.bucket}, prefix=${packagePrefix}/ type=package-revision source=com.quiltdata bus=default`;
 
     // Display deployment plan
     console.log();
@@ -627,6 +629,7 @@ export async function deploy(
     console.log(`  ${chalk.bold("Region:")}                    ${deployRegion}`);
     console.log(`  ${chalk.bold("Stage:")}                     ${options.stage}`);
     console.log(`  ${chalk.bold("Profile:")}                   ${options.profileName}`);
+    console.log(`  ${chalk.bold("Mode:")}                      standalone`);
     console.log();
     console.log(chalk.bold("  Resolved Quilt Services:"));
     console.log(`    ${chalk.bold("Catalog Host:")}            ${services.quiltWebHost}`);
@@ -641,6 +644,7 @@ export async function deploy(
     console.log(chalk.bold("  Stack Parameters:"));
     console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)} ${chalk.dim("(deployment-time resolution only)")}`);
     console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
+    console.log(`    ${chalk.bold("Event:")}                   ${eventSummary}`);
     console.log();
     console.log(chalk.bold("  Container Image:"));
     console.log(`    ${chalk.bold("ECR Account:")}             ${ecrAccount}`);
