@@ -41,6 +41,7 @@ class Config:
     athena_user_workgroup: str = ""
     enable_webhook_verification: bool = True
     pkg_prefix: str = ""
+    workflow: str = ""
     quilt_write_role_arn: str = ""
 
     # Secret fetching infrastructure (not the secrets themselves)
@@ -222,6 +223,7 @@ class Config:
             self.s3_prefix = secret_data.pkg_prefix or "benchling"
             self.pkg_prefix = self.s3_prefix
             self.package_key = secret_data.pkg_key or "experiment_id"
+            self.workflow = secret_data.workflow or ""
 
             # Security configuration ALWAYS comes from secret
             self.enable_webhook_verification = secret_data.enable_webhook_verification

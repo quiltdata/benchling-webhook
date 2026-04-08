@@ -56,6 +56,14 @@ export interface LogGroupInfo {
     streamPrefix?: string;
 }
 
+export interface LogsFrameData {
+    logGroups: LogGroupInfo[];
+    totalEntries: number;
+    hasLogs: boolean;
+    hasLogGroups: boolean;
+    rolloutStatus?: string;
+}
+
 /**
  * Get AWS region and deployment info from profile configuration
  */
@@ -649,6 +657,50 @@ async function fetchAllLogs(
     return result;
 }
 
+export async function loadLogsFrameData(
+    stackName: string,
+    region: string,
+    currentSince: string,
+    limit: number,
+    type: string,
+    integratedMode: boolean,
+    includeHealth: boolean,
+    filter: string | undefined,
+    awsProfile: string | undefined,
+    rolloutStackName: string,
+): Promise<LogsFrameData> {
+    const logGroups = await fetchAllLogs(
+        stackName,
+        region,
+        currentSince,
+        limit,
+        type,
+        integratedMode,
+        includeHealth,
+        filter,
+        awsProfile,
+    );
+
+    const totalEntries = logGroups.reduce((sum, lg) => sum + lg.entries.length, 0);
+    const hasLogs = totalEntries > 0;
+    const hasLogGroups = logGroups.length > 0;
+
+    let rolloutStatus: string | undefined;
+    try {
+        rolloutStatus = await getEcsRolloutStatus(rolloutStackName, region, awsProfile);
+    } catch {
+        // Silently ignore errors - rollout status is optional
+    }
+
+    return {
+        logGroups,
+        totalEntries,
+        hasLogs,
+        hasLogGroups,
+        rolloutStatus,
+    };
+}
+
 /**
  * Logs command implementation
  */
@@ -748,13 +800,7 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
 
         // Watch loop
         while (true) {
-            // Clear screen on subsequent runs
-            if (!isFirstRun && refreshInterval) {
-                clearScreen();
-            }
-
-            // Fetch logs from all relevant log groups
-            const logGroups = await fetchAllLogs(
+            const frame = await loadLogsFrameData(
                 stackNameForQuery,
                 region,
                 currentSince,
@@ -764,12 +810,9 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
                 includeHealth,
                 filter,
                 awsProfile,
+                integratedMode && quiltStackName ? quiltStackName : stackName,
             );
-
-            // Check if any log group has entries
-            const totalEntries = logGroups.reduce((sum, lg) => sum + lg.entries.length, 0);
-            const hasLogs = totalEntries > 0;
-            const hasLogGroups = logGroups.length > 0;
+            const { logGroups, hasLogs, hasLogGroups, rolloutStatus } = frame;
 
             // If no log groups found at all, show error and exit
             if (!hasLogGroups) {
@@ -819,16 +862,9 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
                 continue;
             }
 
-            // Fetch ECS rollout status (optional, non-blocking)
-            let rolloutStatus: string | undefined;
-            try {
-                rolloutStatus = await getEcsRolloutStatus(
-                    integratedMode && quiltStackName ? quiltStackName : stackName,
-                    region,
-                    awsProfile,
-                );
-            } catch {
-                // Silently ignore errors - rollout status is optional
+            // Clear the previous frame only after the next frame is ready
+            if (!isFirstRun && refreshInterval) {
+                clearScreen();
             }
 
             // Display logs

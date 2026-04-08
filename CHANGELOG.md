@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Setup now supports an optional Quilt package creation workflow and persists it through config, secret sync, and runtime package requests
+
+### Fixed
+
+- Benchling tenant input is normalized during setup and validation, so bare slugs, hostnames, and full URLs all resolve to the stored tenant slug
+- Setup now warns when `--profile` would create a new benchling-webhook config profile without an explicit `--aws-profile`, reducing AWS credential profile confusion
+- `logs` auto-refresh now prepares the next frame before clearing the screen, avoiding visible blank redraws
+- README setup guidance now recommends `--aws-profile`/`AWS_PROFILE` for AWS credentials and clarifies that Benchling project access must be granted to the app service account
+
 ## [0.12.1] - 2026-03-02
 
 ### Added

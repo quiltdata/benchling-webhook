@@ -331,6 +331,15 @@ export interface PackageConfig {
      * @default "experiment_id"
      */
     metadataKey: string;
+
+    /**
+     * Optional Quilt workflow name for package creation.
+     *
+     * Empty/undefined uses the Quilt default workflow.
+     *
+     * @example "alpha"
+     */
+    workflow?: string;
 }
 
 /**
@@ -774,6 +783,7 @@ export const ProfileConfigSchema = {
                 bucket: { type: "string", minLength: 3 },
                 prefix: { type: "string", minLength: 1 },
                 metadataKey: { type: "string", minLength: 1 },
+                workflow: { type: "string", minLength: 1 },
             },
         },
         deployment: {

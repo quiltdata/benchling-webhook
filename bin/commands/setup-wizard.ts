@@ -34,6 +34,7 @@ import { runValidation } from "../../lib/wizard/phase4-validation";
 import { runUnifiedFlowDecision } from "../../lib/wizard/phase5-unified-flow";
 import { buildProfileConfigFromExisting, buildProfileConfigFromParameters } from "../../lib/wizard/profile-config-builder";
 import { pollStackStatus, waitForBenchlingSecretArn } from "../../lib/wizard/stack-waiter";
+import { maybeWarnAboutProfileConfusion } from "../../lib/wizard/profile-warning";
 import { syncSecretsToAWS } from "./sync-secrets";
 import { deployCommand } from "./deploy";
 import { CFN_PARAMS } from "../../lib/types/config";
@@ -45,6 +46,8 @@ import { updateStackParameter } from "../../lib/utils/stack-parameter-update";
 export interface SetupWizardOptions {
     /** Configuration profile name */
     profile?: string;
+    /** Whether --profile was explicitly provided on the CLI */
+    explicitProfile?: boolean;
     /** Inherit from another profile (legacy, unused in phase-based wizard) */
     inheritFrom?: string;
     /** Non-interactive mode (use defaults/CLI args) */
@@ -71,6 +74,7 @@ export interface SetupWizardOptions {
     userBucket?: string;
     pkgPrefix?: string;
     pkgKey?: string;
+    workflow?: string;
     logLevel?: string;
     webhookAllowList?: string;
 }
@@ -163,6 +167,7 @@ function printStepHeader(stepNumber: number, title: string): void {
 export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<SetupWizardResult> {
     const {
         profile = "default",
+        explicitProfile = false,
         yes = false,
         skipValidation = false,
         awsProfile,
@@ -174,6 +179,12 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
     const xdg = configStorage || new XDGConfig();
 
     printWelcomeBanner();
+    maybeWarnAboutProfileConfusion({
+        profile,
+        explicitProfile,
+        awsProfile,
+        configStorage: xdg,
+    });
 
     // Load existing configuration if it exists
     let existingConfig: ProfileConfig | null = null;
@@ -295,6 +306,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             userBucket: options.userBucket,
             pkgPrefix: options.pkgPrefix,
             pkgKey: options.pkgKey,
+            workflow: options.workflow,
             logLevel: options.logLevel,
             webhookAllowList: options.webhookAllowList,
         });

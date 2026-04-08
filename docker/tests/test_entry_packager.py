@@ -4,6 +4,7 @@ Tests for EntryPackager.
 Following TDD methodology for Phase 2 implementation.
 """
 
+import json
 from unittest.mock import Mock, patch
 
 import pytest
@@ -256,6 +257,8 @@ class TestEntryPackager:
         config.queue_url = "J3456789012/test"
         config.quilt_catalog = "test.quiltdata.com"
         config.aws_region = "us-west-2"
+        config.workflow = ""
+        config.quilt_write_role_arn = ""
         return config
 
     @pytest.fixture
@@ -452,6 +455,34 @@ class TestEntryPackager:
             )
 
         assert result["MessageId"] == "msg_123"
+
+    def test_send_to_sqs_includes_workflow_when_configured(self, orchestrator):
+        """Test workflow is forwarded to the Quilt package creation payload."""
+        orchestrator.config.workflow = "custom-workflow"
+        mock_response = {"MessageId": "msg_123"}
+
+        with patch.object(orchestrator.sqs_client, "send_message", return_value=mock_response) as send_mock:
+            orchestrator._send_to_sqs(
+                package_name="benchling/EXP0001",
+                timestamp="2025-10-02T10:00:00Z",
+            )
+
+        message_body = json.loads(send_mock.call_args.kwargs["MessageBody"])
+        assert message_body["workflow"] == "custom-workflow"
+
+    def test_send_to_sqs_omits_workflow_when_not_configured(self, orchestrator):
+        """Test workflow is omitted when no custom workflow is configured."""
+        orchestrator.config.workflow = ""
+        mock_response = {"MessageId": "msg_123"}
+
+        with patch.object(orchestrator.sqs_client, "send_message", return_value=mock_response) as send_mock:
+            orchestrator._send_to_sqs(
+                package_name="benchling/EXP0001",
+                timestamp="2025-10-02T10:00:00Z",
+            )
+
+        message_body = json.loads(send_mock.call_args.kwargs["MessageBody"])
+        assert "workflow" not in message_body
 
     # Episode 7: Canvas tests removed - now handled by CanvasManager class
 

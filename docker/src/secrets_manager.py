@@ -48,9 +48,8 @@ class SecretsManagerError(Exception):
 class BenchlingSecretData:
     """All runtime parameters from Benchling secret.
 
-    All fields are REQUIRED. Missing fields cause startup failure.
-    This dataclass contains all 9 runtime configuration parameters
-    that must be stored in AWS Secrets Manager.
+    This dataclass contains the runtime configuration parameters
+    stored in AWS Secrets Manager.
 
     Attributes:
         tenant: Benchling subdomain (e.g., 'quilt-dtt'). Can also be provided as
@@ -61,6 +60,7 @@ class BenchlingSecretData:
         app_definition_id: App definition ID for webhook signature verification
         pkg_prefix: Quilt package name prefix
         pkg_key: Metadata key for linking Benchling entries to Quilt packages
+        workflow: Optional Quilt workflow name for package creation
         user_bucket: S3 bucket name for Benchling exports
         log_level: Application logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         enable_webhook_verification: Enable Lambda authorizer webhook verification (boolean)
@@ -81,6 +81,7 @@ class BenchlingSecretData:
     # Application Behavior
     log_level: str
     enable_webhook_verification: bool
+    workflow: str = ""
 
     # Optional: SQS queue URL (v0.8.0+ gets from environment variable instead)
     queue_url: str = ""
@@ -264,6 +265,7 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
             pkg_prefix=data["pkg_prefix"],
             pkg_key=data["pkg_key"],
             user_bucket=data["user_bucket"],
+            workflow=data.get("workflow", ""),
             log_level=data["log_level"],
             enable_webhook_verification=enable_webhook_verification,
             queue_url=queue_url,

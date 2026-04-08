@@ -7,6 +7,7 @@
 import { ProfileConfig } from "../types/config";
 import { BenchlingSecretDetails, ParameterCollectionResult, StackQueryResult } from "./types";
 import packageJson from "../../package.json";
+import { normalizeBenchlingTenant } from "../utils/benchling";
 
 interface ConfigFromParametersInput {
     stackQuery: StackQueryResult;
@@ -62,7 +63,7 @@ export function buildProfileConfigFromParameters(input: ConfigFromParametersInpu
             region: stackQuery.region,
         },
         benchling: {
-            tenant: parameters.benchling.tenant,
+            tenant: normalizeBenchlingTenant(parameters.benchling.tenant),
             clientId: parameters.benchling.clientId,
             clientSecret: parameters.benchling.clientSecret,
             appDefinitionId: parameters.benchling.appDefinitionId,
@@ -72,6 +73,7 @@ export function buildProfileConfigFromParameters(input: ConfigFromParametersInpu
             bucket: parameters.packages.bucket,
             prefix: parameters.packages.prefix,
             metadataKey: parameters.packages.metadataKey,
+            ...(parameters.packages.workflow ? { workflow: parameters.packages.workflow } : {}),
         },
         deployment: {
             region: parameters.deployment.region,
@@ -101,7 +103,7 @@ export function buildProfileConfigFromExisting(input: ConfigFromExistingInput): 
     const { stackQuery, existingConfig, secretDetails, benchlingSecretArn, catalogDns, integratedStack } = input;
 
     const benchling = {
-        tenant: existingConfig?.benchling?.tenant ?? secretDetails?.tenant,
+        tenant: normalizeBenchlingTenant(existingConfig?.benchling?.tenant ?? secretDetails?.tenant ?? ""),
         clientId: existingConfig?.benchling?.clientId ?? secretDetails?.clientId,
         clientSecret: existingConfig?.benchling?.clientSecret ?? secretDetails?.clientSecret,
         appDefinitionId: existingConfig?.benchling?.appDefinitionId ?? secretDetails?.appDefinitionId,
@@ -144,6 +146,9 @@ export function buildProfileConfigFromExisting(input: ConfigFromExistingInput): 
         bucket: packages.bucket!,
         prefix: packages.prefix,
         metadataKey: packages.metadataKey,
+        ...(existingConfig?.packages?.workflow ?? secretDetails?.workflow
+            ? { workflow: existingConfig?.packages?.workflow ?? secretDetails?.workflow }
+            : {}),
     };
 
     const config: ProfileConfig = {

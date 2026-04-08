@@ -97,6 +97,27 @@ class TestSecretValidation:
         assert secret.user_bucket == "test-bucket"
         assert secret.log_level == "INFO"
         assert secret.enable_webhook_verification is True
+        assert secret.workflow == ""
+
+    def test_optional_workflow_is_accepted(self, mock_sm_client, valid_secret_data):
+        """Test that optional workflow is parsed when present."""
+        valid_secret_data["workflow"] = "custom-workflow"
+
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
+
+        secret = fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
+
+        assert secret.workflow == "custom-workflow"
+
+    def test_tenant_is_normalized_from_hostname(self, mock_sm_client, valid_secret_data):
+        """Test that tenant hostnames are normalized to the bare slug."""
+        valid_secret_data["tenant"] = "test-tenant.benchling.com"
+
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
+
+        secret = fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
+
+        assert secret.tenant == "test-tenant"
 
     def test_missing_single_parameter(self, mock_sm_client, valid_secret_data):
         """Test that missing single parameter raises clear error."""

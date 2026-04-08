@@ -11,6 +11,7 @@ import inquirer from "inquirer";
 import chalk from "chalk";
 import { manifestCommand } from "../../bin/commands/manifest";
 import { ParameterCollectionInput, ParameterCollectionResult } from "./types";
+import { normalizeBenchlingTenant } from "../utils/benchling";
 
 /**
  * Phase 3: Parameter Collection
@@ -62,12 +63,12 @@ export async function runParameterCollection(
     // Tenant
     let tenant: string;
     if (input.benchlingTenant) {
-        tenant = input.benchlingTenant;
+        tenant = normalizeBenchlingTenant(input.benchlingTenant);
         console.log(`  Tenant: ${tenant} (from CLI)`);
     } else if (yes) {
         // In non-interactive mode, use existing config or error
         if (existingConfig?.benchling?.tenant) {
-            tenant = existingConfig.benchling.tenant;
+            tenant = normalizeBenchlingTenant(existingConfig.benchling.tenant);
             console.log(`  Tenant: ${tenant} (from existing config)`);
         } else {
             throw new Error("--benchling-tenant is required in non-interactive mode");
@@ -80,11 +81,19 @@ export async function runParameterCollection(
                 name: "tenant",
                 message: "Benchling Tenant:",
                 default: existingConfig?.benchling?.tenant || "",
-                validate: (value: string): boolean | string =>
-                    value.trim().length > 0 || "Tenant is required",
+                validate: (value: string): boolean | string => {
+                    const normalized = normalizeBenchlingTenant(value);
+                    if (!normalized) {
+                        return "Tenant is required";
+                    }
+                    if (!/^[a-zA-Z0-9._-]+$/.test(normalized)) {
+                        return "Tenant contains invalid characters";
+                    }
+                    return true;
+                },
             },
         ]);
-        tenant = tenantAnswer.tenant;
+        tenant = normalizeBenchlingTenant(tenantAnswer.tenant);
     }
 
     // Check if we have existing app - offer to reuse or create new
@@ -306,19 +315,23 @@ export async function runParameterCollection(
     let bucket: string;
     let prefix: string;
     let metadataKey: string;
+    let workflow: string | undefined;
 
     if (input.userBucket && input.pkgPrefix && input.pkgKey) {
         bucket = input.userBucket;
         prefix = input.pkgPrefix;
         metadataKey = input.pkgKey;
+        workflow = input.workflow?.trim() || undefined;
         console.log(`  Bucket: ${bucket} (from CLI)`);
         console.log(`  Prefix: ${prefix} (from CLI)`);
         console.log(`  Metadata Key: ${metadataKey} (from CLI)`);
+        console.log(`  Workflow: ${workflow || "(default)"} (from ${input.workflow !== undefined ? "CLI" : "default"})`);
     } else if (yes) {
         // In non-interactive mode, use CLI args or existing config or error
         bucket = input.userBucket || existingConfig?.packages?.bucket || "";
         prefix = input.pkgPrefix || existingConfig?.packages?.prefix || "benchling";
         metadataKey = input.pkgKey || existingConfig?.packages?.metadataKey || "experiment_id";
+        workflow = input.workflow?.trim() || existingConfig?.packages?.workflow || undefined;
 
         if (!bucket) {
             throw new Error("--user-bucket is required in non-interactive mode");
@@ -327,6 +340,7 @@ export async function runParameterCollection(
         console.log(`  Bucket: ${bucket} (from ${input.userBucket ? "CLI" : "existing config"})`);
         console.log(`  Prefix: ${prefix} (from ${input.pkgPrefix ? "CLI" : existingConfig?.packages?.prefix ? "existing config" : "default"})`);
         console.log(`  Metadata Key: ${metadataKey} (from ${input.pkgKey ? "CLI" : existingConfig?.packages?.metadataKey ? "existing config" : "default"})`);
+        console.log(`  Workflow: ${workflow || "(default)"} (from ${input.workflow !== undefined ? "CLI" : existingConfig?.packages?.workflow ? "existing config" : "default"})`);
     } else {
         // Always show prompts with defaults from existing config
         const packageAnswers = await inquirer.prompt([
@@ -350,10 +364,17 @@ export async function runParameterCollection(
                 message: "Package metadata key:",
                 default: existingConfig?.packages?.metadataKey || "experiment_id",
             },
+            {
+                type: "input",
+                name: "workflow",
+                message: "Workflow name (optional, empty for default):",
+                default: existingConfig?.packages?.workflow || "",
+            },
         ]);
         bucket = packageAnswers.bucket;
         prefix = packageAnswers.prefix;
         metadataKey = packageAnswers.metadataKey;
+        workflow = packageAnswers.workflow.trim() || undefined;
     }
 
     // =========================================================================
@@ -428,6 +449,7 @@ export async function runParameterCollection(
             bucket,
             prefix,
             metadataKey,
+            workflow,
         },
         deployment: {
             region,
