@@ -11,6 +11,7 @@ import threading
 import time
 import zipfile
 from datetime import datetime
+from json import JSONDecodeError
 from typing import Any, Dict, Optional
 
 import boto3
@@ -468,6 +469,9 @@ class EntryPackager:
             # Initialize S3 client with role assumption
             s3_client = self.role_manager.get_s3_client()
             uploaded_files = []
+            canvas_id = payload.canvas_id
+            if canvas_id is None:
+                canvas_id = self._load_existing_canvas_id(s3_client, package_name)
 
             # Extract and upload files from ZIP
             self.logger.info("Extracting and uploading files from in-memory ZIP buffer")
@@ -502,6 +506,7 @@ class EntryPackager:
                 uploaded_files=uploaded_files,
                 download_url=download_url,
                 entry_data=entry_data,
+                canvas_id=canvas_id,
             )
 
             # Upload metadata files
@@ -549,6 +554,7 @@ class EntryPackager:
         uploaded_files: list,
         download_url: str,
         entry_data: Dict[str, Any],
+        canvas_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create standardized metadata files.
 
@@ -601,6 +607,8 @@ class EntryPackager:
             "webhook_data": webhook_data,
             "files": files_dict,
         }
+        if canvas_id is not None:
+            entry_json["canvas_id"] = canvas_id
 
         # input.json - Processing metadata
         input_json = {
@@ -678,6 +686,38 @@ For questions about the data, refer to the original Benchling entry.
             "input.json": input_json,
             "README.md": readme_content,
         }
+
+    def _load_existing_canvas_id(self, s3_client: Any, package_name: str) -> Optional[str]:
+        """Read existing entry.json from S3 to preserve a previously stored canvas_id."""
+        s3_key = f"{package_name}/entry.json"
+        try:
+            response = s3_client.get_object(Bucket=self.config.s3_bucket_name, Key=s3_key)
+            body = response["Body"].read().decode("utf-8")
+            metadata = json.loads(body)
+            if isinstance(metadata, dict):
+                canvas_id = metadata.get("canvas_id")
+                if isinstance(canvas_id, str) and canvas_id:
+                    return canvas_id
+        except s3_client.exceptions.NoSuchKey:
+            self.logger.debug("No existing entry.json found while preserving canvas_id", package_name=package_name)
+        except JSONDecodeError as exc:
+            self.logger.warning(
+                "Existing entry.json is not valid JSON; skipping canvas_id preservation",
+                package_name=package_name,
+                error=str(exc),
+            )
+        except Exception as exc:
+            error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+            if error_code in {"NoSuchKey", "404"}:
+                self.logger.debug("No existing entry.json found while preserving canvas_id", package_name=package_name)
+            else:
+                self.logger.warning(
+                    "Failed to read existing entry.json; skipping canvas_id preservation",
+                    package_name=package_name,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+        return None
 
     @REST_API_RETRY
     def _send_to_sqs(self, package_name: str, timestamp: str) -> Dict[str, Any]:

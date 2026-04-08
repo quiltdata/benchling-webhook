@@ -43,6 +43,37 @@ describe("BenchlingWebhookStack", () => {
         template.resourceCountIs("AWS::Events::Connection", 0);
     });
 
+    test("creates EventBridge package revision rule and API target", () => {
+        template.hasParameter("PackagePrefix", {
+            Default: "benchling",
+        });
+
+        template.hasResourceProperties("AWS::Events::Rule", {
+            EventPattern: {
+                source: ["com.quiltdata"],
+                "detail-type": ["package-revision"],
+            },
+            Targets: Match.arrayWith([
+                Match.objectLike({
+                    Arn: Match.anyValue(),
+                    RoleArn: Match.anyValue(),
+                }),
+            ]),
+        });
+    });
+
+    test("allows EventBridge invoke role to call package-event endpoint", () => {
+        template.hasResourceProperties("AWS::IAM::Policy", {
+            PolicyDocument: Match.objectLike({
+                Statement: Match.arrayWith([
+                    Match.objectLike({
+                        Action: "execute-api:Invoke",
+                    }),
+                ]),
+            }),
+        });
+    });
+
     test("creates CloudWatch log groups", () => {
         template.resourceCountIs("AWS::Logs::LogGroup", 2); // API Gateway, container logs (no WAF log group without allowlist)
     });
@@ -105,7 +136,7 @@ describe("BenchlingWebhookStack", () => {
         const restApi = Object.values(restApiTemplate)[0];
         const statements = restApi.Properties.Policy.Statement;
 
-        expect(statements).toHaveLength(1);
+        expect(statements).toHaveLength(2);
 
         // Verify single statement has IP conditions and applies to all endpoints
         const statement = statements[0];
@@ -116,6 +147,7 @@ describe("BenchlingWebhookStack", () => {
             "192.168.1.0/24",
             "10.0.0.0/8",
         ]);
+        expect(statements[1].Resource).toBe("execute-api:/*/POST/package-event");
 
         // Verify NO WAF resources are created (replaced by resource policy)
         ipFilterTemplate.resourceCountIs("AWS::WAFv2::WebACL", 0);
