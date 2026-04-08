@@ -758,6 +758,16 @@ def create_app() -> FastAPI:
                 role_arn=config.quilt_write_role_arn or None,
                 region=config.aws_region,
             )
+            if top_hash:
+                latest_top_hash = package_fetcher.get_package_top_hash(package_name)
+                if latest_top_hash != top_hash:
+                    logger.info(
+                        "Package event skipped - stale package revision",
+                        package_name=package_name,
+                        event_top_hash=top_hash,
+                        latest_top_hash=latest_top_hash,
+                    )
+                    return
             metadata = package_fetcher.get_package_metadata(package_name)
             canvas_id = metadata.get("canvas_id")
             entry_id = metadata.get("entry_id")
@@ -811,6 +821,19 @@ def create_app() -> FastAPI:
             if not isinstance(package_name, str) or not package_name:
                 raise ValueError("package event detail.handle is required")
 
+            bucket = detail.get("bucket")
+            if not isinstance(bucket, str) or not bucket:
+                raise ValueError("package event detail.bucket is required")
+            assert config is not None
+            if bucket != config.s3_bucket_name:
+                logger.warning(
+                    "Rejected package event for unexpected bucket",
+                    bucket=bucket,
+                    expected_bucket=config.s3_bucket_name,
+                    package_name=package_name,
+                )
+                return JSONResponse({"error": "Forbidden"}, status_code=403)
+
             top_hash = detail.get("topHash")
             if top_hash is not None and not isinstance(top_hash, str):
                 raise ValueError("package event detail.topHash must be a string when present")
@@ -819,7 +842,7 @@ def create_app() -> FastAPI:
                 "Package event received",
                 path=request.url.path,
                 package_name=package_name,
-                bucket=detail.get("bucket"),
+                bucket=bucket,
                 top_hash=top_hash,
             )
 
