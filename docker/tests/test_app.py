@@ -183,6 +183,7 @@ class TestFastAPIApp:
             patch("src.app.CanvasManager") as mock_canvas_manager,
         ):
             mock_fetcher = Mock()
+            mock_fetcher.get_package_top_hash.return_value = "abc123"
             mock_fetcher.get_package_metadata.return_value = {
                 "canvas_id": "canvas_123",
                 "entry_id": "etr_123456",
@@ -198,6 +199,7 @@ class TestFastAPIApp:
             assert response.status_code == 200
             assert response.json()["status"] == "ACCEPTED"
             assert thread_targets
+            mock_fetcher.get_package_top_hash.assert_called_once_with("benchling/EXP0001")
             mock_fetcher.get_package_metadata.assert_called_once_with("benchling/EXP0001")
             payload = mock_canvas_manager.call_args.args[2]
             assert payload.canvas_id == "canvas_123"
@@ -219,6 +221,7 @@ class TestFastAPIApp:
             patch("src.app.CanvasManager") as mock_canvas_manager,
         ):
             mock_fetcher = Mock()
+            mock_fetcher.get_package_top_hash.return_value = "current123"
             mock_fetcher.get_package_metadata.return_value = {"entry_id": "etr_123456"}
             mock_fetcher_class.return_value = mock_fetcher
 
@@ -228,12 +231,61 @@ class TestFastAPIApp:
             assert response.json()["status"] == "ACCEPTED"
             mock_canvas_manager.assert_not_called()
 
-    def test_package_event_endpoint_rejects_invalid_payload(self, client):
-        """Test package-event endpoint validates required event fields."""
-        response = client.post("/package-event", json={"detail": {}})
+    @pytest.mark.parametrize(
+        ("payload", "status_code", "error_fragment"),
+        [
+            ({}, 400, "detail is required"),
+            ({"detail": {}}, 400, "detail.handle is required"),
+            ({"detail": {"handle": "benchling/EXP0001"}}, 400, "detail.bucket is required"),
+            (
+                {"detail": {"bucket": "test-bucket", "handle": "benchling/EXP0001", "topHash": 123}},
+                400,
+                "detail.topHash must be a string",
+            ),
+            (
+                {"detail": {"bucket": "wrong-bucket", "handle": "benchling/EXP0001"}},
+                403,
+                "Forbidden",
+            ),
+        ],
+    )
+    def test_package_event_endpoint_validates_payload(self, client, payload, status_code, error_fragment):
+        """Test package-event endpoint validates required and trusted event fields."""
+        response = client.post("/package-event", json=payload)
 
-        assert response.status_code == 400
-        assert "detail.handle" in response.json()["error"]
+        assert response.status_code == status_code
+        assert error_fragment in response.json()["error"]
+
+    def test_package_event_endpoint_skips_stale_revisions(self, client):
+        """Test package-event endpoint skips stale package revisions."""
+        event_payload = {
+            "detail": {
+                "bucket": "test-bucket",
+                "handle": "benchling/EXP0001",
+                "topHash": "stale123",
+            }
+        }
+
+        def thread_factory(*args, **kwargs):
+            thread = Mock()
+            thread.start.side_effect = lambda: kwargs["target"](*kwargs.get("args", ()))
+            return thread
+
+        with (
+            patch("src.app.threading.Thread", side_effect=thread_factory),
+            patch("src.app.PackageFileFetcher") as mock_fetcher_class,
+            patch("src.app.CanvasManager") as mock_canvas_manager,
+        ):
+            mock_fetcher = Mock()
+            mock_fetcher.get_package_top_hash.return_value = "latest456"
+            mock_fetcher_class.return_value = mock_fetcher
+
+            response = client.post("/package-event", json=event_payload)
+
+            assert response.status_code == 200
+            assert response.json()["status"] == "ACCEPTED"
+            mock_fetcher.get_package_metadata.assert_not_called()
+            mock_canvas_manager.assert_not_called()
 
     @pytest.mark.local
     def test_canvas_endpoint_handles_browse_files_button(self, client, mock_benchling_client):

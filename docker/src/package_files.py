@@ -155,6 +155,11 @@ class PackageFileFetcher:
 
         return manifest_meta, entries
 
+    def get_package_top_hash(self, package_name: str) -> str:
+        """Fetch the latest top hash for a package."""
+        registry = self._get_registry()
+        return self._fetch_physical_key_bytes(registry.pointer_latest_pk(package_name)).decode("utf-8").strip()
+
     @staticmethod
     def _is_valid_file_entry(entry: Dict) -> bool:
         """Return True if manifest entry represents a real file."""

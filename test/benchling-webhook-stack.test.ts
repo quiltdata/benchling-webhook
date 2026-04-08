@@ -52,6 +52,10 @@ describe("BenchlingWebhookStack", () => {
             EventPattern: {
                 source: ["com.quiltdata"],
                 "detail-type": ["package-revision"],
+                detail: {
+                    bucket: [{ Ref: "PackageBucket" }],
+                    handle: [{ prefix: { "Fn::Join": ["", [{ Ref: "PackagePrefix" }, "/"]] } }],
+                },
             },
             Targets: Match.arrayWith([
                 Match.objectLike({
@@ -60,18 +64,49 @@ describe("BenchlingWebhookStack", () => {
                 }),
             ]),
         });
+
+        const rules = template.findResources("AWS::Events::Rule");
+        const rule = Object.values(rules)[0] as any;
+        expect(JSON.stringify(rule.Properties.Targets[0].Arn)).toContain("package-event");
+        expect(JSON.stringify(rule.Properties.Targets[0].Arn)).toContain("POST");
     });
 
     test("allows EventBridge invoke role to call package-event endpoint", () => {
-        template.hasResourceProperties("AWS::IAM::Policy", {
-            PolicyDocument: Match.objectLike({
-                Statement: Match.arrayWith([
-                    Match.objectLike({
-                        Action: "execute-api:Invoke",
-                    }),
-                ]),
-            }),
+        const roles = template.findResources("AWS::IAM::Role");
+        const eventBridgeRoleEntry = Object.entries(roles).find(([, role]: [string, any]) =>
+            role.Properties?.AssumeRolePolicyDocument?.Statement?.some(
+                (statement: any) => statement.Principal?.Service === "events.amazonaws.com",
+            )
+        );
+
+        expect(eventBridgeRoleEntry).toBeDefined();
+
+        const [eventBridgeRoleLogicalId] = eventBridgeRoleEntry!;
+        const policies = template.findResources("AWS::IAM::Policy");
+        const invokePolicy = Object.values(policies).find((policy: any) =>
+            policy.Properties?.Roles?.some((roleRef: any) => roleRef.Ref === eventBridgeRoleLogicalId)
+        );
+
+        expect(invokePolicy).toBeDefined();
+        expect(invokePolicy).toMatchObject({
+            Properties: {
+                PolicyDocument: {
+                    Statement: expect.arrayContaining([
+                        expect.objectContaining({
+                            Action: "execute-api:Invoke",
+                            Resource: {
+                                "Fn::Join": expect.any(Array),
+                            },
+                        }),
+                    ]),
+                },
+            },
         });
+
+        const invokeStatement = (invokePolicy as any).Properties.PolicyDocument.Statement.find(
+            (statement: any) => statement.Action === "execute-api:Invoke"
+        );
+        expect(JSON.stringify(invokeStatement.Resource)).toContain("/POST/package-event");
     });
 
     test("creates CloudWatch log groups", () => {
