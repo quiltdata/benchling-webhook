@@ -782,8 +782,12 @@ def create_app() -> FastAPI:
                 )
                 return
 
+            from datetime import datetime, timezone
+
+            updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
             payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
-            result = CanvasManager(active_benchling, config, payload).update_canvas()
+            result = CanvasManager(active_benchling, config, payload).update_canvas(updated_at=updated_at)
             logger.info(
                 "Package event canvas refresh completed",
                 package_name=package_name,
@@ -989,24 +993,21 @@ def create_app() -> FastAPI:
             execution_arn = entry_packager.execute_workflow_async(payload)
 
             canvas_manager = CanvasManager(benchling, config, payload)
-            canvas_manager.handle_async()
+
+            # Return pending canvas synchronously (disabled buttons, no links,
+            # "Updating..." footer). The EventBridge package-revision handler
+            # will refresh the canvas with full links once the package publishes.
+            canvas_response = canvas_manager.get_canvas_response()
 
             logger.info(
-                "Canvas update triggered asynchronously",
+                "Canvas response returned (pending state)",
                 canvas_id=payload.canvas_id,
                 entry_id=payload.entry_id,
                 event_type=payload.event_type,
                 execution_arn=execution_arn,
             )
 
-            return JSONResponse(
-                {
-                    "status": "ACCEPTED",
-                    "message": "Canvas update initiated",
-                    "execution_arn": execution_arn,
-                },
-                status_code=202,
-            )
+            return canvas_response
 
         except ValueError as e:
             logger.warning("Invalid canvas payload", error=str(e))
