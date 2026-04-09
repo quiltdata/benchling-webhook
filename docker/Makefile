@@ -378,7 +378,7 @@ test-deployed-dev-direct: check-xdg
 	if [ -n "$$DEPLOYED_AT" ]; then \
 		echo "📅 Deployed at: $$DEPLOYED_AT"; \
 	fi; \
-	uv run python scripts/test_webhook.py "$$DEV_ENDPOINT" --health-only --wait=120
+	uv run python scripts/test_webhook.py "$$DEV_ENDPOINT" --profile $(PROFILE) --wait=120 $(TEST_FLAGS)
 
 # Test deployed prod stack via API Gateway endpoint
 # v0.7.0: Updated to use deployments.json with profile/stage structure
