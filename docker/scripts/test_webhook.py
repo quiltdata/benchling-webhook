@@ -144,29 +144,29 @@ def check_webhook_verification(server_url):
     return None
 
 
-def warmup_post(server_url, max_attempts=3):
-    """Send warm-up POST requests to establish VPC Link / NLB connections.
+def warmup_post(server_url, rounds=4):
+    """Send warm-up POST requests to prime VPC Link / NLB connections.
 
-    The first POST requests through API Gateway -> VPC Link -> NLB can be slow
-    (504 Gateway Timeout) even when GET health checks succeed. Sending a
-    throwaway POST warms up the TCP connection pool.
+    The NLB round-robins across targets. One target may have stale VPC Link
+    connections causing 29s+ delays. Sending multiple warm-up POSTs ensures
+    both NLB targets have active connections.
     """
     print("🔥 Warming up POST connections...")
-    for attempt in range(1, max_attempts + 1):
+    ok = 0
+    for i in range(1, rounds + 1):
         try:
             response = requests.post(
                 f"{server_url}/health",
                 json={},
                 timeout=30,
             )
-            print(f"   Warm-up {attempt}: {response.status_code}")
+            print(f"   Warm-up {i}: {response.status_code}")
             if response.status_code < 500:
-                print("   POST connections warm")
-                return True
+                ok += 1
         except requests.exceptions.RequestException as e:
-            print(f"   Warm-up {attempt}: {e}")
-    print("   Warm-up complete (best-effort)")
-    return False
+            print(f"   Warm-up {i}: {e}")
+    print(f"   {ok}/{rounds} warm-up requests succeeded")
+    return ok > 0
 
 
 def _print_response(response, verification_expected=False):
@@ -189,25 +189,38 @@ def test_webhook(server_url, event_type, payload, verification_enabled=False):
     print(f"📡 Sending to: {webhook_url}")
     print(f"📦 Payload: {json.dumps(payload, indent=2)}\n")
 
-    try:
-        response = requests.post(
-            webhook_url,
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=30,
-        )
+    # Retry on 504 (NLB round-robins across targets; one target may have
+    # stale VPC Link connections causing 29s gateway timeouts)
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.post(
+                webhook_url,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=30,
+            )
 
-        if verification_enabled and response.status_code == 403:
-            _print_response(response, verification_expected=True)
-            print("   (403 expected: webhook verification enabled, test requests are unsigned)")
-            return True
+            if response.status_code == 504 and attempt < max_attempts:
+                print(f"   ⏳ 504 Gateway Timeout (attempt {attempt}/{max_attempts}), retrying...")
+                continue
 
-        _print_response(response)
-        return 200 <= response.status_code < 300
+            if verification_enabled and response.status_code == 403:
+                _print_response(response, verification_expected=True)
+                print("   (403 expected: webhook verification enabled, test requests are unsigned)")
+                return True
 
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Error: {e}")
-        return False
+            _print_response(response)
+            return 200 <= response.status_code < 300
+
+        except requests.exceptions.RequestException as e:
+            if attempt < max_attempts:
+                print(f"   ⏳ Error (attempt {attempt}/{max_attempts}): {e}, retrying...")
+                continue
+            print(f"❌ Error: {e}")
+            return False
+
+    return False
 
 
 def wait_for_ready(server_url, max_wait=120, interval=10):
