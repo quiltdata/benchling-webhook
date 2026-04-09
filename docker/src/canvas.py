@@ -272,30 +272,33 @@ class CanvasManager:
         return result
 
     def get_canvas_response(self) -> dict[str, Any]:
-        """Generate canvas response for synchronous webhook reply.
+        """Generate minimal pending canvas for synchronous webhook reply.
 
-        Shows "Updating..." footer since the async workflow hasn't completed yet.
-        The subsequent async canvas update will show "Up to date".
+        Must return instantly (<1s) to meet Benchling's canvas timeout.
+        Skips all expensive calls (Benchling API, Athena, S3).
+        The EventBridge package-revision handler will replace this with the full canvas.
         """
-        logger.debug(
-            "Generating canvas response",
-            canvas_id=self.canvas_id,
-            entry_id=self.entry_id,
-            package_name=self.package_name,
-        )
+        pending_blocks = [
+            *blocks.create_main_navigation_buttons(self.entry_id, enabled=False),
+            blocks.create_markdown_block("## Preparing package...\n", "md1"),
+            blocks.create_markdown_block(
+                fmt.format_canvas_footer(
+                    version=__version__,
+                    quilt_host=self.config.quilt_catalog,
+                    bucket=self.config.s3_bucket_name,
+                    pending=True,
+                ),
+                "md-footer",
+            ),
+        ]
 
-        canvas_blocks = self._make_blocks(pending=True)
-        logger.debug("Canvas blocks created", blocks_count=len(canvas_blocks))
-
-        blocks_dict = blocks.blocks_to_dict(canvas_blocks)
+        blocks_dict = blocks.blocks_to_dict(pending_blocks)
 
         logger.info(
-            "Canvas response generated",
+            "Pending canvas response generated",
             canvas_id=self.canvas_id,
-            package_name=self.package_name,
+            entry_id=self.entry_id,
             blocks_count=len(blocks_dict),
-            catalog_url=self.catalog_url,
-            sync_uri=self.sync_uri(),
         )
 
         return {"blocks": blocks_dict}
