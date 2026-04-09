@@ -157,6 +157,7 @@ describe("generateManifest (pure function)", () => {
                 "v2.canvas.created",
                 "v2.entry.created",
                 "v2.entry.updated.fields",
+                "v2.entry.updated.reviewRecord",
             ];
 
             requiredTypes.forEach((type) => {

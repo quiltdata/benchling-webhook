@@ -71,6 +71,7 @@ def map_event_type_to_file(event_type):
     mapping = {
         "v2.entry.created": "entry-created.json",
         "v2.entry.updated.fields": "entry-updated.json",
+        "v2.entry.updated.reviewRecord": "entry-review-record.json",
         "v2.canvas.created": "canvas-created.json",
         "v2.canvas.initialized": "canvas-initialized.json",
         "v2.canvas.userInteracted": "canvas-interaction.json",

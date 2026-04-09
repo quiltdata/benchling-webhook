@@ -17,4 +17,5 @@ subscriptions:
     - type: v2.canvas.created # user clicks 'Create'
     - type: v2.entry.created # new notebook created
     - type: v2.entry.updated.fields
+    - type: v2.entry.updated.reviewRecord
 #  - type: v2.entity.registered
