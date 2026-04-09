@@ -96,13 +96,15 @@ If the App Canvas is not already part of your standard notebook template, Benchl
 
 This requires a Benchling admin to use `npx` from [NodeJS](https://nodejs.org) version 18 or later.
 
-#### 1.1 Generate a manifest
+#### 1.1 Get the app manifest
+
+Download `app-manifest.yaml` from the
+[latest GitHub release](https://github.com/quiltdata/benchling-webhook/releases/latest),
+or generate one locally:
 
 ```bash
 npx @quiltdata/benchling-webhook@latest manifest
 ```
-
-This will generate an `app-manifest.yaml` file in your local folder
 
 #### 1.2 Upload the manifest to Benchling
 
