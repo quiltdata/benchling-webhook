@@ -128,15 +128,59 @@ def determine_endpoint(event_type):
         return "/event"
 
 
-def _print_response(response):
+def check_webhook_verification(server_url):
+    """Check if webhook verification is enabled via /config endpoint."""
+    try:
+        response = requests.get(f"{server_url}/config", timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            enabled = data.get("security", {}).get("webhook_verification_enabled")
+            if enabled is not None:
+                return bool(enabled)
+            # Fall back to parameters section
+            return bool(data.get("parameters", {}).get("enable_webhook_verification"))
+    except Exception:
+        pass
+    return None
+
+
+def warmup_post(server_url, max_attempts=3):
+    """Send warm-up POST requests to establish VPC Link / NLB connections.
+
+    The first POST requests through API Gateway -> VPC Link -> NLB can be slow
+    (504 Gateway Timeout) even when GET health checks succeed. Sending a
+    throwaway POST warms up the TCP connection pool.
+    """
+    print("🔥 Warming up POST connections...")
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.post(
+                f"{server_url}/health",
+                json={},
+                timeout=30,
+            )
+            print(f"   Warm-up {attempt}: {response.status_code}")
+            if response.status_code < 500:
+                print("   POST connections warm")
+                return True
+        except requests.exceptions.RequestException as e:
+            print(f"   Warm-up {attempt}: {e}")
+    print("   Warm-up complete (best-effort)")
+    return False
+
+
+def _print_response(response, verification_expected=False):
     """Print response with appropriate status indicator."""
     is_success = 200 <= response.status_code < 300
+    if verification_expected and response.status_code == 403:
+        # 403 is expected when webhook verification is enabled and we can't sign
+        is_success = True
     status_icon = "✅" if is_success else "❌"
     print(f"{status_icon} Response Status: {response.status_code}")
     print(f"📄 Response Body: {response.text}")
 
 
-def test_webhook(server_url, event_type, payload):
+def test_webhook(server_url, event_type, payload, verification_enabled=False):
     """Send a test webhook to the server."""
     endpoint = determine_endpoint(event_type)
     webhook_url = f"{server_url}{endpoint}"
@@ -150,8 +194,13 @@ def test_webhook(server_url, event_type, payload):
             webhook_url,
             json=payload,
             headers={"Content-Type": "application/json"},
-            timeout=10,
+            timeout=30,
         )
+
+        if verification_enabled and response.status_code == 403:
+            _print_response(response, verification_expected=True)
+            print("   (403 expected: webhook verification enabled, test requests are unsigned)")
+            return True
 
         _print_response(response)
         return 200 <= response.status_code < 300
@@ -254,6 +303,22 @@ if __name__ == "__main__":
     print()
 
     if not health_only:
+        # Warm up POST connections (VPC Link / NLB can 504 on first POSTs)
+        warmup_post(server_url)
+        print()
+
+        # Check if webhook verification is enabled
+        verification_enabled = check_webhook_verification(server_url)
+        if verification_enabled:
+            print("🔒 Webhook verification: ENABLED")
+            print("   Test requests are unsigned - 403 responses are expected and count as PASS")
+            print("   (Only Benchling can sign webhooks with the correct HMAC keys)")
+        elif verification_enabled is False:
+            print("🔓 Webhook verification: DISABLED")
+        else:
+            print("⚠️  Webhook verification: UNKNOWN (could not query /config)")
+        print()
+
         # Load test entry ID from profile
         test_entry_id = load_test_entry_id(profile)
         if test_entry_id:
@@ -278,7 +343,12 @@ if __name__ == "__main__":
         for event_type in event_types:
             payload = load_test_payload(event_type, test_entry_id)
             if payload:
-                success = test_webhook(server_url, event_type, payload)
+                success = test_webhook(
+                    server_url,
+                    event_type,
+                    payload,
+                    verification_enabled=bool(verification_enabled),
+                )
                 all_results.append((event_type, success))
                 print("-" * 50)
             else:
