@@ -225,8 +225,12 @@ class Config:
             self.package_key = secret_data.pkg_key or "experiment_id"
             self.workflow = secret_data.workflow or ""
 
-            # Security configuration ALWAYS comes from secret
-            self.enable_webhook_verification = secret_data.enable_webhook_verification
+            # Security configuration from secret, unless env var explicitly disables it
+            env_override = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "").lower()
+            if env_override in ("false", "0", "no"):
+                self.enable_webhook_verification = False
+            else:
+                self.enable_webhook_verification = secret_data.enable_webhook_verification
 
             # Log level from secret
             if secret_data.log_level:
