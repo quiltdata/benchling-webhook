@@ -186,7 +186,7 @@ class TestFlexibleRoutes:
 
     @pytest.mark.parametrize("stage", ["prod", "dev"])
     def test_canvas_webhook_with_stage_prefix(self, client, mock_entry_packager, stage):
-        """Test /canvas webhook with stage prefix."""
+        """Test /canvas webhook with stage prefix returns pending canvas."""
         payload = {
             "channel": "events",
             "message": {"type": "v2.canvas.initialized", "resourceId": "etr_123456"},
@@ -197,16 +197,18 @@ class TestFlexibleRoutes:
         with patch("src.app.CanvasManager") as mock_canvas_manager:
             mock_manager_instance = Mock()
             mock_canvas_manager.return_value = mock_manager_instance
+            mock_manager_instance.get_canvas_response.return_value = {"blocks": []}
 
             response = client.post(f"/{stage}/canvas", json=payload)
 
-            assert response.status_code == 202
+            assert response.status_code == 200
             data = response.json()
-            assert data["status"] == "ACCEPTED"
-            mock_manager_instance.handle_async.assert_called_once()
+            assert "blocks" in data
+            mock_manager_instance.get_canvas_response.assert_called_once()
+            mock_manager_instance.handle_async.assert_not_called()
 
     def test_canvas_webhook_direct_path(self, client, mock_entry_packager):
-        """Test /canvas webhook without stage prefix."""
+        """Test /canvas webhook without stage prefix returns pending canvas."""
         payload = {
             "channel": "events",
             "message": {"type": "v2.canvas.initialized", "resourceId": "etr_123456"},
@@ -217,12 +219,13 @@ class TestFlexibleRoutes:
         with patch("src.app.CanvasManager") as mock_canvas_manager:
             mock_manager_instance = Mock()
             mock_canvas_manager.return_value = mock_manager_instance
+            mock_manager_instance.get_canvas_response.return_value = {"blocks": []}
 
             response = client.post("/canvas", json=payload)
 
-            assert response.status_code == 202
+            assert response.status_code == 200
             data = response.json()
-            assert data["status"] == "ACCEPTED"
+            assert "blocks" in data
 
     # ============================================================================
     # Verify both path styles produce identical responses

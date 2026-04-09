@@ -39,7 +39,9 @@ def linkify_urls(text: str) -> str:
     return URL_PATTERN.sub(replace_url, text)
 
 
-def format_package_header(package_name: str, display_id: str, catalog_url: str, sync_url: str) -> str:
+def format_package_header(
+    package_name: str, display_id: str, catalog_url: str, sync_url: str, pending: bool = False
+) -> str:
     """Format primary package header with action links.
 
     Args:
@@ -47,21 +49,28 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
         display_id: Entry display ID
         catalog_url: URL to catalog view
         sync_url: URL for sync action
+        pending: If True, render as plain text (no links)
 
     Returns:
         Formatted markdown string
     """
+    if pending:
+        return f"""## {display_id}
+
+* Package: {package_name}
+"""
     return f"""## {display_id}
 
 * Package: [{package_name}]({catalog_url}) [[🔄 sync]]({sync_url})
 """
 
 
-def format_linked_packages(packages: List[Package]) -> str:
+def format_linked_packages(packages: List[Package], pending: bool = False) -> str:
     """Format linked packages section.
 
     Args:
         packages: List of Package instances to display
+        pending: If True, render as plain text (no links)
 
     Returns:
         Formatted markdown string, or empty string if no packages
@@ -71,7 +80,10 @@ def format_linked_packages(packages: List[Package]) -> str:
 
     content = "\n### Linked Packages\n\n"
     for pkg in packages:
-        content += f"* [{pkg.package_name}]({pkg.catalog_url}) [[🔄 sync]]({pkg.make_sync_url()})\n"
+        if pending:
+            content += f"* {pkg.package_name}\n"
+        else:
+            content += f"* [{pkg.package_name}]({pkg.catalog_url}) [[🔄 sync]]({pkg.make_sync_url()})\n"
     return content
 
 
@@ -265,21 +277,31 @@ def dict_to_markdown_list(data: Dict[str, Any], indent_level: int = 0) -> str:
     return md
 
 
-def format_canvas_footer(version: str, quilt_host: str, bucket: str) -> str:
+def format_canvas_footer(
+    version: str, quilt_host: str, bucket: str, pending: bool = False, updated_at: str | None = None
+) -> str:
     """Format canvas footer with version and deployment information.
 
     Args:
         version: Application version
         quilt_host: Quilt catalog host
         bucket: S3 bucket name
+        pending: If True, show "Updating..." status
+        updated_at: ISO timestamp of last package update (shown when not pending)
 
     Returns:
         Formatted markdown string with footer information
     """
+    if pending:
+        status = "⏳ *Updating...*"
+    elif updated_at:
+        status = f"✅ *Updated at {updated_at}*"
+    else:
+        status = "✅ *Up to date*"
     return f"""
 
 ---
-**NOTE**: *Package updates automatically*
+{status}
 
 {bucket}@{quilt_host} Rev {version}
 """

@@ -131,8 +131,8 @@ class TestFastAPIApp:
         assert "error" in data
         assert "not found" in data["error"].lower()
 
-    def test_canvas_endpoint_async_update(self, client, mock_entry_packager):
-        """Test /canvas endpoint returns 202 and triggers async update."""
+    def test_canvas_endpoint_returns_pending_canvas(self, client, mock_entry_packager):
+        """Test /canvas endpoint returns pending canvas response synchronously."""
         mock_entry_packager.execute_workflow_async.return_value = "etr_123456"
 
         payload = {
@@ -145,17 +145,18 @@ class TestFastAPIApp:
         with patch("src.app.CanvasManager") as mock_canvas_manager:
             mock_manager_instance = Mock()
             mock_canvas_manager.return_value = mock_manager_instance
-            mock_manager_instance.get_package_browser_blocks.return_value = [MagicMock()]
+            mock_manager_instance.get_canvas_response.return_value = {
+                "blocks": [{"type": "MARKDOWN", "id": "md1", "value": "test"}]
+            }
 
             response = client.post("/canvas", json=payload)
 
-            assert response.status_code == 202
+            assert response.status_code == 200
             data = response.json()
-            assert data["status"] == "ACCEPTED"
-            assert "execution_arn" in data
+            assert "blocks" in data
 
-            mock_manager_instance.handle_async.assert_called_once()
-            mock_manager_instance.get_canvas_response.assert_not_called()
+            mock_manager_instance.get_canvas_response.assert_called_once()
+            mock_manager_instance.handle_async.assert_not_called()
             workflow_payload = mock_entry_packager.execute_workflow_async.call_args.args[0]
             assert workflow_payload.canvas_id == "canvas_123"
 
