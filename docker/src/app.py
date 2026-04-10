@@ -698,13 +698,25 @@ def create_app() -> FastAPI:
                     canvas_id=payload.canvas_id,
                 )
                 canvas_manager = CanvasManager(benchling, config, payload)
-                canvas_response = canvas_manager.get_canvas_response()
 
                 logger.debug("Starting background export workflow from /event", entry_id=payload.entry_id)
                 entry_packager.execute_workflow_async(payload)
 
-                logger.info("Returning canvas response from /event endpoint", canvas_id=payload.canvas_id)
-                return canvas_response
+                def async_pending_canvas_from_event():
+                    try:
+                        canvas_manager.update_canvas_pending()
+                    except Exception as e:
+                        logger.error(
+                            "Failed to set pending canvas from /event", canvas_id=payload.canvas_id, error=str(e)
+                        )
+
+                threading.Thread(target=async_pending_canvas_from_event, daemon=True).start()
+
+                logger.info("Canvas update initiated from /event endpoint", canvas_id=payload.canvas_id)
+                return JSONResponse(
+                    {"status": "ACCEPTED", "message": "Canvas update initiated"},
+                    status_code=202,
+                )
 
             supported_event_types = {
                 "v2.entry.updated.fields",
@@ -994,20 +1006,29 @@ def create_app() -> FastAPI:
 
             canvas_manager = CanvasManager(benchling, config, payload)
 
-            # Return pending canvas synchronously (disabled buttons, no links,
-            # "Updating..." footer). The EventBridge package-revision handler
-            # will refresh the canvas with full links once the package publishes.
-            canvas_response = canvas_manager.get_canvas_response()
+            # Push pending canvas via SDK in background thread.
+            # Benchling ignores blocks in the webhook response body —
+            # canvas content must be set via the update_canvas API.
+            def async_pending_canvas():
+                try:
+                    canvas_manager.update_canvas_pending()
+                except Exception as e:
+                    logger.error("Failed to set pending canvas", canvas_id=payload.canvas_id, error=str(e))
+
+            threading.Thread(target=async_pending_canvas, daemon=True).start()
 
             logger.info(
-                "Canvas response returned (pending state)",
+                "Canvas update initiated (pending state)",
                 canvas_id=payload.canvas_id,
                 entry_id=payload.entry_id,
                 event_type=payload.event_type,
                 execution_arn=execution_arn,
             )
 
-            return canvas_response
+            return JSONResponse(
+                {"status": "ACCEPTED", "message": "Canvas update initiated", "execution_arn": execution_arn},
+                status_code=202,
+            )
 
         except ValueError as e:
             logger.warning("Invalid canvas payload", error=str(e))

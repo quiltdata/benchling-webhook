@@ -202,7 +202,9 @@ def test_webhook(server_url, event_type, payload, verification_enabled=False):
             )
 
             if response.status_code == 504 and attempt < max_attempts:
-                print(f"   ⏳ 504 Gateway Timeout (attempt {attempt}/{max_attempts}), retrying...")
+                wait = 10 * attempt  # 10s, 20s — let NLB connections settle
+                print(f"   ⏳ 504 Gateway Timeout (attempt {attempt}/{max_attempts}), retrying in {wait}s...")
+                time.sleep(wait)
                 continue
 
             if verification_enabled and response.status_code == 403:
