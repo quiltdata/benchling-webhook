@@ -271,11 +271,10 @@ class CanvasManager:
 
         return result
 
-    def get_canvas_response(self) -> dict[str, Any]:
-        """Generate minimal pending canvas for synchronous webhook reply.
+    def update_canvas_pending(self) -> dict[str, Any]:
+        """Push minimal pending canvas via Benchling SDK.
 
-        Must return instantly (<1s) to meet Benchling's canvas timeout.
-        Skips all expensive calls (Benchling API, Athena, S3).
+        Lightweight: skips Athena/S3/expensive calls.
         The EventBridge package-revision handler will replace this with the full canvas.
         """
         pending_blocks = [
@@ -291,17 +290,7 @@ class CanvasManager:
                 "md-footer",
             ),
         ]
-
-        blocks_dict = blocks.blocks_to_dict(pending_blocks)
-
-        logger.info(
-            "Pending canvas response generated",
-            canvas_id=self.canvas_id,
-            entry_id=self.entry_id,
-            blocks_count=len(blocks_dict),
-        )
-
-        return {"blocks": blocks_dict}
+        return self.update_canvas_with_blocks(pending_blocks)
 
     def update_canvas(self, updated_at: str | None = None) -> dict[str, Any]:
         """Update existing Canvas using Benchling SDK.
