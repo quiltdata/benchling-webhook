@@ -42,6 +42,12 @@ class IntegrationTest:
             "endpoint": "/event",
             "expected_status": 200,
         },
+        {
+            "name": "v2.entry.updated.reviewRecord",
+            "file": "../test-events/entry-review-record.json",
+            "endpoint": "/event",
+            "expected_status": 200,
+        },
     ]
 
     def __init__(self, base_url: str = "http://localhost:8080", entry_id: Optional[str] = None, verbose: bool = False):

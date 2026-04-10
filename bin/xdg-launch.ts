@@ -225,10 +225,8 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         envVars.APP_ENV = "development";
         envVars.LOG_LEVEL = config.logging?.level || "DEBUG";
 
-        // Disable verification in dev mode for easier testing
-        if (mode === "docker-dev") {
-            envVars.ENABLE_WEBHOOK_VERIFICATION = "false";
-        }
+        // Disable verification in local dev modes for easier testing
+        envVars.ENABLE_WEBHOOK_VERIFICATION = "false";
     } else {
         // docker (production)
         envVars.APP_ENV = "production";

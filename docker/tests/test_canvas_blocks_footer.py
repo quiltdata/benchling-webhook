@@ -23,9 +23,28 @@ class TestCanvasFooterBlocks:
         footer = format_canvas_footer(version="0.8.4", quilt_host="test.com", bucket="test-bucket")
 
         assert isinstance(footer, str)
-        assert "Package will be created/updated asynchronously" in footer
+        assert "Up to date" in footer
         assert "test-bucket@test.com" in footer
         assert "Rev 0.8.4" in footer
+
+    def test_format_canvas_footer_pending(self):
+        """Verify pending state shows 'Updating...'."""
+        footer = format_canvas_footer(version="0.8.4", quilt_host="test.com", bucket="test-bucket", pending=True)
+
+        assert "Updating..." in footer
+        assert "Up to date" not in footer
+
+    def test_format_canvas_footer_with_timestamp(self):
+        """Verify updated_at timestamp is shown."""
+        footer = format_canvas_footer(
+            version="0.8.4",
+            quilt_host="test.com",
+            bucket="test-bucket",
+            updated_at="2026-04-09 20:30 UTC",
+        )
+
+        assert "Updated at 2026-04-09 20:30 UTC" in footer
+        assert "Updating..." not in footer
 
     def test_make_blocks_includes_footer_as_markdown_block(self, mock_config, mock_benchling):
         """Verify _make_blocks includes footer as MarkdownUiBlockUpdate."""
@@ -61,7 +80,7 @@ class TestCanvasFooterBlocks:
 
         # Verify footer content
         footer_content = last_block.value
-        assert "Package will be created/updated asynchronously" in footer_content
+        assert "Up to date" in footer_content
         assert mock_config.s3_bucket_name in footer_content
         assert mock_config.quilt_catalog in footer_content
 
@@ -99,7 +118,7 @@ class TestCanvasFooterBlocks:
         footer_block_dict = blocks_dict[-1]
         assert footer_block_dict["type"] == "MARKDOWN"
         assert footer_block_dict["id"] == "md-footer"
-        assert "Package will be created/updated asynchronously" in footer_block_dict["value"]
+        assert "Up to date" in footer_block_dict["value"]
 
     def test_blocks_to_dict_rejects_invalid_blocks(self):
         """Verify blocks_to_dict raises TypeError for invalid block types."""

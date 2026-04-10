@@ -183,7 +183,7 @@ class CanvasManager:
         """
         return self.package.upload_url
 
-    def _make_markdown_content(self) -> str:
+    def _make_markdown_content(self, pending: bool = False) -> str:
         """Generate markdown content for the Canvas.
 
         Composes the full canvas content in the following order:
@@ -191,6 +191,9 @@ class CanvasManager:
         2. Notice and status
         3. Linked packages (if any)
         4. Error notifications (if any)
+
+        Args:
+            pending: If True, render links as plain text (package not yet created)
 
         Returns:
             Formatted markdown string with package links
@@ -201,6 +204,7 @@ class CanvasManager:
             display_id=self.entry.display_id,
             catalog_url=self.catalog_url,
             sync_url=self.sync_uri(),
+            pending=pending,
         )
 
         # Linked packages
@@ -216,7 +220,7 @@ class CanvasManager:
             # Store linked packages as instance variable
             self._linked_packages = linked_packages
 
-            content += fmt.format_linked_packages(linked_packages)
+            content += fmt.format_linked_packages(linked_packages, pending=pending)
 
         except Exception as e:
             error_msg = f"Failed to search for linked packages: {str(e)}"
@@ -236,18 +240,23 @@ class CanvasManager:
 
         return content
 
-    def _make_blocks(self) -> list:
-        """Create UI blocks for the Canvas."""
-        markdown_content = self._make_markdown_content()
+    def _make_blocks(self, pending: bool = False, updated_at: str | None = None) -> list:
+        """Create UI blocks for the Canvas.
+
+        Args:
+            pending: If True, disable buttons and links, show "Updating..." footer
+            updated_at: ISO timestamp of last package update (shown when not pending)
+        """
+        markdown_content = self._make_markdown_content(pending=pending)
         markdown_block = blocks.create_markdown_block(markdown_content, "md1")
 
         result = [
-            *blocks.create_main_navigation_buttons(self.entry_id),  # Buttons at the top
+            *blocks.create_main_navigation_buttons(self.entry_id, enabled=not pending),
             markdown_block,
         ]
 
-        # Add linked package browse buttons if any exist
-        if self._linked_packages:
+        # Add linked package browse buttons if any exist (disabled when pending)
+        if self._linked_packages and not pending:
             result.extend(blocks.create_linked_package_browse_buttons(self.entry_id, self._linked_packages))
 
         # Add footer as markdown block
@@ -255,40 +264,30 @@ class CanvasManager:
             version=__version__,
             quilt_host=self.config.quilt_catalog,
             bucket=self.config.s3_bucket_name,
+            pending=pending,
+            updated_at=updated_at,
         )
         result.append(blocks.create_markdown_block(footer_markdown, "md-footer"))
 
         return result
 
-    def get_canvas_response(self) -> dict[str, Any]:
-        """Generate canvas response for synchronous webhook reply."""
-        logger.debug(
-            "Generating canvas response",
-            canvas_id=self.canvas_id,
-            entry_id=self.entry_id,
-            package_name=self.package_name,
-        )
+    def update_canvas_pending(self) -> dict[str, Any]:
+        """Push pending canvas with full content but disabled links/buttons.
 
-        canvas_blocks = self._make_blocks()
-        logger.debug("Canvas blocks created", blocks_count=len(canvas_blocks))
+        Shows the same information as the final canvas so the user can see
+        where the package will be. Only the status line and button state differ.
+        """
+        blocks = self._make_blocks(pending=True)
+        return self.update_canvas_with_blocks(blocks)
 
-        blocks_dict = blocks.blocks_to_dict(canvas_blocks)
+    def update_canvas(self, updated_at: str | None = None) -> dict[str, Any]:
+        """Update existing Canvas using Benchling SDK.
 
-        logger.info(
-            "Canvas response generated",
-            canvas_id=self.canvas_id,
-            package_name=self.package_name,
-            blocks_count=len(blocks_dict),
-            catalog_url=self.catalog_url,
-            sync_uri=self.sync_uri(),
-        )
-
-        return {"blocks": blocks_dict}
-
-    def update_canvas(self) -> dict[str, Any]:
-        """Update existing Canvas using Benchling SDK."""
+        Args:
+            updated_at: ISO timestamp to display in footer (e.g. "2026-04-09 20:30 UTC")
+        """
         try:
-            blocks = self._make_blocks()
+            blocks = self._make_blocks(updated_at=updated_at)
 
             canvas_update = AppCanvasUpdate(
                 blocks=blocks,  # type: ignore

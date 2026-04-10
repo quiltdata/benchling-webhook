@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-04-08
+
+### Added
+
+- **Async canvas refresh** - Quilt `package-revision` events refresh Benchling canvases automatically via EventBridge, with a two-state "pending → complete" UX
+- **Review record events** - `v2.entry.updated.reviewRecord` now triggers the standard entry export workflow
+
+### Fixed
+
+- Canvas-initiated package exports now preserve `canvas_id` in `entry.json`
+- Canvas updates use SDK `update_canvas` for reliable async rendering
+
+## [0.13.0] - 2026-02-25
+
 ### Added
 
 - Setup now supports an optional Quilt package creation workflow and persists it through config, secret sync, and runtime package requests

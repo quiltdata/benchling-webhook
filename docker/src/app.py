@@ -1,7 +1,7 @@
 import logging
 import os
 import threading
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, cast
 
 import httpx
 import structlog
@@ -18,6 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .canvas import CanvasManager
 from .config import Config, get_config
 from .entry_packager import EntryPackager
+from .package_files import PackageFileFetcher
 from .payload import Payload
 from .secrets_manager import SecretsManagerError
 from .version import __version__
@@ -697,13 +698,25 @@ def create_app() -> FastAPI:
                     canvas_id=payload.canvas_id,
                 )
                 canvas_manager = CanvasManager(benchling, config, payload)
-                canvas_response = canvas_manager.get_canvas_response()
 
                 logger.debug("Starting background export workflow from /event", entry_id=payload.entry_id)
                 entry_packager.execute_workflow_async(payload)
 
-                logger.info("Returning canvas response from /event endpoint", canvas_id=payload.canvas_id)
-                return canvas_response
+                def async_pending_canvas_from_event():
+                    try:
+                        canvas_manager.update_canvas_pending()
+                    except Exception as e:
+                        logger.error(
+                            "Failed to set pending canvas from /event", canvas_id=payload.canvas_id, error=str(e)
+                        )
+
+                threading.Thread(target=async_pending_canvas_from_event, daemon=True).start()
+
+                logger.info("Canvas update initiated from /event endpoint", canvas_id=payload.canvas_id)
+                return JSONResponse(
+                    {"status": "ACCEPTED", "message": "Canvas update initiated"},
+                    status_code=202,
+                )
 
             supported_event_types = {
                 "v2.entry.updated.fields",
@@ -741,6 +754,128 @@ def create_app() -> FastAPI:
             logger.error("Webhook processing failed", error=error_msg, exc_info=True)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
 
+    def _refresh_canvas_for_package_event(package_name: str, top_hash: str | None = None) -> None:
+        """Refresh a canvas after Quilt publishes a package revision event."""
+        try:
+            assert config is not None
+            create_benchling_client = getattr(app.state, "create_benchling_client", None)
+            active_benchling = create_benchling_client() if callable(create_benchling_client) else benchling
+            if active_benchling is None:
+                raise RuntimeError("Benchling client unavailable")
+            active_benchling = cast(Benchling, active_benchling)
+
+            package_fetcher = PackageFileFetcher(
+                catalog_url=config.quilt_catalog,
+                bucket=config.s3_bucket_name,
+                role_arn=config.quilt_write_role_arn or None,
+                region=config.aws_region,
+            )
+            if top_hash:
+                latest_top_hash = package_fetcher.get_package_top_hash(package_name)
+                if latest_top_hash != top_hash:
+                    logger.info(
+                        "Package event skipped - stale package revision",
+                        package_name=package_name,
+                        event_top_hash=top_hash,
+                        latest_top_hash=latest_top_hash,
+                    )
+                    return
+            metadata = package_fetcher.get_package_metadata(package_name)
+            canvas_id = metadata.get("canvas_id")
+            entry_id = metadata.get("entry_id")
+
+            if not canvas_id or not entry_id:
+                logger.info(
+                    "Package event skipped - package metadata missing canvas target",
+                    package_name=package_name,
+                    has_canvas_id=bool(canvas_id),
+                    has_entry_id=bool(entry_id),
+                    top_hash=top_hash,
+                )
+                return
+
+            from datetime import datetime, timezone
+
+            updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+            payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
+            result = CanvasManager(active_benchling, config, payload).update_canvas(updated_at=updated_at)
+            logger.info(
+                "Package event canvas refresh completed",
+                package_name=package_name,
+                canvas_id=canvas_id,
+                entry_id=entry_id,
+                top_hash=top_hash,
+                success=result.get("success"),
+            )
+        except Exception as exc:
+            logger.error(
+                "Package event canvas refresh failed",
+                package_name=package_name,
+                top_hash=top_hash,
+                error=str(exc),
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+
+    async def _handle_package_event_impl(request: Request):
+        """Shared EventBridge package event handling implementation."""
+        try:
+            blocked_response = _runtime_guard_response(request.url.path)
+            if blocked_response:
+                return blocked_response
+
+            event = await request.json()
+            if not isinstance(event, dict):
+                raise ValueError("Invalid JSON payload provided in request")
+
+            detail = event.get("detail")
+            if not isinstance(detail, dict):
+                raise ValueError("package event detail is required")
+
+            package_name = detail.get("handle")
+            if not isinstance(package_name, str) or not package_name:
+                raise ValueError("package event detail.handle is required")
+
+            bucket = detail.get("bucket")
+            if not isinstance(bucket, str) or not bucket:
+                raise ValueError("package event detail.bucket is required")
+            assert config is not None
+            if bucket != config.s3_bucket_name:
+                logger.warning(
+                    "Rejected package event for unexpected bucket",
+                    bucket=bucket,
+                    expected_bucket=config.s3_bucket_name,
+                    package_name=package_name,
+                )
+                return JSONResponse({"error": "Forbidden"}, status_code=403)
+
+            top_hash = detail.get("topHash")
+            if top_hash is not None and not isinstance(top_hash, str):
+                raise ValueError("package event detail.topHash must be a string when present")
+
+            logger.info(
+                "Package event received",
+                path=request.url.path,
+                package_name=package_name,
+                bucket=bucket,
+                top_hash=top_hash,
+            )
+
+            threading.Thread(
+                target=_refresh_canvas_for_package_event,
+                args=(package_name, top_hash),
+                daemon=True,
+            ).start()
+
+            return JSONResponse({"status": "ACCEPTED"}, status_code=200)
+        except ValueError as exc:
+            logger.warning("Invalid package event payload", error=str(exc))
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        except Exception as exc:
+            logger.error("Package event processing failed", error=str(exc), exc_info=True)
+            return JSONResponse({"error": "Internal server error"}, status_code=500)
+
     @app.post("/event")
     async def handle_event(request: Request, _verified: None = Depends(verify_webhook_dependency)):
         """Handle Benchling webhook events with HMAC signature verification - direct path."""
@@ -752,6 +887,16 @@ def create_app() -> FastAPI:
     ):
         """Handle Benchling webhook events with HMAC signature verification - stage-prefixed path."""
         return await _handle_event_impl(request, _verified)
+
+    @app.post("/package-event")
+    async def handle_package_event(request: Request):
+        """Handle EventBridge package revision events - direct path."""
+        return await _handle_package_event_impl(request)
+
+    @app.post("/{stage}/package-event")
+    async def handle_package_event_with_stage(stage: str, request: Request):
+        """Handle EventBridge package revision events - stage-prefixed path."""
+        return await _handle_package_event_impl(request)
 
     async def _handle_lifecycle_impl(request: Request, _verified: None = None):
         """Shared lifecycle event handling implementation."""
@@ -860,10 +1005,20 @@ def create_app() -> FastAPI:
             execution_arn = entry_packager.execute_workflow_async(payload)
 
             canvas_manager = CanvasManager(benchling, config, payload)
-            canvas_manager.handle_async()
+
+            # Push pending canvas via SDK in background thread.
+            # Benchling ignores blocks in the webhook response body —
+            # canvas content must be set via the update_canvas API.
+            def async_pending_canvas():
+                try:
+                    canvas_manager.update_canvas_pending()
+                except Exception as e:
+                    logger.error("Failed to set pending canvas", canvas_id=payload.canvas_id, error=str(e))
+
+            threading.Thread(target=async_pending_canvas, daemon=True).start()
 
             logger.info(
-                "Canvas update triggered asynchronously",
+                "Canvas update initiated (pending state)",
                 canvas_id=payload.canvas_id,
                 entry_id=payload.entry_id,
                 event_type=payload.event_type,
@@ -871,11 +1026,7 @@ def create_app() -> FastAPI:
             )
 
             return JSONResponse(
-                {
-                    "status": "ACCEPTED",
-                    "message": "Canvas update initiated",
-                    "execution_arn": execution_arn,
-                },
+                {"status": "ACCEPTED", "message": "Canvas update initiated", "execution_arn": execution_arn},
                 status_code=202,
             )
 

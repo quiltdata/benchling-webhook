@@ -126,6 +126,18 @@ class TestPayload:
 
         assert payload.canvas_id is None
 
+    def test_canvas_id_falls_back_to_context(self):
+        """Test canvas_id falls back to top-level context for canvas initialization events."""
+        payload_dict = {
+            "message": {"id": "evt_123", "resourceId": "etr_123", "type": "v2.canvas.initialized"},
+            "context": {"canvasId": "canvas_from_context"},
+            "baseURL": "https://demo.benchling.com",
+        }
+
+        payload = Payload(payload_dict)
+
+        assert payload.canvas_id == "canvas_from_context"
+
     def test_missing_timestamp_returns_none(self):
         """Test missing timestamp returns None."""
         payload_dict = {

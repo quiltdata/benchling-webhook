@@ -90,11 +90,12 @@ def create_section(section_id: str, buttons: List[ButtonUiBlock]) -> SectionUiBl
     )
 
 
-def create_main_navigation_buttons(entry_id: str) -> List:
+def create_main_navigation_buttons(entry_id: str, enabled: bool = True) -> List:
     """Create main view navigation buttons (Browse Package, Update Package).
 
     Args:
         entry_id: Entry identifier for button IDs
+        enabled: Whether buttons are interactive (False during pending state)
 
     Returns:
         List containing section with navigation buttons
@@ -103,12 +104,12 @@ def create_main_navigation_buttons(entry_id: str) -> List:
         create_button(
             button_id=f"browse-files-{entry_id}-p0-s15",
             text="Browse Package",
-            enabled=True,
+            enabled=enabled,
         ),
         create_button(
             button_id=f"update-package-{entry_id}",
             text="Update Package",
-            enabled=True,
+            enabled=enabled,
         ),
     ]
 
