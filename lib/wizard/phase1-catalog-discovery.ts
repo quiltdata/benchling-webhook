@@ -65,7 +65,7 @@ function normalizeCatalogDns(catalogUrl: string): string {
  * @returns True if valid, error message otherwise
  */
 function validateCatalogDns(catalogDns: string): boolean | string {
-    const trimmed = catalogDns.trim();
+    const trimmed = normalizeCatalogDns(catalogDns).trim();
     if (trimmed.length === 0) {
         return "Catalog DNS name is required";
     }
@@ -149,7 +149,7 @@ export async function runCatalogDiscovery(
             {
                 type: "input",
                 name: "manualCatalog",
-                message: "Enter catalog DNS name:",
+                message: "Enter catalog DNS name or URL:",
                 validate: validateCatalogDns,
                 filter: normalizeCatalogDns,
             },
@@ -201,7 +201,7 @@ export async function runCatalogDiscovery(
             {
                 type: "input",
                 name: "manualCatalog",
-                message: "Enter catalog DNS name:",
+                message: "Enter catalog DNS name or URL:",
                 validate: validateCatalogDns,
                 filter: normalizeCatalogDns,
             },
@@ -229,7 +229,7 @@ export async function runCatalogDiscovery(
         {
             type: "input",
             name: "manualCatalog",
-            message: "Enter Quilt Catalog DNS name (e.g., open.quiltdata.com):",
+            message: "Enter Quilt Catalog DNS name or URL (e.g., open.quiltdata.com or https://open.quiltdata.com):",
             validate: validateCatalogDns,
             filter: normalizeCatalogDns,
         },

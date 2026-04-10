@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-04-10
+
+### Changed
+
+- Setup now treats disabled integrated webhooks as an IaC-managed concern: it instructs users to enable the Quilt stack setting through CloudFormation/Terraform instead of mutating the stack directly, avoiding stack drift for customers who manage Quilt via IaC
+
+### Added
+
+- `setup --force` and install-time `--force` support for emergency overrides when direct stack mutation is absolutely necessary
+- Focused setup wizard coverage for the new IaC-first integrated enablement flow
+
+### Fixed
+
+- Manual catalog entry in setup now accepts full Quilt catalog URLs and normalizes them to bare DNS names before validation and storage
+
 ## [0.14.0] - 2026-04-08
 
 ### Added

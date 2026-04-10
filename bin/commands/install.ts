@@ -71,6 +71,11 @@ export interface InstallCommandOptions {
      */
     yes?: boolean;
 
+    /**
+     * Allow direct stack mutation instead of requiring IaC-managed changes
+     */
+    force?: boolean;
+
 }
 
 /**
@@ -94,6 +99,7 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
         awsRegion,
         setupOnly = false,
         yes = false,
+        force = false,
     } = options;
 
     // Validate flags
@@ -113,6 +119,7 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
             awsRegion,
             yes: yes,
             isPartOfInstall: true, // Suppress next steps from setup wizard
+            force,
         });
     } catch (error) {
         const err = error as Error;

@@ -145,6 +145,7 @@ program
     .option("--inherit-from <name>", "Base profile to inherit from")
     .option("--region <region>", "AWS region")
     .option("--aws-profile <name>", "AWS credentials profile")
+    .option("--force", "Allow direct stack mutation instead of requiring IaC-managed changes")
     .action(async (options, command) => {
         try {
             await setupWizardCommand({
@@ -517,6 +518,8 @@ if (
             i++;
         } else if (args[i] === "--skip-validation") {
             options.skipValidation = true;
+        } else if (args[i] === "--force") {
+            (options as typeof options & { force?: boolean }).force = true;
         }
     }
 

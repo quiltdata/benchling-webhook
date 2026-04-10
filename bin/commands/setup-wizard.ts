@@ -64,6 +64,8 @@ export interface SetupWizardOptions {
     isPartOfInstall?: boolean;
     /** Config storage implementation (for testing) */
     configStorage?: XDGBase;
+    /** Allow direct stack mutation instead of requiring IaC-managed changes */
+    force?: boolean;
 
     // CLI argument overrides
     catalogUrl?: string;
@@ -174,6 +176,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         awsRegion,
         setupOnly = false,
         configStorage,
+        force = false,
     } = options;
 
     const xdg = configStorage || new XDGConfig();
@@ -348,6 +351,20 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         console.log(`Saving configuration to profile: ${profile}...\n`);
         xdg.writeProfile(profile, config);
         console.log(chalk.green(`✓ Configuration saved to: ~/.config/benchling-webhook/${profile}/config.json\n`));
+    };
+
+    const throwIntegrationIacGuidance = (): never => {
+        const setupCommand = profile === "default"
+            ? "npm run setup -- --force"
+            : `npm run setup -- --profile ${profile} --force`;
+
+        throw new Error(
+            "Integrated Benchling Webhook is disabled in the Quilt stack.\n\n" +
+            "Enable it through your infrastructure-as-code workflow first so CloudFormation/Terraform stays authoritative.\n" +
+            "Ask your IT/platform team to update the Quilt stack configuration and re-apply it.\n\n" +
+            "If you must bypass IaC temporarily, rerun setup with --force:\n" +
+            `  ${setupCommand}`,
+        );
     };
 
     const requireConfig = async (integratedStack: boolean): Promise<ProfileConfig> => {
@@ -548,6 +565,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
                 config: existingConfig || (await requireConfig(true)),
                 deploymentHandled: true,
             };
+        }
+
+        if (!force) {
+            throwIntegrationIacGuidance();
         }
 
         const updateResult = await updateStackParameter({
