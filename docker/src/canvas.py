@@ -272,25 +272,13 @@ class CanvasManager:
         return result
 
     def update_canvas_pending(self) -> dict[str, Any]:
-        """Push minimal pending canvas via Benchling SDK.
+        """Push pending canvas with full content but disabled links/buttons.
 
-        Lightweight: skips Athena/S3/expensive calls.
-        The EventBridge package-revision handler will replace this with the full canvas.
+        Shows the same information as the final canvas so the user can see
+        where the package will be. Only the status line and button state differ.
         """
-        pending_blocks = [
-            *blocks.create_main_navigation_buttons(self.entry_id, enabled=False),
-            blocks.create_markdown_block("## Preparing package...\n", "md1"),
-            blocks.create_markdown_block(
-                fmt.format_canvas_footer(
-                    version=__version__,
-                    quilt_host=self.config.quilt_catalog,
-                    bucket=self.config.s3_bucket_name,
-                    pending=True,
-                ),
-                "md-footer",
-            ),
-        ]
-        return self.update_canvas_with_blocks(pending_blocks)
+        blocks = self._make_blocks(pending=True)
+        return self.update_canvas_with_blocks(blocks)
 
     def update_canvas(self, updated_at: str | None = None) -> dict[str, Any]:
         """Update existing Canvas using Benchling SDK.
