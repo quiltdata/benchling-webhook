@@ -139,6 +139,15 @@ describe("BenchlingWebhookStack", () => {
                 ]),
             }),
         });
+
+        const restApiTemplate = template.findResources("AWS::ApiGateway::RestApi");
+        const restApi = Object.values(restApiTemplate)[0] as any;
+        const publicStatement = restApi.Properties.Policy.Statement.find(
+            (statement: any) => statement.Principal?.AWS === "*"
+        );
+
+        expect(publicStatement).toBeDefined();
+        expect(publicStatement.NotResource).toBe("execute-api:/*/POST/package-event");
     });
 
     test("does NOT create WAF (v1.0.0 uses resource policy instead)", () => {
@@ -173,10 +182,10 @@ describe("BenchlingWebhookStack", () => {
 
         expect(statements).toHaveLength(2);
 
-        // Verify single statement has IP conditions and applies to all endpoints
+        // Verify public statement excludes the EventBridge-only endpoint
         const statement = statements[0];
         expect(statement).toBeDefined();
-        expect(statement.Resource).toBe("execute-api:/*");
+        expect(statement.NotResource).toBe("execute-api:/*/POST/package-event");
         expect(statement.Condition).toBeDefined();
         expect(statement.Condition.IpAddress["aws:SourceIp"]).toEqual([
             "192.168.1.0/24",
@@ -188,6 +197,22 @@ describe("BenchlingWebhookStack", () => {
         ipFilterTemplate.resourceCountIs("AWS::WAFv2::WebACL", 0);
         ipFilterTemplate.resourceCountIs("AWS::WAFv2::IPSet", 0);
         ipFilterTemplate.resourceCountIs("AWS::WAFv2::WebACLAssociation", 0);
+    });
+
+    test("does not publicly expose package-event when no IP allowlist is configured", () => {
+        const restApiTemplate = template.findResources("AWS::ApiGateway::RestApi");
+        const restApi = Object.values(restApiTemplate)[0] as any;
+        const statements = restApi.Properties.Policy.Statement;
+
+        const publicStatement = statements.find((statement: any) => statement.Principal?.AWS === "*");
+        const eventBridgeStatement = statements.find(
+            (statement: any) => statement.Resource === "execute-api:/*/POST/package-event"
+        );
+
+        expect(publicStatement).toBeDefined();
+        expect(publicStatement.NotResource).toBe("execute-api:/*/POST/package-event");
+        expect(eventBridgeStatement).toBeDefined();
+        expect(eventBridgeStatement.Principal.AWS).toHaveProperty("Fn::GetAtt");
     });
 
     test("creates VPC Link and Network Load Balancer", () => {
