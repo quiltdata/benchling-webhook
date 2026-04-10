@@ -174,9 +174,11 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Timeout Configuration:
 # - --timeout 60: Worker timeout (allows JWKS fetch in VPC to complete)
 # - --graceful-timeout 30: Graceful shutdown period for workers
-# - --keep-alive 75: Keep connections alive to avoid recreation overhead
+# - --keep-alive 620: Must exceed NLB TCP idle timeout (350s default) to prevent
+#   stale connection reuse. When keep-alive < NLB timeout, the NLB tries to reuse
+#   connections that Gunicorn has already closed, causing 29s+ request delays (504s).
 # - --log-level info: Log worker lifecycle events for debugging
 # PORT Configuration:
 # - Uses shell form to expand PORT environment variable (defaults to 8080 in ENV)
 # - This allows runtime override (e.g., PORT=5001 in integrated deployments)
-CMD sh -c "gunicorn 'src.app:create_app()' --preload -k uvicorn.workers.UvicornWorker --workers 2 --bind 0.0.0.0:${PORT} --worker-tmp-dir /dev/shm --timeout 60 --graceful-timeout 30 --keep-alive 75 --log-level info --access-logfile - --error-logfile -"
+CMD sh -c "gunicorn 'src.app:create_app()' --preload -k uvicorn.workers.UvicornWorker --workers 2 --bind 0.0.0.0:${PORT} --worker-tmp-dir /dev/shm --timeout 60 --graceful-timeout 30 --keep-alive 620 --log-level info --access-logfile - --error-logfile -"

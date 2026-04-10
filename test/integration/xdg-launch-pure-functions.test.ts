@@ -80,10 +80,8 @@ describe("XDG Launch Pure Functions - Integration", () => {
             expect(envVars.APP_ENV).toBe("development");
             expect(envVars.LOG_LEVEL).toBe(mockConfig.logging?.level || "DEBUG");
 
-            // Verify security configuration
-            expect(envVars.ENABLE_WEBHOOK_VERIFICATION).toBe(
-                String(mockConfig.security?.enableVerification !== false)
-            );
+            // Verify security configuration - local dev modes always disable verification
+            expect(envVars.ENABLE_WEBHOOK_VERIFICATION).toBe("false");
         });
 
         it("should produce valid environment variables from mock config in docker mode", () => {

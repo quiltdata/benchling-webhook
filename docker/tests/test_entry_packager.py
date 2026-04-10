@@ -4,7 +4,9 @@ Tests for EntryPackager.
 Following TDD methodology for Phase 2 implementation.
 """
 
+import io
 import json
+import zipfile
 from unittest.mock import Mock, patch
 
 import pytest
@@ -606,6 +608,111 @@ class TestEntryPackager:
         assert "filename" not in entry_json["files"]["file1.txt"]
         assert "filename" not in entry_json["files"]["file2.csv"]
         assert "filename" not in entry_json["files"]["data.json"]
+
+    def test_create_metadata_files_includes_canvas_id_when_present(self, orchestrator):
+        """Test entry.json stores canvas_id for canvas-initiated exports."""
+        result = orchestrator._create_metadata_files(
+            package_name="benchling/EXP-001",
+            entry_id="etr_123",
+            timestamp="2025-10-02T10:00:00Z",
+            base_url="https://demo.benchling.com",
+            webhook_data={},
+            uploaded_files=[],
+            download_url="https://example.com/export.zip",
+            entry_data={
+                "id": "etr_123",
+                "display_id": "EXP-001",
+                "name": "Test Entry",
+                "web_url": "https://demo.benchling.com/entry/etr_123",
+                "created_at": "2025-10-01T10:00:00Z",
+                "modified_at": "2025-10-02T10:00:00Z",
+            },
+            canvas_id="canvas_123",
+        )
+
+        assert result["entry.json"]["canvas_id"] == "canvas_123"
+
+    def test_create_metadata_files_omits_canvas_id_when_missing(self, orchestrator):
+        """Test entry.json does not emit a null canvas_id field."""
+        result = orchestrator._create_metadata_files(
+            package_name="benchling/EXP-001",
+            entry_id="etr_123",
+            timestamp="2025-10-02T10:00:00Z",
+            base_url="https://demo.benchling.com",
+            webhook_data={},
+            uploaded_files=[],
+            download_url="https://example.com/export.zip",
+            entry_data={
+                "id": "etr_123",
+                "display_id": "EXP-001",
+                "name": "Test Entry",
+                "web_url": "https://demo.benchling.com/entry/etr_123",
+                "created_at": "2025-10-01T10:00:00Z",
+                "modified_at": "2025-10-02T10:00:00Z",
+            },
+        )
+
+        assert "canvas_id" not in result["entry.json"]
+
+    def test_process_export_preserves_existing_canvas_id(self, orchestrator, mock_benchling):
+        """Test entry events preserve a previously stored canvas_id from entry.json."""
+        mock_entry = Mock()
+        mock_entry.to_dict.return_value = {
+            "id": "etr_123",
+            "display_id": "EXP0001",
+            "name": "Test Entry",
+            "web_url": "https://demo.benchling.com/entry/etr_123",
+            "created_at": "2025-10-01T10:00:00Z",
+            "modified_at": "2025-10-02T10:00:00Z",
+            "fields": [],
+        }
+        mock_benchling.entries.get_entry_by_id.return_value = mock_entry
+
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as archive:
+            archive.writestr("export.csv", "hello")
+        zip_buffer.seek(0)
+
+        mock_response = Mock()
+        mock_response.iter_content.return_value = [zip_buffer.getvalue()]
+        mock_response.raise_for_status.return_value = None
+
+        s3_client = Mock()
+        s3_client.get_object.return_value = {
+            "Body": io.BytesIO(json.dumps({"canvas_id": "canvas_preserved"}).encode("utf-8"))
+        }
+
+        payload = Payload(
+            {
+                "message": {
+                    "resourceId": "etr_123",
+                    "timestamp": "2025-10-02T10:00:00Z",
+                    "type": "v2.entry.updated.fields",
+                },
+                "baseURL": "https://demo.benchling.com",
+            }
+        )
+
+        original_process = orchestrator._process_export.__wrapped__
+        with (
+            patch("src.entry_packager.requests.get", return_value=mock_response),
+            patch.object(orchestrator.role_manager, "get_s3_client", return_value=s3_client),
+        ):
+            result = original_process(
+                orchestrator,
+                payload=payload,
+                download_url="https://example.com/export.zip",
+            )
+
+        assert result["statusCode"] == 200
+        written_entry_json = None
+        for call in s3_client.put_object.call_args_list:
+            if call.kwargs["Key"] == "benchling/EXP0001/entry.json":
+                written_entry_json = json.loads(call.kwargs["Body"].decode("utf-8"))
+                break
+
+        assert written_entry_json is not None
+        assert written_entry_json["canvas_id"] == "canvas_preserved"
 
     # Episode 9: Async execution tests
     def test_execute_workflow_async(self, orchestrator, mock_benchling):

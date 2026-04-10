@@ -61,31 +61,33 @@ export class RestApiGateway {
             .map(ip => ip.trim())
             .filter(ip => ip.length > 0);
 
-        // Build resource policy document with IP filtering
-        // Resource ARN format: execute-api:/*/<stage>/<method>/<path>
-        // Creates a single statement that either allows all IPs or restricts to allowlist
+        // Build resource policy document with IP filtering.
+        // The broad public/IP-scoped allow must exclude POST /package-event
+        // because that endpoint is reserved for EventBridge and does not use
+        // Benchling HMAC verification.
         const policyStatements: iam.PolicyStatement[] = [];
+        const publicInvokePolicy = {
+            principals: [new iam.AnyPrincipal()],
+            actions: ["execute-api:Invoke"],
+            notResources: ["execute-api:/*/POST/package-event"],
+        };
 
         if (allowedIps.length === 0) {
             // No IP filtering - allow all requests from anywhere
             policyStatements.push(
                 new iam.PolicyStatement({
                     effect: iam.Effect.ALLOW,
-                    principals: [new iam.AnyPrincipal()],
-                    actions: ["execute-api:Invoke"],
-                    resources: ["execute-api:/*"],
+                    ...publicInvokePolicy,
                 }),
             );
             console.log("Resource Policy IP filtering: DISABLED (no webhookAllowList configured)");
-            console.log("All endpoints accessible from any IP");
+            console.log("All endpoints except /package-event accessible from any IP");
         } else {
             // IP filtering enabled - single statement for ALL endpoints
             policyStatements.push(
                 new iam.PolicyStatement({
                     effect: iam.Effect.ALLOW,
-                    principals: [new iam.AnyPrincipal()],
-                    actions: ["execute-api:Invoke"],
-                    resources: ["execute-api:/*"], // Apply to ALL endpoints
+                    ...publicInvokePolicy,
                     conditions: {
                         IpAddress: {
                             "aws:SourceIp": allowedIps,
@@ -96,7 +98,7 @@ export class RestApiGateway {
 
             console.log("Resource Policy IP filtering: ENABLED");
             console.log(`Allowed IPs: ${allowedIps.join(", ")}`);
-            console.log("IP filtering applies to ALL endpoints (including health checks)");
+            console.log("IP filtering applies to all public endpoints except /package-event");
         }
 
         const policyDoc = new iam.PolicyDocument({

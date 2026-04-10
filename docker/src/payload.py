@@ -43,7 +43,7 @@ class Payload:
         logger.info(
             "Payload initialized",
             event_type=self._message.get("type"),
-            has_canvas_id="canvasId" in self._message,
+            has_canvas_id=bool(self._message.get("canvasId") or self._payload.get("context", {}).get("canvasId")),
             has_resource_id="resourceId" in self._message,
             has_entry_id="entryId" in self._message,
             has_button_id="buttonId" in self._message,
@@ -177,7 +177,7 @@ class Payload:
     @property
     def canvas_id(self) -> Optional[str]:
         """Extract canvas_id from payload."""
-        return self._message.get("canvasId")
+        return self._message.get("canvasId") or self._payload.get("context", {}).get("canvasId")
 
     @property
     def timestamp(self) -> Optional[str]:

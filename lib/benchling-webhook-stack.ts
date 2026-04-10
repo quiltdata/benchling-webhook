@@ -2,6 +2,9 @@ import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as athena from "aws-cdk-lib/aws-athena";
+import * as events from "aws-cdk-lib/aws-events";
+import * as targets from "aws-cdk-lib/aws-events-targets";
+import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
 import { RestApiGateway } from "./rest-api-gateway";
@@ -126,6 +129,11 @@ export class BenchlingWebhookStack extends cdk.Stack {
             description: "S3 bucket name for Quilt packages (resolved from Quilt stack outputs at runtime)",
             default: "",  // StackConfig doesn't include package bucket - only passed via env vars
         });
+        const packagePrefixParam = new cdk.CfnParameter(this, "PackagePrefix", {
+            type: "String",
+            description: "Package handle prefix to match Quilt package revision events",
+            default: "benchling",
+        });
 
         const quiltDatabaseParam = new cdk.CfnParameter(this, "QuiltDatabase", {
             type: "String",
@@ -143,6 +151,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const logLevelValue = logLevelParam.valueAsString;
         const imageTagValue = imageTagParam.valueAsString;
         const packageBucketValue = packageBucketParam.valueAsString;
+        const packagePrefixValue = packagePrefixParam.valueAsString;
         const quiltDatabaseValue = quiltDatabaseParam.valueAsString;
 
         const createAthenaWorkgroupCondition = new cdk.CfnCondition(this, "CreateAthenaWorkgroup", {
@@ -308,6 +317,43 @@ export class BenchlingWebhookStack extends cdk.Stack {
             config: config,
             stage: stage,
         });
+
+        const eventBridgeApiRole = new iam.Role(this, "EventBridgeApiInvokeRole", {
+            assumedBy: new iam.ServicePrincipal("events.amazonaws.com"),
+            description: "Allows EventBridge to invoke the package event API endpoint",
+        });
+
+        eventBridgeApiRole.addToPolicy(new iam.PolicyStatement({
+            actions: ["execute-api:Invoke"],
+            resources: [this.api.api.arnForExecuteApi("POST", "/package-event", stage)],
+        }));
+
+        this.api.api.addToResourcePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            principals: [new iam.ArnPrincipal(eventBridgeApiRole.roleArn)],
+            actions: ["execute-api:Invoke"],
+            resources: ["execute-api:/*/POST/package-event"],
+        }));
+
+        const packageRevisionRule = new events.Rule(this, "PackageRevisionRule", {
+            description: "Refresh Benchling canvases when Quilt publishes package revisions",
+            eventPattern: {
+                source: ["com.quiltdata"],
+                detailType: ["package-revision"],
+                detail: {
+                    bucket: [packageBucketValue],
+                    handle: [{ prefix: `${packagePrefixValue}/` }],
+                },
+            },
+        });
+
+        packageRevisionRule.addTarget(new targets.ApiGateway(this.api.api, {
+            stage,
+            method: "POST",
+            path: "/package-event",
+            eventRole: eventBridgeApiRole,
+            postBody: events.RuleTargetInput.fromEventPath("$"),
+        }));
 
         // Store webhook endpoint for easy access (REST API v1 with stage)
         // REST API URL already includes the stage in the path (e.g., https://xxx.execute-api.region.amazonaws.com/stage/)

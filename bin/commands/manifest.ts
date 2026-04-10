@@ -43,6 +43,7 @@ subscriptions:
     - type: v2.canvas.created
     - type: v2.entry.created
     - type: v2.entry.updated.fields
+    - type: v2.entry.updated.reviewRecord
 `;
 }
 

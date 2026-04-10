@@ -43,6 +43,72 @@ describe("BenchlingWebhookStack", () => {
         template.resourceCountIs("AWS::Events::Connection", 0);
     });
 
+    test("creates EventBridge package revision rule and API target", () => {
+        template.hasParameter("PackagePrefix", {
+            Default: "benchling",
+        });
+
+        template.hasResourceProperties("AWS::Events::Rule", {
+            EventPattern: {
+                source: ["com.quiltdata"],
+                "detail-type": ["package-revision"],
+                detail: {
+                    bucket: [{ Ref: "PackageBucket" }],
+                    handle: [{ prefix: { "Fn::Join": ["", [{ Ref: "PackagePrefix" }, "/"]] } }],
+                },
+            },
+            Targets: Match.arrayWith([
+                Match.objectLike({
+                    Arn: Match.anyValue(),
+                    RoleArn: Match.anyValue(),
+                }),
+            ]),
+        });
+
+        const rules = template.findResources("AWS::Events::Rule");
+        const rule = Object.values(rules)[0] as any;
+        expect(JSON.stringify(rule.Properties.Targets[0].Arn)).toContain("package-event");
+        expect(JSON.stringify(rule.Properties.Targets[0].Arn)).toContain("POST");
+    });
+
+    test("allows EventBridge invoke role to call package-event endpoint", () => {
+        const roles = template.findResources("AWS::IAM::Role");
+        const eventBridgeRoleEntry = Object.entries(roles).find(([, role]: [string, any]) =>
+            role.Properties?.AssumeRolePolicyDocument?.Statement?.some(
+                (statement: any) => statement.Principal?.Service === "events.amazonaws.com",
+            )
+        );
+
+        expect(eventBridgeRoleEntry).toBeDefined();
+
+        const [eventBridgeRoleLogicalId] = eventBridgeRoleEntry!;
+        const policies = template.findResources("AWS::IAM::Policy");
+        const invokePolicy = Object.values(policies).find((policy: any) =>
+            policy.Properties?.Roles?.some((roleRef: any) => roleRef.Ref === eventBridgeRoleLogicalId)
+        );
+
+        expect(invokePolicy).toBeDefined();
+        expect(invokePolicy).toMatchObject({
+            Properties: {
+                PolicyDocument: {
+                    Statement: expect.arrayContaining([
+                        expect.objectContaining({
+                            Action: "execute-api:Invoke",
+                            Resource: {
+                                "Fn::Join": expect.any(Array),
+                            },
+                        }),
+                    ]),
+                },
+            },
+        });
+
+        const invokeStatement = (invokePolicy as any).Properties.PolicyDocument.Statement.find(
+            (statement: any) => statement.Action === "execute-api:Invoke"
+        );
+        expect(JSON.stringify(invokeStatement.Resource)).toContain("/POST/package-event");
+    });
+
     test("creates CloudWatch log groups", () => {
         template.resourceCountIs("AWS::Logs::LogGroup", 2); // API Gateway, container logs (no WAF log group without allowlist)
     });
@@ -73,6 +139,15 @@ describe("BenchlingWebhookStack", () => {
                 ]),
             }),
         });
+
+        const restApiTemplate = template.findResources("AWS::ApiGateway::RestApi");
+        const restApi = Object.values(restApiTemplate)[0] as any;
+        const publicStatement = restApi.Properties.Policy.Statement.find(
+            (statement: any) => statement.Principal?.AWS === "*"
+        );
+
+        expect(publicStatement).toBeDefined();
+        expect(publicStatement.NotResource).toBe("execute-api:/*/POST/package-event");
     });
 
     test("does NOT create WAF (v1.0.0 uses resource policy instead)", () => {
@@ -105,22 +180,39 @@ describe("BenchlingWebhookStack", () => {
         const restApi = Object.values(restApiTemplate)[0];
         const statements = restApi.Properties.Policy.Statement;
 
-        expect(statements).toHaveLength(1);
+        expect(statements).toHaveLength(2);
 
-        // Verify single statement has IP conditions and applies to all endpoints
+        // Verify public statement excludes the EventBridge-only endpoint
         const statement = statements[0];
         expect(statement).toBeDefined();
-        expect(statement.Resource).toBe("execute-api:/*");
+        expect(statement.NotResource).toBe("execute-api:/*/POST/package-event");
         expect(statement.Condition).toBeDefined();
         expect(statement.Condition.IpAddress["aws:SourceIp"]).toEqual([
             "192.168.1.0/24",
             "10.0.0.0/8",
         ]);
+        expect(statements[1].Resource).toBe("execute-api:/*/POST/package-event");
 
         // Verify NO WAF resources are created (replaced by resource policy)
         ipFilterTemplate.resourceCountIs("AWS::WAFv2::WebACL", 0);
         ipFilterTemplate.resourceCountIs("AWS::WAFv2::IPSet", 0);
         ipFilterTemplate.resourceCountIs("AWS::WAFv2::WebACLAssociation", 0);
+    });
+
+    test("does not publicly expose package-event when no IP allowlist is configured", () => {
+        const restApiTemplate = template.findResources("AWS::ApiGateway::RestApi");
+        const restApi = Object.values(restApiTemplate)[0] as any;
+        const statements = restApi.Properties.Policy.Statement;
+
+        const publicStatement = statements.find((statement: any) => statement.Principal?.AWS === "*");
+        const eventBridgeStatement = statements.find(
+            (statement: any) => statement.Resource === "execute-api:/*/POST/package-event"
+        );
+
+        expect(publicStatement).toBeDefined();
+        expect(publicStatement.NotResource).toBe("execute-api:/*/POST/package-event");
+        expect(eventBridgeStatement).toBeDefined();
+        expect(eventBridgeStatement.Principal.AWS).toHaveProperty("Fn::GetAtt");
     });
 
     test("creates VPC Link and Network Load Balancer", () => {

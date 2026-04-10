@@ -186,7 +186,7 @@ class TestFlexibleRoutes:
 
     @pytest.mark.parametrize("stage", ["prod", "dev"])
     def test_canvas_webhook_with_stage_prefix(self, client, mock_entry_packager, stage):
-        """Test /canvas webhook with stage prefix."""
+        """Test /canvas webhook with stage prefix returns 202 and updates via SDK."""
         payload = {
             "channel": "events",
             "message": {"type": "v2.canvas.initialized", "resourceId": "etr_123456"},
@@ -197,16 +197,21 @@ class TestFlexibleRoutes:
         with patch("src.app.CanvasManager") as mock_canvas_manager:
             mock_manager_instance = Mock()
             mock_canvas_manager.return_value = mock_manager_instance
+            mock_manager_instance.update_canvas_pending.return_value = {"success": True}
 
             response = client.post(f"/{stage}/canvas", json=payload)
 
             assert response.status_code == 202
             data = response.json()
             assert data["status"] == "ACCEPTED"
-            mock_manager_instance.handle_async.assert_called_once()
+
+            import time
+
+            time.sleep(0.1)
+            mock_manager_instance.update_canvas_pending.assert_called_once()
 
     def test_canvas_webhook_direct_path(self, client, mock_entry_packager):
-        """Test /canvas webhook without stage prefix."""
+        """Test /canvas webhook without stage prefix returns 202."""
         payload = {
             "channel": "events",
             "message": {"type": "v2.canvas.initialized", "resourceId": "etr_123456"},
@@ -217,6 +222,7 @@ class TestFlexibleRoutes:
         with patch("src.app.CanvasManager") as mock_canvas_manager:
             mock_manager_instance = Mock()
             mock_canvas_manager.return_value = mock_manager_instance
+            mock_manager_instance.update_canvas_pending.return_value = {"success": True}
 
             response = client.post("/canvas", json=payload)
 

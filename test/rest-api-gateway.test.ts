@@ -163,15 +163,15 @@ describe("RestApiGateway", () => {
 
         const template = Template.fromStack(stack);
 
-        // REST API should have a policy allowing all endpoints (no IP filtering)
+        // REST API should have a policy allowing public endpoints while
+        // excluding the EventBridge-only package-event endpoint.
         template.hasResourceProperties("AWS::ApiGateway::RestApi", {
             Policy: Match.objectLike({
                 Statement: Match.arrayWith([
-                    // Single statement allowing all IPs
                     Match.objectLike({
                         Effect: "Allow",
                         Action: "execute-api:Invoke",
-                        Resource: "execute-api:/*",
+                        NotResource: "execute-api:/*/POST/package-event",
                     }),
                 ]),
             }),
@@ -184,6 +184,7 @@ describe("RestApiGateway", () => {
 
         expect(statements).toHaveLength(1);
         expect(statements[0].Condition).toBeUndefined();
+        expect(statements[0].NotResource).toBe("execute-api:/*/POST/package-event");
     });
 
     test("creates resource policy with IP filtering when webhookAllowList is configured", () => {
@@ -213,12 +214,12 @@ describe("RestApiGateway", () => {
 
         expect(statements).toHaveLength(1);
 
-        // Single statement: ALL endpoints WITH IP conditions
+        // Single statement: all public endpoints except package-event, with IP conditions
         const statement = statements[0];
 
         expect(statement.Effect).toBe("Allow");
         expect(statement.Action).toBe("execute-api:Invoke");
-        expect(statement.Resource).toBe("execute-api:/*"); // Single wildcard resource
+        expect(statement.NotResource).toBe("execute-api:/*/POST/package-event");
         expect(statement.Condition).toBeDefined();
         expect(statement.Condition.IpAddress).toBeDefined();
         expect(statement.Condition.IpAddress["aws:SourceIp"]).toEqual([
@@ -250,11 +251,11 @@ describe("RestApiGateway", () => {
         const restApi = Object.values(restApiTemplate)[0];
         const statements = restApi.Properties.Policy.Statement;
 
-        // Single statement covers ALL endpoints
+        // Single statement covers all public endpoints except package-event
         expect(statements).toHaveLength(1);
 
         const statement = statements[0];
-        expect(statement.Resource).toBe("execute-api:/*");
+        expect(statement.NotResource).toBe("execute-api:/*/POST/package-event");
         expect(statement.Condition).toBeDefined();
         expect(statement.Condition.IpAddress).toBeDefined();
         expect(statement.Condition.IpAddress["aws:SourceIp"]).toEqual([
