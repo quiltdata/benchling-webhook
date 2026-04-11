@@ -6,156 +6,27 @@
 - Always fix IDE diagnostics after edits
 - Docker images ALWAYS pull from centralized ECR: `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest`
 
-## Testing (Essential Guide)
+## Critical: Use Project npm Scripts
 
-**Full details:** [spec/a08-test-scenarios.md](spec/a08-test-scenarios.md)
+**Version bumps:** Use `npm run version -- minor|patch|major`, NOT `npm version`. The project script syncs `package.json`, `pyproject.toml`, `app-manifest.yaml`, and `uv.lock` in one commit.
 
-### Quick Reference: When to Run What
+**General rule:** Always check `npm run` before assuming a built-in npm command. The project script is always preferred.
 
-```bash
-# PRE-COMMIT (always run before committing)
-npm test                     # ~20s: TS + Python unit tests + lint + typecheck
-
-# BEFORE MERGING PR
-npm run test:integration     # ~2m: Full TypeScript integration tests
-npm run test:local           # ~45s: Local Docker dev build + webhook tests
-
-# AFTER MAKING DOCKER CHANGES (requires local build only)
-npm run test:local:prod      # ~60s: Test production Docker build locally
-
-# AFTER CI BUILDS IMAGE (requires git tag + CI completion)
-npm run test:dev             # ~5m: Deploy to dev + test (auto-deploys if needed)
-npm run test:prod            # ~10s: Health check prod deployment (non-invasive)
-cd docker && make test-ecr   # ~90s: Validate published ECR image
-```
-
-### Critical Dependencies
-
-**Docker Images:** All deployments pull from centralized ECR `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest`
-
-**CI Build Required For:**
-
-- `npm run test:dev` - Requires Docker image in ECR
-- `npm run test:prod` - Requires Docker image in ECR
-- `make test-ecr` - Requires Docker image in ECR
-
-**CI Build Trigger:**
+## Testing: When to Run What
 
 ```bash
-npm run version:tag:dev      # Creates git tag → triggers CI → builds/pushes Docker image
+npm test                     # PRE-COMMIT (always)
+npm run test:integration     # BEFORE MERGING PR
+npm run test:local           # AFTER DOCKER CHANGES
+npm run test:local:prod      # AFTER DOCKER PROD CHANGES
+npm run test:dev             # AFTER CI BUILDS IMAGE (needs git tag first)
 ```
 
-### Test Categories Summary
+CI build trigger: `npm run version:tag:dev`
 
-| Test | Duration | CI Dep | When |
-|------|----------|--------|------|
-| `npm test` | ~20s | ❌ | Pre-commit (always) |
-| `npm run test:integration` | ~2m | ❌ | Before merging PR |
-| `npm run test:local` | ~45s | ❌ | Docker dev changes |
-| `npm run test:local:prod` | ~60s | ❌ | Docker prod changes |
-| `npm run test:dev` | ~5m | ✅ | After CI builds image |
-| `npm run test:prod` | ~10s | ✅ | Validate prod deployment |
+## Gotchas
 
-**Legend:** CI Dep = Requires CI to have built Docker image
-
-### Common Test Issues
-
-| Error | Solution |
-|-------|----------|
-| `No profile found` | `npm run setup` |
-| `Image not found in ECR` | `npm run version:tag:dev` (triggers CI build) |
-| `ECR authentication failed` | `aws sso login` |
-| `Timeout waiting for health` | Check logs: `docker logs {container}` |
-
-## Key Repository Commands
-
-### Development Workflow
-
-```bash
-npm run setup                # Interactive config wizard (one-time)
-npm test                     # Fast pre-commit tests
-npm run test:local           # Test local Docker build
-```
-
-### Release Workflow (Maintainers)
-
-```bash
-npm run version:tag          # Create git tag → triggers CI → builds Docker image
-npm run deploy:prod          # Deploy to production
-```
-
-### Key Files
-
-- [lib/types/stack-config.ts](lib/types/stack-config.ts) - Minimal CDK stack configuration interface
-- [lib/utils/config-transform.ts](lib/utils/config-transform.ts) - ProfileConfig → StackConfig transformation
-- [lib/benchling-webhook-stack.ts](lib/benchling-webhook-stack.ts) - Main CDK stack
-- [bin/commands/deploy.ts](bin/commands/deploy.ts) - Deployment orchestration
-- [docker/](docker/) - FastAPI webhook processor (Python)
-
-## High-Level Architecture
-
-**Flow:** API Gateway (REST v1) → VPC Link → Network Load Balancer → ECS Fargate (FastAPI) → S3 + SQS
-
-**Configuration:** Profile-based XDG config in `~/.config/benchling-webhook/{profile}/config.json`
-
-**Key Concepts:**
-
-- **Profile** - Named config set (e.g., `default`, `sales`, `dev`)
-- **Stage** - API Gateway deployment target (e.g., `dev`, `prod`)
-- **StackConfig** - Minimal interface for CDK stack (v0.10.0+, decoupled from ProfileConfig)
-
-**Security:**
-
-- Primary: HMAC signature verification in FastAPI
-- Optional: Resource Policy IP filtering (free, when `webhookAllowList` configured)
-
-## Configuration v0.10.0+
-
-**Breaking Change:** Removed unused Iceberg fields (`quilt.athenaUserPolicy`, `quilt.athenaResultsBucketPolicy`, `quilt.athenaResultsBucket`)
-
-**New Architecture:**
-
-- CDK stack uses minimal `StackConfig` interface (only required fields)
-- `config-transform.ts` converts ProfileConfig → StackConfig
-- Eliminated subprocess env var round-trip
-- Deployment flow: deploy.ts passes config via stdin to CDK
-
-## Common Patterns
-
-### Creating a PR
-
-```bash
-npm run test                 # Ensure tests pass
-git commit -m "type(scope): description"
-gh pr create                 # Creates PR with conventional format
-```
-
-### Checking Logs
-
-```bash
-npm run logs -- --profile default
-# Checks both API Gateway and ECS container logs
-```
-
-### Multi-Stack Deployments
-
-```bash
-npm run deploy:prod -- --profile sales --yes
-# Creates: BenchlingWebhookStack-sales
-```
-
-## Troubleshooting
-
-| Issue                  | Solution                                                   |
-| ---------------------- | ---------------------------------------------------------- |
-| Missing profile        | Run `npm run setup`                                        |
-| 403 Forbidden (HMAC)   | Check ECS logs for signature errors                        |
-| 403 Forbidden (IP)     | Add IP to `webhookAllowList` or disable filtering          |
-| Stack name conflict    | Use unique `stackName` per profile in config.json          |
-
-## Documentation
-
-- [CLAUDE.md](CLAUDE.md) - Comprehensive project documentation
-- [CHANGELOG.md](CHANGELOG.md) - Release notes and migration guides
-- [spec/](spec/) - Architecture specs and implementation details
-- [docker/README.md](docker/README.md) - FastAPI application documentation
+- `npm run test:dev`, `test:prod`, `make test-ecr` all require CI to have built the Docker image first
+- Integrated mode (`integratedStack: true`) blocks `deploy` — the Quilt stack handles deployment
+- The prefix (`pkg_prefix`) is a runtime secret — never bake it into CloudFormation/IaC
+- Pass args to npm scripts with `--`: `npm run deploy:prod -- --profile sales --yes`
