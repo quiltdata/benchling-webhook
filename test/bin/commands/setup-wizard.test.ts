@@ -214,11 +214,71 @@ describe("runSetupWizard", () => {
         await expect(runSetupWizard({
             yes: true,
             configStorage: storage,
-        })).rejects.toThrow("Enable it through your infrastructure-as-code workflow first");
+        })).rejects.toThrow("must be done through your infrastructure-as-code workflow");
 
         expect(updateStackParameter).not.toHaveBeenCalled();
         expect(syncSecretsToAWS).not.toHaveBeenCalled();
         expect(storage.profileExists("default")).toBe(false);
+    });
+
+    it("stops with IaC guidance when disable-integration is selected without --force", async () => {
+        const storage = new XDGTest();
+
+        (runUnifiedFlowDecision as jest.Mock).mockResolvedValue({
+            action: "disable-integration",
+            flow: "integration-enabled",
+            benchlingSecretArn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:benchling",
+            secretDetails: null,
+            hasStandaloneDeployment: false,
+        });
+
+        (runStackQuery as jest.Mock).mockResolvedValue({
+            stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt/abc",
+            catalog: "catalog.quiltdata.com",
+            database: "quilt_db",
+            queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
+            region: "us-east-1",
+            account: "123456789012",
+            benchlingIntegrationEnabled: true,
+            stackQuerySucceeded: true,
+        });
+
+        await expect(runSetupWizard({
+            yes: true,
+            configStorage: storage,
+        })).rejects.toThrow("must be done through your infrastructure-as-code workflow");
+
+        expect(updateStackParameter).not.toHaveBeenCalled();
+    });
+
+    it("stops with IaC guidance when switch-standalone is selected without --force", async () => {
+        const storage = new XDGTest();
+
+        (runUnifiedFlowDecision as jest.Mock).mockResolvedValue({
+            action: "switch-standalone",
+            flow: "integration-enabled",
+            benchlingSecretArn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:benchling",
+            secretDetails: null,
+            hasStandaloneDeployment: false,
+        });
+
+        (runStackQuery as jest.Mock).mockResolvedValue({
+            stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/quilt/abc",
+            catalog: "catalog.quiltdata.com",
+            database: "quilt_db",
+            queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
+            region: "us-east-1",
+            account: "123456789012",
+            benchlingIntegrationEnabled: true,
+            stackQuerySucceeded: true,
+        });
+
+        await expect(runSetupWizard({
+            yes: true,
+            configStorage: storage,
+        })).rejects.toThrow("must be done through your infrastructure-as-code workflow");
+
+        expect(updateStackParameter).not.toHaveBeenCalled();
     });
 
     it("updates the stack when --force is provided", async () => {

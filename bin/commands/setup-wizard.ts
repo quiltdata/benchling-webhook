@@ -359,8 +359,8 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             : `npm run setup -- --profile ${profile} --force`;
 
         throw new Error(
-            "Integrated Benchling Webhook is disabled in the Quilt stack.\n\n" +
-            "Enable it through your infrastructure-as-code workflow first so CloudFormation/Terraform stays authoritative.\n" +
+            "Enabling or disabling the integrated Benchling Webhook must be done through your infrastructure-as-code workflow\n" +
+            "so CloudFormation/Terraform stays authoritative.\n\n" +
             "Ask your IT/platform team to update the Quilt stack configuration and re-apply it.\n\n" +
             "If you must bypass IaC temporarily, rerun setup with --force:\n" +
             `  ${setupCommand}`,
@@ -456,6 +456,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         break;
     }
     case "disable-integration": {
+        if (!force) {
+            throwIntegrationIacGuidance();
+        }
+
         // User already confirmed in Phase 5 - proceed with disabling
         console.log(chalk.dim("Disabling integrated webhook..."));
 
@@ -506,6 +510,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
                 config: existingConfig || (await requireConfig(true)),
                 deploymentHandled: true,
             };
+        }
+
+        if (!force) {
+            throwIntegrationIacGuidance();
         }
 
         const updateResult = await updateStackParameter({
