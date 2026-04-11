@@ -259,6 +259,19 @@ class TestFastAPIApp:
         assert response.status_code == status_code
         assert error_fragment in response.json()["error"]
 
+    def test_package_event_endpoint_ignores_outside_prefix(self, client):
+        """Test package-event endpoint ignores events whose handle doesn't match pkg_prefix."""
+        event_payload = {
+            "detail": {
+                "bucket": "test-bucket",
+                "handle": "other-prefix/EXP0001",
+            }
+        }
+        response = client.post("/package-event", json=event_payload)
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "IGNORED"
+
     def test_package_event_endpoint_skips_stale_revisions(self, client):
         """Test package-event endpoint skips stale package revisions."""
         event_payload = {
