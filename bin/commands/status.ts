@@ -1108,7 +1108,7 @@ function displayStatusResult(
         if (mode === "integrated" && !result.benchlingIntegrationEnabled) {
             console.log(chalk.bold("Action Required:"));
             console.log(chalk.yellow("  BenchlingIntegration is Disabled"));
-            console.log(chalk.dim("  Enable it via CloudFormation console or re-run setup\n"));
+            console.log(chalk.dim("  Enable it via CloudFormation/Terraform, or rerun setup with --force only as an emergency override\n"));
         }
     } else if (result.stackStatus?.includes("FAILED") || result.stackStatus?.includes("ROLLBACK")) {
         console.log(chalk.bold("Status:"));

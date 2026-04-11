@@ -543,7 +543,7 @@ describe("statusCommand", () => {
                 expect.stringContaining("BenchlingIntegration is Disabled")
             );
             expect(mockConsoleLog).toHaveBeenCalledWith(
-                expect.stringContaining("Enable it via CloudFormation console or re-run setup")
+                expect.stringContaining("Enable it via CloudFormation/Terraform")
             );
         });
 
