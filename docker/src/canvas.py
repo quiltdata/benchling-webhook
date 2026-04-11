@@ -183,17 +183,13 @@ class CanvasManager:
         """
         return self.package.upload_url
 
-    def _make_markdown_content(self, pending: bool = False) -> str:
+    def _make_markdown_content(self) -> str:
         """Generate markdown content for the Canvas.
 
         Composes the full canvas content in the following order:
         1. Primary package information
-        2. Notice and status
-        3. Linked packages (if any)
-        4. Error notifications (if any)
-
-        Args:
-            pending: If True, render links as plain text (package not yet created)
+        2. Linked packages (if any)
+        3. Error notifications (if any)
 
         Returns:
             Formatted markdown string with package links
@@ -204,7 +200,6 @@ class CanvasManager:
             display_id=self.entry.display_id,
             catalog_url=self.catalog_url,
             sync_url=self.sync_uri(),
-            pending=pending,
         )
 
         # Linked packages
@@ -220,7 +215,7 @@ class CanvasManager:
             # Store linked packages as instance variable
             self._linked_packages = linked_packages
 
-            content += fmt.format_linked_packages(linked_packages, pending=pending)
+            content += fmt.format_linked_packages(linked_packages)
 
         except Exception as e:
             error_msg = f"Failed to search for linked packages: {str(e)}"
@@ -240,23 +235,22 @@ class CanvasManager:
 
         return content
 
-    def _make_blocks(self, pending: bool = False, updated_at: str | None = None) -> list:
+    def _make_blocks(self, updated_at: str | None = None) -> list:
         """Create UI blocks for the Canvas.
 
         Args:
-            pending: If True, disable buttons and links, show "Updating..." footer
-            updated_at: ISO timestamp of last package update (shown when not pending)
+            updated_at: ISO timestamp of last package update
         """
-        markdown_content = self._make_markdown_content(pending=pending)
+        markdown_content = self._make_markdown_content()
         markdown_block = blocks.create_markdown_block(markdown_content, "md1")
 
         result = [
-            *blocks.create_main_navigation_buttons(self.entry_id, enabled=not pending),
+            *blocks.create_main_navigation_buttons(self.entry_id),
             markdown_block,
         ]
 
-        # Add linked package browse buttons if any exist (disabled when pending)
-        if self._linked_packages and not pending:
+        # Add linked package browse buttons if any exist
+        if self._linked_packages:
             result.extend(blocks.create_linked_package_browse_buttons(self.entry_id, self._linked_packages))
 
         # Add footer as markdown block
@@ -264,21 +258,11 @@ class CanvasManager:
             version=__version__,
             quilt_host=self.config.quilt_catalog,
             bucket=self.config.s3_bucket_name,
-            pending=pending,
             updated_at=updated_at,
         )
         result.append(blocks.create_markdown_block(footer_markdown, "md-footer"))
 
         return result
-
-    def update_canvas_pending(self) -> dict[str, Any]:
-        """Push pending canvas with full content but disabled links/buttons.
-
-        Shows the same information as the final canvas so the user can see
-        where the package will be. Only the status line and button state differ.
-        """
-        blocks = self._make_blocks(pending=True)
-        return self.update_canvas_with_blocks(blocks)
 
     def update_canvas(self, updated_at: str | None = None) -> dict[str, Any]:
         """Update existing Canvas using Benchling SDK.

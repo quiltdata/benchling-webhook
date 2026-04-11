@@ -23,16 +23,9 @@ class TestCanvasFooterBlocks:
         footer = format_canvas_footer(version="0.8.4", quilt_host="test.com", bucket="test-bucket")
 
         assert isinstance(footer, str)
-        assert "Up to date" in footer
+        assert "Pending update" in footer
         assert "test-bucket@test.com" in footer
         assert "Rev 0.8.4" in footer
-
-    def test_format_canvas_footer_pending(self):
-        """Verify pending state shows 'Updating...'."""
-        footer = format_canvas_footer(version="0.8.4", quilt_host="test.com", bucket="test-bucket", pending=True)
-
-        assert "Updating..." in footer
-        assert "Up to date" not in footer
 
     def test_format_canvas_footer_with_timestamp(self):
         """Verify updated_at timestamp is shown."""
@@ -80,7 +73,7 @@ class TestCanvasFooterBlocks:
 
         # Verify footer content
         footer_content = last_block.value
-        assert "Up to date" in footer_content
+        assert "Pending update" in footer_content
         assert mock_config.s3_bucket_name in footer_content
         assert mock_config.quilt_catalog in footer_content
 
@@ -118,7 +111,7 @@ class TestCanvasFooterBlocks:
         footer_block_dict = blocks_dict[-1]
         assert footer_block_dict["type"] == "MARKDOWN"
         assert footer_block_dict["id"] == "md-footer"
-        assert "Up to date" in footer_block_dict["value"]
+        assert "Pending update" in footer_block_dict["value"]
 
     def test_blocks_to_dict_rejects_invalid_blocks(self):
         """Verify blocks_to_dict raises TypeError for invalid block types."""
