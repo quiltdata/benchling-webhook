@@ -850,6 +850,15 @@ def create_app() -> FastAPI:
                 )
                 return JSONResponse({"error": "Forbidden"}, status_code=403)
 
+            expected_prefix = f"{config.pkg_prefix}/"
+            if not package_name.startswith(expected_prefix):
+                logger.info(
+                    "Ignored package event outside prefix",
+                    package_name=package_name,
+                    expected_prefix=expected_prefix,
+                )
+                return JSONResponse({"status": "IGNORED"}, status_code=200)
+
             top_hash = detail.get("topHash")
             if top_hash is not None and not isinstance(top_hash, str):
                 raise ValueError("package event detail.topHash must be a string when present")
