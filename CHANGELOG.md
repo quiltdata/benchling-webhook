@@ -19,6 +19,8 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - Manual catalog entry in setup now accepts full Quilt catalog URLs and normalizes them to bare DNS names before validation and storage
+- Deploy now passes `PackagePrefix` to CDK so the EventBridge rule matches the actual runtime package prefix (previously hardcoded to `"benchling"`)
+- Pending canvas now shows full package content with disabled links instead of a bare "Preparing package..." placeholder
 
 ## [0.14.0] - 2026-04-08
 
