@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- EventBridge rule now matches only on `source` and `detail-type` — bucket and prefix filtering moved to the Docker runtime, where values are available from Secrets Manager. This unblocks integrated-mode stacks where the IaC layer cannot reference secret-derived values.
+
+### Removed
+
+- `PackagePrefix` CloudFormation parameter (filtering now happens at runtime in the Docker handler)
+
 ## [0.15.0] - 2026-04-10
 
 ### Changed
