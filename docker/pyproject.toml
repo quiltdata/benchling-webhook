@@ -26,7 +26,7 @@ dependencies = [
     "fastapi==0.135.3",
     "uvicorn[standard]==0.44.0",
     "gunicorn==25.3.0",
-    "boto3==1.42.87",
+    "boto3==1.42.88",
     "dataclasses-json>=0.5.2,<0.6.0",
     "python-dotenv==1.2.2",
     "structlog==25.5.0",
