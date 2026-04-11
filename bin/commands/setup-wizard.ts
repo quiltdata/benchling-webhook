@@ -64,6 +64,8 @@ export interface SetupWizardOptions {
     isPartOfInstall?: boolean;
     /** Config storage implementation (for testing) */
     configStorage?: XDGBase;
+    /** Allow direct stack mutation instead of requiring IaC-managed changes */
+    force?: boolean;
 
     // CLI argument overrides
     catalogUrl?: string;
@@ -174,6 +176,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         awsRegion,
         setupOnly = false,
         configStorage,
+        force = false,
     } = options;
 
     const xdg = configStorage || new XDGConfig();
@@ -350,6 +353,20 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         console.log(chalk.green(`✓ Configuration saved to: ~/.config/benchling-webhook/${profile}/config.json\n`));
     };
 
+    const throwIntegrationIacGuidance = (): never => {
+        const setupCommand = profile === "default"
+            ? "npm run setup -- --force"
+            : `npm run setup -- --profile ${profile} --force`;
+
+        throw new Error(
+            "Enabling or disabling the integrated Benchling Webhook must be done through your infrastructure-as-code workflow\n" +
+            "so CloudFormation/Terraform stays authoritative.\n\n" +
+            "Ask your IT/platform team to update the Quilt stack configuration and re-apply it.\n\n" +
+            "If you must bypass IaC temporarily, rerun setup with --force:\n" +
+            `  ${setupCommand}`,
+        );
+    };
+
     const requireConfig = async (integratedStack: boolean): Promise<ProfileConfig> => {
         try {
             return buildProfileConfigFromExisting({
@@ -439,6 +456,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         break;
     }
     case "disable-integration": {
+        if (!force) {
+            throwIntegrationIacGuidance();
+        }
+
         // User already confirmed in Phase 5 - proceed with disabling
         console.log(chalk.dim("Disabling integrated webhook..."));
 
@@ -489,6 +510,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
                 config: existingConfig || (await requireConfig(true)),
                 deploymentHandled: true,
             };
+        }
+
+        if (!force) {
+            throwIntegrationIacGuidance();
         }
 
         const updateResult = await updateStackParameter({
@@ -548,6 +573,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
                 config: existingConfig || (await requireConfig(true)),
                 deploymentHandled: true,
             };
+        }
+
+        if (!force) {
+            throwIntegrationIacGuidance();
         }
 
         const updateResult = await updateStackParameter({
