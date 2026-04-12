@@ -44,18 +44,10 @@ describe("BenchlingWebhookStack", () => {
     });
 
     test("creates EventBridge package revision rule and API target", () => {
-        template.hasParameter("PackagePrefix", {
-            Default: "benchling",
-        });
-
         template.hasResourceProperties("AWS::Events::Rule", {
             EventPattern: {
                 source: ["com.quiltdata"],
                 "detail-type": ["package-revision"],
-                detail: {
-                    bucket: [{ Ref: "PackageBucket" }],
-                    handle: [{ prefix: { "Fn::Join": ["", [{ Ref: "PackagePrefix" }, "/"]] } }],
-                },
             },
             Targets: Match.arrayWith([
                 Match.objectLike({

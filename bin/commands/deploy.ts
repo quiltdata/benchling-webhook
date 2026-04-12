@@ -761,7 +761,6 @@ export async function deploy(
             `BenchlingSecretARN=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
             `PackageBucket=${config.packages.bucket}`,
-            `PackagePrefix=${config.packages.prefix || "benchling"}`,
             `QuiltDatabase=${config.quilt.database || ""}`,  // IAM permissions only (same value as AthenaUserDatabase)
             `LogLevel=${config.logging?.level || "INFO"}`,
         ];

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- EventBridge rule now matches only on `source` and `detail-type` — bucket and prefix filtering moved to the Docker runtime, where values are available from Secrets Manager. This unblocks integrated-mode stacks where the IaC layer cannot reference secret-derived values.
+- Canvas footer now shows "Pending update" (honest) instead of "Up to date" (a lie) when no confirmed update timestamp exists
+
+### Removed
+
+- `PackagePrefix` CloudFormation parameter (filtering now happens at runtime in the Docker handler)
+- Pending canvas state — the intermediate "Updating..." canvas with disabled buttons and stripped links was removed entirely; the canvas now stays unchanged until the EventBridge package event confirms the update, then renders the final state with a real timestamp
+
 ## [0.15.0] - 2026-04-10
 
 ### Changed
