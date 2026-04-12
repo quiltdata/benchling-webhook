@@ -26,19 +26,23 @@ not for this opt-out mechanism.
 
 Both fixes are needed — once LF enforcement is active, every Glue path hits LF.
 
-1. **CFN-managed tables** (Iceberg, NamedPackages, AuditTrail): add explicit
-   per-table IAM_ALLOWED_PRINCIPALS grants for each.
+1. **CFN-managed tables** (NamedPackages, AuditTrail): already have explicit
+   per-table IAM_ALLOWED_PRINCIPALS grants in _TABLE_GRANTS. No change needed.
 
-2. **Dynamically-created tables** (UserAthenaDatabase views): replace the
-   IAM_ALLOWED_PRINCIPALS TableWildcard grants with per-role TableWildcard
-   grants. TableWildcard itself is fine — the restriction is only on
-   combining it with IAM_ALLOWED_PRINCIPALS.
+2. **Dynamically-created tables**: replace the IAM_ALLOWED_PRINCIPALS
+   TableWildcard grants with per-role TableWildcard grants. TableWildcard
+   itself is fine — the restriction is only on combining it with
+   IAM_ALLOWED_PRINCIPALS.
 
-   Roles that need UserAthenaDatabase TableWildcard grants:
-   - **AmazonECSTaskExecutionRole** (Registry) — creates/updates/deletes tables
+   **UserAthenaDatabase** (per-bucket views, created by Registry at runtime):
+   - **AmazonECSTaskExecutionRole** — creates/updates/deletes tables
    - **BenchlingTaskRole** — queries tables via Athena
    - **IcebergLambdaRole** — queries tables via Athena
    - **TabulatorOpenQueryRole** — queries tables via Athena
    - **T4BucketReadRole** — queries tables (user-facing)
    - **T4BucketWriteRole** — queries tables (user-facing)
    - **ManagedUserRole** — queries tables (user-facing)
+
+   **IcebergDatabase** (tables created by Registry at runtime):
+   - **AmazonECSTaskExecutionRole** — creates/manages tables
+   - **IcebergLambdaRole** — reads/updates tables
