@@ -193,7 +193,7 @@ jobs:
           npm run deploy:notes -- "$VERSION" "$IMAGE_URI" "$IS_PRERELEASE" "$PACKAGE_NAME" > /tmp/release_notes.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: Release ${{ needs.docker.outputs.tag }}
           body_path: /tmp/release_notes.md
