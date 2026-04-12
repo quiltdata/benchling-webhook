@@ -129,12 +129,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             description: "S3 bucket name for Quilt packages (resolved from Quilt stack outputs at runtime)",
             default: "",  // StackConfig doesn't include package bucket - only passed via env vars
         });
-        const packagePrefixParam = new cdk.CfnParameter(this, "PackagePrefix", {
-            type: "String",
-            description: "Package handle prefix to match Quilt package revision events",
-            default: "benchling",
-        });
-
         const quiltDatabaseParam = new cdk.CfnParameter(this, "QuiltDatabase", {
             type: "String",
             description: "Glue database name for Quilt packages (resolved from Quilt stack outputs at runtime)",
@@ -151,7 +145,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const logLevelValue = logLevelParam.valueAsString;
         const imageTagValue = imageTagParam.valueAsString;
         const packageBucketValue = packageBucketParam.valueAsString;
-        const packagePrefixValue = packagePrefixParam.valueAsString;
         const quiltDatabaseValue = quiltDatabaseParam.valueAsString;
 
         const createAthenaWorkgroupCondition = new cdk.CfnCondition(this, "CreateAthenaWorkgroup", {
@@ -340,10 +333,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             eventPattern: {
                 source: ["com.quiltdata"],
                 detailType: ["package-revision"],
-                detail: {
-                    bucket: [packageBucketValue],
-                    handle: [{ prefix: `${packagePrefixValue}/` }],
-                },
             },
         });
 

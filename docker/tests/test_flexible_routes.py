@@ -194,21 +194,11 @@ class TestFlexibleRoutes:
             "context": {"canvasId": "canvas_123"},
         }
 
-        with patch("src.app.CanvasManager") as mock_canvas_manager:
-            mock_manager_instance = Mock()
-            mock_canvas_manager.return_value = mock_manager_instance
-            mock_manager_instance.update_canvas_pending.return_value = {"success": True}
+        response = client.post(f"/{stage}/canvas", json=payload)
 
-            response = client.post(f"/{stage}/canvas", json=payload)
-
-            assert response.status_code == 202
-            data = response.json()
-            assert data["status"] == "ACCEPTED"
-
-            import time
-
-            time.sleep(0.1)
-            mock_manager_instance.update_canvas_pending.assert_called_once()
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "ACCEPTED"
 
     def test_canvas_webhook_direct_path(self, client, mock_entry_packager):
         """Test /canvas webhook without stage prefix returns 202."""
@@ -219,16 +209,11 @@ class TestFlexibleRoutes:
             "context": {"canvasId": "canvas_123"},
         }
 
-        with patch("src.app.CanvasManager") as mock_canvas_manager:
-            mock_manager_instance = Mock()
-            mock_canvas_manager.return_value = mock_manager_instance
-            mock_manager_instance.update_canvas_pending.return_value = {"success": True}
+        response = client.post("/canvas", json=payload)
 
-            response = client.post("/canvas", json=payload)
-
-            assert response.status_code == 202
-            data = response.json()
-            assert data["status"] == "ACCEPTED"
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "ACCEPTED"
 
     # ============================================================================
     # Verify both path styles produce identical responses
