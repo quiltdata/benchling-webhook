@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Dependency updates — minor and patch bumps across the stack (#381)
+- `softprops/action-gh-release` GitHub Action bumped to v3 (#380)
+
 ## [0.16.0] - 2026-04-11
 
 ### Changed
