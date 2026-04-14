@@ -5,6 +5,7 @@ import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
+import * as sqs from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
 import { StackConfig } from "./types/stack-config";
 
@@ -39,6 +40,7 @@ export interface FargateServiceProps {
     // NEW: Optional IAM managed policy ARNs (from Quilt stack discovery)
     readonly bucketWritePolicyArn?: string;
     readonly athenaUserPolicyArn?: string;
+    readonly packageEventQueue?: sqs.IQueue;
 
     // Runtime-configurable parameters (from CloudFormation)
     readonly benchlingSecret: string;
@@ -299,6 +301,13 @@ export class FargateService extends Construct {
             LOG_LEVEL: props.logLevel || "INFO",  // StackConfig doesn't include logging level - use parameter default
         };
 
+        if (props.packageEventQueue) {
+            environmentVars.PACKAGE_EVENT_QUEUE_URL = props.packageEventQueue.queueUrl;
+            environmentVars.PACKAGE_EVENT_CONCURRENCY = "5";
+            environmentVars.PACKAGE_EVENT_GRACEFUL_TIMEOUT = "30";
+            props.packageEventQueue.grantConsumeMessages(taskRole);
+        }
+
         // Add container with configured environment
         const container = taskDefinition.addContainer("BenchlingWebhookContainer", {
             image: ecs.ContainerImage.fromEcrRepository(
@@ -318,6 +327,23 @@ export class FargateService extends Construct {
                 startPeriod: cdk.Duration.seconds(60),
             },
         });
+
+        if (props.packageEventQueue) {
+            taskDefinition.addContainer("BenchlingPackageEventConsumer", {
+                image: ecs.ContainerImage.fromEcrRepository(
+                    props.ecrRepository,
+                    props.imageTag || "latest",
+                ),
+                command: ["python", "-m", "src.sqs_consumer"],
+                essential: true,
+                stopTimeout: cdk.Duration.seconds(30),
+                logging: ecs.LogDriver.awsLogs({
+                    streamPrefix: "benchling-sqs-consumer",
+                    logGroup: this.logGroup,
+                }),
+                environment: environmentVars,
+            });
+        }
 
         // Map container port
         container.addPortMappings({

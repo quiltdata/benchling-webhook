@@ -9,7 +9,7 @@ All notable changes to this project will be documented in this file.
 
 - Dependency updates — minor and patch bumps across the stack (#381)
 - `softprops/action-gh-release` GitHub Action bumped to v3 (#380)
-- A11 async-SQS design now keeps EventBridge matching at `source` + `detail-type` only, requires the consumer sidecar to be `essential: true`, and documents a `300s` visibility timeout floor so the rollout plan does not reintroduce the integrated-stack secret/IaC breakage or duplicate slow refreshes
+- Package revision refreshes now run through EventBridge → SQS → ECS sidecar consumer in the standalone stack, with a shared `package_event` refresh module, `300s` queue visibility timeout, and no public `/package-event` API route
 
 ## [0.16.0] - 2026-04-11
 

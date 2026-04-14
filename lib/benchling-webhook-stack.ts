@@ -4,7 +4,7 @@ import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as athena from "aws-cdk-lib/aws-athena";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
-import * as iam from "aws-cdk-lib/aws-iam";
+import * as sqs from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
 import { FargateService } from "./fargate-service";
 import { RestApiGateway } from "./rest-api-gateway";
@@ -271,6 +271,18 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const isDevVersion = imageTagValue.match(/^\d+\.\d+\.\d+-\d{8}T\d{6}Z$/);
         const stackVersion = isDevVersion ? imageTagValue : packageJson.version;
 
+        const packageEventDlq = new sqs.Queue(this, "PackageEventDLQ", {
+            retentionPeriod: cdk.Duration.days(14),
+        });
+
+        const packageEventQueue = new sqs.Queue(this, "PackageEventQueue", {
+            visibilityTimeout: cdk.Duration.minutes(5),
+            deadLetterQueue: {
+                queue: packageEventDlq,
+                maxReceiveCount: 5,
+            },
+        });
+
         // Build Fargate Service props using new config structure
         this.fargateService = new FargateService(this, "FargateService", {
             vpc,
@@ -290,6 +302,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             // IAM managed policy ARNs for S3 and Athena access
             bucketWritePolicyArn: config.quilt.bucketWritePolicyArn,
             athenaUserPolicyArn: config.quilt.athenaUserPolicyArn,
+            packageEventQueue,
             // Legacy parameters
             benchlingSecret: benchlingSecretValue,
             packageBucket: packageBucketValue,
@@ -311,23 +324,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             stage: stage,
         });
 
-        const eventBridgeApiRole = new iam.Role(this, "EventBridgeApiInvokeRole", {
-            assumedBy: new iam.ServicePrincipal("events.amazonaws.com"),
-            description: "Allows EventBridge to invoke the package event API endpoint",
-        });
-
-        eventBridgeApiRole.addToPolicy(new iam.PolicyStatement({
-            actions: ["execute-api:Invoke"],
-            resources: [this.api.api.arnForExecuteApi("POST", "/package-event", stage)],
-        }));
-
-        this.api.api.addToResourcePolicy(new iam.PolicyStatement({
-            effect: iam.Effect.ALLOW,
-            principals: [new iam.ArnPrincipal(eventBridgeApiRole.roleArn)],
-            actions: ["execute-api:Invoke"],
-            resources: ["execute-api:/*/POST/package-event"],
-        }));
-
         const packageRevisionRule = new events.Rule(this, "PackageRevisionRule", {
             description: "Refresh Benchling canvases when Quilt publishes package revisions",
             eventPattern: {
@@ -336,13 +332,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             },
         });
 
-        packageRevisionRule.addTarget(new targets.ApiGateway(this.api.api, {
-            stage,
-            method: "POST",
-            path: "/package-event",
-            eventRole: eventBridgeApiRole,
-            postBody: events.RuleTargetInput.fromEventPath("$"),
-        }));
+        packageRevisionRule.addTarget(new targets.SqsQueue(packageEventQueue));
 
         // Store webhook endpoint for easy access (REST API v1 with stage)
         // REST API URL already includes the stage in the path (e.g., https://xxx.execute-api.region.amazonaws.com/stage/)
@@ -399,6 +389,11 @@ export class BenchlingWebhookStack extends cdk.Stack {
         new cdk.CfnOutput(this, "TargetGroupArn", {
             value: this.nlb.targetGroup.targetGroupArn,
             description: "NLB Target Group ARN for ECS tasks",
+        });
+
+        new cdk.CfnOutput(this, "PackageEventQueueUrl", {
+            value: packageEventQueue.queueUrl,
+            description: "SQS queue URL for package revision events",
         });
     }
 
