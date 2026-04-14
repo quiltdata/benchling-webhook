@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from src.package_event import RefreshOutcome, RefreshResult
-from src.sqs_consumer import PackageEventParseError, SqsConsumer, parse_package_event_message
+from src.sqs_consumer import PackageEventParseError, SqsConsumer, main, parse_package_event_message
 
 
 @pytest.fixture
@@ -137,3 +137,27 @@ async def test_consumer_deletes_filtered_messages(mock_config):
     )
 
     consumer.delete_message.assert_awaited_once_with("receipt-1")
+
+
+@pytest.mark.anyio
+async def test_main_applies_secrets_before_polling():
+    """Regression: main() must apply secrets so s3_bucket_name is set before filtering."""
+    mock_config = Mock()
+    mock_config.s3_bucket_name = ""
+    mock_config.pkg_prefix = "benchling"
+    mock_config.aws_region = "us-east-1"
+
+    mock_secrets = Mock()
+    mock_secrets.user_bucket = "quilt-bake"
+    mock_config.get_benchling_secrets.return_value = mock_secrets
+
+    with (
+        patch.dict("os.environ", {"PACKAGE_EVENT_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/test"}),
+        patch("src.sqs_consumer.get_config", return_value=mock_config),
+        patch("src.sqs_consumer.build_sqs_client"),
+        patch("src.sqs_consumer.SqsConsumer.run", new_callable=AsyncMock),
+    ):
+        await main()
+
+    mock_config.get_benchling_secrets.assert_called_once()
+    mock_config.apply_benchling_secrets.assert_called_once_with(mock_secrets)

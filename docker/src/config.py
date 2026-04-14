@@ -1,5 +1,6 @@
 import os
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from typing import Optional
 
 import boto3
@@ -8,6 +9,12 @@ from botocore.config import Config as BotocoreConfig
 
 from .secrets_manager import BenchlingSecretData, fetch_benchling_secret
 
+# Default TTL for cached secrets (seconds).
+# Secrets are refreshed after this interval, balancing rotation speed vs latency.
+# Secrets Manager calls can take 10-30s in VPC environments without a VPC endpoint,
+# so caching avoids per-request latency that exceeds the 29s API Gateway timeout.
+SECRETS_CACHE_TTL_SECONDS = 60
+
 logger = structlog.get_logger(__name__)
 
 
@@ -15,16 +22,17 @@ logger = structlog.get_logger(__name__)
 class Config:
     """Application configuration - hybrid approach with on-demand secret fetching.
 
-    v1.2.0+: Secrets fetched on-demand per request (no caching)
+    v1.2.0+: Secrets fetched on-demand with TTL cache (default 60s)
 
     Quilt/AWS configuration comes from environment variables (set by XDG Launch or CDK):
         - QUILT_WEB_HOST, ATHENA_USER_DATABASE, PACKAGER_SQS_URL, etc.
         - QUILT_WRITE_ROLE_ARN (optional, for cross-account access)
 
-    Benchling credentials come from AWS Secrets Manager (fetched on EVERY request):
+    Benchling credentials come from AWS Secrets Manager (cached with TTL):
         - BenchlingSecret environment variable points to the secret name
         - Secret contains: tenant, client_id, client_secret, app_definition_id, etc.
-        - Secrets are NOT cached - fresh fetch on every webhook for instant rotation
+        - Secrets are cached for SECRETS_CACHE_TTL_SECONDS (default 60s)
+        - Rotation takes effect within one TTL interval (no restart needed)
 
     No CloudFormation queries! Only Secrets Manager for Benchling credentials.
     """
@@ -48,6 +56,11 @@ class Config:
     _benchling_secret_name: str = ""
     _sm_client: Optional[object] = None
     _test_mode: bool = False
+
+    # TTL cache for Secrets Manager responses
+    _cached_secrets: Optional[BenchlingSecretData] = field(default=None, repr=False)
+    _cache_timestamp: float = 0.0
+    _cache_ttl: float = SECRETS_CACHE_TTL_SECONDS
 
     def __post_init__(self):
         """Initialize configuration from environment variables.
@@ -174,21 +187,36 @@ class Config:
             )
 
     def get_benchling_secrets(self) -> BenchlingSecretData:
-        """Fetch Benchling secrets from Secrets Manager on-demand.
+        """Fetch Benchling secrets from Secrets Manager with TTL cache.
 
-        This method fetches fresh secrets on EVERY call, enabling instant rotation
-        without container restart. The latency cost (~100-500ms) is acceptable
-        compared to 40-second JWKS fetches and overall webhook processing time.
+        Returns cached secrets if the cache is still valid (within TTL).
+        Otherwise fetches fresh secrets from Secrets Manager and updates the cache.
+
+        The TTL cache (default 60s) balances two concerns:
+        - Secret rotation takes effect within one TTL interval (no restart needed)
+        - Avoids per-request Secrets Manager calls that can take 10-30s in VPC
+          environments without a VPC endpoint, exceeding the 29s API Gateway timeout
 
         Returns:
             BenchlingSecretData with current secret values from Secrets Manager
 
         Raises:
-            SecretsManagerError: If secret fetch fails
+            SecretsManagerError: If secret fetch fails (on cache miss)
         """
-        logger.debug(
-            "Fetching Benchling secrets on-demand (no cache)",
+        now = time.monotonic()
+        if self._cached_secrets is not None and (now - self._cache_timestamp) < self._cache_ttl:
+            logger.debug(
+                "Using cached Benchling secrets",
+                secret_name=self._benchling_secret_name,
+                cache_age_seconds=round(now - self._cache_timestamp, 1),
+                cache_ttl=self._cache_ttl,
+            )
+            return self._cached_secrets
+
+        logger.info(
+            "Fetching Benchling secrets from Secrets Manager",
             secret_name=self._benchling_secret_name,
+            cache_expired=self._cached_secrets is not None,
         )
 
         secret_data = fetch_benchling_secret(
@@ -197,12 +225,16 @@ class Config:
             self._benchling_secret_name,
         )
 
-        logger.debug(
-            "Benchling secrets fetched successfully",
+        self._cached_secrets = secret_data
+        self._cache_timestamp = now
+
+        logger.info(
+            "Benchling secrets cached",
             has_tenant=bool(secret_data.tenant),
             has_client_id=bool(secret_data.client_id),
             has_client_secret=bool(secret_data.client_secret),
             has_app_definition_id=bool(secret_data.app_definition_id),
+            cache_ttl=self._cache_ttl,
         )
 
         return secret_data
