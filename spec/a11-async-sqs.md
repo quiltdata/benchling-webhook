@@ -321,8 +321,8 @@ reads `PACKAGE_EVENT_QUEUE_URL` from env; deployment flavor is invisible.
    process, single event loop (see *Process model* above).
 2. On SIGTERM (ECS stop), set an asyncio stop event; drain in-flight
    handlers up to `PACKAGE_EVENT_GRACEFUL_TIMEOUT` seconds (default 30s)
-   — matches ECS `stopTimeout`. After the deadline, cancel remaining
-   tasks and exit.
+   — and set the sidecar container's ECS `stopTimeout` to the same value.
+   After the deadline, cancel remaining tasks and exit.
 3. All blocking boto3 calls (SQS receive/delete, S3, Athena, Benchling
    SDK) run via `asyncio.to_thread(...)`. No new async SDK; see
    *Dependency policy*.
