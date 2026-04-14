@@ -319,20 +319,20 @@ describe("RestApiGateway", () => {
         template.resourceCountIs("AWS::WAFv2::WebACLAssociation", 0);
     });
 
-    test("uses specified stage in deployment", () => {
+    test("uses prod stage in deployment", () => {
         new RestApiGateway(stack, "TestApiGateway", {
             vpc,
             networkLoadBalancer,
             nlbListener,
             serviceSecurityGroup,
             config: profileToStackConfig(mockConfig),
-            stage: "dev",
+            stage: "prod",
         });
 
         const template = Template.fromStack(stack);
 
         template.hasResourceProperties("AWS::ApiGateway::Stage", {
-            StageName: "dev",
+            StageName: "prod",
         });
     });
 

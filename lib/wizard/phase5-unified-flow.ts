@@ -59,7 +59,7 @@ function resolveHasStandaloneDeployment(input: UnifiedFlowDecisionInput): boolea
 
     try {
         const deployments = input.configStorage.getDeployments(input.profile);
-        return Object.keys(deployments.active).length > 0;
+        return deployments.active !== null;
     } catch {
         return false;
     }

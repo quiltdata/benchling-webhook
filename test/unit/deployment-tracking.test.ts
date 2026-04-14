@@ -21,7 +21,6 @@ describe("Deployment Tracking", () => {
     describe("recordDeployment()", () => {
         it("should record a new deployment", () => {
             const deployment: DeploymentRecord = {
-                stage: "dev",
                 timestamp: "2025-11-04T10:30:00Z",
                 imageTag: "latest",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -35,14 +34,13 @@ describe("Deployment Tracking", () => {
 
             const deployments = mockStorage.getDeployments("default");
 
-            expect(deployments.active["dev"]).toEqual(deployment);
+            expect(deployments.active).toEqual(deployment);
             expect(deployments.history).toHaveLength(1);
             expect(deployments.history[0]).toEqual(deployment);
         });
 
         it("should add deployment to history (newest first)", () => {
             const deployment1: DeploymentRecord = {
-                stage: "dev",
                 timestamp: "2025-11-04T09:00:00Z",
                 imageTag: "0.6.0",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -51,7 +49,6 @@ describe("Deployment Tracking", () => {
             };
 
             const deployment2: DeploymentRecord = {
-                stage: "dev",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "0.7.0",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -60,7 +57,6 @@ describe("Deployment Tracking", () => {
             };
 
             const deployment3: DeploymentRecord = {
-                stage: "dev",
                 timestamp: "2025-11-04T11:00:00Z",
                 imageTag: "latest",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -80,9 +76,8 @@ describe("Deployment Tracking", () => {
             expect(deployments.history[2]).toEqual(deployment1);
         });
 
-        it("should update active deployment for stage", () => {
+        it("should update active deployment", () => {
             const deployment1: DeploymentRecord = {
-                stage: "dev",
                 timestamp: "2025-11-04T09:00:00Z",
                 imageTag: "0.6.0",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -91,7 +86,6 @@ describe("Deployment Tracking", () => {
             };
 
             const deployment2: DeploymentRecord = {
-                stage: "dev",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "latest",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -105,13 +99,12 @@ describe("Deployment Tracking", () => {
             const deployments = mockStorage.getDeployments("default");
 
             // Active should be the most recent
-            expect(deployments.active["dev"]).toEqual(deployment2);
-            expect(deployments.active["dev"].imageTag).toBe("latest");
+            expect(deployments.active).toEqual(deployment2);
+            expect(deployments.active?.imageTag).toBe("latest");
         });
 
-        it("should handle multiple stages per profile", () => {
-            const devDeployment: DeploymentRecord = {
-                stage: "dev",
+        it("should replace active deployment when recording a new one", () => {
+            const firstDeployment: DeploymentRecord = {
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "latest",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -119,8 +112,7 @@ describe("Deployment Tracking", () => {
                 region: "us-east-1",
             };
 
-            const prodDeployment: DeploymentRecord = {
-                stage: "prod",
+            const secondDeployment: DeploymentRecord = {
                 timestamp: "2025-11-04T11:00:00Z",
                 imageTag: "0.7.0",
                 endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com",
@@ -128,19 +120,18 @@ describe("Deployment Tracking", () => {
                 region: "us-east-1",
             };
 
-            mockStorage.recordDeployment("default", devDeployment);
-            mockStorage.recordDeployment("default", prodDeployment);
+            mockStorage.recordDeployment("default", firstDeployment);
+            mockStorage.recordDeployment("default", secondDeployment);
 
             const deployments = mockStorage.getDeployments("default");
 
-            expect(deployments.active["dev"]).toEqual(devDeployment);
-            expect(deployments.active["prod"]).toEqual(prodDeployment);
+            // Last recorded deployment wins
+            expect(deployments.active).toEqual(secondDeployment);
             expect(deployments.history).toHaveLength(2);
         });
 
         it("should create deployment for profile that does not exist yet", () => {
             const deployment: DeploymentRecord = {
-                stage: "dev",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "latest",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -151,12 +142,11 @@ describe("Deployment Tracking", () => {
             mockStorage.recordDeployment("new-profile", deployment);
 
             const deployments = mockStorage.getDeployments("new-profile");
-            expect(deployments.active["dev"]).toEqual(deployment);
+            expect(deployments.active).toEqual(deployment);
         });
 
         it("should include optional fields in deployment record", () => {
             const deployment: DeploymentRecord = {
-                stage: "prod",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "0.7.0",
                 endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com",
@@ -170,14 +160,13 @@ describe("Deployment Tracking", () => {
 
             const deployments = mockStorage.getDeployments("default");
 
-            expect(deployments.active["prod"].deployedBy).toBe("ernest@example.com");
-            expect(deployments.active["prod"].commit).toBe("abc123f");
+            expect(deployments.active?.deployedBy).toBe("ernest@example.com");
+            expect(deployments.active?.commit).toBe("abc123f");
         });
 
         it("should record profile-based stack names", () => {
             // Test "default" profile uses legacy stack name
             const defaultDeployment: DeploymentRecord = {
-                stage: "prod",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "0.9.8",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -187,7 +176,6 @@ describe("Deployment Tracking", () => {
 
             // Test "sales" profile uses profile-specific stack name
             const salesDeployment: DeploymentRecord = {
-                stage: "prod",
                 timestamp: "2025-11-04T10:30:00Z",
                 imageTag: "0.9.8",
                 endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com",
@@ -201,13 +189,12 @@ describe("Deployment Tracking", () => {
             const defaultDeployments = mockStorage.getDeployments("default");
             const salesDeployments = mockStorage.getDeployments("sales");
 
-            expect(defaultDeployments.active["prod"].stackName).toBe("BenchlingWebhookStack");
-            expect(salesDeployments.active["prod"].stackName).toBe("BenchlingWebhookStack-sales");
+            expect(defaultDeployments.active?.stackName).toBe("BenchlingWebhookStack");
+            expect(salesDeployments.active?.stackName).toBe("BenchlingWebhookStack-sales");
         });
 
         it("should support custom stack names", () => {
             const customDeployment: DeploymentRecord = {
-                stage: "prod",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "0.9.8",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -219,7 +206,7 @@ describe("Deployment Tracking", () => {
 
             const deployments = mockStorage.getDeployments("custom-profile");
 
-            expect(deployments.active["prod"].stackName).toBe("CustomBenchlingStack");
+            expect(deployments.active?.stackName).toBe("CustomBenchlingStack");
         });
     });
 
@@ -227,13 +214,12 @@ describe("Deployment Tracking", () => {
         it("should return empty history when no deployments exist", () => {
             const deployments = mockStorage.getDeployments("nonexistent");
 
-            expect(deployments.active).toEqual({});
+            expect(deployments.active).toBeNull();
             expect(deployments.history).toEqual([]);
         });
 
         it("should read existing deployments file", () => {
             const deployment1: DeploymentRecord = {
-                stage: "dev",
                 timestamp: "2025-11-04T09:00:00Z",
                 imageTag: "0.6.0",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -242,7 +228,6 @@ describe("Deployment Tracking", () => {
             };
 
             const deployment2: DeploymentRecord = {
-                stage: "prod",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "0.7.0",
                 endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com",
@@ -255,8 +240,8 @@ describe("Deployment Tracking", () => {
 
             const deployments = mockStorage.getDeployments("default");
 
-            expect(deployments.active["dev"]).toEqual(deployment1);
-            expect(deployments.active["prod"]).toEqual(deployment2);
+            // Last recorded deployment is the active one
+            expect(deployments.active).toEqual(deployment2);
             expect(deployments.history).toHaveLength(2);
         });
 
@@ -264,14 +249,13 @@ describe("Deployment Tracking", () => {
     });
 
     describe("getActiveDeployment()", () => {
-        it("should return null when no deployment exists for stage", () => {
-            const deployment = mockStorage.getActiveDeployment("default", "prod");
+        it("should return null when no deployment exists", () => {
+            const deployment = mockStorage.getActiveDeployment("default");
             expect(deployment).toBeNull();
         });
 
-        it("should return active deployment for stage", () => {
-            const devDeployment: DeploymentRecord = {
-                stage: "dev",
+        it("should return active deployment", () => {
+            const firstDeployment: DeploymentRecord = {
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "latest",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -279,8 +263,7 @@ describe("Deployment Tracking", () => {
                 region: "us-east-1",
             };
 
-            const prodDeployment: DeploymentRecord = {
-                stage: "prod",
+            const secondDeployment: DeploymentRecord = {
                 timestamp: "2025-11-04T11:00:00Z",
                 imageTag: "0.7.0",
                 endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com",
@@ -288,19 +271,17 @@ describe("Deployment Tracking", () => {
                 region: "us-east-1",
             };
 
-            mockStorage.recordDeployment("default", devDeployment);
-            mockStorage.recordDeployment("default", prodDeployment);
+            mockStorage.recordDeployment("default", firstDeployment);
+            mockStorage.recordDeployment("default", secondDeployment);
 
-            const dev = mockStorage.getActiveDeployment("default", "dev");
-            const prod = mockStorage.getActiveDeployment("default", "prod");
+            const active = mockStorage.getActiveDeployment("default");
 
-            expect(dev).toEqual(devDeployment);
-            expect(prod).toEqual(prodDeployment);
+            // Last recorded deployment is the active one
+            expect(active).toEqual(secondDeployment);
         });
 
-        it("should return most recent deployment when stage has multiple deployments", () => {
+        it("should return most recent deployment when multiple are recorded", () => {
             const deployment1: DeploymentRecord = {
-                stage: "dev",
                 timestamp: "2025-11-04T09:00:00Z",
                 imageTag: "0.6.0",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -309,7 +290,6 @@ describe("Deployment Tracking", () => {
             };
 
             const deployment2: DeploymentRecord = {
-                stage: "dev",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "latest",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -320,14 +300,14 @@ describe("Deployment Tracking", () => {
             mockStorage.recordDeployment("default", deployment1);
             mockStorage.recordDeployment("default", deployment2);
 
-            const active = mockStorage.getActiveDeployment("default", "dev");
+            const active = mockStorage.getActiveDeployment("default");
 
             expect(active).toEqual(deployment2);
             expect(active?.imageTag).toBe("latest");
         });
 
         it("should return null for nonexistent profile", () => {
-            const deployment = mockStorage.getActiveDeployment("nonexistent", "dev");
+            const deployment = mockStorage.getActiveDeployment("nonexistent");
             expect(deployment).toBeNull();
         });
     });
@@ -344,7 +324,6 @@ describe("Deployment Tracking", () => {
 
             timestamps.forEach((timestamp, index) => {
                 const deployment: DeploymentRecord = {
-                    stage: "dev",
                     timestamp,
                     imageTag: `tag-${index}`,
                     endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -368,7 +347,6 @@ describe("Deployment Tracking", () => {
 
         it("should track deployments across different profiles independently", () => {
             const defaultDeployment: DeploymentRecord = {
-                stage: "prod",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "0.7.0",
                 endpoint: "https://xyz789.execute-api.us-east-1.amazonaws.com",
@@ -377,7 +355,6 @@ describe("Deployment Tracking", () => {
             };
 
             const devDeployment: DeploymentRecord = {
-                stage: "dev",
                 timestamp: "2025-11-04T11:00:00Z",
                 imageTag: "latest",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -392,15 +369,14 @@ describe("Deployment Tracking", () => {
             const devDeployments = mockStorage.getDeployments("dev");
 
             expect(defaultDeployments.history).toHaveLength(1);
-            expect(defaultDeployments.active["prod"]).toEqual(defaultDeployment);
+            expect(defaultDeployments.active).toEqual(defaultDeployment);
 
             expect(devDeployments.history).toHaveLength(1);
-            expect(devDeployments.active["dev"]).toEqual(devDeployment);
+            expect(devDeployments.active).toEqual(devDeployment);
         });
 
         it("should persist deployment data across XDGConfig instances", () => {
             const deployment: DeploymentRecord = {
-                stage: "dev",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "latest",
                 endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com",
@@ -413,7 +389,7 @@ describe("Deployment Tracking", () => {
             // Read back deployments from same instance (mock storage is in-memory)
             const deployments = mockStorage.getDeployments("default");
 
-            expect(deployments.active["dev"]).toEqual(deployment);
+            expect(deployments.active).toEqual(deployment);
             expect(deployments.history).toHaveLength(1);
         });
     });

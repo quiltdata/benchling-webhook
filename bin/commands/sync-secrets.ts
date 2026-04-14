@@ -485,8 +485,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
                 console.log(`Integrated mode: Using Quilt stack: ${stackNameOrArn}`);
             } else {
                 // Standalone mode: Try to find active deployment to get stack name
-                const activeDeployment = xdgConfig.getActiveDeployment(profile, "prod") ||
-                                        xdgConfig.getActiveDeployment(profile, "dev");
+                const activeDeployment = xdgConfig.getActiveDeployment(profile);
 
                 if (activeDeployment && activeDeployment.stackName) {
                     stackNameOrArn = activeDeployment.stackName;

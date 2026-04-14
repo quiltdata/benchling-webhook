@@ -79,12 +79,6 @@ export interface NextStepsOptions {
   profile: string;
 
   /**
-   * Deployment stage (dev or prod)
-   * @default Inferred from profile
-   */
-  stage?: string;
-
-  /**
    * Execution context (optional in Phase 1, required in Phase 2)
    *
    * If not provided, defaults to repository context for backward compatibility.

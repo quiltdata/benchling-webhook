@@ -171,12 +171,11 @@ describe("installCommand", () => {
             expect(mockDeploy).toHaveBeenCalledWith(
                 expect.objectContaining({
                     profile: "dev",
-                    stage: "dev",
                 })
             );
         });
 
-        it("should determine stage as 'prod' for prod profile", async () => {
+        it("should call deploy with correct profile for prod", async () => {
             mockSetupWizard.mockResolvedValue({
                 success: true,
                 profile: "prod",
@@ -191,12 +190,12 @@ describe("installCommand", () => {
 
             expect(mockDeploy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    stage: "prod",
+                    profile: "prod",
                 })
             );
         });
 
-        it("should determine stage as 'prod' for default profile", async () => {
+        it("should call deploy with correct profile for default", async () => {
             mockSetupWizard.mockResolvedValue({
                 success: true,
                 profile: "default",
@@ -211,7 +210,7 @@ describe("installCommand", () => {
 
             expect(mockDeploy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    stage: "prod",
+                    profile: "default",
                 })
             );
         });

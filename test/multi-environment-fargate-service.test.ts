@@ -127,7 +127,7 @@ describe("FargateService - Multi-Environment Support", () => {
     });
 
     describe("Environment Variable Configuration", () => {
-        test("sets STAGE environment variable for production", () => {
+        test("sets BenchlingSecret environment variable", () => {
             const profileConfig = createMockConfig();
             const config = profileToStackConfig(profileConfig);
             new FargateService(stack, "TestFargateService", {

@@ -214,7 +214,7 @@ async function checkSecretsSync(xdgConfig: XDGConfig, profile: ProfileName): Pro
 async function checkDeploymentConfig(xdgConfig: XDGConfig, profile: ProfileName): Promise<HealthCheckResult> {
     try {
         // Check for active deployment
-        const deployment = xdgConfig.getActiveDeployment(profile, "prod");
+        const deployment = xdgConfig.getActiveDeployment(profile);
 
         if (!deployment) {
             return {

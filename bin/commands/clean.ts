@@ -49,37 +49,28 @@ export async function cleanCommand(options: CleanOptions): Promise<void> {
     }
 
     // Load profile to check for active deployments
-    let hasDeployments = false;
-    let activeStages: string[] = [];
+    let hasActiveDeployment = false;
 
     try {
         xdg.readProfile(profile); // Verify profile can be read
         const deployments = xdg.getDeployments(profile);
-        if (deployments && deployments.active) {
-            activeStages = Object.keys(deployments.active);
-            hasDeployments = activeStages.length > 0;
-        }
+        hasActiveDeployment = deployments.active != null;
     } catch (error) {
         console.log(chalk.yellow(`Warning: Could not read profile '${profile}' details: ${(error as Error).message}`));
     }
 
     // Show warning about active deployments
-    if (hasDeployments) {
+    if (hasActiveDeployment) {
         console.log();
-        console.log(chalk.yellow.bold("⚠️  WARNING: Active Deployments Detected"));
+        console.log(chalk.yellow.bold("⚠️  WARNING: Active Deployment Detected"));
         console.log();
-        console.log(chalk.yellow(`The profile '${profile}' has active deployments for the following stages:`));
-        activeStages.forEach((stage) => {
-            console.log(chalk.yellow(`  - ${stage}`));
-        });
+        console.log(chalk.yellow(`The profile '${profile}' has an active deployment.`));
         console.log();
         console.log(chalk.yellow("This command will ONLY remove the local configuration."));
         console.log(chalk.yellow("AWS resources (CloudFormation stacks, etc.) will NOT be destroyed."));
         console.log();
         console.log(chalk.cyan("To destroy AWS resources first, run:"));
-        activeStages.forEach((stage) => {
-            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook destroy --profile ${profile} --stage ${stage}`));
-        });
+        console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook destroy --profile ${profile}`));
         console.log();
     }
 

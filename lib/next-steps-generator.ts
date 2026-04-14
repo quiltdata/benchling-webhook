@@ -113,13 +113,11 @@ function formatDeployCommand(profile: string, context: { isRepository: boolean; 
         if (profile === "default") return "npm run deploy";
         if (profile === "dev") return "npm run deploy:dev";
         if (profile === "prod") return "npm run deploy:prod";
-        return `npm run deploy -- --profile ${profile} --stage ${profile}`;
+        return `npm run deploy -- --profile ${profile}`;
     } else {
         // NPX context - use npx commands
         if (profile === "default") return `npx ${context.packageName} deploy`;
-        if (profile === "dev") return `npx ${context.packageName} deploy --profile ${profile} --stage dev`;
-        if (profile === "prod") return `npx ${context.packageName} deploy --profile ${profile} --stage prod`;
-        return `npx ${context.packageName} deploy --profile ${profile} --stage ${profile}`;
+        return `npx ${context.packageName} deploy --profile ${profile}`;
     }
 }
 
