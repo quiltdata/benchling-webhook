@@ -241,6 +241,13 @@ async def main() -> int:
         return 0
 
     config = get_config()
+    secrets = config.get_benchling_secrets()
+    config.apply_benchling_secrets(secrets)
+    logger.info(
+        "SQS consumer config loaded from secrets",
+        s3_bucket_name=config.s3_bucket_name,
+        pkg_prefix=config.pkg_prefix,
+    )
     sqs_client = build_sqs_client(config.aws_region)
     concurrency = int(os.getenv("PACKAGE_EVENT_CONCURRENCY", "5"))
     graceful_timeout = int(os.getenv("PACKAGE_EVENT_GRACEFUL_TIMEOUT", "30"))

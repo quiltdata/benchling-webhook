@@ -78,12 +78,12 @@ async def verify_webhook_signature(request: Request, config, jwks_fetcher: Calla
     3. Enables graceful degradation if authorizer is disabled
     4. Allows local testing without Lambda infrastructure
 
-    v1.2.0+: Fetches fresh secrets from Secrets Manager on every request to enable
-    instant secret rotation without container restart.
+    v1.2.0+: Fetches secrets from Secrets Manager with TTL cache (default 60s).
+    Rotation takes effect within one cache TTL interval without container restart.
 
     Args:
         request: FastAPI request object containing headers and body
-        config: Application configuration with on-demand secret fetching
+        config: Application configuration with cached secret fetching
         jwks_fetcher: Function to fetch JWKS keys (supports connection pooling)
 
     Raises:
@@ -92,8 +92,7 @@ async def verify_webhook_signature(request: Request, config, jwks_fetcher: Calla
     Environment Variables:
         ENABLE_WEBHOOK_VERIFICATION: Enable/disable verification (default: true)
     """
-    # Fetch fresh secrets from Secrets Manager for every webhook request
-    # This enables instant rotation without container restart (~100-500ms latency)
+    # Fetch secrets (uses TTL cache — typically instant, fetches from SM on cache miss)
     logger.debug("Fetching fresh Benchling secrets for webhook verification")
     try:
         secrets = config.get_benchling_secrets()
