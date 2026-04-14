@@ -1,0 +1,269 @@
+import asyncio
+import json
+import os
+import signal
+import time
+from dataclasses import dataclass
+from typing import Any, Callable
+
+import boto3
+import structlog
+from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
+from benchling_sdk.benchling import Benchling
+from botocore.config import Config as BotocoreConfig
+
+from .config import Config, get_config
+from .package_event import RefreshOutcome, refresh_canvas_for_package_event
+
+logger = structlog.get_logger(__name__)
+
+DELETE_OUTCOMES = {
+    RefreshOutcome.SUCCESS.value,
+    RefreshOutcome.SKIPPED_STALE.value,
+    RefreshOutcome.SKIPPED_NO_CANVAS.value,
+    "skipped_filtered",
+}
+
+
+class PackageEventParseError(ValueError):
+    """Raised when an SQS message cannot be parsed as a package event."""
+
+
+@dataclass(frozen=True)
+class PackageEventMessage:
+    package_name: str
+    bucket: str
+    top_hash: str | None
+
+
+def parse_package_event_message(body: str) -> PackageEventMessage:
+    try:
+        event = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise PackageEventParseError("Message body is not valid JSON") from exc
+
+    if not isinstance(event, dict):
+        raise PackageEventParseError("Message body must decode to an object")
+
+    detail = event.get("detail")
+    if not isinstance(detail, dict):
+        raise PackageEventParseError("package event detail is required")
+
+    package_name = detail.get("handle")
+    if not isinstance(package_name, str) or not package_name:
+        raise PackageEventParseError("package event detail.handle is required")
+
+    bucket = detail.get("bucket")
+    if not isinstance(bucket, str) or not bucket:
+        raise PackageEventParseError("package event detail.bucket is required")
+
+    top_hash = detail.get("topHash")
+    if top_hash is not None and not isinstance(top_hash, str):
+        raise PackageEventParseError("package event detail.topHash must be a string when present")
+
+    return PackageEventMessage(package_name=package_name, bucket=bucket, top_hash=top_hash)
+
+
+def create_benchling_client(config: Config) -> Benchling:
+    secrets = config.get_benchling_secrets()
+    config.apply_benchling_secrets(secrets)
+    auth_method = ClientCredentialsOAuth2(
+        client_id=secrets.client_id,
+        client_secret=secrets.client_secret,
+    )
+    return Benchling(url=f"https://{secrets.tenant}.benchling.com", auth_method=auth_method)
+
+
+class SqsConsumer:
+    def __init__(
+        self,
+        *,
+        queue_url: str,
+        config: Config,
+        benchling_factory: Callable[[], Benchling],
+        sqs_client: Any,
+        concurrency: int = 5,
+        graceful_timeout: int = 30,
+    ):
+        self.queue_url = queue_url
+        self.config = config
+        self.benchling_factory = benchling_factory
+        self.sqs_client = sqs_client
+        self.concurrency = concurrency
+        self.graceful_timeout = graceful_timeout
+        self.stop_event = asyncio.Event()
+        self.semaphore = asyncio.Semaphore(concurrency)
+        self.in_flight_tasks: set[asyncio.Task[None]] = set()
+
+    async def receive_messages(self) -> list[dict[str, Any]]:
+        response = await asyncio.to_thread(
+            self.sqs_client.receive_message,
+            QueueUrl=self.queue_url,
+            WaitTimeSeconds=20,
+            MaxNumberOfMessages=10,
+        )
+        return response.get("Messages", [])
+
+    async def delete_message(self, receipt_handle: str) -> None:
+        await asyncio.to_thread(
+            self.sqs_client.delete_message,
+            QueueUrl=self.queue_url,
+            ReceiptHandle=receipt_handle,
+        )
+
+    async def process_message(self, message: dict[str, Any]) -> None:
+        sqs_message_id = message.get("MessageId", "unknown")
+        receipt_handle = message.get("ReceiptHandle")
+        start_time = time.monotonic()
+        package_handle: str | None = None
+        top_hash: str | None = None
+        outcome = "consumer_bug"
+        should_delete = False
+
+        try:
+            parsed = parse_package_event_message(message.get("Body", ""))
+            package_handle = parsed.package_name
+            top_hash = parsed.top_hash
+
+            expected_prefix = f"{self.config.pkg_prefix}/"
+            if parsed.bucket != self.config.s3_bucket_name:
+                outcome = "skipped_filtered"
+                should_delete = True
+                logger.info(
+                    "Ignoring package event for unexpected bucket",
+                    sqs_message_id=sqs_message_id,
+                    bucket=parsed.bucket,
+                    expected_bucket=self.config.s3_bucket_name,
+                    package_handle=package_handle,
+                )
+            elif not parsed.package_name.startswith(expected_prefix):
+                outcome = "skipped_filtered"
+                should_delete = True
+                logger.info(
+                    "Ignoring package event outside configured prefix",
+                    sqs_message_id=sqs_message_id,
+                    package_handle=package_handle,
+                    expected_prefix=expected_prefix,
+                )
+            else:
+                result = await asyncio.to_thread(
+                    refresh_canvas_for_package_event,
+                    parsed.package_name,
+                    parsed.top_hash,
+                    config=self.config,
+                    benchling_factory=self.benchling_factory,
+                )
+                outcome = result.outcome.value
+                should_delete = outcome in DELETE_OUTCOMES
+        except PackageEventParseError as exc:
+            outcome = "parse_error"
+            logger.error(
+                "Failed to parse package event message",
+                sqs_message_id=sqs_message_id,
+                error=str(exc),
+                exc_info=True,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            outcome = "consumer_bug"
+            logger.error(
+                "Unexpected package event consumer failure",
+                sqs_message_id=sqs_message_id,
+                package_handle=package_handle,
+                top_hash=top_hash,
+                error=str(exc),
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+        finally:
+            if should_delete and receipt_handle:
+                await self.delete_message(receipt_handle)
+
+            logger.info(
+                "Processed package event SQS message",
+                sqs_message_id=sqs_message_id,
+                package_handle=package_handle,
+                top_hash=top_hash,
+                duration_ms=int((time.monotonic() - start_time) * 1000),
+                outcome=outcome,
+            )
+
+    async def _run_task(self, message: dict[str, Any]) -> None:
+        try:
+            await self.process_message(message)
+        finally:
+            self.semaphore.release()
+
+    def _track_task(self, task: asyncio.Task[None]) -> None:
+        self.in_flight_tasks.add(task)
+        task.add_done_callback(self.in_flight_tasks.discard)
+
+    async def run(self) -> None:
+        while not self.stop_event.is_set():
+            messages = await self.receive_messages()
+            for message in messages:
+                if self.stop_event.is_set():
+                    break
+                await self.semaphore.acquire()
+                task = asyncio.create_task(self._run_task(message))
+                self._track_task(task)
+
+        if not self.in_flight_tasks:
+            return
+
+        _done, pending = await asyncio.wait(self.in_flight_tasks, timeout=self.graceful_timeout)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    def request_stop(self) -> None:
+        self.stop_event.set()
+
+
+def build_sqs_client(region: str) -> Any:
+    session = boto3.Session(region_name=region)
+    return session.client(
+        "sqs",
+        config=BotocoreConfig(
+            retries={"max_attempts": 3, "mode": "standard"},
+            connect_timeout=5,
+            read_timeout=30,
+        ),
+    )
+
+
+async def main() -> int:
+    queue_url = os.getenv("PACKAGE_EVENT_QUEUE_URL", "").strip()
+    if not queue_url:
+        logger.info("PACKAGE_EVENT_QUEUE_URL not configured; SQS consumer exiting")
+        return 0
+
+    config = get_config()
+    sqs_client = build_sqs_client(config.aws_region)
+    concurrency = int(os.getenv("PACKAGE_EVENT_CONCURRENCY", "5"))
+    graceful_timeout = int(os.getenv("PACKAGE_EVENT_GRACEFUL_TIMEOUT", "30"))
+
+    consumer = SqsConsumer(
+        queue_url=queue_url,
+        config=config,
+        benchling_factory=lambda: create_benchling_client(config),
+        sqs_client=sqs_client,
+        concurrency=concurrency,
+        graceful_timeout=graceful_timeout,
+    )
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, consumer.request_stop)
+        except NotImplementedError:  # pragma: no cover - platform specific
+            signal.signal(sig, lambda _signum, _frame: consumer.request_stop())
+
+    await consumer.run()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(asyncio.run(main()))
