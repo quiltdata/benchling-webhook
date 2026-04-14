@@ -93,7 +93,7 @@ describe("My Test Suite", () => {
 - `profileExists(profile: string): boolean`
 - `getDeployments(profile: string): DeploymentHistory`
 - `recordDeployment(profile: string, deployment: DeploymentRecord): void`
-- `getActiveDeployment(profile: string, stage: string): DeploymentRecord | null`
+- `getActiveDeployment(profile: string): DeploymentRecord | null`
 - `readProfileWithInheritance(profile: string, baseProfile?: string): ProfileConfig`
 - `validateProfile(config: ProfileConfig): ValidationResult`
 - `clear(): void` - Clears all stored data (test helper)

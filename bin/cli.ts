@@ -44,7 +44,7 @@ Quick Start:
 v0.7.0 Changes:
   - New unified configuration architecture with profile support
   - Profile-based deployment tracking (~/.config/benchling-webhook/{profile}/)
-  - Independent --profile and --stage options for flexible deployments
+  - Profile-based deployment tracking
   - Profile inheritance support for environment hierarchies
 
 For upgrade instructions: https://github.com/quiltdata/benchling-webhook/blob/main/MIGRATION.md
@@ -61,9 +61,7 @@ program
         "Name or ARN of Benchling secret in Secrets Manager",
     )
     .option("--env-file <path>", "Path to .env file", ".env")
-// Multi-environment options
     .option("--profile <name>", "Configuration profile to use (default: default)")
-    .option("--stage <name>", "API Gateway stage: dev or prod (default: prod)")
 // Common options
     .option("--no-bootstrap-check", "Skip CDK bootstrap verification")
     .option("--require-approval <level>", "CDK approval level", "never")
@@ -76,17 +74,15 @@ program
         `
 
 Examples:
-  Deploy to production with default profile:
+  Deploy with default profile:
     $ npx @quiltdata/benchling-webhook deploy \\
         --quilt-stack-arn "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/abc123"
 
-  Deploy to dev stage with dev profile:
-    $ npx @quiltdata/benchling-webhook deploy \\
-        --profile dev --stage dev
+  Deploy with dev profile:
+    $ npx @quiltdata/benchling-webhook deploy --profile dev
 
-  Deploy to prod with custom image tag:
-    $ npx @quiltdata/benchling-webhook deploy \\
-        --stage prod --image-tag "0.7.0"
+  Deploy with custom image tag:
+    $ npx @quiltdata/benchling-webhook deploy --image-tag "0.7.0"
 
 For more information: https://github.com/quiltdata/benchling-webhook#deployment
 `,
@@ -105,7 +101,6 @@ program
     .command("destroy")
     .description("Destroy the CDK stack from AWS")
     .option("--profile <name>", "Configuration profile to use (default: default)")
-    .option("--stage <name>", "API Gateway stage: dev or prod (default: prod)")
     .option("--region <region>", "AWS region where the stack is deployed")
     .option("--yes", "Skip confirmation prompts")
     .option("--keep-tracking", "Keep deployment tracking in profile after destruction")
@@ -114,12 +109,11 @@ program
         `
 
 Examples:
-  Destroy production stack with default profile:
+  Destroy stack with default profile:
     $ npx @quiltdata/benchling-webhook destroy
 
-  Destroy dev stack with dev profile:
-    $ npx @quiltdata/benchling-webhook destroy \\
-        --profile dev --stage dev
+  Destroy dev profile stack:
+    $ npx @quiltdata/benchling-webhook destroy --profile dev
 
   Destroy without confirmation prompt:
     $ npx @quiltdata/benchling-webhook destroy --yes

@@ -34,10 +34,9 @@ describe("XDGTest In-Memory Configuration Storage", () => {
   };
 
   const validDeploymentHistory: DeploymentHistory = {
-    active: {},
+    active: null,
     history: [
       {
-        stage: "dev",
         timestamp: "2025-11-04T10:00:00Z",
         imageTag: "0.7.0",
         endpoint: "https://test.example.com",

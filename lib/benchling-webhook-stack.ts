@@ -310,9 +310,6 @@ export class BenchlingWebhookStack extends cdk.Stack {
             logLevel: logLevelValue,
         });
 
-        // Get stage from environment or default to prod
-        const stage = process.env.STAGE || "prod";
-
         // Create REST API v1 that routes through VPC Link to the NLB
         // v1.0.0: REST API with resource policy replaces HTTP API v2 + WAF
         this.api = new RestApiGateway(this, "RestApiGateway", {
@@ -321,7 +318,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             nlbListener: this.nlb.listener,
             serviceSecurityGroup: this.fargateService.securityGroup,
             config: config,
-            stage: stage,
+            stage: "prod",
         });
 
         const packageRevisionRule = new events.Rule(this, "PackageRevisionRule", {
@@ -334,8 +331,8 @@ export class BenchlingWebhookStack extends cdk.Stack {
 
         packageRevisionRule.addTarget(new targets.SqsQueue(packageEventQueue));
 
-        // Store webhook endpoint for easy access (REST API v1 with stage)
-        // REST API URL already includes the stage in the path (e.g., https://xxx.execute-api.region.amazonaws.com/stage/)
+        // Store webhook endpoint for easy access
+        // REST API URL includes the stage in the path (e.g., https://xxx.execute-api.region.amazonaws.com/prod/)
         this.webhookEndpoint = this.api.api.url;
         if (!this.api.api.url) {
             throw new Error("REST API URL was not generated. This should not happen.");
@@ -376,7 +373,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         });
 
         new cdk.CfnOutput(this, "ApiStage", {
-            value: stage,
+            value: "prod",
             description: "API Gateway deployment stage",
         });
 

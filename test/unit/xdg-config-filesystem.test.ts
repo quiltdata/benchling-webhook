@@ -57,10 +57,9 @@ describe("XDGConfig Filesystem Storage Primitives", () => {
     };
 
     const validDeployments = {
-        active: {},
+        active: null,
         history: [
             {
-                stage: "prod",
                 timestamp: "2025-11-04T10:00:00Z",
                 imageTag: "0.7.0",
                 endpoint: "https://example.com",

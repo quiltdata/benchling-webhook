@@ -86,7 +86,7 @@ export class MockConfigStorage implements IConfigStorage {
         const history = this.deployments.get(profile);
         if (!history) {
             return {
-                active: {},
+                active: null,
                 history: [],
             };
         }
@@ -99,7 +99,7 @@ export class MockConfigStorage implements IConfigStorage {
         let history = this.deployments.get(profile);
         if (!history) {
             history = {
-                active: {},
+                active: null,
                 history: [],
             };
         }
@@ -107,17 +107,17 @@ export class MockConfigStorage implements IConfigStorage {
         // Add to history (newest first)
         history.history.unshift(deployment);
 
-        // Update active deployment for this stage
-        history.active[deployment.stage] = deployment;
+        // Update active deployment
+        history.active = deployment;
 
         // Store updated history
         this.deployments.set(profile, history);
     }
 
-    public getActiveDeployment(profile: string, stage: string): DeploymentRecord | null {
+    public getActiveDeployment(profile: string): DeploymentRecord | null {
         try {
             const deployments = this.getDeployments(profile);
-            return deployments.active[stage] || null;
+            return deployments.active || null;
         } catch {
             return null;
         }

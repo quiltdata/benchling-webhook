@@ -258,7 +258,6 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
 
                 // Cache webhook URL in deployments.json
                 configStorage.recordDeployment(profile, {
-                    stage: "prod",
                     endpoint: webhookUrl,
                     timestamp: new Date().toISOString(),
                     imageTag: "integrated",

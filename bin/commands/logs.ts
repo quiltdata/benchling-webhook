@@ -30,7 +30,6 @@ const FETCH_LIMIT = 100; // Fetch more logs to ensure we get meaningful entries 
 
 export interface LogsCommandOptions {
     profile?: string;
-    stage?: string;
     awsProfile?: string;
     type?: string;
     since?: string;
@@ -86,12 +85,8 @@ function getDeploymentInfo(
             // Try to get webhook endpoint from deployment tracking
             let webhookEndpoint: string | undefined;
             const deployments = configStorage.getDeployments(profile);
-            const stages = ["prod", "dev", ...Object.keys(deployments.active)];
-            for (const stage of stages) {
-                if (deployments.active[stage]?.endpoint) {
-                    webhookEndpoint = deployments.active[stage].endpoint;
-                    break;
-                }
+            if (deployments.active?.endpoint) {
+                webhookEndpoint = deployments.active.endpoint;
             }
 
             // For integrated mode, extract Quilt stack name from ARN
@@ -761,7 +756,6 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
             if (webhookEndpoint) {
                 try {
                     xdg.recordDeployment(profile, {
-                        stage: "prod",
                         endpoint: webhookEndpoint,
                         timestamp: new Date().toISOString(),
                         imageTag: "integrated", // Marker for integrated stack (no image deployment)

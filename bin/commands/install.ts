@@ -161,7 +161,6 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
         // Show next steps for manual deployment
         const nextSteps = generateNextSteps({
             profile: setupResult.profile,
-            stage: determineStage(setupResult.profile),
             skipDeployment: true,
         });
         console.log(nextSteps);
@@ -196,7 +195,6 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
         // Show next steps for manual deployment
         const nextSteps = generateNextSteps({
             profile: setupResult.profile,
-            stage: determineStage(setupResult.profile),
             skipDeployment: true,
         });
         console.log(nextSteps);
@@ -209,12 +207,9 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
     printPhaseHeader(2, PHASE_TITLES.deployment);
     console.log("Deploying to AWS... This may take 5-10 minutes.\n");
 
-    const stage = determineStage(setupResult.profile);
-
     try {
         await deployCommand({
             profile: setupResult.profile,
-            stage,
             yes: true, // Skip deploy command's own confirmation
         });
 
@@ -234,7 +229,6 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
 
         const nextSteps = generateNextSteps({
             profile: setupResult.profile,
-            stage,
             deployment: {
                 success: false,
                 error: err.message,
@@ -245,20 +239,6 @@ export async function installCommand(options: InstallCommandOptions = {}): Promi
 
         throw error;
     }
-}
-
-/**
- * Determine deployment stage from profile name
- *
- * @param profile - Profile name
- * @returns Deployment stage (dev or prod)
- */
-function determineStage(profile: string): "dev" | "prod" {
-    if (profile === "dev") {
-        return "dev";
-    }
-    // Default and all other profiles deploy to prod
-    return "prod";
 }
 
 /**
