@@ -678,9 +678,18 @@ class TestEntryPackager:
         mock_response.raise_for_status.return_value = None
 
         s3_client = Mock()
-        s3_client.get_object.return_value = {
-            "Body": io.BytesIO(json.dumps({"canvas_id": "canvas_preserved"}).encode("utf-8"))
-        }
+
+        # Mock get_object to return the sidecar file for .canvas_id reads,
+        # and entry.json for fallback reads.
+        def mock_get_object(**kwargs):
+            key = kwargs.get("Key", "")
+            if key.endswith("/.canvas_id"):
+                return {"Body": io.BytesIO(b"canvas_preserved")}
+            if key.endswith("/entry.json"):
+                return {"Body": io.BytesIO(json.dumps({"canvas_id": "canvas_preserved"}).encode("utf-8"))}
+            raise s3_client.exceptions.NoSuchKey({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+
+        s3_client.get_object.side_effect = mock_get_object
 
         payload = Payload(
             {

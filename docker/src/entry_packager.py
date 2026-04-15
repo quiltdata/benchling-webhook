@@ -10,8 +10,7 @@ import json
 import threading
 import time
 import zipfile
-from datetime import datetime
-from json import JSONDecodeError
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import boto3
@@ -470,8 +469,14 @@ class EntryPackager:
             s3_client = self.role_manager.get_s3_client()
             uploaded_files = []
             canvas_id = payload.canvas_id
-            if canvas_id is None:
-                canvas_id = self._load_existing_canvas_id(s3_client, package_name)
+
+            # If canvas_id comes from a canvas event, persist it to a dedicated
+            # sidecar file so entry events (which have no canvas_id) can't
+            # overwrite it via the race on entry.json.
+            if canvas_id is not None:
+                self._save_canvas_id(s3_client, package_name, canvas_id)
+            else:
+                canvas_id = self._load_canvas_id(s3_client, package_name)
 
             # Extract and upload files from ZIP
             self.logger.info("Extracting and uploading files from in-memory ZIP buffer")
@@ -494,6 +499,12 @@ class EntryPackager:
                             "size": len(file_content),
                         }
                     )
+
+            # Re-read canvas_id right before writing to minimize the race window.
+            # Another thread (canvas event) may have written .canvas_id since we
+            # last checked.
+            if canvas_id is None:
+                canvas_id = self._load_canvas_id(s3_client, package_name)
 
             # Create metadata files (entry_data already fetched above)
             metadata_files = self._create_metadata_files(
@@ -687,36 +698,60 @@ For questions about the data, refer to the original Benchling entry.
             "README.md": readme_content,
         }
 
-    def _load_existing_canvas_id(self, s3_client: Any, package_name: str) -> Optional[str]:
-        """Read existing entry.json from S3 to preserve a previously stored canvas_id."""
-        s3_key = f"{package_name}/entry.json"
+    def _save_canvas_id(self, s3_client: Any, package_name: str, canvas_id: str) -> None:
+        """Write canvas_id to a dedicated sidecar file in S3.
+
+        Only called when canvas_id comes from a canvas event payload.
+        Entry events never write this file, which prevents the race condition
+        where an entry event overwrites a canvas event's canvas_id.
+        """
+        s3_key = f"{package_name}/.canvas_id"
         try:
-            response = s3_client.get_object(Bucket=self.config.s3_bucket_name, Key=s3_key)
+            s3_client.put_object(
+                Bucket=self.config.s3_bucket_name,
+                Key=s3_key,
+                Body=canvas_id.encode("utf-8"),
+            )
+            self.logger.info("Saved canvas_id to sidecar file", package_name=package_name, canvas_id=canvas_id)
+        except Exception as exc:
+            self.logger.warning(
+                "Failed to save canvas_id sidecar file",
+                package_name=package_name,
+                canvas_id=canvas_id,
+                error=str(exc),
+            )
+
+    def _load_canvas_id(self, s3_client: Any, package_name: str) -> Optional[str]:
+        """Load canvas_id from S3, checking sidecar file first then entry.json."""
+        # Primary: dedicated sidecar file (written only by canvas events)
+        sidecar_key = f"{package_name}/.canvas_id"
+        try:
+            response = s3_client.get_object(Bucket=self.config.s3_bucket_name, Key=sidecar_key)
+            canvas_id = response["Body"].read().decode("utf-8").strip()
+            if canvas_id:
+                self.logger.debug("Loaded canvas_id from sidecar file", package_name=package_name)
+                return canvas_id
+        except Exception as exc:
+            error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+            if error_code not in {"NoSuchKey", "404"}:
+                self.logger.debug("Failed to read .canvas_id sidecar", error=str(exc))
+
+        # Fallback: entry.json (backward compat for packages created before sidecar)
+        entry_key = f"{package_name}/entry.json"
+        try:
+            response = s3_client.get_object(Bucket=self.config.s3_bucket_name, Key=entry_key)
             body = response["Body"].read().decode("utf-8")
             metadata = json.loads(body)
             if isinstance(metadata, dict):
                 canvas_id = metadata.get("canvas_id")
                 if isinstance(canvas_id, str) and canvas_id:
+                    self.logger.debug("Loaded canvas_id from entry.json fallback", package_name=package_name)
                     return canvas_id
-        except s3_client.exceptions.NoSuchKey:
-            self.logger.debug("No existing entry.json found while preserving canvas_id", package_name=package_name)
-        except JSONDecodeError as exc:
-            self.logger.warning(
-                "Existing entry.json is not valid JSON; skipping canvas_id preservation",
-                package_name=package_name,
-                error=str(exc),
-            )
         except Exception as exc:
             error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
-            if error_code in {"NoSuchKey", "404"}:
-                self.logger.debug("No existing entry.json found while preserving canvas_id", package_name=package_name)
-            else:
-                self.logger.warning(
-                    "Failed to read existing entry.json; skipping canvas_id preservation",
-                    package_name=package_name,
-                    error=str(exc),
-                    error_type=type(exc).__name__,
-                )
+            if error_code not in {"NoSuchKey", "404"}:
+                self.logger.debug("Failed to read entry.json for canvas_id", error=str(exc))
+
         return None
 
     @REST_API_RETRY
@@ -840,6 +875,27 @@ For questions about the data, refer to the original Benchling entry.
                 message_id=sqs_result.get("MessageId"),
             )
 
+            # Step 6: Best-effort canvas update (don't fail workflow if this fails).
+            # This provides an optimistic preview; the SQS consumer will send the
+            # authoritative update once Quilt creates the package revision.
+            s3_client = self.role_manager.get_s3_client()
+            canvas_id = payload.canvas_id or self._load_canvas_id(s3_client, package_name)
+            if canvas_id and self.benchling:
+                try:
+                    from .canvas import CanvasManager
+
+                    updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                    cm_payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
+                    cm = CanvasManager(self.benchling, self.config, cm_payload)
+                    cm.update_canvas(updated_at=updated_at)
+                    self.logger.info("Canvas updated directly after workflow", canvas_id=canvas_id)
+                except Exception as canvas_err:
+                    self.logger.warning(
+                        "Direct canvas update failed (SQS consumer will retry)",
+                        canvas_id=canvas_id,
+                        error=str(canvas_err),
+                    )
+
             result = {
                 "status": "SUCCESS",
                 "packageName": package_name,
@@ -892,6 +948,12 @@ For questions about the data, refer to the original Benchling entry.
             event_type=payload.event_type,
             package_name_preview=package_name_preview,
         )
+
+        # Send immediate "Processing..." feedback if this is a canvas event
+        if payload.canvas_id and self.benchling:
+            from .canvas import CanvasManager
+
+            CanvasManager.send_processing_update(self.benchling, payload.canvas_id)
 
         # Execute workflow in background thread
         def background_execution():
