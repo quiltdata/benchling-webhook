@@ -11,13 +11,14 @@ All notable changes to this project will be documented in this file.
 
 - **Package events via SQS** — EventBridge now routes `package-revision` events through an SQS queue to a dedicated ECS sidecar consumer, replacing the API Gateway `/package-event` route
 - Secrets fetching uses a TTL cache with background refresh (prevents 504 on cache miss)
+- Dev deploy is hardcoded to standalone
 - Integrated-stack deploy now prompts instead of blocking outright
 - Dependency updates (#380, #381)
 
 ### Added
 
 - SQS dead-letter queue (14-day retention) for failed package events
-- Deployment plan displays Benchling tenant and masked client ID from the secret
+- Deployment plan displays workflow, Benchling tenant and masked client ID from the secret
 
 ### Removed
 
