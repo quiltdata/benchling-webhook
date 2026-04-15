@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-04-15
+
+### Fixed
+
+- SQS consumer now waits for Benchling secrets to be populated instead of crashing on fresh deploys. Previously, an empty `BenchlingSecret` (populated later by the external config script) caused `SecretsManagerError` at startup, repeated task failures, and tripped the ECS deployment circuit breaker. The consumer now installs signal handlers first, then loops with bounded exponential backoff (30s → 300s) until secrets load, short-circuiting cleanly on SIGTERM
+- `MaxNumberOfMessages` is now capped at `min(10, concurrency)` so tail messages no longer sit in the semaphore backlog eating visibility timeout
+
 ## [0.17.0] - 2026-04-14
 
 ### Changed
