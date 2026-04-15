@@ -33,5 +33,14 @@ def isolate_environment(monkeypatch):
     for var in env_vars_to_clear:
         monkeypatch.delenv(var, raising=False)
 
+    # Default packaging-request queue URL so create_app() doesn't enter
+    # degraded mode in tests that don't explicitly need to exercise the
+    # missing-queue branch. Tests that need to remove it can call
+    # monkeypatch.delenv("PACKAGING_REQUEST_QUEUE_URL").
+    monkeypatch.setenv(
+        "PACKAGING_REQUEST_QUEUE_URL",
+        "https://sqs.us-west-2.amazonaws.com/123/test.fifo",
+    )
+
     # Yield to run the test
     yield

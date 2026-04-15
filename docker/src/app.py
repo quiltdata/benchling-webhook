@@ -18,6 +18,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .canvas import CanvasManager
 from .config import Config, get_config
 from .entry_packager import EntryPackager
+from .packaging_publisher import (
+    PackagingQueueNotConfiguredError,
+    get_packaging_queue_url,
+    publish_packaging_request,
+)
 from .payload import Payload
 from .secrets_manager import SecretsManagerError
 from .version import __version__
@@ -206,6 +211,7 @@ def create_app() -> FastAPI:
     config: Config | None = None
     benchling: Benchling | None = None
     entry_packager: EntryPackager | None = None
+    packaging_queue_url: str | None = None
     startup_problem: Dict[str, Any] | None = None
     jwks_http_client: httpx.Client | None = None
 
@@ -266,7 +272,8 @@ def create_app() -> FastAPI:
 
     def _initialize_runtime() -> None:
         """Initialize configuration and clients, recording secret-related failures."""
-        nonlocal config, benchling, entry_packager, jwks_fetcher_with_caching, jwks_http_client
+        nonlocal config, benchling, entry_packager, packaging_queue_url
+        nonlocal jwks_fetcher_with_caching, jwks_http_client
 
         try:
             config = get_config()
@@ -419,6 +426,22 @@ def create_app() -> FastAPI:
                 benchling=benchling,
                 config=config,
             )
+
+            # Resolve packaging-request FIFO queue URL. Required in production
+            # so webhook handlers can enqueue work; missing env var is a
+            # configuration problem we want to surface clearly at startup.
+            try:
+                packaging_queue_url = get_packaging_queue_url()
+                logger.info(
+                    "Packaging-request queue configured",
+                    queue_url=packaging_queue_url,
+                )
+            except PackagingQueueNotConfiguredError as exc:
+                record_startup_problem(exc, "packaging_queue")
+                logger.warning(
+                    "PACKAGING_REQUEST_QUEUE_URL not set - webhook will reject "
+                    "events until this env var is configured"
+                )
 
             # Validate role assumption at startup (blocking - fail fast)
             role_arn = getattr(config, "quilt_write_role_arn", None)
@@ -669,6 +692,24 @@ def create_app() -> FastAPI:
         )
         return JSONResponse(build_secret_unavailable_body(), status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
 
+    def _send_updating_canvas_best_effort(payload: Payload) -> None:
+        """Send the immediate 'Updating...' canvas before enqueuing the workflow.
+
+        Best-effort: any failure is logged but does not block the publish, so
+        the user always sees the workflow start (just maybe without the
+        intermediate placeholder).
+        """
+        if not payload.canvas_id or benchling is None or config is None:
+            return
+        try:
+            CanvasManager(benchling, config, payload).send_updating_canvas()
+        except Exception as exc:
+            logger.warning(
+                "Failed to send initial 'Updating...' canvas",
+                canvas_id=payload.canvas_id,
+                error=str(exc),
+            )
+
     async def _handle_event_impl(request: Request, _verified: None = None):
         """Shared event webhook handling implementation."""
         try:
@@ -677,6 +718,7 @@ def create_app() -> FastAPI:
                 return blocked_response
 
             assert benchling is not None and entry_packager is not None and config is not None
+            assert packaging_queue_url is not None, "packaging_queue_url must be set when not in degraded mode"
 
             logger.info("Received /event", headers=dict(request.headers))
             payload = await Payload.from_request(request, benchling)
@@ -695,8 +737,8 @@ def create_app() -> FastAPI:
                     event_type=payload.event_type,
                     canvas_id=payload.canvas_id,
                 )
-                logger.debug("Starting background export workflow from /event", entry_id=payload.entry_id)
-                entry_packager.execute_workflow_async(payload)
+                _send_updating_canvas_best_effort(payload)
+                publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
 
                 logger.info("Canvas update initiated from /event endpoint", canvas_id=payload.canvas_id)
                 return JSONResponse(
@@ -716,17 +758,16 @@ def create_app() -> FastAPI:
                     "message": f"Event type {payload.event_type} not processed",
                 }
 
-            logger.debug("Starting background export workflow for entry event", entry_id=payload.entry_id)
-            entry_id = entry_packager.execute_workflow_async(payload)
+            publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
 
             logger.info(
-                "Entry event processed - workflow started",
-                entry_id=entry_id,
+                "Entry event processed - packaging request enqueued",
+                entry_id=payload.entry_id,
                 event_type=payload.event_type,
             )
 
             return {
-                "entry_id": entry_id,
+                "entry_id": payload.entry_id,
                 "status": "ACCEPTED",
                 "message": "Workflow started successfully",
                 "orchestration": "python",
@@ -821,6 +862,7 @@ def create_app() -> FastAPI:
                 return blocked_response
 
             assert benchling is not None and entry_packager is not None and config is not None
+            assert packaging_queue_url is not None, "packaging_queue_url must be set when not in degraded mode"
 
             logger.info("Received /canvas", headers=dict(request.headers))
             payload = await Payload.from_request(request, benchling)
@@ -855,19 +897,19 @@ def create_app() -> FastAPI:
 
                 logger.warning("Unknown button action from /canvas", button_id=button_id)
 
-            logger.debug("Starting background export workflow", entry_id=payload.entry_id)
-            execution_arn = entry_packager.execute_workflow_async(payload)
+            _send_updating_canvas_best_effort(payload)
+            sqs_message_id = publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
 
             logger.info(
                 "Canvas update initiated",
                 canvas_id=payload.canvas_id,
                 entry_id=payload.entry_id,
                 event_type=payload.event_type,
-                execution_arn=execution_arn,
+                sqs_message_id=sqs_message_id,
             )
 
             return JSONResponse(
-                {"status": "ACCEPTED", "message": "Canvas update initiated", "execution_arn": execution_arn},
+                {"status": "ACCEPTED", "message": "Canvas update initiated", "sqs_message_id": sqs_message_id},
                 status_code=202,
             )
 
@@ -1134,8 +1176,9 @@ def create_app() -> FastAPI:
     def handle_update_package(payload, entry_packager, benchling, config):
         """Handle Update Package button click (existing functionality)."""
         logger.info("Update package requested", entry_id=payload.entry_id)
+        assert packaging_queue_url is not None, "packaging_queue_url must be set when not in degraded mode"
 
-        execution_arn = entry_packager.execute_workflow_async(payload)
+        sqs_message_id = publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
 
         canvas_manager = CanvasManager(benchling, config, payload)
         canvas_manager.handle_async()
@@ -1144,7 +1187,7 @@ def create_app() -> FastAPI:
             {
                 "status": "ACCEPTED",
                 "message": "Package update started!",
-                "execution_arn": execution_arn,
+                "sqs_message_id": sqs_message_id,
             },
             status_code=202,
         )
