@@ -5,11 +5,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-04-14
+
 ### Changed
 
-- Dependency updates — minor and patch bumps across the stack (#381)
-- `softprops/action-gh-release` GitHub Action bumped to v3 (#380)
-- Package revision refreshes now run through EventBridge → SQS → ECS sidecar consumer in the standalone stack, with a shared `package_event` refresh module, `300s` queue visibility timeout, and no public `/package-event` API route
+- **Package events via SQS** — EventBridge now routes `package-revision` events through an SQS queue to a dedicated ECS sidecar consumer, replacing the API Gateway `/package-event` route
+- Secrets fetching uses a TTL cache with background refresh (prevents 504 on cache miss)
+- Integrated-stack deploy now prompts instead of blocking outright
+- Dependency updates (#380, #381)
+
+### Added
+
+- SQS dead-letter queue (14-day retention) for failed package events
+- Deployment plan displays Benchling tenant and masked client ID from the secret
+
+### Removed
+
+- `--stage` CLI option — all deployments use a single `prod` stage; the profile determines the environment
+- `/package-event` API Gateway route and its EventBridge → API Gateway IAM plumbing
+
+### Fixed
+
+- SQS consumer applies secrets at startup so bucket filter works on first message
+- SQS consumer logs use a separate stream prefix; health-check noise filtered server-side
 
 ## [0.16.0] - 2026-04-11
 
