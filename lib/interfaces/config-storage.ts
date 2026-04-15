@@ -71,12 +71,11 @@ export interface IConfigStorage {
     recordDeployment(profile: string, deployment: DeploymentRecord): void;
 
     /**
-     * Gets the active deployment for a specific stage
+     * Gets the active deployment for a profile
      * @param profile - Profile name
-     * @param stage - Stage name (e.g., "dev", "prod")
-     * @returns Active deployment record for the stage, or null if none exists
+     * @returns Active deployment record, or null if none exists
      */
-    getActiveDeployment(profile: string, stage: string): DeploymentRecord | null;
+    getActiveDeployment(profile: string): DeploymentRecord | null;
 
     /**
      * Reads profile configuration with inheritance support

@@ -79,7 +79,7 @@ describe('generateNextSteps', () => {
 
       // Phase 3 now includes health check as third step
       expect(result).toContain('Next steps:');
-      expect(result).toContain('Deploy to AWS: npm run deploy -- --profile staging --stage staging');
+      expect(result).toContain('Deploy to AWS: npm run deploy -- --profile staging');
       expect(result).toContain('npx @quiltdata/benchling-webhook test --profile staging');
     });
   });
@@ -156,7 +156,7 @@ describe('generateNextSteps', () => {
       it('should generate npm run deploy with profile flag', () => {
         const result = generateNextSteps({ profile: 'staging', context });
 
-        expect(result).toContain('npm run deploy -- --profile staging --stage staging');
+        expect(result).toContain('npm run deploy -- --profile staging');
         expect(result).toContain('npx @quiltdata/benchling-webhook test --profile staging');
       });
 
@@ -171,7 +171,7 @@ describe('generateNextSteps', () => {
         const result = generateNextSteps({ profile: 'staging', context });
         const expected = [
           'Next steps:',
-          '  1. Deploy to AWS: npm run deploy -- --profile staging --stage staging',
+          '  1. Deploy to AWS: npm run deploy -- --profile staging',
           '  2. Test integration: npx @quiltdata/benchling-webhook test --profile staging'
         ].join('\n');
 
@@ -182,7 +182,7 @@ describe('generateNextSteps', () => {
         const result = generateNextSteps({ profile: 'staging', context, skipDeployment: true });
         const expected = [
           'Next steps:',
-          '  1. Deploy to AWS: npm run deploy -- --profile staging --stage staging',
+          '  1. Deploy to AWS: npm run deploy -- --profile staging',
           '  2. Test integration: npx @quiltdata/benchling-webhook test --profile staging',
           '  3. Check configuration: npm run setup:health -- --profile staging'
         ].join('\n');
@@ -226,10 +226,10 @@ describe('generateNextSteps', () => {
     });
 
     describe('dev profile', () => {
-      it('should generate npx commands with profile and stage flags', () => {
+      it('should generate npx commands with profile flag', () => {
         const result = generateNextSteps({ profile: 'dev', context });
 
-        expect(result).toContain('npx @quiltdata/benchling-webhook deploy --profile dev --stage dev');
+        expect(result).toContain('npx @quiltdata/benchling-webhook deploy --profile dev');
         expect(result).toContain('npx @quiltdata/benchling-webhook test --profile dev');
         expect(result).not.toContain('npm run');
       });
@@ -238,7 +238,7 @@ describe('generateNextSteps', () => {
         const result = generateNextSteps({ profile: 'dev', context });
         const expected = [
           'Next steps:',
-          '  1. Deploy to AWS: npx @quiltdata/benchling-webhook deploy --profile dev --stage dev',
+          '  1. Deploy to AWS: npx @quiltdata/benchling-webhook deploy --profile dev',
           '  2. Test integration: npx @quiltdata/benchling-webhook test --profile dev'
         ].join('\n');
 
@@ -247,10 +247,10 @@ describe('generateNextSteps', () => {
     });
 
     describe('prod profile', () => {
-      it('should generate npx commands with profile and prod stage', () => {
+      it('should generate npx commands with profile flag for prod', () => {
         const result = generateNextSteps({ profile: 'prod', context });
 
-        expect(result).toContain('npx @quiltdata/benchling-webhook deploy --profile prod --stage prod');
+        expect(result).toContain('npx @quiltdata/benchling-webhook deploy --profile prod');
         expect(result).toContain('npx @quiltdata/benchling-webhook test --profile prod');
         expect(result).not.toContain('npm run');
       });
@@ -259,7 +259,7 @@ describe('generateNextSteps', () => {
         const result = generateNextSteps({ profile: 'prod', context });
         const expected = [
           'Next steps:',
-          '  1. Deploy to AWS: npx @quiltdata/benchling-webhook deploy --profile prod --stage prod',
+          '  1. Deploy to AWS: npx @quiltdata/benchling-webhook deploy --profile prod',
           '  2. Test integration: npx @quiltdata/benchling-webhook test --profile prod'
         ].join('\n');
 
@@ -271,7 +271,7 @@ describe('generateNextSteps', () => {
       it('should generate npx commands with custom profile', () => {
         const result = generateNextSteps({ profile: 'staging', context });
 
-        expect(result).toContain('npx @quiltdata/benchling-webhook deploy --profile staging --stage staging');
+        expect(result).toContain('npx @quiltdata/benchling-webhook deploy --profile staging');
         expect(result).toContain('npx @quiltdata/benchling-webhook test --profile staging');
       });
 
@@ -286,7 +286,7 @@ describe('generateNextSteps', () => {
         const result = generateNextSteps({ profile: 'staging', context });
         const expected = [
           'Next steps:',
-          '  1. Deploy to AWS: npx @quiltdata/benchling-webhook deploy --profile staging --stage staging',
+          '  1. Deploy to AWS: npx @quiltdata/benchling-webhook deploy --profile staging',
           '  2. Test integration: npx @quiltdata/benchling-webhook test --profile staging'
         ].join('\n');
 
@@ -297,7 +297,7 @@ describe('generateNextSteps', () => {
         const result = generateNextSteps({ profile: 'staging', context, skipDeployment: true });
         const expected = [
           'Next steps:',
-          '  1. Deploy to AWS: npx @quiltdata/benchling-webhook deploy --profile staging --stage staging',
+          '  1. Deploy to AWS: npx @quiltdata/benchling-webhook deploy --profile staging',
           '  2. Test integration: npx @quiltdata/benchling-webhook test --profile staging',
           '  3. Check configuration: npx @quiltdata/benchling-webhook health-check --profile staging'
         ].join('\n');
@@ -353,8 +353,8 @@ describe('generateNextSteps', () => {
       expect(result).toContain('npx @quiltdata/benchling-webhook test --profile test-env-2');
     });
 
-    it('should handle undefined stage', () => {
-      const result = generateNextSteps({ profile: 'default', stage: undefined, context: repoContext });
+    it('should handle undefined stage (backward compat)', () => {
+      const result = generateNextSteps({ profile: 'default', context: repoContext });
 
       expect(result).toBeTruthy();
       expect(result).toContain('npm run deploy');

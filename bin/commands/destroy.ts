@@ -18,7 +18,6 @@ import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-clo
 export async function destroyCommand(options: {
     yes?: boolean;
     profile?: string;
-    stage?: "dev" | "prod";
     region?: string;
     keepTracking?: boolean;
 }): Promise<void> {
@@ -33,9 +32,6 @@ export async function destroyCommand(options: {
 
     // Determine profile name (default: "default")
     const profileName = options.profile || "default";
-
-    // Determine stage (default: "prod")
-    const stage = options.stage || "prod";
 
     // Load configuration from profile
     const xdg = new XDGConfig();
@@ -130,20 +126,19 @@ export async function destroyCommand(options: {
 
         // Check if there's deployment tracking to clean up
         const deployments = xdg.getDeployments(profileName);
-        const activeDeployment = deployments.active?.[stage];
 
-        if (activeDeployment) {
+        if (deployments.active) {
             console.log();
             console.log(
                 chalk.yellow(
-                    `Found deployment tracking for profile '${profileName}' stage '${stage}'`,
+                    `Found deployment tracking for profile '${profileName}'`,
                 ),
             );
 
             if (options.yes || (await confirmCleanupTracking())) {
-                xdg.clearDeployment(profileName, stage);
+                xdg.clearDeployment(profileName);
                 console.log(
-                    chalk.green(`✓ Cleared deployment tracking for '${profileName}' stage '${stage}'`),
+                    chalk.green(`✓ Cleared deployment tracking for '${profileName}'`),
                 );
             }
         }
@@ -158,7 +153,6 @@ export async function destroyCommand(options: {
     console.log(chalk.gray("─".repeat(80)));
     console.log(`  ${chalk.bold("Stack:")}        ${stackName}`);
     console.log(`  ${chalk.bold("Region:")}       ${destroyRegion}`);
-    console.log(`  ${chalk.bold("Stage:")}        ${stage}`);
     console.log(`  ${chalk.bold("Profile:")}      ${profileName}`);
     console.log(`  ${chalk.bold("Status:")}       ${stackStatus}`);
     console.log(chalk.gray("─".repeat(80)));
@@ -232,12 +226,11 @@ export async function destroyCommand(options: {
         // Clean up deployment tracking unless --keep-tracking is set
         if (!options.keepTracking) {
             const deployments = xdg.getDeployments(profileName);
-            const activeDeployment = deployments.active?.[stage];
 
-            if (activeDeployment) {
-                xdg.clearDeployment(profileName, stage);
+            if (deployments.active) {
+                xdg.clearDeployment(profileName);
                 console.log(
-                    chalk.green(`✓ Cleared deployment tracking for '${profileName}' stage '${stage}'`),
+                    chalk.green(`✓ Cleared deployment tracking for '${profileName}'`),
                 );
             }
         }
@@ -248,10 +241,9 @@ export async function destroyCommand(options: {
                 `${chalk.green.bold("✓ Destruction Complete!")}\n\n` +
                     `Stack:   ${chalk.cyan(stackName)}\n` +
                     `Region:  ${chalk.cyan(destroyRegion)}\n` +
-                    `Stage:   ${chalk.cyan(stage)}\n` +
                     `Profile: ${chalk.cyan(profileName)}\n\n` +
                     `${chalk.bold("Next steps:")}\n` +
-                    `  • To deploy a new stack: ${chalk.cyan(`npx @quiltdata/benchling-webhook deploy --stage ${stage} --profile ${profileName}`)}\n` +
+                    `  • To deploy a new stack: ${chalk.cyan(`npx @quiltdata/benchling-webhook deploy --profile ${profileName}`)}\n` +
                     `  • To update configuration: ${chalk.cyan(`npx @quiltdata/benchling-webhook setup --profile ${profileName}`)}`,
                 { padding: 1, borderColor: "green", borderStyle: "round" },
             ),
@@ -295,6 +287,7 @@ async function confirmDestruction(): Promise<boolean> {
         name: "confirm",
         message: "Are you sure you want to destroy the stack?",
         initial: false,
+        format: (v: unknown) => v ? "yes" : "no",
     });
 
     return response.confirm;
@@ -307,8 +300,9 @@ async function confirmCleanupTracking(): Promise<boolean> {
     const response = await prompt<{ confirm: boolean }>({
         type: "confirm",
         name: "confirm",
-        message: "Clear deployment tracking for this profile/stage?",
+        message: "Clear deployment tracking for this profile?",
         initial: true,
+        format: (v: unknown) => v ? "yes" : "no",
     });
 
     return response.confirm;

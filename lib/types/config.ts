@@ -553,23 +553,13 @@ export interface ConfigMetadata {
 /**
  * Deployment History
  *
- * Tracks all deployments for a profile, with active deployment pointers per stage.
+ * Tracks all deployments for a profile with one active deployment pointer.
  */
 export interface DeploymentHistory {
     /**
-     * Active deployments by stage name
-     *
-     * Maps stage name (e.g., "dev", "prod") to the currently active deployment.
-     *
-     * @example
-     * ```json
-     * {
-     *   "dev": { "stage": "dev", "endpoint": "https://...", "imageTag": "latest", ... },
-     *   "prod": { "stage": "prod", "endpoint": "https://...", "imageTag": "0.7.0", ... }
-     * }
-     * ```
+     * The currently active deployment for this profile, or null if none.
      */
-    active: Record<string, DeploymentRecord>;
+    active: DeploymentRecord | null;
 
     /**
      * Complete deployment history (newest first)
@@ -585,14 +575,6 @@ export interface DeploymentHistory {
  * A single deployment event with full metadata for debugging and rollback.
  */
 export interface DeploymentRecord {
-    /**
-     * API Gateway stage name
-     *
-     * @example "dev"
-     * @example "prod"
-     */
-    stage: string;
-
     /**
      * ISO 8601 deployment timestamp
      *
@@ -829,6 +811,21 @@ export const ProfileConfigSchema = {
 /**
  * JSON Schema for DeploymentHistory validation
  */
+const DeploymentRecordSchema = {
+    type: "object",
+    required: ["timestamp", "imageTag", "endpoint", "stackName", "region"],
+    properties: {
+        timestamp: { type: "string", format: "date-time" },
+        imageTag: { type: "string" },
+        endpoint: { type: "string", format: "uri" },
+        stackName: { type: "string" },
+        region: { type: "string" },
+        deployedBy: { type: "string" },
+        commit: { type: "string" },
+    },
+    additionalProperties: true,
+} as const;
+
 export const DeploymentHistorySchema = {
     $schema: "http://json-schema.org/draft-07/schema#",
     title: "DeploymentHistory",
@@ -837,38 +834,14 @@ export const DeploymentHistorySchema = {
     required: ["active", "history"],
     properties: {
         active: {
-            type: "object",
-            additionalProperties: {
-                type: "object",
-                required: ["stage", "timestamp", "imageTag", "endpoint", "stackName", "region"],
-                properties: {
-                    stage: { type: "string" },
-                    timestamp: { type: "string", format: "date-time" },
-                    imageTag: { type: "string" },
-                    endpoint: { type: "string", format: "uri" },
-                    stackName: { type: "string" },
-                    region: { type: "string" },
-                    deployedBy: { type: "string" },
-                    commit: { type: "string" },
-                },
-            },
+            oneOf: [
+                DeploymentRecordSchema,
+                { type: "null" },
+            ],
         },
         history: {
             type: "array",
-            items: {
-                type: "object",
-                required: ["stage", "timestamp", "imageTag", "endpoint", "stackName", "region"],
-                properties: {
-                    stage: { type: "string" },
-                    timestamp: { type: "string", format: "date-time" },
-                    imageTag: { type: "string" },
-                    endpoint: { type: "string", format: "uri" },
-                    stackName: { type: "string" },
-                    region: { type: "string" },
-                    deployedBy: { type: "string" },
-                    commit: { type: "string" },
-                },
-            },
+            items: DeploymentRecordSchema,
         },
     },
     additionalProperties: false,

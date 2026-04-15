@@ -5,15 +5,42 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-04-14
+
 ### Changed
 
-- EventBridge rule now matches only on `source` and `detail-type` — bucket and prefix filtering moved to the Docker runtime, where values are available from Secrets Manager. This unblocks integrated-mode stacks where the IaC layer cannot reference secret-derived values.
-- Canvas footer now shows "Pending update" (honest) instead of "Up to date" (a lie) when no confirmed update timestamp exists
+- **Package events via SQS** — EventBridge now routes `package-revision` events through an SQS queue to a dedicated ECS sidecar consumer, replacing the API Gateway `/package-event` route
+- Secrets fetching uses a TTL cache with background refresh (prevents 504 on cache miss)
+- Integrated-stack deploy now prompts instead of blocking outright
+- Dependency updates (#380, #381)
+
+### Added
+
+- SQS dead-letter queue (14-day retention) for failed package events
+- Deployment plan displays Benchling tenant and masked client ID from the secret
 
 ### Removed
 
-- `PackagePrefix` CloudFormation parameter (filtering now happens at runtime in the Docker handler)
-- Pending canvas state — the intermediate "Updating..." canvas with disabled buttons and stripped links was removed entirely; the canvas now stays unchanged until the EventBridge package event confirms the update, then renders the final state with a real timestamp
+- `--stage` CLI option — all deployments use a single `prod` stage; the profile determines the environment
+- `/package-event` API Gateway route and its EventBridge → API Gateway IAM plumbing
+
+### Fixed
+
+- SQS consumer applies secrets at startup so bucket filter works on first message
+- SQS consumer logs use a separate stream prefix; health-check noise filtered server-side
+
+## [0.16.0] - 2026-04-11
+
+### Changed
+
+- EventBridge rule now matches only on `source` and `detail-type` — bucket and prefix filtering moved to the Docker runtime, where values are available from Secrets Manager. This unblocks integrated-mode stacks where the IaC layer cannot reference secret-derived values (#379)
+- Canvas footer now shows "Pending update" (honest) instead of "Up to date" (a lie) when no confirmed update timestamp exists (#379)
+- Dependency updates — minor and patch bumps across the stack (#378)
+
+### Removed
+
+- `PackagePrefix` CloudFormation parameter (filtering now happens at runtime in the Docker handler) (#379)
+- Pending canvas state — the intermediate "Updating..." canvas with disabled buttons and stripped links was removed entirely; the canvas now stays unchanged until the EventBridge package event confirms the update, then renders the final state with a real timestamp (#379)
 
 ## [0.15.0] - 2026-04-10
 

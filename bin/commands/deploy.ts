@@ -16,6 +16,7 @@ import { ProfileConfig, getStackName } from "../../lib/types/config";
 import { profileToStackConfig } from "../../lib/utils/config-transform";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 import { syncSecretsToAWS } from "./sync-secrets";
+import { fetchBenchlingSecretDetails } from "../../lib/wizard/benchling-secret";
 
 /**
  * Helper function to display setup command suggestion
@@ -159,7 +160,7 @@ function getLatestDevVersion(): string | null {
  * Deploy command for v0.7.0 configuration architecture
  *
  * Uses new profile-based configuration with deployment tracking.
- * Supports independent --profile and --stage options.
+ * Uses profile-based configuration.
  *
  * v0.10.0: Refactored to call createStack() directly instead of spawning subprocess.
  * This eliminates environment variable IPC complexity and simplifies testing.
@@ -172,7 +173,6 @@ export async function deployCommand(options: {
     bootstrapCheck?: boolean;
     requireApproval?: string;
     profile?: string;           // Profile name (default: "default")
-    stage?: "dev" | "prod";     // API Gateway stage (independent of profile)
     stackArn?: string;
     benchlingSecret?: string;
     imageTag?: string;
@@ -192,9 +192,6 @@ export async function deployCommand(options: {
     // Determine profile name (default: "default")
     const profileName = options.profile || "default";
 
-    // Determine stage (default: "prod")
-    const stage = options.stage || "prod";
-
     // Load configuration from profile
     const xdg = new XDGConfig();
     let config: ProfileConfig;
@@ -208,10 +205,8 @@ export async function deployCommand(options: {
         console.error(chalk.red((error as Error).message));
         console.log();
         console.log(chalk.yellow("Run setup wizard to create configuration:"));
-        // Suggest stage-specific setup command
-        const setupCmd = stage === "dev" ? "setup:dev" : stage === "prod" ? "setup:prod" : "setup";
         const profileArg = profileName !== "default" ? ` -- --profile ${profileName}` : "";
-        console.log(chalk.cyan(`  npm run ${setupCmd}${profileArg}`));
+        console.log(chalk.cyan(`  npm run setup${profileArg}`));
         console.log();
         process.exit(1);
     }
@@ -271,7 +266,6 @@ export async function deployCommand(options: {
         ...options,
         imageTag,
         profileName,
-        stage,
     });
 }
 
@@ -289,7 +283,6 @@ export async function deploy(
         yes?: boolean;
         bootstrapCheck?: boolean;
         requireApproval?: string;
-        stage: "dev" | "prod";
         profileName: string;
         imageTag: string;
         region?: string;
@@ -297,13 +290,13 @@ export async function deploy(
         force?: boolean;
     },
 ): Promise<void> {
-    // Check if this is an integrated stack - NO deployment allowed
+    // Check if this is an integrated stack - warn and ask user
     if (config.integratedStack === true) {
         console.log();
         console.log(boxen(
             chalk.yellow.bold("⚠️  Integrated Stack Mode") + "\n\n" +
             chalk.dim("The webhook handler is already deployed as part of the Quilt stack.\n") +
-            chalk.dim("No separate deployment is needed or allowed.\n\n") +
+            chalk.dim("No separate deployment is usually needed.\n\n") +
             chalk.cyan("To update credentials, run:\n") +
             chalk.cyan(`  npm run setup -- --profile ${options.profileName}`),
             {
@@ -314,7 +307,24 @@ export async function deploy(
             },
         ));
         console.log();
-        process.exit(0);
+
+        if (options.yes) {
+            console.log(chalk.yellow("Proceeding with deployment (--yes)"));
+        } else {
+            const { proceed } = await prompt<{ proceed: boolean }>([{
+                type: "confirm",
+                name: "proceed",
+                message: "Deploy a parallel standalone stack anyway?",
+                initial: false,
+                format: (v: unknown) => v ? "yes" : "no",
+            }]);
+
+            if (!proceed) {
+                console.log(chalk.yellow("Deployment cancelled"));
+                process.exit(0);
+            }
+        }
+        console.log();
     }
 
     const spinner = ora("Validating parameters...").start();
@@ -394,6 +404,12 @@ export async function deploy(
         process.exit(1);
     }
 
+    // Fetch Benchling secret details for deployment plan display
+    const secretDetails = await fetchBenchlingSecretDetails({
+        secretArn: benchlingSecret,
+        region: deployRegion,
+    });
+
     // Check CDK bootstrap
     if (options.bootstrapCheck !== false) {
         spinner.start("Checking CDK bootstrap status...");
@@ -452,6 +468,7 @@ export async function deploy(
                 name: "shouldDestroy",
                 message: "Destroy this stack and recreate? (Only option to proceed)",
                 initial: true,
+                format: (v: unknown) => v ? "yes" : "no",
             },
         ]);
 
@@ -555,8 +572,8 @@ export async function deploy(
         if (proceedChoice === "destroy") {
             console.log();
             console.log(chalk.bold("Run destroy then redeploy:"));
-            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook@latest destroy --profile ${options.profileName} --stage ${options.stage}`));
-            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook@latest deploy --profile ${options.profileName} --stage ${options.stage}`));
+            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook@latest destroy --profile ${options.profileName}`));
+            console.log(chalk.cyan(`  npx @quiltdata/benchling-webhook@latest deploy --profile ${options.profileName}`));
             console.log();
             process.exit(1);
         }
@@ -627,7 +644,6 @@ export async function deploy(
     console.log(`  ${chalk.bold("Stack:")}                     ${stackName}`);
     console.log(`  ${chalk.bold("Account:")}                   ${deployAccount}`);
     console.log(`  ${chalk.bold("Region:")}                    ${deployRegion}`);
-    console.log(`  ${chalk.bold("Stage:")}                     ${options.stage}`);
     console.log(`  ${chalk.bold("Profile:")}                   ${options.profileName}`);
     console.log(`  ${chalk.bold("Mode:")}                      standalone`);
     console.log();
@@ -644,6 +660,20 @@ export async function deploy(
     console.log(chalk.bold("  Stack Parameters:"));
     console.log(`    ${chalk.bold("Quilt Stack ARN:")}         ${maskArn(stackArn)} ${chalk.dim("(deployment-time resolution only)")}`);
     console.log(`    ${chalk.bold("Benchling Secret:")}        ${benchlingSecret}`);
+    if (secretDetails) {
+        if (secretDetails.tenant) {
+            console.log(`    ${chalk.bold("Benchling Tenant:")}        ${secretDetails.tenant}`);
+        }
+        if (secretDetails.clientId) {
+            const id = secretDetails.clientId;
+            const masked = id.length > 8 ? id.slice(0, 4) + "…" + id.slice(-4) : id;
+            console.log(`    ${chalk.bold("Benchling Client ID:")}     ${masked}`);
+        }
+    }
+    const workflowName = config.packages.workflow;
+    if (workflowName) {
+        console.log(`    ${chalk.bold("Workflow:")}                ${workflowName}`);
+    }
     console.log(`    ${chalk.bold("Event:")}                   ${eventSummary}`);
     console.log();
     console.log(chalk.bold("  Container Image:"));
@@ -683,6 +713,7 @@ export async function deploy(
             name: "proceed",
             message: "Proceed with deployment?",
             initial: true,
+            format: (v: unknown) => v ? "yes" : "no",
         });
 
         if (!response.proceed) {
@@ -830,7 +861,6 @@ export async function deploy(
                     // Record deployment in profile
                     const xdg = new XDGConfig();
                     xdg.recordDeployment(options.profileName, {
-                        stage: options.stage,
                         timestamp: new Date().toISOString(),
                         imageTag: options.imageTag,
                         endpoint: cleanEndpoint,
@@ -841,7 +871,7 @@ export async function deploy(
                         authorizerLogGroup,
                     });
 
-                    console.log(`✅ Recorded deployment to profile '${options.profileName}' stage '${options.stage}'`);
+                    console.log(`✅ Recorded deployment to profile '${options.profileName}'`);
 
                     // Success message with webhook URL
                     console.log();
@@ -850,7 +880,6 @@ export async function deploy(
                             `${chalk.green.bold("✓ Deployment Complete!")}\n\n` +
                             `Stack:  ${chalk.cyan(stackName)}\n` +
                             `Region: ${chalk.cyan(deployRegion)}\n` +
-                            `Stage:  ${chalk.cyan(options.stage)}\n` +
                             `Profile: ${chalk.cyan(options.profileName)}\n` +
                             `Webhook URL: ${chalk.cyan(webhookUrl)}\n\n` +
                             `${chalk.bold("Next steps:")}\n` +

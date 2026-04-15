@@ -62,14 +62,13 @@ export class RestApiGateway {
             .filter(ip => ip.length > 0);
 
         // Build resource policy document with IP filtering.
-        // The broad public/IP-scoped allow must exclude POST /package-event
-        // because that endpoint is reserved for EventBridge and does not use
-        // Benchling HMAC verification.
+        // All public API paths are subject to the same policy; the old
+        // package-event carve-out was removed when EventBridge moved to SQS.
         const policyStatements: iam.PolicyStatement[] = [];
         const publicInvokePolicy = {
             principals: [new iam.AnyPrincipal()],
             actions: ["execute-api:Invoke"],
-            notResources: ["execute-api:/*/POST/package-event"],
+            resources: ["execute-api:/*"],
         };
 
         if (allowedIps.length === 0) {
@@ -81,7 +80,7 @@ export class RestApiGateway {
                 }),
             );
             console.log("Resource Policy IP filtering: DISABLED (no webhookAllowList configured)");
-            console.log("All endpoints except /package-event accessible from any IP");
+            console.log("All endpoints accessible from any IP");
         } else {
             // IP filtering enabled - single statement for ALL endpoints
             policyStatements.push(
@@ -98,7 +97,7 @@ export class RestApiGateway {
 
             console.log("Resource Policy IP filtering: ENABLED");
             console.log(`Allowed IPs: ${allowedIps.join(", ")}`);
-            console.log("IP filtering applies to all public endpoints except /package-event");
+            console.log("IP filtering applies to all public endpoints");
         }
 
         const policyDoc = new iam.PolicyDocument({

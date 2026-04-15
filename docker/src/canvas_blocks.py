@@ -90,6 +90,18 @@ def create_section(section_id: str, buttons: List[ButtonUiBlock]) -> SectionUiBl
     )
 
 
+def create_processing_blocks() -> List:
+    """Create canvas blocks showing a 'Processing...' state.
+
+    Used to provide immediate feedback when a canvas is first created,
+    before the export workflow completes.
+
+    Returns:
+        List containing a markdown block with processing message
+    """
+    return [create_markdown_block("**Processing...**\n\nExporting entry and creating package.", "md-processing")]
+
+
 def create_main_navigation_buttons(entry_id: str) -> List:
     """Create main view navigation buttons (Browse Package, Update Package).
 
