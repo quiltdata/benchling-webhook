@@ -218,7 +218,10 @@ async function getLogGroupsFromStack(
         const apiExecLogGroup = outputs.find((o) => o.OutputKey === "ApiGatewayExecutionLogGroup")?.OutputValue;
         const authorizerLogGroup = outputs.find((o) => o.OutputKey === "AuthorizerLogGroup")?.OutputValue;
 
-        if (ecsLogGroup) logGroups["ecs"] = { logGroup: ecsLogGroup };
+        if (ecsLogGroup) {
+            logGroups["ecs"] = { logGroup: ecsLogGroup, streamPrefix: "benchling-webhook" };
+            logGroups["sqs"] = { logGroup: ecsLogGroup, streamPrefix: "benchling-sqs-consumer" };
+        }
         if (apiLogGroup) logGroups["api"] = { logGroup: apiLogGroup };
         if (apiExecLogGroup) logGroups["api-exec"] = { logGroup: apiExecLogGroup };
         if (authorizerLogGroup) logGroups["authorizer"] = { logGroup: authorizerLogGroup };
@@ -319,10 +322,18 @@ async function fetchLogsFromGroup(
         // Fetch more logs than needed to account for filtering
         const fetchLimit = includeHealth ? limit : FETCH_LIMIT;
 
+        // Exclude health checks server-side when no custom filter is specified.
+        // Client-side filtering alone fails because the FETCH_LIMIT (100) fills
+        // entirely with high-frequency health checks, hiding real application logs.
+        let effectiveFilter = filterPattern;
+        if (!includeHealth && !filterPattern) {
+            effectiveFilter = "-\"GET /health\"";
+        }
+
         const command = new FilterLogEventsCommand({
             logGroupName,
             startTime,
-            filterPattern,
+            filterPattern: effectiveFilter,
             limit: fetchLimit,
             ...(logStreamNamePrefix ? { logStreamNamePrefix } : {}),
         });
@@ -601,7 +612,7 @@ async function fetchAllLogs(
     }
 
     // For standalone mode, use the traditional type-based approach
-    const typesToQuery = type === "all" ? ["ecs", "api", "api-exec", "authorizer"] : [type];
+    const typesToQuery = type === "all" ? ["ecs", "sqs", "api", "api-exec", "authorizer"] : [type];
 
     for (const logType of typesToQuery) {
         const logGroupInfo = discoveredLogGroups[logType];
@@ -617,6 +628,9 @@ async function fetchAllLogs(
         switch (logType) {
         case "ecs":
             displayName = "ECS Container Logs";
+            break;
+        case "sqs":
+            displayName = "SQS Consumer Logs";
             break;
         case "api":
             displayName = "API Gateway Access Logs";
@@ -640,12 +654,14 @@ async function fetchAllLogs(
             includeHealth,
             filterPattern,
             awsProfile,
+            logGroupInfo.streamPrefix,
         );
 
         result.push({
             name: logGroupName,
             displayName,
             entries,
+            streamPrefix: logGroupInfo.streamPrefix,
         });
     }
 
@@ -714,8 +730,8 @@ export async function logsCommand(options: LogsCommandOptions = {}): Promise<Log
     } = options;
 
     // Validate log type
-    if (!["ecs", "api", "api-exec", "authorizer", "all"].includes(type)) {
-        const errorMsg = "Invalid log type. Must be 'ecs', 'api', 'api-exec', 'authorizer', or 'all'";
+    if (!["ecs", "sqs", "api", "api-exec", "authorizer", "all"].includes(type)) {
+        const errorMsg = "Invalid log type. Must be 'ecs', 'sqs', 'api', 'api-exec', 'authorizer', or 'all'";
         console.error(chalk.red(`\n❌ ${errorMsg}\n`));
         return { success: false, error: errorMsg };
     }
