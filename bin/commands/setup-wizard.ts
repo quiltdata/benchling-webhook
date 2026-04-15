@@ -631,6 +631,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             parameters: parameters!,
             catalogDns: catalogResult.catalogDns,
             integratedStack: false,
+            benchlingSecretArn: flowDecision.benchlingSecretArn,
         });
 
         saveConfig(config);
@@ -656,17 +657,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             parameters: parameters!,
             catalogDns: catalogResult.catalogDns,
             integratedStack: false,
+            benchlingSecretArn: flowDecision.benchlingSecretArn,
         });
 
         saveConfig(config);
-
-        if (!setupOnly) {
-            await deployCommand({
-                profile,
-                yes: true,
-            });
-        }
-
         await syncSecretsToAWS({
             profile,
             awsProfile,
@@ -674,6 +668,13 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             force: true,
             configStorage: xdg,
         });
+
+        if (!setupOnly) {
+            await deployCommand({
+                profile,
+                yes: true,
+            });
+        }
         break;
     }
     case "update-standalone-secret": {
