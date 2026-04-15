@@ -90,23 +90,15 @@ def create_section(section_id: str, buttons: List[ButtonUiBlock]) -> SectionUiBl
     )
 
 
-def create_processing_blocks() -> List:
-    """Create canvas blocks showing a 'Processing...' state.
-
-    Used to provide immediate feedback when a canvas is first created,
-    before the export workflow completes.
-
-    Returns:
-        List containing a markdown block with processing message
-    """
-    return [create_markdown_block("**Processing...**\n\nExporting entry and creating package.", "md-processing")]
-
-
-def create_main_navigation_buttons(entry_id: str) -> List:
+def create_main_navigation_buttons(entry_id: str, update_enabled: bool = True) -> List:
     """Create main view navigation buttons (Browse Package, Update Package).
 
     Args:
         entry_id: Entry identifier for button IDs
+        update_enabled: If False, render the 'Update Package' button as disabled.
+            Used during the initial 'Updating...' state so a second click cannot
+            spawn a concurrent export workflow. Browse stays enabled — on a
+            re-export the previous package version is still valid.
 
     Returns:
         List containing section with navigation buttons
@@ -119,6 +111,7 @@ def create_main_navigation_buttons(entry_id: str) -> List:
         create_button(
             button_id=f"update-package-{entry_id}",
             text="Update Package",
+            enabled=update_enabled,
         ),
     ]
 

@@ -949,11 +949,20 @@ For questions about the data, refer to the original Benchling entry.
             package_name_preview=package_name_preview,
         )
 
-        # Send immediate "Processing..." feedback if this is a canvas event
+        # Send immediate regular-layout canvas (with "Updating..." footer) if this
+        # is a canvas event. The background workflow will later refresh it with
+        # linked-package data and an "Updated at" timestamp.
         if payload.canvas_id and self.benchling:
             from .canvas import CanvasManager
 
-            CanvasManager.send_processing_update(self.benchling, payload.canvas_id)
+            try:
+                CanvasManager(self.benchling, self.config, payload).send_updating_canvas()
+            except Exception as e:
+                self.logger.warning(
+                    "Failed to send initial 'Updating...' canvas",
+                    canvas_id=payload.canvas_id,
+                    error=str(e),
+                )
 
         # Execute workflow in background thread
         def background_execution():

@@ -235,22 +235,36 @@ class CanvasManager:
 
         return content
 
-    def _make_blocks(self, updated_at: str | None = None) -> list:
+    def _make_blocks(self, updated_at: str | None = None, is_updating: bool = False) -> list:
         """Create UI blocks for the Canvas.
 
         Args:
             updated_at: ISO timestamp of last package update
+            is_updating: If True, render the "regular" layout with an "Updating..."
+                footer and skip slow metadata queries (linked packages). Used for
+                the initial acknowledgment canvas shown before the workflow runs.
         """
-        markdown_content = self._make_markdown_content()
+        if is_updating:
+            # Render only the primary package header — skip the Athena query for
+            # linked packages so the initial update returns quickly.
+            markdown_content = fmt.format_package_header(
+                package_name=self.package_name,
+                display_id=self.entry.display_id,
+                catalog_url=self.catalog_url,
+                sync_url=self.sync_uri(),
+            )
+        else:
+            markdown_content = self._make_markdown_content()
+
         markdown_block = blocks.create_markdown_block(markdown_content, "md1")
 
         result = [
-            *blocks.create_main_navigation_buttons(self.entry_id),
+            *blocks.create_main_navigation_buttons(self.entry_id, update_enabled=not is_updating),
             markdown_block,
         ]
 
-        # Add linked package browse buttons if any exist
-        if self._linked_packages:
+        # Add linked package browse buttons if any exist (skipped during initial update)
+        if not is_updating and self._linked_packages:
             result.extend(blocks.create_linked_package_browse_buttons(self.entry_id, self._linked_packages))
 
         # Add footer as markdown block
@@ -259,6 +273,7 @@ class CanvasManager:
             quilt_host=self.config.quilt_catalog,
             bucket=self.config.s3_bucket_name,
             updated_at=updated_at,
+            is_updating=is_updating,
         )
         result.append(blocks.create_markdown_block(footer_markdown, "md-footer"))
 
@@ -633,22 +648,23 @@ class CanvasManager:
         """Handle Canvas webhook payload asynchronously in background thread."""
         threading.Thread(target=self._handle, daemon=True).start()
 
-    @staticmethod
-    def send_processing_update(benchling: Benchling, canvas_id: str) -> dict[str, Any]:
-        """Send a 'Processing...' canvas update. Best-effort, does not raise.
+    def send_updating_canvas(self) -> dict[str, Any]:
+        """Send the regular canvas layout with an 'Updating...' footer.
 
-        Called synchronously on the request thread to provide immediate feedback
-        when a canvas is first created, before the background workflow runs.
+        Best-effort, does not raise. Called synchronously on the request thread
+        to provide immediate feedback with the same layout as the final view —
+        the background workflow will later call ``update_canvas`` with full
+        linked-package data and an 'Updated at' timestamp.
         """
         try:
-            processing_blocks = blocks.create_processing_blocks()
+            updating_blocks = self._make_blocks(is_updating=True)
             canvas_update = AppCanvasUpdate(
-                blocks=processing_blocks,  # type: ignore
+                blocks=updating_blocks,  # type: ignore
                 enabled=True,  # type: ignore
             )
-            result = benchling.apps.update_canvas(canvas_id=canvas_id, canvas=canvas_update)
-            logger.info("Sent processing acknowledgment", canvas_id=canvas_id)
-            return {"success": True, "canvas_id": getattr(result, "id", canvas_id)}
+            result = self.benchling.apps.update_canvas(canvas_id=self.canvas_id, canvas=canvas_update)
+            logger.info("Sent 'Updating...' canvas acknowledgment", canvas_id=self.canvas_id)
+            return {"success": True, "canvas_id": getattr(result, "id", self.canvas_id)}
         except Exception as e:
-            logger.warning("Failed to send processing acknowledgment", canvas_id=canvas_id, error=str(e))
+            logger.warning("Failed to send 'Updating...' canvas", canvas_id=self.canvas_id, error=str(e))
             return {"success": False, "error": str(e)}
