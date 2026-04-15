@@ -276,7 +276,7 @@ export abstract class XDGBase implements IConfigStorage {
      * @example
      * ```typescript
      * const deployments = storage.getDeployments("default");
-     * console.log(deployments.active["prod"]); // Active prod deployment
+     * console.log(deployments.active); // Active deployment
      * console.log(deployments.history[0]); // Most recent deployment
      * ```
      */
@@ -291,9 +291,27 @@ export abstract class XDGBase implements IConfigStorage {
         // Return empty history if none exists
         if (!deployments) {
             return {
-                active: {},
+                active: null,
                 history: [],
             };
+        }
+
+        // Migrate legacy format: active was Record<string, DeploymentRecord>, now DeploymentRecord | null
+        if (deployments.active && typeof deployments.active === "object" && !("timestamp" in deployments.active)) {
+            const legacyActive = deployments.active as unknown as Record<string, DeploymentRecord>;
+            const entries = Object.values(legacyActive);
+            // Pick the most recently deployed entry
+            deployments.active = entries.length > 0
+                ? entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0]
+                : null;
+            // Strip legacy stage field from history entries
+            deployments.history = deployments.history.map(({ stage: _, ...rest }: DeploymentRecord & { stage?: string }) => rest as DeploymentRecord);
+            // Write migrated format back
+            try {
+                this.writeDeploymentsRaw(profile, deployments);
+            } catch {
+                // Non-fatal: migration write failed, will retry next time
+            }
         }
 
         // Validate schema
@@ -313,7 +331,7 @@ export abstract class XDGBase implements IConfigStorage {
     /**
      * Records a new deployment for a profile
      *
-     * Adds deployment to history and updates active deployment for the stage.
+     * Adds deployment to history and updates active deployment.
      * Creates deployment history if it doesn't exist.
      *
      * @param profile - Profile name
@@ -322,7 +340,6 @@ export abstract class XDGBase implements IConfigStorage {
      * @example
      * ```typescript
      * storage.recordDeployment("default", {
-     *   stage: "prod",
      *   timestamp: new Date().toISOString(),
      *   imageTag: "0.7.0",
      *   endpoint: "https://abc123.execute-api.us-east-1.amazonaws.com/prod",
@@ -343,7 +360,7 @@ export abstract class XDGBase implements IConfigStorage {
             console.warn(`Warning: Could not read deployment history: ${(error as Error).message}`);
             console.warn("Starting with empty deployment history (previous deployments not preserved).\n");
             deployments = {
-                active: {},
+                active: null,
                 history: [],
             };
         }
@@ -351,8 +368,8 @@ export abstract class XDGBase implements IConfigStorage {
         // Add to history (newest first)
         deployments.history.unshift(deployment);
 
-        // Update active deployment for this stage
-        deployments.active[deployment.stage] = deployment;
+        // Update active deployment
+        deployments.active = deployment;
 
         // Write deployments
         try {
@@ -363,58 +380,54 @@ export abstract class XDGBase implements IConfigStorage {
     }
 
     /**
-     * Gets the active deployment for a specific stage
+     * Gets the active deployment for a profile
      *
      * @param profile - Profile name
-     * @param stage - Stage name (e.g., "dev", "prod")
-     * @returns Active deployment record for the stage, or null if none exists
+     * @returns Active deployment record, or null if none exists
      *
      * @example
      * ```typescript
-     * const prodDeployment = storage.getActiveDeployment("default", "prod");
-     * if (prodDeployment) {
-     *   console.log("Prod endpoint:", prodDeployment.endpoint);
+     * const deployment = storage.getActiveDeployment("default");
+     * if (deployment) {
+     *   console.log("Endpoint:", deployment.endpoint);
      * }
      * ```
      */
-    public getActiveDeployment(profile: string, stage: string): DeploymentRecord | null {
+    public getActiveDeployment(profile: string): DeploymentRecord | null {
         try {
             const deployments = this.getDeployments(profile);
-            return deployments.active[stage] || null;
+            return deployments.active || null;
         } catch {
             return null;
         }
     }
 
     /**
-     * Clears the active deployment for a specific stage
+     * Clears the active deployment for a profile
      *
-     * Removes the active deployment entry for the given stage, but keeps
-     * the deployment history intact.
+     * Removes the active deployment entry, but keeps the deployment history intact.
      *
      * @param profile - Profile name
-     * @param stage - Stage name (e.g., "dev", "prod")
      *
      * @example
      * ```typescript
-     * // Clear production deployment tracking after destroying the stack
-     * storage.clearDeployment("default", "prod");
+     * // Clear deployment tracking after destroying the stack
+     * storage.clearDeployment("default");
      * ```
      */
-    public clearDeployment(profile: string, stage: string): void {
+    public clearDeployment(profile: string): void {
         try {
             const deployments = this.getDeployments(profile);
 
-            // Remove active deployment for this stage
-            if (deployments.active[stage]) {
-                delete deployments.active[stage];
+            if (deployments.active) {
+                deployments.active = null;
 
                 // Write updated deployments
                 this.writeDeploymentsRaw(profile, deployments);
             }
         } catch (error) {
             throw new Error(
-                `Failed to clear deployment for profile "${profile}" stage "${stage}": ${(error as Error).message}`,
+                `Failed to clear deployment for profile "${profile}": ${(error as Error).message}`,
             );
         }
     }

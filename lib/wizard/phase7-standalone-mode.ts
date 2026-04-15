@@ -161,7 +161,6 @@ export async function runStandaloneMode(input: StandaloneModeInput): Promise<Sta
                 const { deployCommand } = await import("../../bin/commands/deploy");
                 await deployCommand({
                     profile,
-                    stage: profile === "prod" ? "prod" : "dev",
                     yes: true,
                 });
                 console.log(chalk.green("\n✓ Deployment completed successfully\n"));

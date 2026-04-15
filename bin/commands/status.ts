@@ -162,17 +162,7 @@ function identifyTargetStack(
     } else {
         // Standalone: Query BenchlingWebhookStack from deployments
         const deployments = xdg.getDeployments(profile);
-
-        // Find any active deployment (prefer prod, then dev, then any)
-        const stages = ["prod", "dev", ...Object.keys(deployments.active)];
-        let activeDeployment = null;
-
-        for (const stage of stages) {
-            if (deployments.active[stage]) {
-                activeDeployment = deployments.active[stage];
-                break;
-            }
-        }
+        const activeDeployment = deployments.active;
 
         if (!activeDeployment) {
             throw new Error(

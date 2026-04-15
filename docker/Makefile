@@ -315,7 +315,6 @@ test-ecr: check-xdg
 	@echo "✅ Done"
 
 # Test deployed dev stack via API Gateway endpoint (auto-deploys if needed)
-# v0.7.0: Updated to use deployments.json with profile/stage structure
 test-deployed-dev: check-xdg
 	@if [ -n "$(SKIP_AUTO_DEPLOY)" ]; then \
 		echo "⏭️  Auto-deploy disabled (SKIP_AUTO_DEPLOY=1)"; \
@@ -327,11 +326,11 @@ test-deployed-dev: check-xdg
 		if [ ! -f "$$DEPLOYMENTS_JSON" ]; then \
 			echo "📦 No deployments.json found - deployment needed"; \
 			NEEDS_DEPLOY=1; \
-		elif ! jq -e '.active.dev' "$$DEPLOYMENTS_JSON" >/dev/null 2>&1; then \
-			echo "📦 No dev deployment found - deployment needed"; \
+		elif ! jq -e '.active' "$$DEPLOYMENTS_JSON" >/dev/null 2>&1; then \
+			echo "📦 No active deployment found - deployment needed"; \
 			NEEDS_DEPLOY=1; \
 		else \
-			DEPLOYED_AT=$$(jq -r '.active.dev.timestamp // empty' "$$DEPLOYMENTS_JSON"); \
+			DEPLOYED_AT=$$(jq -r '.active.timestamp // empty' "$$DEPLOYMENTS_JSON"); \
 			if [ -z "$$DEPLOYED_AT" ]; then \
 				echo "📦 No deployment timestamp found - deployment needed"; \
 				NEEDS_DEPLOY=1; \
@@ -360,14 +359,13 @@ test-deployed-dev: check-xdg
 	fi
 
 # Test deployed dev stack (direct, no auto-deploy check)
-# v0.7.0: Updated to use deployments.json with profile/stage structure
 test-deployed-dev-direct: check-xdg
 	@echo "🧪 Testing deployed dev stack (profile: $(PROFILE))..."
-	@DEV_ENDPOINT=$$(jq -r '.active.dev.endpoint // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
-	IMAGE_TAG=$$(jq -r '.active.dev.imageTag // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
-	DEPLOYED_AT=$$(jq -r '.active.dev.timestamp // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	@DEV_ENDPOINT=$$(jq -r '.active.endpoint // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	IMAGE_TAG=$$(jq -r '.active.imageTag // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	DEPLOYED_AT=$$(jq -r '.active.timestamp // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
 	if [ -z "$$DEV_ENDPOINT" ]; then \
-		echo "❌ No dev endpoint found in $(PROFILE_DIR)/deployments.json"; \
+		echo "❌ No active endpoint found in $(PROFILE_DIR)/deployments.json"; \
 		echo "💡 Run 'npm run deploy:dev -- --profile $(PROFILE)' first to deploy the dev stack"; \
 		exit 1; \
 	fi; \
@@ -384,11 +382,11 @@ test-deployed-dev-direct: check-xdg
 # v0.7.0: Updated to use deployments.json with profile/stage structure
 test-deployed-prod: check-xdg
 	@echo "🧪 Testing deployed prod stack (profile: $(PROFILE))..."
-	@PROD_ENDPOINT=$$(jq -r '.active.prod.endpoint // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
-	IMAGE_TAG=$$(jq -r '.active.prod.imageTag // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
-	DEPLOYED_AT=$$(jq -r '.active.prod.timestamp // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	@PROD_ENDPOINT=$$(jq -r '.active.endpoint // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	IMAGE_TAG=$$(jq -r '.active.imageTag // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
+	DEPLOYED_AT=$$(jq -r '.active.timestamp // empty' $(PROFILE_DIR)/deployments.json 2>/dev/null); \
 	if [ -z "$$PROD_ENDPOINT" ]; then \
-		echo "❌ No prod endpoint found in $(PROFILE_DIR)/deployments.json"; \
+		echo "❌ No active endpoint found in $(PROFILE_DIR)/deployments.json"; \
 		echo "💡 Run 'npm run deploy:prod -- --profile $(PROFILE)' first to deploy the prod stack"; \
 		exit 1; \
 	fi; \

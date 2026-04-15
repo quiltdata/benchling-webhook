@@ -626,9 +626,29 @@ class CanvasManager:
             self.update_canvas()
 
         except Exception as e:
-            logger.error("Canvas operation failed", error=str(e))
-            raise
+            logger.error("Canvas operation failed", error=str(e), exc_info=True)
+            # Don't re-raise: this runs in a daemon thread, exception would be lost
 
     def handle_async(self) -> None:
         """Handle Canvas webhook payload asynchronously in background thread."""
         threading.Thread(target=self._handle, daemon=True).start()
+
+    @staticmethod
+    def send_processing_update(benchling: Benchling, canvas_id: str) -> dict[str, Any]:
+        """Send a 'Processing...' canvas update. Best-effort, does not raise.
+
+        Called synchronously on the request thread to provide immediate feedback
+        when a canvas is first created, before the background workflow runs.
+        """
+        try:
+            processing_blocks = blocks.create_processing_blocks()
+            canvas_update = AppCanvasUpdate(
+                blocks=processing_blocks,  # type: ignore
+                enabled=True,  # type: ignore
+            )
+            result = benchling.apps.update_canvas(canvas_id=canvas_id, canvas=canvas_update)
+            logger.info("Sent processing acknowledgment", canvas_id=canvas_id)
+            return {"success": True, "canvas_id": getattr(result, "id", canvas_id)}
+        except Exception as e:
+            logger.warning("Failed to send processing acknowledgment", canvas_id=canvas_id, error=str(e))
+            return {"success": False, "error": str(e)}

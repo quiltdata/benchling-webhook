@@ -410,10 +410,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         saveConfig(config);
 
         // Clear deployment tracking for integrated mode (no separate deployments)
-        const deploymentsC = xdg.getDeployments(profile);
-        Object.keys(deploymentsC.active).forEach(stage => {
-            xdg.clearDeployment(profile, stage);
-        });
+        xdg.clearDeployment(profile);
 
         await syncSecretsToAWS({
             profile,
@@ -440,10 +437,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
 
         // Clear deployment tracking for integrated mode (no separate deployments)
         if (integratedStack) {
-            const deployments = xdg.getDeployments(profile);
-            Object.keys(deployments.active).forEach(stage => {
-                xdg.clearDeployment(profile, stage);
-            });
+            xdg.clearDeployment(profile);
 
             const { statusCommand } = await import("./status");
             await statusCommand({
@@ -486,10 +480,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         saveConfig(config);
 
         // Clear deployment tracking for integrated mode (no separate deployments)
-        const deploymentsToCleanup = xdg.getDeployments(profile);
-        Object.keys(deploymentsToCleanup.active).forEach(stage => {
-            xdg.clearDeployment(profile, stage);
-        });
+        xdg.clearDeployment(profile);
         break;
     }
     case "switch-standalone": {
@@ -549,7 +540,6 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         if (!setupOnly) {
             await deployCommand({
                 profile,
-                stage: profile === "prod" ? "prod" : "dev",
                 yes: true,
             });
         }
@@ -615,10 +605,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         saveConfig(config);
 
         // Clear deployment tracking for integrated mode (no separate deployments)
-        const deploymentsB = xdg.getDeployments(profile);
-        Object.keys(deploymentsB.active).forEach(stage => {
-            xdg.clearDeployment(profile, stage);
-        });
+        xdg.clearDeployment(profile);
 
         await syncSecretsToAWS({
             profile,
@@ -644,6 +631,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             parameters: parameters!,
             catalogDns: catalogResult.catalogDns,
             integratedStack: false,
+            benchlingSecretArn: flowDecision.benchlingSecretArn,
         });
 
         saveConfig(config);
@@ -658,7 +646,6 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         if (!setupOnly) {
             await deployCommand({
                 profile,
-                stage: profile === "prod" ? "prod" : "dev",
                 yes: true,
             });
         }
@@ -670,18 +657,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             parameters: parameters!,
             catalogDns: catalogResult.catalogDns,
             integratedStack: false,
+            benchlingSecretArn: flowDecision.benchlingSecretArn,
         });
 
         saveConfig(config);
-
-        if (!setupOnly) {
-            await deployCommand({
-                profile,
-                stage: profile === "prod" ? "prod" : "dev",
-                yes: true,
-            });
-        }
-
         await syncSecretsToAWS({
             profile,
             awsProfile,
@@ -689,6 +668,13 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             force: true,
             configStorage: xdg,
         });
+
+        if (!setupOnly) {
+            await deployCommand({
+                profile,
+                yes: true,
+            });
+        }
         break;
     }
     case "update-standalone-secret": {

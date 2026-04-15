@@ -166,7 +166,6 @@ describe("cleanCommand", () => {
         beforeEach(() => {
             xdg.writeProfile("test", testConfig);
             xdg.recordDeployment("test", {
-                stage: "dev",
                 timestamp: new Date().toISOString(),
                 imageTag: "latest",
                 endpoint: "https://example.execute-api.us-east-1.amazonaws.com/dev",
@@ -180,9 +179,8 @@ describe("cleanCommand", () => {
 
             await cleanCommand({ profile: "test", xdg });
 
-            // Should show warning about active deployments
-            expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Active Deployments"));
-            expect(console.log).toHaveBeenCalledWith(expect.stringContaining("dev"));
+            // Should show warning about active deployment
+            expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Active Deployment Detected"));
             expect(console.log).toHaveBeenCalledWith(expect.stringContaining("destroy"));
         });
 
