@@ -287,6 +287,7 @@ async function confirmDestruction(): Promise<boolean> {
         name: "confirm",
         message: "Are you sure you want to destroy the stack?",
         initial: false,
+        format: (v: unknown) => v ? "yes" : "no",
     });
 
     return response.confirm;
@@ -301,6 +302,7 @@ async function confirmCleanupTracking(): Promise<boolean> {
         name: "confirm",
         message: "Clear deployment tracking for this profile?",
         initial: true,
+        format: (v: unknown) => v ? "yes" : "no",
     });
 
     return response.confirm;

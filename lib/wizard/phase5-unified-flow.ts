@@ -98,9 +98,14 @@ export async function runUnifiedFlowDecision(
     const hasBenchlingSecret = Boolean(benchlingSecretArn);
 
     let flow: UnifiedFlowDecisionResult["flow"];
+
+    // Dev profile always uses standalone mode (for local testing against shared stacks)
+    if (profile === "dev") {
+        flow = hasStandaloneDeployment ? "standalone-existing" : "integration-missing";
+    }
     // Priority: Current stack state > standalone deployment detection
     // If the stack has integration enabled/disabled, that takes precedence over local config
-    if (integrationEnabled === true && hasBenchlingSecret) {
+    else if (integrationEnabled === true && hasBenchlingSecret) {
         flow = "integration-running";
     } else if (integrationEnabled === false) {
         flow = "integration-disabled";
