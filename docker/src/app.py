@@ -911,7 +911,7 @@ def create_app() -> FastAPI:
                     benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
                     logger.info("Canvas updated with browser view", canvas_id=payload.canvas_id)
                 except Exception as e:
-                    logger.error("Failed to update canvas", error=str(e))
+                    logger.error("Failed to update canvas", error=str(e), exc_info=True)
 
             threading.Thread(target=async_update, daemon=True).start()
 
@@ -997,7 +997,7 @@ def create_app() -> FastAPI:
                     benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
                     logger.info("Canvas updated with page", canvas_id=payload.canvas_id, page=page_number)
                 except Exception as e:
-                    logger.error("Failed to update canvas", error=str(e))
+                    logger.error("Failed to update canvas", error=str(e), exc_info=True)
 
             threading.Thread(target=async_update, daemon=True).start()
 
@@ -1062,7 +1062,7 @@ def create_app() -> FastAPI:
                 benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
                 logger.info("Canvas updated with main package view", canvas_id=payload.canvas_id)
             except Exception as e:
-                logger.error("Failed to return to main package view", error=str(e))
+                logger.error("Failed to return to main package view", error=str(e), exc_info=True)
 
         threading.Thread(target=async_update, daemon=True).start()
 
@@ -1089,7 +1089,7 @@ def create_app() -> FastAPI:
                     benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
                     logger.info("Canvas updated with metadata view", canvas_id=payload.canvas_id)
                 except Exception as e:
-                    logger.error("Failed to update canvas", error=str(e))
+                    logger.error("Failed to update canvas", error=str(e), exc_info=True)
 
             threading.Thread(target=async_update, daemon=True).start()
 
@@ -1121,7 +1121,7 @@ def create_app() -> FastAPI:
                         package_name=package_name,
                     )
                 except Exception as e:
-                    logger.error("Failed to update canvas with linked package metadata", error=str(e))
+                    logger.error("Failed to update canvas with linked package metadata", error=str(e), exc_info=True)
 
             threading.Thread(target=async_update, daemon=True).start()
 
