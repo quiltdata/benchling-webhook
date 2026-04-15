@@ -265,7 +265,13 @@ def dict_to_markdown_list(data: Dict[str, Any], indent_level: int = 0) -> str:
     return md
 
 
-def format_canvas_footer(version: str, quilt_host: str, bucket: str, updated_at: str | None = None) -> str:
+def format_canvas_footer(
+    version: str,
+    quilt_host: str,
+    bucket: str,
+    updated_at: str | None = None,
+    is_updating: bool = False,
+) -> str:
     """Format canvas footer with version and deployment information.
 
     Args:
@@ -273,11 +279,14 @@ def format_canvas_footer(version: str, quilt_host: str, bucket: str, updated_at:
         quilt_host: Quilt catalog host
         bucket: S3 bucket name
         updated_at: ISO timestamp of last package update
+        is_updating: If True, show 'Updating...' status (overrides updated_at)
 
     Returns:
         Formatted markdown string with footer information
     """
-    if updated_at:
+    if is_updating:
+        status = "⏳ *Updating...*"
+    elif updated_at:
         status = f"✅ *Updated at {updated_at}*"
     else:
         status = "⏳ *Pending update*"
