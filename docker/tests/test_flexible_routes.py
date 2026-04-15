@@ -49,14 +49,24 @@ class TestFlexibleRoutes:
 
     @pytest.fixture
     def mock_entry_packager(self):
-        """Mock EntryPackager."""
+        """Mock EntryPackager (with the sqs_client the publisher needs)."""
         packager = Mock()
-        packager.execute_workflow_async.return_value = "etr_123456"
+        packager.sqs_client = Mock()
         return packager
 
     @pytest.fixture
-    def app(self, mock_config, mock_benchling_client, mock_entry_packager):
+    def mock_publish(self):
+        """Patch the FIFO publisher; webhook handlers enqueue here."""
+        with patch("src.app.publish_packaging_request", return_value="msg-id-test") as publish:
+            yield publish
+
+    @pytest.fixture
+    def app(self, mock_config, mock_benchling_client, mock_entry_packager, mock_publish, monkeypatch):
         """Create FastAPI app with mocked dependencies."""
+        monkeypatch.setenv(
+            "PACKAGING_REQUEST_QUEUE_URL",
+            "https://sqs.us-west-2.amazonaws.com/123/test.fifo",
+        )
         with (
             patch("src.app.get_config", return_value=mock_config),
             patch("src.app.Benchling", return_value=mock_benchling_client),
@@ -127,7 +137,7 @@ class TestFlexibleRoutes:
     # ============================================================================
 
     @pytest.mark.parametrize("stage", ["prod", "dev", "staging"])
-    def test_event_webhook_with_stage_prefix(self, client, mock_entry_packager, stage):
+    def test_event_webhook_with_stage_prefix(self, client, mock_publish, stage):
         """Test /event webhook with stage prefix (API Gateway path)."""
         payload = {
             "channel": "events",
@@ -140,7 +150,7 @@ class TestFlexibleRoutes:
         data = response.json()
         assert data["status"] == "ACCEPTED"
         assert "entry_id" in data
-        mock_entry_packager.execute_workflow_async.assert_called_once()
+        mock_publish.assert_called_once()
 
     def test_event_webhook_direct_path(self, client, mock_entry_packager):
         """Test /event webhook without stage prefix (direct call)."""
@@ -235,7 +245,7 @@ class TestFlexibleRoutes:
         assert direct_response.status_code == stage_response.status_code
         assert direct_response.json() == stage_response.json()
 
-    def test_event_responses_are_identical(self, client, mock_entry_packager):
+    def test_event_responses_are_identical(self, client, mock_publish):
         """Verify direct and stage-prefixed event endpoints return identical responses."""
         payload = {
             "channel": "events",
@@ -247,8 +257,8 @@ class TestFlexibleRoutes:
         stage_response = client.post("/prod/event", json=payload)
 
         assert direct_response.status_code == stage_response.status_code
-        # Both should have called the packager
-        assert mock_entry_packager.execute_workflow_async.call_count == 2
+        # Both should have enqueued a packaging request
+        assert mock_publish.call_count == 2
 
     # ============================================================================
     # Verify HMAC verification works for both path styles

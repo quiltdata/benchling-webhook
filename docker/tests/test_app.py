@@ -39,9 +39,16 @@ class TestFastAPIApp:
 
     @pytest.fixture
     def mock_entry_packager(self):
-        """Mock EntryPackager."""
+        """Mock EntryPackager (with the sqs_client the publisher needs)."""
         packager = Mock()
+        packager.sqs_client = Mock()
         return packager
+
+    @pytest.fixture
+    def mock_publish(self):
+        """Patch the FIFO publisher; webhook handlers enqueue here."""
+        with patch("src.app.publish_packaging_request", return_value="msg-id-test") as publish:
+            yield publish
 
     @pytest.fixture
     def app(
@@ -49,7 +56,14 @@ class TestFastAPIApp:
         mock_config,
         mock_benchling_client,
         mock_entry_packager,
+        mock_publish,
+        monkeypatch,
     ):
+        # Webhook handlers require this env var to enqueue work.
+        monkeypatch.setenv(
+            "PACKAGING_REQUEST_QUEUE_URL",
+            "https://sqs.us-west-2.amazonaws.com/123/test.fifo",
+        )
         with (
             patch("src.app.get_config", return_value=mock_config),
             patch("src.app.Benchling", return_value=mock_benchling_client),
@@ -91,10 +105,8 @@ class TestFastAPIApp:
             with pytest.raises(Exception):
                 create_app()
 
-    def test_webhook_endpoint_success(self, client, mock_entry_packager):
-        """Test webhook endpoint with valid payload."""
-        mock_entry_packager.execute_workflow_async.return_value = "etr_123456"
-
+    def test_webhook_endpoint_success(self, client, mock_publish):
+        """Test webhook endpoint enqueues a packaging request."""
         payload = {
             "channel": "events",
             "message": {"type": "v2.entry.updated.fields", "resourceId": "etr_123456"},
@@ -106,6 +118,7 @@ class TestFastAPIApp:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ACCEPTED"
+        mock_publish.assert_called_once()
 
     def test_webhook_endpoint_no_payload(self, client):
         """Test webhook endpoint with no JSON payload."""
@@ -131,10 +144,8 @@ class TestFastAPIApp:
         assert "error" in data
         assert "not found" in data["error"].lower()
 
-    def test_canvas_endpoint_starts_workflow(self, client, mock_entry_packager):
-        """Test /canvas endpoint returns 202 and starts workflow."""
-        mock_entry_packager.execute_workflow_async.return_value = "etr_123456"
-
+    def test_canvas_endpoint_starts_workflow(self, client, mock_publish):
+        """Test /canvas endpoint returns 202 and enqueues a packaging request."""
         payload = {
             "channel": "events",
             "message": {"type": "v2.canvas.initialized", "resourceId": "etr_123456"},
@@ -148,8 +159,10 @@ class TestFastAPIApp:
         data = response.json()
         assert data["status"] == "ACCEPTED"
 
-        workflow_payload = mock_entry_packager.execute_workflow_async.call_args.args[0]
-        assert workflow_payload.canvas_id == "canvas_123"
+        # publish_packaging_request(sqs_client, queue_url, payload)
+        mock_publish.assert_called_once()
+        published_payload = mock_publish.call_args.args[2]
+        assert published_payload.canvas_id == "canvas_123"
 
     @pytest.mark.local
     def test_canvas_endpoint_handles_browse_files_button(self, client, mock_benchling_client):

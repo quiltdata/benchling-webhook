@@ -283,6 +283,26 @@ export class BenchlingWebhookStack extends cdk.Stack {
             },
         });
 
+        // FIFO queue that serializes packaging work per entry_id. Replaces the
+        // old daemon-thread fire-and-forget in execute_workflow_async, removing
+        // the canvas_id race that the .canvas_id sidecar used to mask.
+        // Visibility timeout exceeds the worst-case PDF-export poll
+        // (60 attempts x 30s = 30 min) plus margin.
+        const packagingRequestDlq = new sqs.Queue(this, "PackagingRequestDLQ", {
+            fifo: true,
+            retentionPeriod: cdk.Duration.days(14),
+        });
+
+        const packagingRequestQueue = new sqs.Queue(this, "PackagingRequestQueue", {
+            fifo: true,
+            contentBasedDeduplication: true,
+            visibilityTimeout: cdk.Duration.minutes(40),
+            deadLetterQueue: {
+                queue: packagingRequestDlq,
+                maxReceiveCount: 3,
+            },
+        });
+
         // Build Fargate Service props using new config structure
         this.fargateService = new FargateService(this, "FargateService", {
             vpc,
@@ -303,6 +323,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             bucketWritePolicyArn: config.quilt.bucketWritePolicyArn,
             athenaUserPolicyArn: config.quilt.athenaUserPolicyArn,
             packageEventQueue,
+            packagingRequestQueue,
             // Legacy parameters
             benchlingSecret: benchlingSecretValue,
             packageBucket: packageBucketValue,

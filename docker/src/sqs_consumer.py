@@ -82,21 +82,19 @@ def create_benchling_client(config: Config) -> Benchling:
     return Benchling(url=f"https://{secrets.tenant}.benchling.com", auth_method=auth_method)
 
 
-class SqsConsumer:
+class BaseSqsConsumer:
+    """Generic SQS polling/dispatch loop. Subclasses implement ``process_message``."""
+
     def __init__(
         self,
         *,
         queue_url: str,
-        config: Config,
-        benchling_factory: Callable[[], Benchling],
         sqs_client: Any,
         concurrency: int = 5,
         graceful_timeout: int = 30,
         stop_event: asyncio.Event | None = None,
     ):
         self.queue_url = queue_url
-        self.config = config
-        self.benchling_factory = benchling_factory
         self.sqs_client = sqs_client
         self.concurrency = concurrency
         self.graceful_timeout = graceful_timeout
@@ -123,6 +121,66 @@ class SqsConsumer:
             QueueUrl=self.queue_url,
             ReceiptHandle=receipt_handle,
         )
+
+    async def process_message(self, message: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def _run_task(self, message: dict[str, Any]) -> None:
+        try:
+            await self.process_message(message)
+        finally:
+            self.semaphore.release()
+
+    def _track_task(self, task: asyncio.Task[None]) -> None:
+        self.in_flight_tasks.add(task)
+        task.add_done_callback(self.in_flight_tasks.discard)
+
+    async def run(self) -> None:
+        while not self.stop_event.is_set():
+            messages = await self.receive_messages()
+            for message in messages:
+                if self.stop_event.is_set():
+                    break
+                await self.semaphore.acquire()
+                task = asyncio.create_task(self._run_task(message))
+                self._track_task(task)
+
+        if not self.in_flight_tasks:
+            return
+
+        _done, pending = await asyncio.wait(self.in_flight_tasks, timeout=self.graceful_timeout)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    def request_stop(self) -> None:
+        self.stop_event.set()
+
+
+class SqsConsumer(BaseSqsConsumer):
+    """Drains the package-revision EventBridge → SQS queue and refreshes canvases."""
+
+    def __init__(
+        self,
+        *,
+        queue_url: str,
+        config: Config,
+        benchling_factory: Callable[[], Benchling],
+        sqs_client: Any,
+        concurrency: int = 5,
+        graceful_timeout: int = 30,
+        stop_event: asyncio.Event | None = None,
+    ):
+        super().__init__(
+            queue_url=queue_url,
+            sqs_client=sqs_client,
+            concurrency=concurrency,
+            graceful_timeout=graceful_timeout,
+            stop_event=stop_event,
+        )
+        self.config = config
+        self.benchling_factory = benchling_factory
 
     async def process_message(self, message: dict[str, Any]) -> None:
         sqs_message_id = message.get("MessageId", "unknown")
@@ -201,38 +259,6 @@ class SqsConsumer:
                 duration_ms=int((time.monotonic() - start_time) * 1000),
                 outcome=outcome,
             )
-
-    async def _run_task(self, message: dict[str, Any]) -> None:
-        try:
-            await self.process_message(message)
-        finally:
-            self.semaphore.release()
-
-    def _track_task(self, task: asyncio.Task[None]) -> None:
-        self.in_flight_tasks.add(task)
-        task.add_done_callback(self.in_flight_tasks.discard)
-
-    async def run(self) -> None:
-        while not self.stop_event.is_set():
-            messages = await self.receive_messages()
-            for message in messages:
-                if self.stop_event.is_set():
-                    break
-                await self.semaphore.acquire()
-                task = asyncio.create_task(self._run_task(message))
-                self._track_task(task)
-
-        if not self.in_flight_tasks:
-            return
-
-        _done, pending = await asyncio.wait(self.in_flight_tasks, timeout=self.graceful_timeout)
-        for task in pending:
-            task.cancel()
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
-
-    def request_stop(self) -> None:
-        self.stop_event.set()
 
 
 def build_sqs_client(region: str) -> Any:
