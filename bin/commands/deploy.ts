@@ -670,6 +670,10 @@ export async function deploy(
             console.log(`    ${chalk.bold("Benchling Client ID:")}     ${masked}`);
         }
     }
+    const workflowName = config.packages.workflow;
+    if (workflowName) {
+        console.log(`    ${chalk.bold("Workflow:")}                ${workflowName}`);
+    }
     console.log(`    ${chalk.bold("Event:")}                   ${eventSummary}`);
     console.log();
     console.log(chalk.bold("  Container Image:"));
