@@ -316,7 +316,7 @@ export async function deploy(
                 name: "proceed",
                 message: "Deploy a parallel standalone stack anyway?",
                 initial: false,
-                format: (v: unknown) => v ? "yes" : "no",
+                format: (v: unknown): string => v ? "yes" : "no",
             }]);
 
             if (!proceed) {
@@ -468,7 +468,7 @@ export async function deploy(
                 name: "shouldDestroy",
                 message: "Destroy this stack and recreate? (Only option to proceed)",
                 initial: true,
-                format: (v: unknown) => v ? "yes" : "no",
+                format: (v: unknown): string => v ? "yes" : "no",
             },
         ]);
 
