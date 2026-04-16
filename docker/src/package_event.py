@@ -74,27 +74,6 @@ def _classify_exception(exc: Exception) -> RefreshOutcome:
     return RefreshOutcome.TRANSIENT_ERROR
 
 
-def _load_canvas_id_sidecar(
-    package_fetcher: PackageFileFetcher,
-    package_name: str,
-    bucket: str,
-) -> str | None:
-    """Read canvas_id from the dedicated .canvas_id sidecar file in S3."""
-    s3_key = f"{package_name}/.canvas_id"
-    try:
-        s3_client = package_fetcher.role_manager.get_s3_client()
-        response = s3_client.get_object(Bucket=bucket, Key=s3_key)
-        canvas_id = response["Body"].read().decode("utf-8").strip()
-        if canvas_id:
-            logger.info("Loaded canvas_id from sidecar file", package_name=package_name)
-            return canvas_id
-    except Exception as exc:
-        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
-        if error_code not in {"NoSuchKey", "404"}:
-            logger.debug("Failed to read .canvas_id sidecar", package_name=package_name, error=str(exc))
-    return None
-
-
 def refresh_canvas_for_package_event(
     package_name: str,
     top_hash: str | None,
@@ -129,12 +108,6 @@ def refresh_canvas_for_package_event(
         metadata = package_fetcher.get_package_metadata(package_name)
         canvas_id = metadata.get("canvas_id")
         entry_id = metadata.get("entry_id")
-
-        # Fallback: read canvas_id from dedicated sidecar file (.canvas_id).
-        # This handles the race condition where v2.entry.created overwrites
-        # entry.json before v2.canvas.created writes it.
-        if not canvas_id and entry_id:
-            canvas_id = _load_canvas_id_sidecar(package_fetcher, package_name, config.s3_bucket_name)
 
         if not canvas_id or not entry_id:
             logger.info(

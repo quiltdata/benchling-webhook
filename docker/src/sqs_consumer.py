@@ -14,6 +14,7 @@ from botocore.config import Config as BotocoreConfig
 
 from .config import Config, get_config
 from .package_event import RefreshOutcome, refresh_canvas_for_package_event
+from .secrets_manager import SecretsManagerError
 
 logger = structlog.get_logger(__name__)
 
@@ -23,6 +24,13 @@ DELETE_OUTCOMES = {
     RefreshOutcome.SKIPPED_NO_CANVAS.value,
     "skipped_filtered",
 }
+
+# Backoff bounds for the pre-start readiness wait when Benchling secrets are
+# not yet populated (e.g., fresh deploy where the config script has not run).
+# Starting at 30s keeps Secrets Manager churn low; capping at 300s bounds the
+# worst-case time-to-process after secrets finally appear.
+READY_WAIT_INITIAL_SECONDS = 30
+READY_WAIT_MAX_SECONDS = 300
 
 
 class PackageEventParseError(ValueError):
@@ -74,33 +82,36 @@ def create_benchling_client(config: Config) -> Benchling:
     return Benchling(url=f"https://{secrets.tenant}.benchling.com", auth_method=auth_method)
 
 
-class SqsConsumer:
+class BaseSqsConsumer:
+    """Generic SQS polling/dispatch loop. Subclasses implement ``process_message``."""
+
     def __init__(
         self,
         *,
         queue_url: str,
-        config: Config,
-        benchling_factory: Callable[[], Benchling],
         sqs_client: Any,
         concurrency: int = 5,
         graceful_timeout: int = 30,
+        stop_event: asyncio.Event | None = None,
     ):
         self.queue_url = queue_url
-        self.config = config
-        self.benchling_factory = benchling_factory
         self.sqs_client = sqs_client
         self.concurrency = concurrency
         self.graceful_timeout = graceful_timeout
-        self.stop_event = asyncio.Event()
+        self.stop_event = stop_event if stop_event is not None else asyncio.Event()
         self.semaphore = asyncio.Semaphore(concurrency)
         self.in_flight_tasks: set[asyncio.Task[None]] = set()
 
     async def receive_messages(self) -> list[dict[str, Any]]:
+        # Cap batch size to concurrency: with WaitTimeSeconds=20 and a bounded
+        # semaphore, asking for more than `concurrency` messages just makes the
+        # tail messages sit in the semaphore backlog eating visibility timeout.
+        batch_size = max(1, min(10, self.concurrency))
         response = await asyncio.to_thread(
             self.sqs_client.receive_message,
             QueueUrl=self.queue_url,
             WaitTimeSeconds=20,
-            MaxNumberOfMessages=10,
+            MaxNumberOfMessages=batch_size,
         )
         return response.get("Messages", [])
 
@@ -110,6 +121,66 @@ class SqsConsumer:
             QueueUrl=self.queue_url,
             ReceiptHandle=receipt_handle,
         )
+
+    async def process_message(self, message: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def _run_task(self, message: dict[str, Any]) -> None:
+        try:
+            await self.process_message(message)
+        finally:
+            self.semaphore.release()
+
+    def _track_task(self, task: asyncio.Task[None]) -> None:
+        self.in_flight_tasks.add(task)
+        task.add_done_callback(self.in_flight_tasks.discard)
+
+    async def run(self) -> None:
+        while not self.stop_event.is_set():
+            messages = await self.receive_messages()
+            for message in messages:
+                if self.stop_event.is_set():
+                    break
+                await self.semaphore.acquire()
+                task = asyncio.create_task(self._run_task(message))
+                self._track_task(task)
+
+        if not self.in_flight_tasks:
+            return
+
+        _done, pending = await asyncio.wait(self.in_flight_tasks, timeout=self.graceful_timeout)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    def request_stop(self) -> None:
+        self.stop_event.set()
+
+
+class SqsConsumer(BaseSqsConsumer):
+    """Drains the package-revision EventBridge → SQS queue and refreshes canvases."""
+
+    def __init__(
+        self,
+        *,
+        queue_url: str,
+        config: Config,
+        benchling_factory: Callable[[], Benchling],
+        sqs_client: Any,
+        concurrency: int = 5,
+        graceful_timeout: int = 30,
+        stop_event: asyncio.Event | None = None,
+    ):
+        super().__init__(
+            queue_url=queue_url,
+            sqs_client=sqs_client,
+            concurrency=concurrency,
+            graceful_timeout=graceful_timeout,
+            stop_event=stop_event,
+        )
+        self.config = config
+        self.benchling_factory = benchling_factory
 
     async def process_message(self, message: dict[str, Any]) -> None:
         sqs_message_id = message.get("MessageId", "unknown")
@@ -189,38 +260,6 @@ class SqsConsumer:
                 outcome=outcome,
             )
 
-    async def _run_task(self, message: dict[str, Any]) -> None:
-        try:
-            await self.process_message(message)
-        finally:
-            self.semaphore.release()
-
-    def _track_task(self, task: asyncio.Task[None]) -> None:
-        self.in_flight_tasks.add(task)
-        task.add_done_callback(self.in_flight_tasks.discard)
-
-    async def run(self) -> None:
-        while not self.stop_event.is_set():
-            messages = await self.receive_messages()
-            for message in messages:
-                if self.stop_event.is_set():
-                    break
-                await self.semaphore.acquire()
-                task = asyncio.create_task(self._run_task(message))
-                self._track_task(task)
-
-        if not self.in_flight_tasks:
-            return
-
-        _done, pending = await asyncio.wait(self.in_flight_tasks, timeout=self.graceful_timeout)
-        for task in pending:
-            task.cancel()
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
-
-    def request_stop(self) -> None:
-        self.stop_event.set()
-
 
 def build_sqs_client(region: str) -> Any:
     session = boto3.Session(region_name=region)
@@ -234,20 +273,87 @@ def build_sqs_client(region: str) -> Any:
     )
 
 
+async def _sleep_with_stop(stop_event: asyncio.Event, seconds: float) -> bool:
+    """Sleep up to ``seconds``, returning early if ``stop_event`` is set.
+
+    Returns ``True`` if the stop event fired during the sleep, ``False`` on timeout.
+    """
+    try:
+        await asyncio.wait_for(stop_event.wait(), timeout=seconds)
+        return True
+    except asyncio.TimeoutError:
+        return False
+
+
+async def wait_for_ready_config(
+    stop_event: asyncio.Event,
+    *,
+    initial_backoff: float = READY_WAIT_INITIAL_SECONDS,
+    max_backoff: float = READY_WAIT_MAX_SECONDS,
+) -> Config | None:
+    """Block until Benchling secrets are populated and loadable.
+
+    The consumer has no useful work without valid secrets (it cannot filter
+    messages without ``s3_bucket_name`` / ``pkg_prefix``). Rather than crashing
+    and tripping the ECS deployment circuit breaker on a fresh deploy where
+    the secret is created empty by design, we loop here until the secret is
+    populated. The signal-driven ``stop_event`` lets ECS stop us cleanly.
+
+    Returns the ready ``Config``, or ``None`` if the stop event fired first.
+    """
+    attempt = 0
+    backoff = initial_backoff
+    while not stop_event.is_set():
+        try:
+            config = get_config()
+            secrets = config.get_benchling_secrets()
+            config.apply_benchling_secrets(secrets)
+        except (SecretsManagerError, ValueError) as exc:
+            attempt += 1
+            logger.warning(
+                "Benchling secrets not ready; SQS consumer waiting before retry",
+                attempt=attempt,
+                retry_in_seconds=backoff,
+                error=str(exc).split("\n", 1)[0],
+                error_type=type(exc).__name__,
+            )
+            if await _sleep_with_stop(stop_event, backoff):
+                return None
+            backoff = min(backoff * 2, max_backoff)
+            continue
+
+        logger.info(
+            "SQS consumer config loaded from secrets",
+            s3_bucket_name=config.s3_bucket_name,
+            pkg_prefix=config.pkg_prefix,
+            attempts=attempt + 1,
+        )
+        return config
+
+    return None
+
+
 async def main() -> int:
     queue_url = os.getenv("PACKAGE_EVENT_QUEUE_URL", "").strip()
     if not queue_url:
         logger.info("PACKAGE_EVENT_QUEUE_URL not configured; SQS consumer exiting")
         return 0
 
-    config = get_config()
-    secrets = config.get_benchling_secrets()
-    config.apply_benchling_secrets(secrets)
-    logger.info(
-        "SQS consumer config loaded from secrets",
-        s3_bucket_name=config.s3_bucket_name,
-        pkg_prefix=config.pkg_prefix,
-    )
+    # Install signal handlers up front so the container can be stopped cleanly
+    # even while we're waiting for secrets to become available.
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, stop_event.set)
+        except NotImplementedError:  # pragma: no cover - platform specific
+            signal.signal(sig, lambda _signum, _frame: stop_event.set())
+
+    config = await wait_for_ready_config(stop_event)
+    if config is None:
+        logger.info("SQS consumer stopped before Benchling secrets became available")
+        return 0
+
     sqs_client = build_sqs_client(config.aws_region)
     concurrency = int(os.getenv("PACKAGE_EVENT_CONCURRENCY", "5"))
     graceful_timeout = int(os.getenv("PACKAGE_EVENT_GRACEFUL_TIMEOUT", "30"))
@@ -259,14 +365,8 @@ async def main() -> int:
         sqs_client=sqs_client,
         concurrency=concurrency,
         graceful_timeout=graceful_timeout,
+        stop_event=stop_event,
     )
-
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        try:
-            loop.add_signal_handler(sig, consumer.request_stop)
-        except NotImplementedError:  # pragma: no cover - platform specific
-            signal.signal(sig, lambda _signum, _frame: consumer.request_stop())
 
     await consumer.run()
     return 0

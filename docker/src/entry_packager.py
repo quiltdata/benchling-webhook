@@ -7,7 +7,6 @@ and queues them for Quilt package creation via SQS.
 
 import io
 import json
-import threading
 import time
 import zipfile
 from datetime import datetime, timezone
@@ -47,6 +46,22 @@ class EntryValidationError(ValueError):
     """Exception raised when entry data validation fails."""
 
     pass
+
+
+def _format_commit_message(payload: Payload) -> str:
+    """Build the Quilt package commit message from a Benchling webhook payload.
+
+    Includes the event type so revisions are self-explanatory in the Quilt UI
+    (e.g., distinguishing ``v2.entry.updated.reviewRecord`` from
+    ``v2.entry.created``). Appends the event timestamp when present; drops it
+    cleanly when missing so the message never trails with a dangling separator.
+    """
+    event = payload.event_type or "webhook payload"
+    message = f"Benchling {event}"
+    timestamp = payload.timestamp
+    if timestamp:
+        message += f" at {timestamp}"
+    return message
 
 
 def validate_entry_data(entry_data: Dict[str, Any], entry_id: str) -> Dict[str, Any]:
@@ -470,13 +485,12 @@ class EntryPackager:
             uploaded_files = []
             canvas_id = payload.canvas_id
 
-            # If canvas_id comes from a canvas event, persist it to a dedicated
-            # sidecar file so entry events (which have no canvas_id) can't
-            # overwrite it via the race on entry.json.
-            if canvas_id is not None:
-                self._save_canvas_id(s3_client, package_name, canvas_id)
-            else:
-                canvas_id = self._load_canvas_id(s3_client, package_name)
+            # When this event has no canvas_id (e.g., a v2.entry.* event),
+            # preserve any canvas_id already recorded by an earlier canvas
+            # event for the same package. Sequential FIFO processing per
+            # entry_id makes a plain S3 read sufficient — no sidecar needed.
+            if canvas_id is None:
+                canvas_id = self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
 
             # Extract and upload files from ZIP
             self.logger.info("Extracting and uploading files from in-memory ZIP buffer")
@@ -499,12 +513,6 @@ class EntryPackager:
                             "size": len(file_content),
                         }
                     )
-
-            # Re-read canvas_id right before writing to minimize the race window.
-            # Another thread (canvas event) may have written .canvas_id since we
-            # last checked.
-            if canvas_id is None:
-                canvas_id = self._load_canvas_id(s3_client, package_name)
 
             # Create metadata files (entry_data already fetched above)
             metadata_files = self._create_metadata_files(
@@ -698,70 +706,41 @@ For questions about the data, refer to the original Benchling entry.
             "README.md": readme_content,
         }
 
-    def _save_canvas_id(self, s3_client: Any, package_name: str, canvas_id: str) -> None:
-        """Write canvas_id to a dedicated sidecar file in S3.
+    def _load_existing_canvas_id_from_entry_json(self, s3_client: Any, package_name: str) -> Optional[str]:
+        """Read canvas_id from a previously-written ``entry.json``, if any.
 
-        Only called when canvas_id comes from a canvas event payload.
-        Entry events never write this file, which prevents the race condition
-        where an entry event overwrites a canvas event's canvas_id.
+        Used when the current event has no ``canvas_id`` (e.g., a v2.entry.*
+        event) but a prior canvas event for the same entry already recorded
+        one. FIFO sequencing on ``entry_id`` guarantees that prior write is
+        visible by the time we run.
         """
-        s3_key = f"{package_name}/.canvas_id"
-        try:
-            s3_client.put_object(
-                Bucket=self.config.s3_bucket_name,
-                Key=s3_key,
-                Body=canvas_id.encode("utf-8"),
-            )
-            self.logger.info("Saved canvas_id to sidecar file", package_name=package_name, canvas_id=canvas_id)
-        except Exception as exc:
-            self.logger.warning(
-                "Failed to save canvas_id sidecar file",
-                package_name=package_name,
-                canvas_id=canvas_id,
-                error=str(exc),
-            )
-
-    def _load_canvas_id(self, s3_client: Any, package_name: str) -> Optional[str]:
-        """Load canvas_id from S3, checking sidecar file first then entry.json."""
-        # Primary: dedicated sidecar file (written only by canvas events)
-        sidecar_key = f"{package_name}/.canvas_id"
-        try:
-            response = s3_client.get_object(Bucket=self.config.s3_bucket_name, Key=sidecar_key)
-            canvas_id = response["Body"].read().decode("utf-8").strip()
-            if canvas_id:
-                self.logger.debug("Loaded canvas_id from sidecar file", package_name=package_name)
-                return canvas_id
-        except Exception as exc:
-            error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
-            if error_code not in {"NoSuchKey", "404"}:
-                self.logger.debug("Failed to read .canvas_id sidecar", error=str(exc))
-
-        # Fallback: entry.json (backward compat for packages created before sidecar)
         entry_key = f"{package_name}/entry.json"
         try:
             response = s3_client.get_object(Bucket=self.config.s3_bucket_name, Key=entry_key)
-            body = response["Body"].read().decode("utf-8")
-            metadata = json.loads(body)
+            metadata = json.loads(response["Body"].read().decode("utf-8"))
             if isinstance(metadata, dict):
                 canvas_id = metadata.get("canvas_id")
                 if isinstance(canvas_id, str) and canvas_id:
-                    self.logger.debug("Loaded canvas_id from entry.json fallback", package_name=package_name)
+                    self.logger.debug("Preserved canvas_id from existing entry.json", package_name=package_name)
                     return canvas_id
         except Exception as exc:
             error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
             if error_code not in {"NoSuchKey", "404"}:
-                self.logger.debug("Failed to read entry.json for canvas_id", error=str(exc))
-
+                self.logger.debug(
+                    "Failed to read entry.json for canvas_id preservation",
+                    package_name=package_name,
+                    error=str(exc),
+                )
         return None
 
     @REST_API_RETRY
-    def _send_to_sqs(self, package_name: str, timestamp: str) -> Dict[str, Any]:
+    def _send_to_sqs(self, package_name: str, payload: Payload) -> Dict[str, Any]:
         """
         Send package creation message to Quilt SQS queue.
 
         Args:
             package_name: Quilt package name
-            timestamp: Event timestamp for commit message
+            payload: Parsed webhook payload (used to build the commit message)
 
         Returns:
             SQS response with MessageId
@@ -777,7 +756,7 @@ For questions about the data, refer to the original Benchling entry.
             "registry": self.config.s3_bucket_name,
             "package_name": package_name,
             "metadata_uri": "entry.json",
-            "commit_message": f"Benchling webhook payload - {timestamp}",
+            "commit_message": _format_commit_message(payload),
         }
         if getattr(self.config, "workflow", ""):
             message_body["workflow"] = self.config.workflow
@@ -869,7 +848,7 @@ For questions about the data, refer to the original Benchling entry.
             )
 
             # Step 5: Send to Quilt queue
-            sqs_result = self._send_to_sqs(package_name, payload.timestamp or "")
+            sqs_result = self._send_to_sqs(package_name, payload)
             self.logger.debug(
                 "SQS message sent",
                 message_id=sqs_result.get("MessageId"),
@@ -879,7 +858,7 @@ For questions about the data, refer to the original Benchling entry.
             # This provides an optimistic preview; the SQS consumer will send the
             # authoritative update once Quilt creates the package revision.
             s3_client = self.role_manager.get_s3_client()
-            canvas_id = payload.canvas_id or self._load_canvas_id(s3_client, package_name)
+            canvas_id = payload.canvas_id or self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
             if canvas_id and self.benchling:
                 try:
                     from .canvas import CanvasManager
@@ -923,77 +902,3 @@ For questions about the data, refer to the original Benchling entry.
             )
 
             raise
-
-    def execute_workflow_async(self, payload: Payload) -> str:
-        """
-        Execute workflow asynchronously in background thread.
-
-        This prevents blocking the webhook response while workflow executes.
-
-        Args:
-            payload: Parsed webhook payload
-
-        Returns:
-            Task identifier (entry_id) for reference
-        """
-        entry_id = payload.entry_id
-        # Note: display_id will be fetched and set during workflow execution
-        # Use entry_id for initial logging, display_id-based package name will be used later
-        package_name_preview = payload.package_name(self.config.s3_prefix, use_display_id=False)
-
-        self.logger.info(
-            "Package entries workflow scheduled",
-            entry_id=entry_id,
-            event_id=payload.event_id,
-            event_type=payload.event_type,
-            package_name_preview=package_name_preview,
-        )
-
-        # Send immediate "Processing..." feedback if this is a canvas event
-        if payload.canvas_id and self.benchling:
-            from .canvas import CanvasManager
-
-            CanvasManager.send_processing_update(self.benchling, payload.canvas_id)
-
-        # Execute workflow in background thread
-        def background_execution():
-            try:
-                self.logger.info(
-                    "Background workflow execution started",
-                    entry_id=entry_id,
-                    event_type=payload.event_type,
-                )
-
-                # Execute all workflow steps
-                result = self.execute_workflow(payload)
-
-                self.logger.info(
-                    "Background workflow execution completed successfully",
-                    entry_id=entry_id,
-                    package_name=result.get("packageName"),
-                    result_status=result.get("status"),
-                )
-
-            except Exception as e:
-                error_message = str(e)
-                error_cause = e.__class__.__name__
-
-                self.logger.error(
-                    "Background workflow execution failed",
-                    entry_id=entry_id,
-                    error=error_message,
-                    error_type=error_cause,
-                    exc_info=True,
-                )
-
-        thread = threading.Thread(target=background_execution, daemon=True)
-        thread.start()
-
-        self.logger.debug(
-            "Background workflow thread started",
-            entry_id=entry_id,
-            thread_name=thread.name,
-            thread_id=thread.ident,
-        )
-
-        return entry_id

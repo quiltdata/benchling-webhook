@@ -41,6 +41,7 @@ export interface FargateServiceProps {
     readonly bucketWritePolicyArn?: string;
     readonly athenaUserPolicyArn?: string;
     readonly packageEventQueue?: sqs.IQueue;
+    readonly packagingRequestQueue?: sqs.IQueue;
 
     // Runtime-configurable parameters (from CloudFormation)
     readonly benchlingSecret: string;
@@ -308,6 +309,15 @@ export class FargateService extends Construct {
             props.packageEventQueue.grantConsumeMessages(taskRole);
         }
 
+        if (props.packagingRequestQueue) {
+            environmentVars.PACKAGING_REQUEST_QUEUE_URL = props.packagingRequestQueue.queueUrl;
+            environmentVars.PACKAGING_REQUEST_CONCURRENCY = "5";
+            environmentVars.PACKAGING_REQUEST_GRACEFUL_TIMEOUT = "30";
+            // Webhook container produces, packaging-consumer container drains.
+            props.packagingRequestQueue.grantSendMessages(taskRole);
+            props.packagingRequestQueue.grantConsumeMessages(taskRole);
+        }
+
         // Add container with configured environment
         const container = taskDefinition.addContainer("BenchlingWebhookContainer", {
             image: ecs.ContainerImage.fromEcrRepository(
@@ -339,6 +349,27 @@ export class FargateService extends Construct {
                 stopTimeout: cdk.Duration.seconds(30),
                 logging: ecs.LogDriver.awsLogs({
                     streamPrefix: "benchling-sqs-consumer",
+                    logGroup: this.logGroup,
+                }),
+                environment: environmentVars,
+            });
+        }
+
+        if (props.packagingRequestQueue) {
+            // Drains the FIFO packaging-request queue and runs
+            // EntryPackager.execute_workflow per message. FIFO + MessageGroupId
+            // serializes per-entry work; a single sidecar container processes
+            // up to PACKAGING_REQUEST_CONCURRENCY entries in parallel.
+            taskDefinition.addContainer("BenchlingPackagingConsumer", {
+                image: ecs.ContainerImage.fromEcrRepository(
+                    props.ecrRepository,
+                    props.imageTag || "latest",
+                ),
+                command: ["python", "-m", "src.packaging_consumer"],
+                essential: true,
+                stopTimeout: cdk.Duration.seconds(30),
+                logging: ecs.LogDriver.awsLogs({
+                    streamPrefix: "benchling-packaging-consumer",
                     logGroup: this.logGroup,
                 }),
                 environment: environmentVars,

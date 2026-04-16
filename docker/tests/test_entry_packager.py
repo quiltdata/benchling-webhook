@@ -446,6 +446,16 @@ class TestEntryPackager:
                 )
 
     # Episode 6: SendToSQS tests
+    @staticmethod
+    def _payload_with(
+        event_type: str = "v2.entry.created",
+        timestamp: str | None = "2025-10-02T10:00:00Z",
+    ) -> Payload:
+        message: dict = {"id": "evt_1", "resourceId": "etr_456", "type": event_type}
+        if timestamp is not None:
+            message["timestamp"] = timestamp
+        return Payload({"message": message, "baseURL": "https://demo.benchling.com"})
+
     def test_send_to_sqs_success(self, orchestrator):
         """Test successful SQS message send."""
         mock_response = {"MessageId": "msg_123"}
@@ -453,10 +463,39 @@ class TestEntryPackager:
         with patch.object(orchestrator.sqs_client, "send_message", return_value=mock_response):
             result = orchestrator._send_to_sqs(
                 package_name="benchling/EXP0001",  # Now uses display_id
-                timestamp="2025-10-02T10:00:00Z",
+                payload=self._payload_with(),
             )
 
         assert result["MessageId"] == "msg_123"
+
+    def test_send_to_sqs_commit_message_includes_event_type_and_timestamp(self, orchestrator):
+        """Commit message embeds the event type so revisions are self-describing."""
+        mock_response = {"MessageId": "msg_123"}
+
+        with patch.object(orchestrator.sqs_client, "send_message", return_value=mock_response) as send_mock:
+            orchestrator._send_to_sqs(
+                package_name="benchling/EXP0001",
+                payload=self._payload_with(
+                    event_type="v2.entry.updated.reviewRecord",
+                    timestamp="2026-04-15T14:25:03Z",
+                ),
+            )
+
+        message_body = json.loads(send_mock.call_args.kwargs["MessageBody"])
+        assert message_body["commit_message"] == ("Benchling v2.entry.updated.reviewRecord at 2026-04-15T14:25:03Z")
+
+    def test_send_to_sqs_commit_message_drops_timestamp_when_missing(self, orchestrator):
+        """Missing timestamp must not produce a trailing ' at ' suffix."""
+        mock_response = {"MessageId": "msg_123"}
+
+        with patch.object(orchestrator.sqs_client, "send_message", return_value=mock_response) as send_mock:
+            orchestrator._send_to_sqs(
+                package_name="benchling/EXP0001",
+                payload=self._payload_with(event_type="v2.entry.created", timestamp=None),
+            )
+
+        message_body = json.loads(send_mock.call_args.kwargs["MessageBody"])
+        assert message_body["commit_message"] == "Benchling v2.entry.created"
 
     def test_send_to_sqs_includes_workflow_when_configured(self, orchestrator):
         """Test workflow is forwarded to the Quilt package creation payload."""
@@ -466,7 +505,7 @@ class TestEntryPackager:
         with patch.object(orchestrator.sqs_client, "send_message", return_value=mock_response) as send_mock:
             orchestrator._send_to_sqs(
                 package_name="benchling/EXP0001",
-                timestamp="2025-10-02T10:00:00Z",
+                payload=self._payload_with(),
             )
 
         message_body = json.loads(send_mock.call_args.kwargs["MessageBody"])
@@ -480,7 +519,7 @@ class TestEntryPackager:
         with patch.object(orchestrator.sqs_client, "send_message", return_value=mock_response) as send_mock:
             orchestrator._send_to_sqs(
                 package_name="benchling/EXP0001",
-                timestamp="2025-10-02T10:00:00Z",
+                payload=self._payload_with(),
             )
 
         message_body = json.loads(send_mock.call_args.kwargs["MessageBody"])
@@ -679,12 +718,11 @@ class TestEntryPackager:
 
         s3_client = Mock()
 
-        # Mock get_object to return the sidecar file for .canvas_id reads,
-        # and entry.json for fallback reads.
+        # Entry events read canvas_id from any existing entry.json. FIFO
+        # sequencing on entry_id guarantees the prior canvas-event write is
+        # visible before this entry-event workflow runs.
         def mock_get_object(**kwargs):
             key = kwargs.get("Key", "")
-            if key.endswith("/.canvas_id"):
-                return {"Body": io.BytesIO(b"canvas_preserved")}
             if key.endswith("/entry.json"):
                 return {"Body": io.BytesIO(json.dumps({"canvas_id": "canvas_preserved"}).encode("utf-8"))}
             raise s3_client.exceptions.NoSuchKey({"Error": {"Code": "NoSuchKey"}}, "GetObject")
@@ -722,56 +760,3 @@ class TestEntryPackager:
 
         assert written_entry_json is not None
         assert written_entry_json["canvas_id"] == "canvas_preserved"
-
-    # Episode 9: Async execution tests
-    def test_execute_workflow_async(self, orchestrator, mock_benchling):
-        """Test async workflow execution returns immediately."""
-        # Mock SDK calls
-        mock_entry = Mock()
-        mock_entry.to_dict.return_value = {
-            "id": "etr_123",
-            "display_id": "EXP0001",
-            "fields": [],
-        }
-        mock_benchling.entries.get_entry_by_id.return_value = mock_entry
-
-        mock_export_result = Mock()
-        mock_export_result.task_id = "task_123"
-        mock_benchling.exports.export.return_value = mock_export_result
-
-        mock_task = Mock()
-        mock_task.id = "task_123"
-        mock_task.status = Mock()
-        mock_task.status.value = "SUCCEEDED"
-        mock_task.response = Mock()
-        mock_task.response.get = Mock(return_value="https://example.com/export.zip")
-        mock_benchling.tasks.get_by_id.return_value = mock_task
-
-        # Mock _process_export (inline processing)
-        mock_process_result = {
-            "statusCode": 200,
-            "package_name": "benchling/EXP0001",  # Now uses display_id
-            "files_uploaded": [],
-            "total_files": 5,
-        }
-        mock_sqs_response = {"MessageId": "msg_123"}
-
-        with (
-            patch.object(orchestrator, "_process_export", return_value=mock_process_result),
-            patch.object(orchestrator.sqs_client, "send_message", return_value=mock_sqs_response),
-        ):
-            payload = Payload(
-                {
-                    "message": {
-                        "id": "evt_456",
-                        "resourceId": "etr_123",
-                        "timestamp": "2025-10-02T10:00:00Z",
-                    },
-                    "baseURL": "https://demo.benchling.com",
-                }
-            )
-
-            # Should return immediately with entry_id
-            entry_id = orchestrator.execute_workflow_async(payload)
-
-            assert entry_id == "etr_123"
