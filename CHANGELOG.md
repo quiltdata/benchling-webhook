@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-04-15
+
+### Fixed
+
+- Canvas during entry export now shows the full navigation layout (Browse/Update buttons, package header, and footer reading "Updating...") instead of a bare "Processing..." placeholder. Update Package is disabled while the export runs; Browse Package stays enabled so the previous package version remains reachable on re-exports
+- Packaging requests are now sequenced per entry through a FIFO SQS queue, so `entry.created` and `canvas.created` events for the same entry can no longer race and drop `canvas_id` from `entry.json`
+
+### Removed
+
+- `.canvas_id` S3 sidecar is no longer read or written — per-entry FIFO ordering makes it unnecessary. Existing sidecar objects in S3 from prior deployments are harmless orphans
+
+## [0.17.1] - 2026-04-15
+
+### Fixed
+
+- SQS consumer now waits for Benchling secrets to be populated instead of crashing on fresh deploys. Previously, an empty `BenchlingSecret` (populated later by the external config script) caused `SecretsManagerError` at startup, repeated task failures, and tripped the ECS deployment circuit breaker. The consumer now installs signal handlers first, then loops with bounded exponential backoff (30s → 300s) until secrets load, short-circuiting cleanly on SIGTERM
+- `MaxNumberOfMessages` is now capped at `min(10, concurrency)` so tail messages no longer sit in the semaphore backlog eating visibility timeout
+
 ## [0.17.0] - 2026-04-14
 
 ### Changed

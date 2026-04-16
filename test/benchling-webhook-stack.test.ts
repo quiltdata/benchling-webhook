@@ -37,19 +37,25 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
-    test("adds the SQS consumer sidecar to the task definition", () => {
+    test("adds the SQS consumer sidecars to the task definition", () => {
         const taskDefinitions = template.findResources("AWS::ECS::TaskDefinition");
         const taskDefinition = Object.values(taskDefinitions)[0] as any;
         const containerDefinitions = taskDefinition.Properties.ContainerDefinitions;
 
-        expect(containerDefinitions).toHaveLength(2);
+        // webhook + package-event consumer + packaging-request consumer
+        expect(containerDefinitions).toHaveLength(3);
 
-        const consumerContainer = containerDefinitions.find(
+        const packageEventConsumer = containerDefinitions.find(
             (container: any) => JSON.stringify(container.Command) === JSON.stringify(["python", "-m", "src.sqs_consumer"])
         );
+        expect(packageEventConsumer).toBeDefined();
+        expect(packageEventConsumer.Essential).toBe(true);
 
-        expect(consumerContainer).toBeDefined();
-        expect(consumerContainer.Essential).toBe(true);
+        const packagingConsumer = containerDefinitions.find(
+            (container: any) => JSON.stringify(container.Command) === JSON.stringify(["python", "-m", "src.packaging_consumer"])
+        );
+        expect(packagingConsumer).toBeDefined();
+        expect(packagingConsumer.Essential).toBe(true);
     });
 
     test("does not create Step Functions", () => {
@@ -84,7 +90,19 @@ describe("BenchlingWebhookStack", () => {
             }),
         });
 
-        template.resourceCountIs("AWS::SQS::Queue", 2);
+        // 4 queues: PackageEventQueue + DLQ, PackagingRequestQueue.fifo + DLQ
+        template.resourceCountIs("AWS::SQS::Queue", 4);
+    });
+
+    test("creates FIFO packaging-request queue with content-based dedup", () => {
+        template.hasResourceProperties("AWS::SQS::Queue", {
+            FifoQueue: true,
+            ContentBasedDeduplication: true,
+            VisibilityTimeout: 2400, // 40 minutes
+            RedrivePolicy: Match.objectLike({
+                maxReceiveCount: 3,
+            }),
+        });
     });
 
     test("creates CloudWatch log groups", () => {
