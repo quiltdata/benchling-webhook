@@ -23,10 +23,10 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi==0.135.3",
-    "uvicorn[standard]==0.44.0",
+    "fastapi==0.136.1",
+    "uvicorn[standard]==0.46.0",
     "gunicorn==25.3.0",
-    "boto3==1.42.89",
+    "boto3==1.42.96",
     "dataclasses-json>=0.5.2,<0.6.0",
     "python-dotenv==1.2.2",
     "structlog==25.5.0",
@@ -49,7 +49,7 @@ dev = [
     "black==26.3.1",
     "flake8==7.3.0",
     "isort==8.0.1",
-    "pyright==1.1.408",
+    "pyright==1.1.409",
 ]
 
 [project.urls]
