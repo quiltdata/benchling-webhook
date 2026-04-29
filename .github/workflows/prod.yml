@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      image_uri_sha: ${{ steps.image.outputs.IMAGE_URI_SHA }}
+      image_uri_sha: ${{ steps.deploy.outputs.image_uri_prod }}
       image_uri_latest: ${{ steps.image.outputs.IMAGE_URI_LATEST }}
       git_sha: ${{ steps.git.outputs.GIT_SHA }}
 
@@ -50,38 +50,31 @@ jobs:
         working-directory: docker
         run: uv sync --all-extras
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: arn:aws:iam::730278974607:role/github/GitHub-benchling-webhook
-          aws-region: us-east-1
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
         with:
           platforms: linux/amd64
 
       - name: Build and push Docker image
-        working-directory: docker
-        run: make push-ci VERSION=${{ steps.git.outputs.GIT_SHA }}
-        env:
-          DOCKER_DEFAULT_PLATFORM: linux/amd64
-          AWS_REGION: us-east-1
+        id: deploy
+        uses: quiltdata/gh-actions/deploy-ecr@deploy-ecr
+        with:
+          dockerfile_path: docker/Dockerfile
+          docker_context_path: docker
+          docker_platform: linux/amd64
+          build_args: |
+            VERSION=${{ steps.git.outputs.GIT_SHA }}
+          image_name: quiltdata/benchling
+          additional_tags: '["latest"]'
+          push_targets: '["prod"]'
 
-      - name: Get Docker image URIs
+      - name: Record Docker image URIs
         id: image
         run: |
-          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          GIT_SHA="${{ steps.git.outputs.GIT_SHA }}"
-          IMAGE_URI_SHA="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:${GIT_SHA}"
-          IMAGE_URI_LATEST="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest"
-
-          echo "IMAGE_URI_SHA=$IMAGE_URI_SHA" >> $GITHUB_OUTPUT
-          echo "IMAGE_URI_LATEST=$IMAGE_URI_LATEST" >> $GITHUB_OUTPUT
-
+          echo "IMAGE_URI_LATEST=730278974607.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest" >> "$GITHUB_OUTPUT"
           echo "Docker Images:"
-          echo "  SHA: $IMAGE_URI_SHA"
-          echo "  Latest: $IMAGE_URI_LATEST"
+          echo "  SHA: ${{ steps.deploy.outputs.image_uri_prod }}"
+          echo "  Latest: 730278974607.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest"
 
   validate:
     name: Validate Production Image
