@@ -57,7 +57,7 @@ jobs:
 
       - name: Build and push Docker image
         id: deploy
-        uses: quiltdata/gh-actions/deploy-ecr@deploy-ecr
+        uses: quiltdata/gh-actions/docker-build-publish@docker-build-publish
         with:
           dockerfile_path: docker/Dockerfile
           docker_context_path: docker
