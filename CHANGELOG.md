@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.3] - 2026-06-15
+
+### Added
+
+- Entries are now searchable by the **human-readable name** of the Benchling objects they reference. `entry.json` gains a `links` array — one `{type, id, name, slug}` entry per referenced object — promoted into the package metadata so `links.name` queries match real names (e.g. find every experiment that references `QB-2743.1`). `name` is resolved from the Benchling API (best-effort `get_by_id`; `null` when the app lacks registry access or the type is unsupported); `slug` is a lossy token parsed from the `webURL` for display/debugging only and is never used as a name
+
+### Changed
+
+- `references.json` renamed to **`links.json`** and reduced to raw discovery facts only — `id`/`type`/`web_url` per link, plus `entities` and `results_tables`. Derived classifications (`category`/`fetchable`/`eventable`/`disposition`) are no longer persisted; they are recomputed from `type` in code at runtime, so the raw archive stays reprocessable and a future classification change needs no re-fetch. `schema_version` bumped to `2`
+
 ## [0.17.2] - 2026-04-15
 
 ### Fixed
