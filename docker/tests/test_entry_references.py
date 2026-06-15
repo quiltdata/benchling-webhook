@@ -4,8 +4,9 @@ import json
 
 from src.entry_references import (
     ENTITY_LINK_TYPES,
+    EVENTABLE_CATEGORIES,
+    FETCHABLE_CATEGORIES,
     LINK_TYPE_CATEGORY,
-    PACKAGEABLE_CATEGORIES,
     EntityReference,
     LinkCategory,
     LinkRef,
@@ -217,7 +218,7 @@ class TestClassifyLinks:
             LinkRef(type="link", category=LinkCategory.EXTERNAL, id=None, web_url="https://example.com"),
         ]
 
-    def test_is_packageable_filter(self):
+    def test_is_fetchable_filter(self):
         entry = _entry(
             _link_note(
                 {"id": "bfi_1", "type": "custom_entity", "webURL": "u1"},
@@ -225,8 +226,28 @@ class TestClassifyLinks:
                 {"type": "link", "webURL": "https://example.com"},
             )
         )
-        packageable = [r.id for r in classify_links(entry) if r.is_packageable]
-        assert packageable == ["bfi_1"]
+        fetchable = [r.id for r in classify_links(entry) if r.is_fetchable]
+        assert fetchable == ["bfi_1"]
+
+    def test_disposition_and_eventable_by_category(self):
+        def link_of(t, i):
+            return _link_note({"id": i, "type": t, "webURL": "u"})
+
+        entry = _entry(
+            link_of("custom_entity", "bfi_1"),  # entity
+            link_of("container", "con_1"),  # inventory
+            link_of("entry", "etr_1"),  # reference
+            link_of("user", "ent_1"),  # metadata
+            link_of("sql_dashboard", "axdash_1"),  # not_packageable
+        )
+        by_id = {r.id: r for r in classify_links(entry)}
+        assert by_id["bfi_1"].disposition == "nest_or_standalone"
+        assert by_id["bfi_1"].is_eventable is True
+        assert by_id["con_1"].disposition == "nest"
+        assert by_id["con_1"].is_eventable is False  # inventory: nest-only
+        assert by_id["etr_1"].disposition == "link"
+        assert by_id["ent_1"].disposition == "pointer"
+        assert by_id["axdash_1"].disposition == "skip"
 
     def test_dedupes_by_id_then_url(self):
         entry = _entry(
@@ -243,12 +264,13 @@ class TestClassifyLinks:
             ("link", "https://dup.com"),
         ]
 
-    def test_packageable_categories_membership(self):
-        assert PACKAGEABLE_CATEGORIES == {
+    def test_fetchable_and_eventable_category_membership(self):
+        assert FETCHABLE_CATEGORIES == {
             LinkCategory.ENTITY,
             LinkCategory.INVENTORY,
             LinkCategory.REFERENCE,
         }
+        assert EVENTABLE_CATEGORIES == {LinkCategory.ENTITY, LinkCategory.REFERENCE}
 
 
 class TestSummarizeReferences:
@@ -268,7 +290,11 @@ class TestSummarizeReferences:
         assert [e["id"] for e in summary["entities"]] == ["bfi_1", "seq_field"]
         assert {link["type"] for link in summary["links"]} == {"custom_entity", "sql_dashboard"}
         assert summary["links"][0]["category"] == "entity"
-        assert summary["links"][1]["packageable"] is False
+        assert summary["links"][0]["disposition"] == "nest_or_standalone"
+        assert summary["links"][0]["fetchable"] is True
+        assert summary["links"][0]["eventable"] is True
+        assert summary["links"][1]["disposition"] == "skip"
+        assert summary["links"][1]["fetchable"] is False
         assert summary["results_tables"] == [{"assay_result_schema_id": "assaysch_1", "api_id": "tbl_1", "name": "T1"}]
 
     def test_empty_entry_yields_empty_arrays(self):
