@@ -1,9 +1,18 @@
 """Tests for entry_references extractor (shared discovery for #143 + #68/#69)."""
 
+import json
+from pathlib import Path
+
 from src.entry_references import (
     ENTITY_LINK_TYPES,
+    LINK_TYPE_CATEGORY,
+    PACKAGEABLE_CATEGORIES,
     EntityReference,
+    LinkCategory,
+    LinkRef,
     ResultsTableReference,
+    classify_link_type,
+    classify_links,
     extract_entity_references,
     extract_note_links,
     extract_results_tables,
@@ -126,3 +135,130 @@ class TestExtractResultsTables:
         note = {"type": "results_table", "apiId": "tbl_1", "assayResultSchemaId": "assaysch_1"}
         entry = _entry(dict(note), dict(note))
         assert len(extract_results_tables(entry)) == 1
+
+
+class TestEntityLinkTypes:
+    """Lock the linkable-entity set to the EntryLink enum (#389)."""
+
+    def test_set_matches_entrylink_entities(self):
+        # custom_entity, dna_sequence, aa_sequence, batch -- and nothing else.
+        assert ENTITY_LINK_TYPES == {"custom_entity", "dna_sequence", "aa_sequence", "batch"}
+
+    def test_batch_is_an_entity_reference(self):
+        entry = _entry(_link_note({"id": "bat_1", "type": "batch", "webURL": "u"}))
+        assert [r.id for r in extract_entity_references(entry)] == ["bat_1"]
+
+    def test_oligos_are_not_link_types(self):
+        # dna_oligo / rna_oligo cannot appear as note links -- not in the enum.
+        for t in ("dna_oligo", "rna_oligo"):
+            assert t not in ENTITY_LINK_TYPES
+            assert t not in LINK_TYPE_CATEGORY
+
+
+class TestClassifyLinkType:
+    def test_full_enum_is_mapped(self):
+        # All 18 EntryLink.type tokens from test/openapi.yaml.
+        enum = {
+            "link", "user", "request", "entry", "stage_entry", "protocol", "workflow",
+            "custom_entity", "aa_sequence", "dna_sequence", "batch", "box", "container",
+            "location", "plate", "insights_dashboard", "folder", "sql_dashboard",
+        }  # fmt: skip
+        assert set(LINK_TYPE_CATEGORY) == enum
+        # none fall through to UNKNOWN
+        assert all(classify_link_type(t) is not LinkCategory.UNKNOWN for t in enum)
+
+    def test_category_assignments(self):
+        assert classify_link_type("custom_entity") is LinkCategory.ENTITY
+        assert classify_link_type("batch") is LinkCategory.ENTITY
+        assert classify_link_type("container") is LinkCategory.INVENTORY
+        assert classify_link_type("entry") is LinkCategory.REFERENCE
+        assert classify_link_type("user") is LinkCategory.METADATA
+        assert classify_link_type("sql_dashboard") is LinkCategory.NOT_PACKAGEABLE
+        assert classify_link_type("stage_entry") is LinkCategory.UNCERTAIN
+        assert classify_link_type("link") is LinkCategory.EXTERNAL
+
+    def test_unknown_and_empty_fall_through(self):
+        assert classify_link_type("future_type") is LinkCategory.UNKNOWN
+        assert classify_link_type(None) is LinkCategory.UNKNOWN
+        assert classify_link_type("") is LinkCategory.UNKNOWN
+
+
+class TestClassifyLinks:
+    def test_surfaces_all_types_classified(self):
+        entry = _entry(
+            _link_note(
+                {"id": "bfi_1", "type": "custom_entity", "webURL": "u1"},
+                {"id": "con_1", "type": "container", "webURL": "u2"},
+                {"id": "axdash_1", "type": "sql_dashboard", "webURL": "u3"},
+                {"type": "link", "webURL": "https://example.com"},
+            )
+        )
+        refs = classify_links(entry)
+        assert refs == [
+            LinkRef(type="custom_entity", category=LinkCategory.ENTITY, id="bfi_1", web_url="u1"),
+            LinkRef(type="container", category=LinkCategory.INVENTORY, id="con_1", web_url="u2"),
+            LinkRef(
+                type="sql_dashboard",
+                category=LinkCategory.NOT_PACKAGEABLE,
+                id="axdash_1",
+                web_url="u3",
+            ),
+            LinkRef(type="link", category=LinkCategory.EXTERNAL, id=None, web_url="https://example.com"),
+        ]
+
+    def test_is_packageable_filter(self):
+        entry = _entry(
+            _link_note(
+                {"id": "bfi_1", "type": "custom_entity", "webURL": "u1"},
+                {"id": "axdash_1", "type": "sql_dashboard", "webURL": "u3"},
+                {"type": "link", "webURL": "https://example.com"},
+            )
+        )
+        packageable = [r.id for r in classify_links(entry) if r.is_packageable]
+        assert packageable == ["bfi_1"]
+
+    def test_dedupes_by_id_then_url(self):
+        entry = _entry(
+            _link_note(
+                {"id": "bfi_1", "type": "custom_entity", "webURL": "u1"},
+                {"id": "bfi_1", "type": "custom_entity", "webURL": "u1"},
+                {"type": "link", "webURL": "https://dup.com"},
+                {"type": "link", "webURL": "https://dup.com"},
+            )
+        )
+        refs = classify_links(entry)
+        assert [(r.type, r.id or r.web_url) for r in refs] == [
+            ("custom_entity", "bfi_1"),
+            ("link", "https://dup.com"),
+        ]
+
+    def test_packageable_categories_membership(self):
+        assert PACKAGEABLE_CATEGORIES == {
+            LinkCategory.ENTITY,
+            LinkCategory.INVENTORY,
+            LinkCategory.REFERENCE,
+        }
+
+
+class TestEntryLinkTypesJson:
+    """Guard spec/entry-link-types.json against drift from the module."""
+
+    def _load(self):
+        path = Path(__file__).resolve().parents[2] / "spec" / "entry-link-types.json"
+        return json.loads(path.read_text())
+
+    def test_json_covers_same_types(self):
+        ref = self._load()
+        json_types = {row["type"] for row in ref["link_types"]}
+        assert json_types == set(LINK_TYPE_CATEGORY)
+
+    def test_json_categories_match_module(self):
+        ref = self._load()
+        for row in ref["link_types"]:
+            module_cat = LINK_TYPE_CATEGORY[row["type"]]
+            assert row["category"] == module_cat.value, row["type"]
+            assert row["packageable"] == (module_cat in PACKAGEABLE_CATEGORIES), row["type"]
+
+    def test_json_packageable_categories_match_module(self):
+        ref = self._load()
+        assert set(ref["packageable_categories"]) == {c.value for c in PACKAGEABLE_CATEGORIES}
