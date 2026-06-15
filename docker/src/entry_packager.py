@@ -20,10 +20,28 @@ from benchling_sdk.models import ExportItemRequest
 
 from .auth import RoleManager
 from .config import get_config
+from .entry_references import link_metadata, summarize_references
 from .payload import Payload
 from .retry_utils import LAMBDA_INVOKE_RETRY, REST_API_RETRY
 
 logger = structlog.get_logger(__name__)
+
+# EntryLink ``type`` -> Benchling SDK service attribute used to resolve the
+# authoritative human-readable name via GET-by-id. Only types with a stable
+# get_by_id are listed (entities first, then inventory and entries -- the types
+# John flagged on the 2026-06-15 call); any other type keeps ``name=None`` and
+# relies on its slug. Name resolution requires the app to be a registry/project
+# collaborator, so every lookup is best-effort (see _enrich_link_names).
+LINK_TYPE_TO_SERVICE: Dict[str, str] = {
+    "custom_entity": "custom_entities",
+    "dna_sequence": "dna_sequences",
+    "aa_sequence": "aa_sequences",
+    "container": "containers",
+    "box": "boxes",
+    "plate": "plates",
+    "location": "locations",
+    "entry": "entries",
+}
 
 
 class DateTimeEncoder(json.JSONEncoder):
@@ -629,6 +647,13 @@ class EntryPackager:
         if canvas_id is not None:
             entry_json["canvas_id"] = canvas_id
 
+        # links - curated, searchable view of the objects this entry references.
+        # Promoted into entry.json (the package's metadata_uri) so `links.name` is
+        # queryable. Names are resolved best-effort against the Benchling API.
+        links = link_metadata(entry_data)
+        self._enrich_link_names(links)
+        entry_json["links"] = links
+
         # input.json - Processing metadata
         input_json = {
             "source": "benchling_webhook",
@@ -684,13 +709,20 @@ This package contains data exported from Benchling entry `{display_id}`.
 """
 
         for file_info in uploaded_files:
-            if file_info["filename"] not in ["entry.json", "entry_data.json", "input.json", "README.md"]:
+            if file_info["filename"] not in [
+                "entry.json",
+                "entry_data.json",
+                "input.json",
+                "links.json",
+                "README.md",
+            ]:
                 readme_content += f"- `{file_info['filename']}` ({file_info['size']} bytes)\n"
 
         readme_content += """
 ## Metadata Files
 - `entry.json`: Key entry metadata (display_id, name, creator, authors, timestamps)
 - `entry_data.json`: Complete entry data from Benchling API
+- `links.json`: Raw Benchling objects this entry links to (entities, inventory, tables); the searchable, name-enriched summary is the `links` field of `entry.json`
 - `input.json`: Export processing metadata
 - `README.md`: This documentation file
 
@@ -699,12 +731,56 @@ This package was created automatically by the Benchling-Quilt integration webhoo
 For questions about the data, refer to the original Benchling entry.
 """
 
+        # links.json - raw discovery of the entities/resources this entry points at,
+        # from the entry's note links and fields (no Benchling records are fetched
+        # here; inferences are not persisted). The searchable view is entry.json.links.
+        links_json = summarize_references(entry_data)
+
         return {
             "entry.json": entry_json,
             "entry_data.json": entry_data,
+            "links.json": links_json,
             "input.json": input_json,
             "README.md": readme_content,
         }
+
+    def _enrich_link_names(self, links: list[Dict[str, Any]]) -> None:
+        """Fill each link's ``name`` with its authoritative Benchling display name.
+
+        Mutates ``links`` in place (the curated entries from ``link_metadata``).
+        Best-effort and never raises: a missing client, an unsupported type, or a
+        forbidden/failed GET-by-id leaves ``name`` as ``None`` -- the slug stays for
+        eyeballing, and the slug is never promoted into ``name``. Name resolution
+        needs the app to be a registry/project collaborator (see AGENTS / setup).
+        """
+        if not self.benchling:
+            return
+        for link in links:
+            service_attr = LINK_TYPE_TO_SERVICE.get(link.get("type") or "")
+            link_id = link.get("id")
+            if not service_attr or not link_id:
+                continue
+            service = getattr(self.benchling, service_attr, None)
+            if service is None:
+                continue
+            record = None
+            try:
+                # ``returning`` trims the payload to just the name where supported.
+                record = service.get_by_id(link_id, returning=["name"])
+            except Exception:
+                try:
+                    record = service.get_by_id(link_id)
+                except Exception as exc:
+                    self.logger.debug(
+                        "Link name lookup failed",
+                        link_id=link_id,
+                        link_type=link.get("type"),
+                        error=str(exc),
+                    )
+                    continue
+            record_name = getattr(record, "name", None)
+            if isinstance(record_name, str) and record_name:
+                link["name"] = record_name
 
     def _load_existing_canvas_id_from_entry_json(self, s3_client: Any, package_name: str) -> Optional[str]:
         """Read canvas_id from a previously-written ``entry.json``, if any.
