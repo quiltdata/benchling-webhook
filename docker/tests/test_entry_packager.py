@@ -648,6 +648,46 @@ class TestEntryPackager:
         assert "filename" not in entry_json["files"]["file2.csv"]
         assert "filename" not in entry_json["files"]["data.json"]
 
+    def test_create_metadata_files_includes_references_json(self, orchestrator):
+        """references.json captures the entities/resources the entry links to."""
+        entry_data = {
+            "id": "etr_123",
+            "display_id": "EXP-001",
+            "name": "Test Entry",
+            "web_url": "https://demo.benchling.com/entry/etr_123",
+            "created_at": "2025-10-01T10:00:00Z",
+            "modified_at": "2025-10-02T10:00:00Z",
+            "days": [
+                {
+                    "notes": [
+                        {
+                            "type": "text",
+                            "links": [
+                                {"id": "bfi_1", "type": "custom_entity", "webURL": "u1"},
+                                {"id": "axdash_1", "type": "sql_dashboard", "webURL": "u2"},
+                            ],
+                        }
+                    ]
+                }
+            ],
+        }
+
+        result = orchestrator._create_metadata_files(
+            package_name="benchling/EXP-001",
+            entry_id="etr_123",
+            timestamp="2025-10-02T10:00:00Z",
+            base_url="https://demo.benchling.com",
+            webhook_data={},
+            uploaded_files=[],
+            download_url="https://example.com/export.zip",
+            entry_data=entry_data,
+        )
+
+        refs = result["references.json"]
+        assert refs["schema_version"] == 1
+        assert [e["id"] for e in refs["entities"]] == ["bfi_1"]  # dashboard filtered out
+        assert {link["type"] for link in refs["links"]} == {"custom_entity", "sql_dashboard"}
+
     def test_create_metadata_files_includes_canvas_id_when_present(self, orchestrator):
         """Test entry.json stores canvas_id for canvas-initiated exports."""
         result = orchestrator._create_metadata_files(
