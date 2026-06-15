@@ -26,7 +26,14 @@ from typing import Any, Iterator, Optional
 
 
 class LinkCategory(str, Enum):
-    """How a note-link type relates to packaging (per #389 conclusions)."""
+    """How a note-link type relates to packaging (per #389).
+
+    Two orthogonal axes drive what we do with a referenced object (see
+    FETCHABLE_CATEGORIES / EVENTABLE_CATEGORIES and CATEGORY_DISPOSITION):
+      - fetchable: a record can be retrieved via GET-by-id.
+      - eventable: it emits its own create/update webhooks, so it can arrive
+        independent of an entry (a candidate for its own package, #143 behavior 2).
+    """
 
     ENTITY = "entity"  # registry entity; GET-by-id + v2.entity.registered event
     INVENTORY = "inventory"  # packageable via GET-by-id; no webhook events
@@ -73,7 +80,33 @@ LINK_TYPE_CATEGORY: dict[str, LinkCategory] = {
 # via structured note parts / inventory tables, not links[].
 
 # Categories whose resources can be fetched as a record via GET-by-id.
-PACKAGEABLE_CATEGORIES = frozenset({LinkCategory.ENTITY, LinkCategory.INVENTORY, LinkCategory.REFERENCE})
+FETCHABLE_CATEGORIES = frozenset({LinkCategory.ENTITY, LinkCategory.INVENTORY, LinkCategory.REFERENCE})
+
+# Categories that also emit their own create/update webhooks, so they can arrive
+# independent of an entry (candidates for their own package, #143 behavior 2).
+EVENTABLE_CATEGORIES = frozenset({LinkCategory.ENTITY, LinkCategory.REFERENCE})
+
+# What to do with a referenced object when packaging the entry that links to it.
+# "packageable" alone was ambiguous -- fetchable-as-a-record vs. worthy-of-its-own
+# package. disposition is the actionable answer, derived from fetchable + eventable:
+#   nest_or_standalone -- entity: fetchable AND eventable. Nest inside the entry
+#                         and/or package standalone -- the open #143 decision.
+#   nest               -- fetchable, no events: only capturable via an entry.
+#   link               -- fetchable primary object with its own events: reference
+#                         its own package, don't embed a copy.
+#   pointer            -- fetchable but low value: keep id + webURL only.
+#   verify             -- endpoint depends on tenant API version / unknown type.
+#   skip               -- nothing to fetch; the entry already keeps the webURL.
+CATEGORY_DISPOSITION: dict[LinkCategory, str] = {
+    LinkCategory.ENTITY: "nest_or_standalone",
+    LinkCategory.INVENTORY: "nest",
+    LinkCategory.REFERENCE: "link",
+    LinkCategory.METADATA: "pointer",
+    LinkCategory.NOT_PACKAGEABLE: "skip",
+    LinkCategory.UNCERTAIN: "verify",
+    LinkCategory.EXTERNAL: "skip",
+    LinkCategory.UNKNOWN: "verify",
+}
 
 # Linkable entity types (subset of LINK_TYPE_CATEGORY that are LinkCategory.ENTITY).
 ENTITY_LINK_TYPES = frozenset(t for t, cat in LINK_TYPE_CATEGORY.items() if cat is LinkCategory.ENTITY)
@@ -96,8 +129,19 @@ class LinkRef:
     web_url: Optional[str] = None
 
     @property
-    def is_packageable(self) -> bool:
-        return self.category in PACKAGEABLE_CATEGORIES
+    def is_fetchable(self) -> bool:
+        """Whether a record can be retrieved via GET-by-id."""
+        return self.category in FETCHABLE_CATEGORIES
+
+    @property
+    def is_eventable(self) -> bool:
+        """Whether it emits its own webhooks (can arrive independent of an entry)."""
+        return self.category in EVENTABLE_CATEGORIES
+
+    @property
+    def disposition(self) -> str:
+        """How to treat this reference when packaging the entry (see CATEGORY_DISPOSITION)."""
+        return CATEGORY_DISPOSITION[self.category]
 
 
 @dataclass(frozen=True)
@@ -197,7 +241,7 @@ def classify_links(entry_data: dict[str, Any]) -> list[LinkRef]:
 
     Surfaces the *full* set of objects an entry points at -- entities, inventory,
     references, metadata pointers, dashboards, and external URLs -- so callers can
-    decide what to fetch (e.g. ``[r for r in classify_links(e) if r.is_packageable]``).
+    decide what to fetch (e.g. ``[r for r in classify_links(e) if r.is_fetchable]``).
     Deduped by Benchling ID when present, else by URL; first-seen order preserved.
     """
     seen: set[str] = set()
@@ -318,7 +362,9 @@ def summarize_references(entry_data: dict[str, Any]) -> dict[str, Any]:
                 "type": link.type,
                 "category": link.category.value,
                 "web_url": link.web_url,
-                "packageable": link.is_packageable,
+                "fetchable": link.is_fetchable,
+                "eventable": link.is_eventable,
+                "disposition": link.disposition,
             }
             for link in classify_links(entry_data)
         ],
