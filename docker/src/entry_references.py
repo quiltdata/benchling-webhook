@@ -1,11 +1,11 @@
 """Extract typed references out of a Benchling entry's structured data.
 
-A Benchling entry can point at other Benchling objects in three places:
+A Benchling entry points at other Benchling objects in three places:
 
-1. Note links -- ``days[].notes[].links[]``, each ``{id, type, webURL}``. Entity
-   mentions appear as ``custom_entity`` / ``dna_sequence`` / ``aa_sequence`` /
-   ``dna_oligo`` / ``rna_oligo``; the same list also carries non-entity types
-   (e.g. ``sql_dashboard``), so callers must filter by ``type``.
+1. Note links -- ``days[].notes[].links[]``, each ``{id, type, webURL}``. ``type``
+   is a closed enum (``EntryLink.type`` in the Benchling OpenAPI spec) of 18
+   tokens spanning entities, inventory, references, dashboards, and plain
+   external hyperlinks -- see :data:`LINK_TYPE_CATEGORY`.
 2. Entity-link fields -- ``fields[name]`` whose ``type`` mentions ``entity``,
    carrying one or more entity IDs directly in ``value``.
 3. Results tables -- ``results_table`` notes carrying an ``assayResultSchemaId``
@@ -13,26 +13,70 @@ A Benchling entry can point at other Benchling objects in three places:
 
 This module is pure: it operates on the entry dict already fetched by
 ``EntryPackager`` and makes no Benchling API calls. Resolving each reference to a
-full record (``get_by_id`` / ``bulk_get``) is the caller's job.
+full record (``get_by_id`` / ``bulk_get``) is the caller's job; this layer only
+discovers and classifies what an entry points at.
 
-Shared discovery layer for entity packaging (#143) and assay results (#68/#69).
+Shared discovery layer for entity packaging (#143), the full entry-linked
+resource map (#389), and assay results (#68/#69).
 """
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-# Note-link / field ``type`` values that denote a registry entity. Used to keep
-# entity references out of the non-entity links (dashboards, etc.) that share
-# the same ``links[]`` array.
-ENTITY_LINK_TYPES = frozenset(
-    {
-        "custom_entity",
-        "dna_sequence",
-        "aa_sequence",
-        "dna_oligo",
-        "rna_oligo",
-    }
-)
+
+class LinkCategory(str, Enum):
+    """How a note-link type relates to packaging (per #389 conclusions)."""
+
+    ENTITY = "entity"  # registry entity; GET-by-id + v2.entity.registered event
+    INVENTORY = "inventory"  # packageable via GET-by-id; no webhook events
+    REFERENCE = "reference"  # packageable; has its own create/update events
+    METADATA = "metadata"  # GET works but low value to package as a record
+    NOT_PACKAGEABLE = "not_packageable"  # no read API (dashboards, protocol)
+    UNCERTAIN = "uncertain"  # endpoint depends on tenant API version; verify first
+    EXTERNAL = "external"  # plain http(s) hyperlink ("link"); no Benchling ID
+    UNKNOWN = "unknown"  # type not in the known enum -- surfaced, not dropped
+
+
+# EntryLink.type -> category. Covers all 18 enum tokens from test/openapi.yaml.
+# Unknown/future tokens fall through to LinkCategory.UNKNOWN via classify_link_type.
+LINK_TYPE_CATEGORY: Dict[str, LinkCategory] = {
+    # entities (eventable via v2.entity.registered)
+    "custom_entity": LinkCategory.ENTITY,
+    "dna_sequence": LinkCategory.ENTITY,
+    "aa_sequence": LinkCategory.ENTITY,
+    "batch": LinkCategory.ENTITY,
+    # inventory (packageable on reference, no events)
+    "container": LinkCategory.INVENTORY,
+    "box": LinkCategory.INVENTORY,
+    "plate": LinkCategory.INVENTORY,
+    "location": LinkCategory.INVENTORY,
+    # references (packageable, own events)
+    "entry": LinkCategory.REFERENCE,
+    "request": LinkCategory.REFERENCE,
+    "workflow": LinkCategory.REFERENCE,
+    # metadata-only pointers
+    "user": LinkCategory.METADATA,
+    "folder": LinkCategory.METADATA,
+    # no read API exists -- keep the webURL as a reference only
+    "sql_dashboard": LinkCategory.NOT_PACKAGEABLE,
+    "insights_dashboard": LinkCategory.NOT_PACKAGEABLE,
+    "protocol": LinkCategory.NOT_PACKAGEABLE,
+    # endpoint depends on tenant API version (v2-alpha) -- verify before relying
+    "stage_entry": LinkCategory.UNCERTAIN,
+    # plain external hyperlink (no Benchling id)
+    "link": LinkCategory.EXTERNAL,
+}
+
+# Note: dna_oligo / rna_oligo / mixture / assay_run / assay_result / workflow_task
+# are NOT EntryLink types -- they cannot appear as note links. They reach an entry
+# via structured note parts / inventory tables, not links[].
+
+# Categories whose resources can be fetched as a record via GET-by-id.
+PACKAGEABLE_CATEGORIES = frozenset({LinkCategory.ENTITY, LinkCategory.INVENTORY, LinkCategory.REFERENCE})
+
+# Linkable entity types (subset of LINK_TYPE_CATEGORY that are LinkCategory.ENTITY).
+ENTITY_LINK_TYPES = frozenset(t for t, cat in LINK_TYPE_CATEGORY.items() if cat is LinkCategory.ENTITY)
 
 # Note ``type`` values that carry tabular assay results.
 RESULTS_TABLE_NOTE_TYPES = frozenset(
@@ -42,6 +86,21 @@ RESULTS_TABLE_NOTE_TYPES = frozenset(
         "table",
     }
 )
+
+
+@dataclass(frozen=True)
+class LinkRef:
+    """A classified note link. ``id``/``web_url`` are absent for some types
+    (``link`` has no id; ``location`` has no webURL)."""
+
+    type: str
+    category: LinkCategory
+    id: Optional[str] = None
+    web_url: Optional[str] = None
+
+    @property
+    def is_packageable(self) -> bool:
+        return self.category in PACKAGEABLE_CATEGORIES
 
 
 @dataclass(frozen=True)
@@ -105,10 +164,25 @@ def _field_value_ids(fval: Dict[str, Any]) -> List[str]:
     return []
 
 
-def extract_note_links(entry_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Return every link object across all note bodies, unfiltered.
+def _link_web_url(link: Dict[str, Any]) -> Optional[str]:
+    return link.get("webURL") or link.get("web_url")
 
-    Lower-level primitive; most callers want :func:`extract_entity_references`.
+
+def classify_link_type(link_type: Optional[str]) -> LinkCategory:
+    """Map an EntryLink ``type`` token to its :class:`LinkCategory`.
+
+    Unknown/future tokens map to ``UNKNOWN`` rather than being silently dropped.
+    """
+    if not link_type:
+        return LinkCategory.UNKNOWN
+    return LINK_TYPE_CATEGORY.get(link_type, LinkCategory.UNKNOWN)
+
+
+def extract_note_links(entry_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return every link object across all note bodies, unfiltered and untyped.
+
+    Lowest-level primitive; most callers want :func:`classify_links` or
+    :func:`extract_entity_references`.
     """
     links: List[Dict[str, Any]] = []
     for note in _iter_notes(entry_data):
@@ -118,6 +192,36 @@ def extract_note_links(entry_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return links
 
 
+def classify_links(entry_data: Dict[str, Any]) -> List[LinkRef]:
+    """Return every note link, classified by category and deduped.
+
+    Surfaces the *full* set of objects an entry points at -- entities, inventory,
+    references, metadata pointers, dashboards, and external URLs -- so callers can
+    decide what to fetch (e.g. ``[r for r in classify_links(e) if r.is_packageable]``).
+    Deduped by Benchling ID when present, else by URL; first-seen order preserved.
+    """
+    seen: set[str] = set()
+    refs: List[LinkRef] = []
+    for link in extract_note_links(entry_data):
+        link_type = link.get("type")
+        link_id = link.get("id")
+        web_url = _link_web_url(link)
+        dedup_key = link_id or web_url
+        if dedup_key is not None:
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+        refs.append(
+            LinkRef(
+                type=str(link_type) if link_type is not None else "",
+                category=classify_link_type(link_type),
+                id=link_id,
+                web_url=web_url,
+            )
+        )
+    return refs
+
+
 def extract_entity_references(
     entry_data: Dict[str, Any],
     *,
@@ -125,7 +229,7 @@ def extract_entity_references(
 ) -> List[EntityReference]:
     """Return deduped entity references from note links and entity-link fields.
 
-    Note links are filtered to ``types`` (default: all known entity types).
+    Note links are filtered to ``types`` (default: all linkable entity types).
     Entity-link fields are detected by an ``entity`` substring in the field
     ``type`` and are included regardless of ``types``. References are deduped by
     ID, preserving first-seen order (note links before fields).
@@ -143,7 +247,7 @@ def extract_entity_references(
             EntityReference(
                 id=str(link_id),
                 type=str(link_type),
-                web_url=link.get("webURL") or link.get("web_url"),
+                web_url=_link_web_url(link),
                 source="note_link",
             )
         )
