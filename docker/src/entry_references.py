@@ -2,10 +2,12 @@
 
 A Benchling entry points at other Benchling objects in three places:
 
-1. Note links -- ``days[].notes[].links[]``, each ``{id, type, webURL}``. ``type``
-   is a closed enum (``EntryLink.type`` in the Benchling OpenAPI spec) of 18
-   tokens spanning entities, inventory, references, dashboards, and plain
-   external hyperlinks -- see :data:`LINK_TYPE_CATEGORY`.
+1. Note links -- ``days[].notes[].links[]``, each carrying a ``type`` plus an
+   optional ``id`` and ``webURL`` (external ``link`` has no ``id``; some types
+   such as ``location`` have no ``webURL``). ``type`` is a closed enum
+   (``EntryLink.type`` in the Benchling OpenAPI spec) of 18 tokens spanning
+   entities, inventory, references, dashboards, and plain external hyperlinks --
+   see :data:`LINK_TYPE_CATEGORY`.
 2. Entity-link fields -- ``fields[name]`` whose ``type`` mentions ``entity``,
    carrying one or more entity IDs directly in ``value``.
 3. Results tables -- ``results_table`` notes carrying an ``assayResultSchemaId``
