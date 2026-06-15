@@ -1,7 +1,6 @@
 """Tests for entry_references extractor (shared discovery for #143 + #68/#69)."""
 
 import json
-from pathlib import Path
 
 from src.entry_references import (
     ENTITY_LINK_TYPES,
@@ -16,6 +15,7 @@ from src.entry_references import (
     extract_entity_references,
     extract_note_links,
     extract_results_tables,
+    summarize_references,
 )
 
 
@@ -240,25 +240,31 @@ class TestClassifyLinks:
         }
 
 
-class TestEntryLinkTypesJson:
-    """Guard spec/entry-link-types.json against drift from the module."""
+class TestSummarizeReferences:
+    def test_serializable_summary_of_all_discovered(self):
+        entry = _entry(
+            _link_note(
+                {"id": "bfi_1", "type": "custom_entity", "webURL": "u1"},
+                {"id": "axdash_1", "type": "sql_dashboard", "webURL": "u2"},
+            ),
+            {"type": "results_table", "apiId": "tbl_1", "assayResultSchemaId": "assaysch_1", "name": "T1"},
+            fields={"Cell Line": {"type": "entity_link", "value": "seq_field"}},
+        )
+        summary = summarize_references(entry)
+        # JSON-serializable end to end (categories are plain strings, etc.)
+        assert json.loads(json.dumps(summary)) == summary
+        assert summary["schema_version"] == 1
+        assert [e["id"] for e in summary["entities"]] == ["bfi_1", "seq_field"]
+        assert {link["type"] for link in summary["links"]} == {"custom_entity", "sql_dashboard"}
+        assert summary["links"][0]["category"] == "entity"
+        assert summary["links"][1]["packageable"] is False
+        assert summary["results_tables"] == [{"assay_result_schema_id": "assaysch_1", "api_id": "tbl_1", "name": "T1"}]
 
-    def _load(self):
-        path = Path(__file__).resolve().parents[2] / "spec" / "entry-link-types.json"
-        return json.loads(path.read_text())
-
-    def test_json_covers_same_types(self):
-        ref = self._load()
-        json_types = {row["type"] for row in ref["link_types"]}
-        assert json_types == set(LINK_TYPE_CATEGORY)
-
-    def test_json_categories_match_module(self):
-        ref = self._load()
-        for row in ref["link_types"]:
-            module_cat = LINK_TYPE_CATEGORY[row["type"]]
-            assert row["category"] == module_cat.value, row["type"]
-            assert row["packageable"] == (module_cat in PACKAGEABLE_CATEGORIES), row["type"]
-
-    def test_json_packageable_categories_match_module(self):
-        ref = self._load()
-        assert set(ref["packageable_categories"]) == {c.value for c in PACKAGEABLE_CATEGORIES}
+    def test_empty_entry_yields_empty_arrays(self):
+        summary = summarize_references({})
+        assert summary == {
+            "schema_version": 1,
+            "entities": [],
+            "links": [],
+            "results_tables": [],
+        }

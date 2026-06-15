@@ -22,7 +22,7 @@ resource map (#389), and assay results (#68/#69).
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Iterator, Optional
 
 
 class LinkCategory(str, Enum):
@@ -40,7 +40,7 @@ class LinkCategory(str, Enum):
 
 # EntryLink.type -> category. Covers all 18 enum tokens from test/openapi.yaml.
 # Unknown/future tokens fall through to LinkCategory.UNKNOWN via classify_link_type.
-LINK_TYPE_CATEGORY: Dict[str, LinkCategory] = {
+LINK_TYPE_CATEGORY: dict[str, LinkCategory] = {
     # entities (eventable via v2.entity.registered)
     "custom_entity": LinkCategory.ENTITY,
     "dna_sequence": LinkCategory.ENTITY,
@@ -78,14 +78,11 @@ PACKAGEABLE_CATEGORIES = frozenset({LinkCategory.ENTITY, LinkCategory.INVENTORY,
 # Linkable entity types (subset of LINK_TYPE_CATEGORY that are LinkCategory.ENTITY).
 ENTITY_LINK_TYPES = frozenset(t for t, cat in LINK_TYPE_CATEGORY.items() if cat is LinkCategory.ENTITY)
 
-# Note ``type`` values that carry tabular assay results.
-RESULTS_TABLE_NOTE_TYPES = frozenset(
-    {
-        "results_table",
-        "registration_table",
-        "table",
-    }
-)
+# Note ``type`` value that carries tabular assay results. Kept as a set for
+# extensibility, but scoped to ``results_table`` only: that is the note type that
+# carries an ``assayResultSchemaId`` (#68/#69). A generic ``table`` or a
+# ``registration_table`` is a different mechanism and must not be swept in here.
+RESULTS_TABLE_NOTE_TYPES = frozenset({"results_table"})
 
 
 @dataclass(frozen=True)
@@ -127,7 +124,7 @@ class ResultsTableReference:
     name: Optional[str] = None
 
 
-def _iter_notes(entry_data: Dict[str, Any]) -> Iterator[Dict[str, Any]]:
+def _iter_notes(entry_data: dict[str, Any]) -> Iterator[dict[str, Any]]:
     """Yield every note across all days, defensively skipping malformed shapes."""
     for day in entry_data.get("days") or []:
         if not isinstance(day, dict):
@@ -137,7 +134,7 @@ def _iter_notes(entry_data: Dict[str, Any]) -> Iterator[Dict[str, Any]]:
                 yield note
 
 
-def _iter_fields(entry_data: Dict[str, Any]) -> Iterator[Tuple[Optional[str], Dict[str, Any]]]:
+def _iter_fields(entry_data: dict[str, Any]) -> Iterator[tuple[Optional[str], dict[str, Any]]]:
     """Yield ``(name, field)`` pairs.
 
     Benchling renders entry ``fields`` as a name-keyed dict; some payloads use a
@@ -154,17 +151,20 @@ def _iter_fields(entry_data: Dict[str, Any]) -> Iterator[Tuple[Optional[str], Di
                 yield fval.get("name"), fval
 
 
-def _field_value_ids(fval: Dict[str, Any]) -> List[str]:
-    """Pull entity ID(s) out of a field value (single value or ``isMulti`` list)."""
+def _field_value_ids(fval: dict[str, Any]) -> list[str]:
+    """Pull entity ID(s) out of a field value (single value or ``isMulti`` list).
+
+    Empty strings are dropped, mirroring the ``if not link_id`` guard on note links.
+    """
     val = fval.get("value")
     if isinstance(val, str):
-        return [val]
+        return [val] if val else []
     if isinstance(val, list):
-        return [v for v in val if isinstance(v, str)]
+        return [v for v in val if isinstance(v, str) and v]
     return []
 
 
-def _link_web_url(link: Dict[str, Any]) -> Optional[str]:
+def _link_web_url(link: dict[str, Any]) -> Optional[str]:
     return link.get("webURL") or link.get("web_url")
 
 
@@ -178,13 +178,13 @@ def classify_link_type(link_type: Optional[str]) -> LinkCategory:
     return LINK_TYPE_CATEGORY.get(link_type, LinkCategory.UNKNOWN)
 
 
-def extract_note_links(entry_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+def extract_note_links(entry_data: dict[str, Any]) -> list[dict[str, Any]]:
     """Return every link object across all note bodies, unfiltered and untyped.
 
     Lowest-level primitive; most callers want :func:`classify_links` or
     :func:`extract_entity_references`.
     """
-    links: List[Dict[str, Any]] = []
+    links: list[dict[str, Any]] = []
     for note in _iter_notes(entry_data):
         for link in note.get("links") or []:
             if isinstance(link, dict):
@@ -192,7 +192,7 @@ def extract_note_links(entry_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return links
 
 
-def classify_links(entry_data: Dict[str, Any]) -> List[LinkRef]:
+def classify_links(entry_data: dict[str, Any]) -> list[LinkRef]:
     """Return every note link, classified by category and deduped.
 
     Surfaces the *full* set of objects an entry points at -- entities, inventory,
@@ -201,7 +201,7 @@ def classify_links(entry_data: Dict[str, Any]) -> List[LinkRef]:
     Deduped by Benchling ID when present, else by URL; first-seen order preserved.
     """
     seen: set[str] = set()
-    refs: List[LinkRef] = []
+    refs: list[LinkRef] = []
     for link in extract_note_links(entry_data):
         link_type = link.get("type")
         link_id = link.get("id")
@@ -223,10 +223,10 @@ def classify_links(entry_data: Dict[str, Any]) -> List[LinkRef]:
 
 
 def extract_entity_references(
-    entry_data: Dict[str, Any],
+    entry_data: dict[str, Any],
     *,
     types: "frozenset[str] | set[str]" = ENTITY_LINK_TYPES,
-) -> List[EntityReference]:
+) -> list[EntityReference]:
     """Return deduped entity references from note links and entity-link fields.
 
     Note links are filtered to ``types`` (default: all linkable entity types).
@@ -235,7 +235,7 @@ def extract_entity_references(
     ID, preserving first-seen order (note links before fields).
     """
     seen: set[str] = set()
-    refs: List[EntityReference] = []
+    refs: list[EntityReference] = []
 
     for link in extract_note_links(entry_data):
         link_id = link.get("id")
@@ -265,14 +265,14 @@ def extract_entity_references(
     return refs
 
 
-def extract_results_tables(entry_data: Dict[str, Any]) -> List[ResultsTableReference]:
+def extract_results_tables(entry_data: dict[str, Any]) -> list[ResultsTableReference]:
     """Return deduped assay-results-table references from entry notes.
 
     Only notes whose ``type`` is a results-table type *and* that carry an
     ``assayResultSchemaId`` are returned. Deduped by ``(api_id, schema_id)``.
     """
-    seen: set[Tuple[Optional[str], str]] = set()
-    tables: List[ResultsTableReference] = []
+    seen: set[tuple[Optional[str], str]] = set()
+    tables: list[ResultsTableReference] = []
     for note in _iter_notes(entry_data):
         if note.get("type") not in RESULTS_TABLE_NOTE_TYPES:
             continue
@@ -292,3 +292,42 @@ def extract_results_tables(entry_data: Dict[str, Any]) -> List[ResultsTableRefer
             )
         )
     return tables
+
+
+# Bump when the references.json shape changes in a way consumers must notice.
+REFERENCES_SCHEMA_VERSION = 1
+
+
+def summarize_references(entry_data: dict[str, Any]) -> dict[str, Any]:
+    """Build a JSON-serializable summary of everything an entry points at.
+
+    Intended to be written into the package alongside ``entry.json`` (as
+    ``references.json``) so downstream consumers see the discovered objects
+    without re-parsing the raw entry. Records discovery only -- no Benchling
+    records are fetched here.
+    """
+    return {
+        "schema_version": REFERENCES_SCHEMA_VERSION,
+        "entities": [
+            {"id": e.id, "type": e.type, "web_url": e.web_url, "source": e.source}
+            for e in extract_entity_references(entry_data)
+        ],
+        "links": [
+            {
+                "id": link.id,
+                "type": link.type,
+                "category": link.category.value,
+                "web_url": link.web_url,
+                "packageable": link.is_packageable,
+            }
+            for link in classify_links(entry_data)
+        ],
+        "results_tables": [
+            {
+                "assay_result_schema_id": t.assay_result_schema_id,
+                "api_id": t.api_id,
+                "name": t.name,
+            }
+            for t in extract_results_tables(entry_data)
+        ],
+    }

@@ -20,6 +20,7 @@ from benchling_sdk.models import ExportItemRequest
 
 from .auth import RoleManager
 from .config import get_config
+from .entry_references import summarize_references
 from .payload import Payload
 from .retry_utils import LAMBDA_INVOKE_RETRY, REST_API_RETRY
 
@@ -684,13 +685,20 @@ This package contains data exported from Benchling entry `{display_id}`.
 """
 
         for file_info in uploaded_files:
-            if file_info["filename"] not in ["entry.json", "entry_data.json", "input.json", "README.md"]:
+            if file_info["filename"] not in [
+                "entry.json",
+                "entry_data.json",
+                "input.json",
+                "references.json",
+                "README.md",
+            ]:
                 readme_content += f"- `{file_info['filename']}` ({file_info['size']} bytes)\n"
 
         readme_content += """
 ## Metadata Files
 - `entry.json`: Key entry metadata (display_id, name, creator, authors, timestamps)
 - `entry_data.json`: Complete entry data from Benchling API
+- `references.json`: Benchling objects this entry links to (entities, inventory, tables)
 - `input.json`: Export processing metadata
 - `README.md`: This documentation file
 
@@ -699,9 +707,14 @@ This package was created automatically by the Benchling-Quilt integration webhoo
 For questions about the data, refer to the original Benchling entry.
 """
 
+        # references.json - the entities/resources this entry points at, discovered
+        # from the entry's note links and fields (no Benchling records are fetched).
+        references_json = summarize_references(entry_data)
+
         return {
             "entry.json": entry_json,
             "entry_data.json": entry_data,
+            "references.json": references_json,
             "input.json": input_json,
             "README.md": readme_content,
         }
