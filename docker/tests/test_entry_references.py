@@ -16,6 +16,8 @@ from src.entry_references import (
     extract_entity_references,
     extract_note_links,
     extract_results_tables,
+    link_metadata,
+    slug_from_web_url,
     summarize_references,
 )
 
@@ -284,24 +286,77 @@ class TestSummarizeReferences:
             fields={"Cell Line": {"type": "entity_link", "value": "seq_field"}},
         )
         summary = summarize_references(entry)
-        # JSON-serializable end to end (categories are plain strings, etc.)
+        # JSON-serializable end to end.
         assert json.loads(json.dumps(summary)) == summary
-        assert summary["schema_version"] == 1
+        assert summary["schema_version"] == 2
         assert [e["id"] for e in summary["entities"]] == ["bfi_1", "seq_field"]
+        # links.json holds raw facts only -- no derived classifications persisted.
         assert {link["type"] for link in summary["links"]} == {"custom_entity", "sql_dashboard"}
-        assert summary["links"][0]["category"] == "entity"
-        assert summary["links"][0]["disposition"] == "nest_or_standalone"
-        assert summary["links"][0]["fetchable"] is True
-        assert summary["links"][0]["eventable"] is True
-        assert summary["links"][1]["disposition"] == "skip"
-        assert summary["links"][1]["fetchable"] is False
+        assert summary["links"][0] == {"id": "bfi_1", "type": "custom_entity", "web_url": "u1"}
+        assert all(
+            set(link) == {"id", "type", "web_url"} for link in summary["links"]
+        ), "links.json must not persist category/fetchable/eventable/disposition"
         assert summary["results_tables"] == [{"assay_result_schema_id": "assaysch_1", "api_id": "tbl_1", "name": "T1"}]
 
     def test_empty_entry_yields_empty_arrays(self):
         summary = summarize_references({})
         assert summary == {
-            "schema_version": 1,
+            "schema_version": 2,
             "entities": [],
             "links": [],
             "results_tables": [],
         }
+
+
+class TestSlugFromWebUrl:
+    def test_strips_known_id_prefix_dash_and_underscore_forms(self):
+        # id appears in dash form in the URL segment
+        assert (
+            slug_from_web_url(
+                "https://benchling.com/benchling/f/R8KcsjhW-academic-registry/bfi-xCUXNVyG-sbn000/edit",
+                "bfi_xCUXNVyG",
+            )
+            == "sbn000"
+        )
+        # id appears in underscore form
+        assert (
+            slug_from_web_url(
+                "https://benchling.com/benchling/f/lib_55UxcIps-registry/bfi_YtegMKkT-batch-test/edit",
+                "bfi_YtegMKkT",
+            )
+            == "batch-test"
+        )
+
+    def test_drops_query_and_fragment(self):
+        assert (
+            slug_from_web_url(
+                "https://benchling.com/benchling/f/lib_Fy2C0HOl-example/seq_UpzwvUug-consensus/edit?alignment=seqanl_1",
+                "seq_UpzwvUug",
+            )
+            == "consensus"
+        )
+
+    def test_none_and_empty(self):
+        assert slug_from_web_url(None) is None
+        assert slug_from_web_url("") is None
+        assert slug_from_web_url("https://benchling.com/", "bfi_1") is None
+
+
+class TestLinkMetadata:
+    def test_curated_four_field_view_name_left_for_caller(self):
+        entry = _entry(
+            _link_note(
+                {
+                    "id": "bfi_xCUXNVyG",
+                    "type": "custom_entity",
+                    "webURL": "https://benchling.com/benchling/f/lib_1-reg/bfi-xCUXNVyG-sbn000/edit",
+                },
+                {"id": "axdash_1", "type": "sql_dashboard", "webURL": "https://benchling.com/sql/axdash_1"},
+            )
+        )
+        links = link_metadata(entry)
+        assert all(set(link) == {"type", "id", "name", "slug"} for link in links)
+        # name is the caller's job (pure module makes no API call)
+        assert all(link["name"] is None for link in links)
+        by_id = {link["id"]: link for link in links}
+        assert by_id["bfi_xCUXNVyG"]["slug"] == "sbn000"

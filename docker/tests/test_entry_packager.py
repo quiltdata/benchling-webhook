@@ -648,8 +648,8 @@ class TestEntryPackager:
         assert "filename" not in entry_json["files"]["file2.csv"]
         assert "filename" not in entry_json["files"]["data.json"]
 
-    def test_create_metadata_files_includes_references_json(self, orchestrator):
-        """references.json captures the entities/resources the entry links to."""
+    def test_create_metadata_files_includes_links_json(self, orchestrator):
+        """links.json captures raw discovery; entry.json.links is the searchable view."""
         entry_data = {
             "id": "etr_123",
             "display_id": "EXP-001",
@@ -663,7 +663,11 @@ class TestEntryPackager:
                         {
                             "type": "text",
                             "links": [
-                                {"id": "bfi_1", "type": "custom_entity", "webURL": "u1"},
+                                {
+                                    "id": "bfi_1",
+                                    "type": "custom_entity",
+                                    "webURL": "https://demo.benchling.com/benchling/f/lib_1-reg/bfi-1-qb-2743-1/edit",
+                                },
                                 {"id": "axdash_1", "type": "sql_dashboard", "webURL": "u2"},
                             ],
                         }
@@ -683,10 +687,21 @@ class TestEntryPackager:
             entry_data=entry_data,
         )
 
-        refs = result["references.json"]
-        assert refs["schema_version"] == 1
-        assert [e["id"] for e in refs["entities"]] == ["bfi_1"]  # dashboard filtered out
-        assert {link["type"] for link in refs["links"]} == {"custom_entity", "sql_dashboard"}
+        # Raw discovery file (no references.json anymore).
+        assert "references.json" not in result
+        links_file = result["links.json"]
+        assert links_file["schema_version"] == 2
+        assert [e["id"] for e in links_file["entities"]] == ["bfi_1"]  # dashboard filtered out
+        assert {link["type"] for link in links_file["links"]} == {"custom_entity", "sql_dashboard"}
+        assert all(set(link) == {"id", "type", "web_url"} for link in links_file["links"])
+
+        # Searchable, curated view promoted into entry.json metadata.
+        meta_links = result["entry.json"]["links"]
+        assert all(set(link) == {"type", "id", "name", "slug"} for link in meta_links)
+        by_id = {link["id"]: link for link in meta_links}
+        # slug parsed from webURL; name left None (mock client returns no real name).
+        assert by_id["bfi_1"]["slug"] == "qb-2743-1"
+        assert by_id["bfi_1"]["name"] is None
 
     def test_create_metadata_files_includes_canvas_id_when_present(self, orchestrator):
         """Test entry.json stores canvas_id for canvas-initiated exports."""

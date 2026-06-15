@@ -338,17 +338,70 @@ def extract_results_tables(entry_data: dict[str, Any]) -> list[ResultsTableRefer
     return tables
 
 
-# Bump when the references.json shape changes in a way consumers must notice.
-REFERENCES_SCHEMA_VERSION = 1
+def slug_from_web_url(web_url: Optional[str], link_id: Optional[str] = None) -> Optional[str]:
+    """Best-effort, human-ish slug parsed from a Benchling object's webURL.
+
+    Benchling user-facing URLs end in ``.../{id}-{name-slug}/edit``. This returns
+    the trailing slug -- lowercased, punctuation-flattened, possibly truncated by
+    Benchling. It is **not** the authoritative display name (case and punctuation
+    are lost; e.g. ``QB-2743.1`` -> ``qb-2743-1``) and must never be used as one.
+    For the real name, fetch the record (the caller's job). Returns ``None`` when
+    no slug can be isolated.
+    """
+    if not web_url or not link_id:
+        return None
+    path = web_url.split("?", 1)[0].split("#", 1)[0].rstrip("/")
+    segments = [p for p in path.split("/") if p and p != "edit"]
+    # The id-bearing segment is ``{id}-{slug}``; the id appears in either ``_`` or
+    # ``-`` form across tenants. Match it normalized, then slice off the ``{id}-``
+    # prefix. A segment that is exactly the id (no trailing slug) yields None, and
+    # a URL with no id-bearing segment yields None -- never a stray path fragment.
+    norm_prefix = f"{link_id}-".replace("_", "-")
+    for candidate in segments:
+        if candidate.replace("_", "-").startswith(norm_prefix):
+            return candidate[len(norm_prefix) :] or None
+    return None
+
+
+def link_metadata(entry_data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Curated, searchable view of an entry's links: ``{type, id, name, slug}``.
+
+    One flat entry per classified note link (deduped by :func:`classify_links`),
+    regardless of type -- the searchable summary promoted into ``entry.json`` so
+    ``links.name`` is queryable. ``name`` is left ``None`` here: the authoritative
+    display name needs an API fetch, which is the caller's job (this module is
+    pure). ``slug`` is the lossy webURL token from :func:`slug_from_web_url` --
+    a debugging/eyeball aid only, never a substitute for ``name``.
+    """
+    return [
+        {
+            "type": r.type,
+            "id": r.id,
+            "name": None,
+            "slug": slug_from_web_url(r.web_url, r.id),
+        }
+        for r in classify_links(entry_data)
+    ]
+
+
+# Bump when the links.json shape changes in a way consumers must notice.
+# v2: links.json holds raw facts only -- derived classifications (category,
+# fetchable, eventable, disposition) are no longer persisted; they are recomputed
+# in code at runtime. The searchable, name-enriched view lives in entry.json
+# ``links`` (see link_metadata), not here.
+REFERENCES_SCHEMA_VERSION = 2
 
 
 def summarize_references(entry_data: dict[str, Any]) -> dict[str, Any]:
-    """Build a JSON-serializable summary of everything an entry points at.
+    """Build the JSON-serializable raw-discovery payload written as ``links.json``.
 
-    Intended to be written into the package alongside ``entry.json`` (as
-    ``references.json``) so downstream consumers see the discovered objects
-    without re-parsing the raw entry. Records discovery only -- no Benchling
-    records are fetched here.
+    Records *raw facts* about what an entry points at -- ids, types, webURLs --
+    so a consumer (or a future, different classification) can reprocess without
+    re-fetching. Deliberately excludes our inferences (``category``/``fetchable``/
+    ``eventable``/``disposition``): those are derived from ``type`` in code, not
+    frozen to disk. No Benchling records are fetched here. The curated, searchable
+    view with human-readable names is the ``links`` field of ``entry.json`` (see
+    :func:`link_metadata`).
     """
     return {
         "schema_version": REFERENCES_SCHEMA_VERSION,
@@ -356,18 +409,7 @@ def summarize_references(entry_data: dict[str, Any]) -> dict[str, Any]:
             {"id": e.id, "type": e.type, "web_url": e.web_url, "source": e.source}
             for e in extract_entity_references(entry_data)
         ],
-        "links": [
-            {
-                "id": link.id,
-                "type": link.type,
-                "category": link.category.value,
-                "web_url": link.web_url,
-                "fetchable": link.is_fetchable,
-                "eventable": link.is_eventable,
-                "disposition": link.disposition,
-            }
-            for link in classify_links(entry_data)
-        ],
+        "links": [{"id": link.id, "type": link.type, "web_url": link.web_url} for link in classify_links(entry_data)],
         "results_tables": [
             {
                 "assay_result_schema_id": t.assay_result_schema_id,
