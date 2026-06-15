@@ -116,6 +116,17 @@ class TestExtractEntityReferences:
         refs = extract_entity_references(entry)
         assert [r.id for r in refs] == ["bfi_x"]
 
+    def test_empty_string_field_values_ignored(self):
+        # Mirrors the `if not link_id` guard on note links: no EntityReference(id="").
+        entry = _entry(
+            fields={
+                "Empty": {"type": "entity_link", "value": ""},
+                "EmptyMulti": {"type": "entity_link", "value": ["", "bfi_ok", ""]},
+            }
+        )
+        refs = extract_entity_references(entry)
+        assert [r.id for r in refs] == ["bfi_ok"]
+
 
 class TestExtractResultsTables:
     def test_returns_tables_with_schema_id(self):
