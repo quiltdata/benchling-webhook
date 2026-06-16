@@ -148,9 +148,11 @@ The wizard will guide you through:
 
 ### 3. Configure Webhook URL
 
-Add the webhook URL (displayed after setup) to your [Benchling app settings](https://docs.benchling.com/docs/getting-started-benchling-apps#installing-your-app).
+Add the webhook URL (displayed after setup) to your [Benchling app settings](https://docs.benchling.com/docs/getting-started-benchling-apps#installing-your-app). The URL is the API Gateway stage root, e.g. `https://{api-id}.execute-api.{region}.amazonaws.com/{stage}`.
 
-**Important**: The endpoint URL format is `https://{api-id}.execute-api.{region}.amazonaws.com/{stage}/webhook` (includes stage prefix like `/prod/webhook` or `/dev/webhook`).
+**Important**: In the Benchling **Webhook Setup** dialog, set **Webhook Routing Setting** to **Suffixed**. Benchling then appends a path suffix based on the kind of event (`/lifecycle`, `/event`, or `/canvas`) to your configured webhook URL — which is what this webhook's routes expect. Do **not** select **Stable**: it posts every event to the bare URL with no suffix, and requests return `404 Endpoint not found`.
+
+![Webhook Routing Setting](imgs/benchling-webhook-routing.png)
 
 If your integration reads or writes within a specific Benchling project, share that project with the service account behind the Benchling App Client ID. This integration uses the app/service-account identity, not an end-user OAuth session. If project access appears broken, verify the service account can perform a simple read or list API call for the target project.
 
