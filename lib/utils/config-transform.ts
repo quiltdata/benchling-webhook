@@ -31,7 +31,7 @@ import type { StackConfig } from "../types/stack-config";
  *
  * **Excluded fields:**
  * - benchling.tenant, clientId, appDefinitionId (read from secret at runtime)
- * - packages.* (passed as environment variables)
+ * - packages.bucket/prefix/metadataKey/workflow (runtime config)
  * - logging.* (passed as environment variables)
  * - _metadata, _inherits (wizard metadata)
  *
@@ -76,6 +76,11 @@ export function profileToStackConfig(
     };
 
     // Add optional fields if present
+    if (profile.packages?.extraBuckets?.length) {
+        stackConfig.packages = {
+            extraBuckets: profile.packages.extraBuckets,
+        };
+    }
 
     // Quilt managed policy ARNs (for S3 and Athena access)
     if (profile.quilt.bucketWritePolicyArn) {

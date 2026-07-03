@@ -20,9 +20,11 @@ import structlog
 
 from .entry_packager import EntryPackager
 from .payload import Payload
+from .routing_config import EffectiveRouting, routed_config_copy
 from .sqs_consumer import (
     BaseSqsConsumer,
     build_sqs_client,
+    configured_concurrency,
     create_benchling_client,
     wait_for_ready_config,
 )
@@ -78,10 +80,23 @@ class PackagingConsumer(BaseSqsConsumer):
                 )
                 return
 
-            payload = Payload(raw, benchling=self.entry_packager.benchling)
+            routing = None
+            payload_body = raw
+            if isinstance(raw.get("webhook"), dict):
+                payload_body = raw["webhook"]
+                routing = EffectiveRouting.from_queue_metadata(raw.get("routing"))
+
+            payload = Payload(payload_body, benchling=self.entry_packager.benchling)
             entry_id = payload.entry_id
 
-            await asyncio.to_thread(self.entry_packager.execute_workflow, payload)
+            entry_packager = self.entry_packager
+            if routing:
+                entry_packager = EntryPackager(
+                    benchling=self.entry_packager.benchling,
+                    config=routed_config_copy(self.entry_packager.config, routing),
+                )
+
+            await asyncio.to_thread(entry_packager.execute_workflow, payload)
             outcome = "success"
             should_delete = True
         except asyncio.CancelledError:
@@ -132,11 +147,10 @@ async def main() -> int:
         logger.info("Packaging consumer stopped before Benchling secrets became available")
         return 0
 
-    sqs_client = build_sqs_client(config.aws_region)
-    concurrency = int(os.getenv("PACKAGING_REQUEST_CONCURRENCY", "5"))
-    graceful_timeout = int(os.getenv("PACKAGING_REQUEST_GRACEFUL_TIMEOUT", "30"))
-
     benchling = create_benchling_client(config)
+    sqs_client = build_sqs_client(config.aws_region)
+    concurrency = configured_concurrency(config.packaging_request_concurrency, "PACKAGING_REQUEST_CONCURRENCY")
+    graceful_timeout = int(os.getenv("PACKAGING_REQUEST_GRACEFUL_TIMEOUT", "30"))
     entry_packager = EntryPackager(benchling=benchling, config=config)
 
     consumer = PackagingConsumer(

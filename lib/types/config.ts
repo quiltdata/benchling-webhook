@@ -317,6 +317,17 @@ export interface PackageConfig {
     bucket: string;
 
     /**
+     * Additional existing S3 buckets the runtime may write to through
+     * Benchling App Configuration routing.
+     *
+     * These buckets are not created by the stack; they only expand IAM access
+     * for per-project or per-event routing targets.
+     *
+     * @example ["benchling-project-a", "benchling-project-b"]
+     */
+    extraBuckets?: string[];
+
+    /**
      * S3 key prefix for packages
      *
      * @example "benchling"
@@ -763,6 +774,11 @@ export const ProfileConfigSchema = {
             required: ["bucket", "prefix", "metadataKey"],
             properties: {
                 bucket: { type: "string", minLength: 3 },
+                extraBuckets: {
+                    type: "array",
+                    items: { type: "string", minLength: 3 },
+                    uniqueItems: true,
+                },
                 prefix: { type: "string", minLength: 1 },
                 metadataKey: { type: "string", minLength: 1 },
                 workflow: { type: "string", minLength: 1 },

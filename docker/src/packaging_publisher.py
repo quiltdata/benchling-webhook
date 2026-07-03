@@ -17,6 +17,7 @@ from typing import Any
 import structlog
 
 from .payload import Payload
+from .routing_config import EffectiveRouting
 
 logger = structlog.get_logger(__name__)
 
@@ -42,6 +43,7 @@ def publish_packaging_request(
     sqs_client: Any,
     queue_url: str,
     payload: Payload,
+    routing: EffectiveRouting | None = None,
 ) -> str:
     """Send a packaging request to the FIFO queue keyed by entry_id.
 
@@ -58,7 +60,16 @@ def publish_packaging_request(
             can return 5xx and Benchling will retry.
     """
     entry_id = payload.entry_id  # raises ValueError if missing — let it propagate
-    body = json.dumps(payload.raw_payload)
+    if routing:
+        body = json.dumps(
+            {
+                "webhook": payload.raw_payload,
+                "routing": routing.to_queue_metadata(),
+            },
+            default=str,
+        )
+    else:
+        body = json.dumps(payload.raw_payload)
 
     response = sqs_client.send_message(
         QueueUrl=queue_url,
@@ -74,6 +85,8 @@ def publish_packaging_request(
         entry_id=entry_id,
         canvas_id=payload.canvas_id,
         event_type=payload.event_type,
+        routing_source=routing.source if routing else "legacy",
+        routing_project=routing.project_name if routing else None,
         sqs_message_id=message_id,
     )
     return message_id

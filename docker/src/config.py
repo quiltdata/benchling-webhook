@@ -2,12 +2,19 @@ import os
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 import boto3
 import structlog
 from botocore.config import Config as BotocoreConfig
 
+from .routing_config import (
+    EffectiveRouting,
+    RoutingConfig,
+    RoutingConfigCache,
+    apply_routing_to_config,
+    legacy_target_from_secret,
+)
 from .secrets_manager import BenchlingSecretData, fetch_benchling_secret
 
 # Default TTL for cached secrets (seconds).
@@ -52,6 +59,8 @@ class Config:
     pkg_prefix: str = ""
     workflow: str = ""
     quilt_write_role_arn: str = ""
+    package_event_concurrency: int = 5
+    packaging_request_concurrency: int = 5
 
     # Secret fetching infrastructure (not the secrets themselves)
     _benchling_secret_name: str = ""
@@ -64,6 +73,7 @@ class Config:
     _cache_ttl: float = SECRETS_CACHE_TTL_SECONDS
     _refresh_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     _refresh_in_progress: bool = False
+    _routing_cache: RoutingConfigCache = field(default_factory=RoutingConfigCache, repr=False)
 
     def __post_init__(self):
         """Initialize configuration from environment variables.
@@ -317,6 +327,76 @@ class Config:
             # Log level from secret
             if secret_data.log_level:
                 self.log_level = secret_data.log_level
+
+    def invalidate_routing_config(self) -> None:
+        """Invalidate cached Benchling App Configuration Items."""
+        self._routing_cache.invalidate()
+
+    def get_routing_config(self, benchling: Any, secret_data: BenchlingSecretData) -> RoutingConfig:
+        """Fetch Tier 1 routing config with TTL/stale-while-refresh cache."""
+        try:
+            return self._routing_cache.get(benchling, secret_data.app_definition_id)
+        except Exception as exc:
+            logger.warning(
+                "Failed to fetch Tier 1 routing config; using legacy fallback",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            return RoutingConfig.empty()
+
+    def apply_global_routing_config(self, benchling: Any, secret_data: BenchlingSecretData) -> None:
+        """Apply non-project Tier 1 defaults/settings to the process config."""
+        routing_config = self.get_routing_config(benchling, secret_data)
+        legacy = legacy_target_from_secret(secret_data)
+        effective = routing_config.resolve(event_type="", legacy=legacy)
+        apply_routing_to_config(self, effective)
+        if routing_config.settings.log_level:
+            self.log_level = routing_config.settings.log_level
+        if routing_config.settings.package_event_concurrency:
+            self.package_event_concurrency = routing_config.settings.package_event_concurrency
+        if routing_config.settings.packaging_request_concurrency:
+            self.packaging_request_concurrency = routing_config.settings.packaging_request_concurrency
+
+    def resolve_effective_routing(
+        self,
+        *,
+        benchling: Any,
+        secret_data: BenchlingSecretData,
+        event_type: str,
+        entry_id: str | None = None,
+    ) -> EffectiveRouting:
+        """Resolve project/event/default routing for one webhook event."""
+        routing_config = self.get_routing_config(benchling, secret_data)
+        project_name = self._resolve_project_name(benchling, entry_id)
+        return routing_config.resolve(
+            event_type=event_type,
+            legacy=legacy_target_from_secret(secret_data),
+            project_name=project_name,
+        )
+
+    def _resolve_project_name(self, benchling: Any, entry_id: str | None) -> str | None:
+        if not entry_id:
+            return None
+        try:
+            entry = benchling.entries.get_by_id(entry_id)
+            folder_id = getattr(entry, "folder_id", None)
+            if not folder_id:
+                return None
+            folder = benchling.folders.get_by_id(folder_id)
+            project_id = getattr(folder, "project_id", None)
+            if not project_id:
+                return None
+            project = benchling.projects.get_by_id(project_id)
+            project_name = getattr(project, "name", None)
+            return project_name if isinstance(project_name, str) else None
+        except Exception as exc:
+            logger.warning(
+                "Project lookup failed; using event/default routing",
+                entry_id=entry_id,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            return None
 
 
 def get_config() -> Config:

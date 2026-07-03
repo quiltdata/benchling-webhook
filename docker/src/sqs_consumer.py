@@ -33,6 +33,15 @@ READY_WAIT_INITIAL_SECONDS = 30
 READY_WAIT_MAX_SECONDS = 300
 
 
+def configured_concurrency(value: Any, env_var: str, default: int = 5) -> int:
+    if isinstance(value, int) and value > 0:
+        return value
+    try:
+        return int(os.getenv(env_var, str(default)))
+    except ValueError:
+        return default
+
+
 class PackageEventParseError(ValueError):
     """Raised when an SQS message cannot be parsed as a package event."""
 
@@ -79,7 +88,9 @@ def create_benchling_client(config: Config) -> Benchling:
         client_id=secrets.client_id,
         client_secret=secrets.client_secret,
     )
-    return Benchling(url=f"https://{secrets.tenant}.benchling.com", auth_method=auth_method)
+    benchling = Benchling(url=f"https://{secrets.tenant}.benchling.com", auth_method=auth_method)
+    config.apply_global_routing_config(benchling, secrets)
+    return benchling
 
 
 class BaseSqsConsumer:
@@ -355,7 +366,7 @@ async def main() -> int:
         return 0
 
     sqs_client = build_sqs_client(config.aws_region)
-    concurrency = int(os.getenv("PACKAGE_EVENT_CONCURRENCY", "5"))
+    concurrency = configured_concurrency(config.package_event_concurrency, "PACKAGE_EVENT_CONCURRENCY")
     graceful_timeout = int(os.getenv("PACKAGE_EVENT_GRACEFUL_TIMEOUT", "30"))
 
     consumer = SqsConsumer(
