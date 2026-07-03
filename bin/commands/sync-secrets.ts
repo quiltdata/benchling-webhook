@@ -296,7 +296,7 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
         client_id: config.benchling.clientId,
         client_secret: clientSecret,
         app_definition_id: config.benchling.appDefinitionId,
-        user_bucket: config.packages.bucket,
+        ...(config.packages.bucket ? { user_bucket: config.packages.bucket } : {}),
         pkg_prefix: config.packages.prefix,
         pkg_key: config.packages.metadataKey,
         ...(config.packages.workflow ? { workflow: config.packages.workflow } : {}),

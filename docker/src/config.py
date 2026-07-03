@@ -139,7 +139,7 @@ class Config:
                 '  "app_definition_id": "...",\n'
                 '  "pkg_prefix": "benchling",\n'
                 '  "pkg_key": "experiment_id",\n'
-                '  "user_bucket": "s3-bucket-name",\n'
+                '  "user_bucket": "s3-bucket-name (optional)",\n'
                 '  "log_level": "INFO",\n'
                 '  "enable_webhook_verification": "true"\n'
                 "}\n"
@@ -300,8 +300,8 @@ class Config:
         """
         # Set package/security config from secret (NOT environment variables!)
         if not self._test_mode:
-            # Package configuration ALWAYS comes from secret
-            self.s3_bucket_name = secret_data.user_bucket
+            # Package configuration comes from secret. Empty bucket means bucketless mode.
+            self.s3_bucket_name = secret_data.user_bucket or ""
             self.s3_prefix = secret_data.pkg_prefix or "benchling"
             self.pkg_prefix = self.s3_prefix
             self.package_key = secret_data.pkg_key or "experiment_id"

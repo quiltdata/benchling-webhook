@@ -38,7 +38,7 @@ function buildProfileConfig(input: StandaloneModeInput): ProfileConfig {
             // No secretArn yet - will be set after creating secret
         },
         packages: {
-            bucket: parameters.packages.bucket,
+            ...(parameters.packages.bucket ? { bucket: parameters.packages.bucket } : {}),
             prefix: parameters.packages.prefix,
             metadataKey: parameters.packages.metadataKey,
         },

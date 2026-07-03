@@ -310,11 +310,15 @@ export interface BenchlingConfig {
  */
 export interface PackageConfig {
     /**
-     * S3 bucket for package storage
+     * S3 bucket for package storage.
+     *
+     * When omitted, the webhook runs in bucketless mode: it does not create
+     * default packages for unlinked entries and linked-package lookup is not
+     * scoped to a single configured bucket.
      *
      * @example "benchling-packages"
      */
-    bucket: string;
+    bucket?: string;
 
     /**
      * S3 key prefix for packages
@@ -760,7 +764,7 @@ export const ProfileConfigSchema = {
         },
         packages: {
             type: "object",
-            required: ["bucket", "prefix", "metadataKey"],
+            required: ["prefix", "metadataKey"],
             properties: {
                 bucket: { type: "string", minLength: 3 },
                 prefix: { type: "string", minLength: 1 },

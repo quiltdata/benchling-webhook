@@ -70,7 +70,7 @@ export function buildProfileConfigFromParameters(input: ConfigFromParametersInpu
             ...(benchlingSecretArn ? { secretArn: benchlingSecretArn } : {}),
         },
         packages: {
-            bucket: parameters.packages.bucket,
+            ...(parameters.packages.bucket ? { bucket: parameters.packages.bucket } : {}),
             prefix: parameters.packages.prefix,
             metadataKey: parameters.packages.metadataKey,
             ...(parameters.packages.workflow ? { workflow: parameters.packages.workflow } : {}),
@@ -120,10 +120,6 @@ export function buildProfileConfigFromExisting(input: ConfigFromExistingInput): 
         throw new Error("Missing Benchling credentials in existing configuration or secret");
     }
 
-    if (!packages.bucket) {
-        throw new Error("Missing package bucket in existing configuration or secret");
-    }
-
     const vpcFromStack = stackQuery.discoveredVpc?.isValid
         ? {
             vpcId: stackQuery.discoveredVpc.vpcId,
@@ -143,7 +139,7 @@ export function buildProfileConfigFromExisting(input: ConfigFromExistingInput): 
     };
 
     const packagesConfig = {
-        bucket: packages.bucket!,
+        ...(packages.bucket ? { bucket: packages.bucket } : {}),
         prefix: packages.prefix,
         metadataKey: packages.metadataKey,
         ...(existingConfig?.packages?.workflow ?? secretDetails?.workflow

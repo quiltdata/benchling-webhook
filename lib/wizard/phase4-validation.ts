@@ -283,17 +283,19 @@ export async function runValidation(input: ValidationInput): Promise<ValidationR
     }
     result.warnings.push(...credValidation.warnings);
 
-    // Validate S3 bucket access
-    const bucketValidation = await validateS3BucketAccess(
-        parameters.packages.bucket,
-        parameters.deployment.region,
-        awsProfile,
-    );
-    if (!bucketValidation.isValid) {
-        result.success = false;
-        result.errors.push(...bucketValidation.errors);
+    // Validate S3 bucket access only when a bucket is configured.
+    if (parameters.packages.bucket) {
+        const bucketValidation = await validateS3BucketAccess(
+            parameters.packages.bucket,
+            parameters.deployment.region,
+            awsProfile,
+        );
+        if (!bucketValidation.isValid) {
+            result.success = false;
+            result.errors.push(...bucketValidation.errors);
+        }
+        result.warnings.push(...bucketValidation.warnings);
     }
-    result.warnings.push(...bucketValidation.warnings);
 
     if (result.success) {
         console.log(chalk.green("✓ Configuration validated successfully\n"));
@@ -302,7 +304,7 @@ export async function runValidation(input: ValidationInput): Promise<ValidationR
         console.error(chalk.gray("   The following validations were performed:"));
         console.error(chalk.gray(`   - Benchling tenant: ${parameters.benchling.tenant}`));
         console.error(chalk.gray(`   - OAuth credentials: Client ID ${parameters.benchling.clientId.substring(0, 8)}...`));
-        console.error(chalk.gray(`   - S3 bucket: ${parameters.packages.bucket} (region: ${parameters.deployment.region})`));
+        console.error(chalk.gray(`   - S3 bucket: ${parameters.packages.bucket || "(bucketless mode)"} (region: ${parameters.deployment.region})`));
         console.error("");
         result.errors.forEach((err) => console.error(`${err}\n`));
     }

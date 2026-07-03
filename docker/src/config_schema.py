@@ -176,7 +176,7 @@ class BenchlingSecret(BaseModel):
     client_id: str = Field(..., description="Benchling OAuth client ID")
     client_secret: str = Field(..., description="Benchling OAuth client secret")
     app_definition_id: str = Field(..., description="Benchling app definition ID")
-    user_bucket: str = Field(..., description="S3 bucket for package storage")
+    user_bucket: Optional[str] = Field(None, description="Optional S3 bucket for package storage")
     pkg_prefix: str = Field("benchling", description="S3 key prefix for packages")
     pkg_key: str = Field("experiment_id", description="Package metadata key")
     log_level: str = Field("INFO", description="Logging level")

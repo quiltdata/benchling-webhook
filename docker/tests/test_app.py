@@ -120,6 +120,23 @@ class TestFastAPIApp:
         assert data["status"] == "ACCEPTED"
         mock_publish.assert_called_once()
 
+    def test_webhook_endpoint_bucketless_skips_packaging(self, client, mock_config, mock_publish):
+        """Bucketless entry events should not enqueue default package creation."""
+        mock_config.s3_bucket_name = ""
+        payload = {
+            "channel": "events",
+            "message": {"type": "v2.entry.created", "resourceId": "etr_123456"},
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        response = client.post("/event", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "SKIPPED"
+        assert data["mode"] == "bucketless"
+        mock_publish.assert_not_called()
+
     def test_webhook_endpoint_no_payload(self, client):
         """Test webhook endpoint with no JSON payload."""
         response = client.post("/event", data="", headers={"Content-Type": "application/json"})

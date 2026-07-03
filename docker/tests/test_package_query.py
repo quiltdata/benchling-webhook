@@ -134,3 +134,87 @@ class TestPackageQuery:
         assert package.package_name == "benchling/etr_123"
         assert package.bucket == "test-bucket"
         assert package.catalog_base_url == "catalog.example.com"
+
+    @patch("src.package_query.RoleManager")
+    def test_find_unique_packages_bucketless_searches_all_package_views(self, mock_role_manager_class):
+        """Bucketless PackageQuery searches every discovered package view."""
+        mock_athena = Mock()
+        mock_athena.start_query_execution.side_effect = [
+            {"QueryExecutionId": "list-query"},
+            {"QueryExecutionId": "bucket-a-query"},
+            {"QueryExecutionId": "bucket-b-query"},
+        ]
+        mock_athena.get_query_execution.return_value = {"QueryExecution": {"Status": {"State": "SUCCEEDED"}}}
+        mock_athena.get_query_results.side_effect = [
+            {
+                "ResultSet": {
+                    "Rows": [
+                        {"Data": [{"VarCharValue": "table_name"}]},
+                        {"Data": [{"VarCharValue": "bucket-a_packages-view"}]},
+                        {"Data": [{"VarCharValue": "bucket-b_packages-view"}]},
+                    ]
+                }
+            },
+            {
+                "ResultSet": {
+                    "Rows": [
+                        {
+                            "Data": [
+                                {"VarCharValue": "pkg_name"},
+                                {"VarCharValue": "timestamp"},
+                                {"VarCharValue": "message"},
+                                {"VarCharValue": "user_meta"},
+                            ]
+                        },
+                        {
+                            "Data": [
+                                {"VarCharValue": "benchling/pkg-a"},
+                                {"VarCharValue": "latest"},
+                                {"VarCharValue": "A"},
+                                {"VarCharValue": '{"experiment_id": "EXP-1"}'},
+                            ]
+                        },
+                    ]
+                }
+            },
+            {
+                "ResultSet": {
+                    "Rows": [
+                        {
+                            "Data": [
+                                {"VarCharValue": "pkg_name"},
+                                {"VarCharValue": "timestamp"},
+                                {"VarCharValue": "message"},
+                                {"VarCharValue": "user_meta"},
+                            ]
+                        },
+                        {
+                            "Data": [
+                                {"VarCharValue": "benchling/pkg-b"},
+                                {"VarCharValue": "latest"},
+                                {"VarCharValue": "B"},
+                                {"VarCharValue": '{"experiment_id": "EXP-1"}'},
+                            ]
+                        },
+                    ]
+                }
+            },
+        ]
+
+        mock_role_manager = Mock()
+        mock_session = Mock()
+        mock_session.client.return_value = mock_athena
+        mock_role_manager._get_or_create_session.return_value = (mock_session, None)
+        mock_role_manager.role_arn = None
+        mock_role_manager._session = None
+        mock_role_manager._expires_at = None
+        mock_role_manager_class.return_value = mock_role_manager
+
+        query = PackageQuery(bucket="", catalog_url="catalog.example.com", database="test_db")
+
+        result = query.find_unique_packages("experiment_id", "EXP-1")
+
+        assert [(pkg.bucket, pkg.package_name) for pkg in result["packages"]] == [
+            ("bucket-a", "benchling/pkg-a"),
+            ("bucket-b", "benchling/pkg-b"),
+        ]

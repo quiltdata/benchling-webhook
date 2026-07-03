@@ -50,7 +50,15 @@ def decode_package_name(encoded_name: str) -> str:
     return encoded_name.replace("--", "/")
 
 
-def parse_browse_linked_button_id(button_id: str) -> tuple[str, str, int, int]:
+def encode_bucket_name(bucket_name: str) -> str:
+    return bucket_name.replace("/", "--")
+
+
+def decode_bucket_name(encoded_name: str) -> str:
+    return encoded_name.replace("--", "/")
+
+
+def parse_browse_linked_button_id_with_bucket(button_id: str) -> tuple[str, str, Optional[str], int, int]:
     """Parse linked package button ID.
 
     Supports multiple button formats:
@@ -99,8 +107,12 @@ def parse_browse_linked_button_id(button_id: str) -> tuple[str, str, int, int]:
 
     encoded_pkg, rest = rest.rsplit("-p", 1)
 
-    # Decode package name: replace "--" back to "/"
+    encoded_bucket = None
+    if "-bucket-" in encoded_pkg:
+        encoded_pkg, encoded_bucket = encoded_pkg.rsplit("-bucket-", 1)
+
     package_name = decode_package_name(encoded_pkg)
+    bucket_name = decode_bucket_name(encoded_bucket) if encoded_bucket else None
 
     # Extract page and size
     if "-s" not in rest:
@@ -114,6 +126,11 @@ def parse_browse_linked_button_id(button_id: str) -> tuple[str, str, int, int]:
     except ValueError as e:
         raise ValueError(f"Invalid page/size in button ID: {button_id}") from e
 
+    return (entry_id, package_name, bucket_name, page_number, page_size)
+
+
+def parse_browse_linked_button_id(button_id: str) -> tuple[str, str, int, int]:
+    entry_id, package_name, _bucket_name, page_number, page_size = parse_browse_linked_button_id_with_bucket(button_id)
     return (entry_id, package_name, page_number, page_size)
 
 

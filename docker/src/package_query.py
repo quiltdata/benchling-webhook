@@ -179,6 +179,88 @@ class PackageQuery:
 
         return data_rows
 
+    def _list_package_view_buckets(self) -> List[str]:
+        query = f"""
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = '{self.database}'
+            AND table_name LIKE '%_packages-view'
+        """
+        rows = self._execute_query(query)
+        buckets: List[str] = []
+        suffix = "_packages-view"
+        for row in rows:
+            table_name = row.get("table_name") or row.get("TABLE_NAME")
+            if isinstance(table_name, str) and table_name.endswith(suffix):
+                buckets.append(table_name[: -len(suffix)])
+        return sorted(set(buckets))
+
+    def _find_unique_packages_in_bucket(self, bucket: str, key: str, value: str) -> Dict[str, Any]:
+        self.logger.info(
+            "Searching for packages by metadata",
+            key=key,
+            value=value,
+            bucket=bucket,
+        )
+
+        view_name = f'"{self.database}"."{bucket}_packages-view"'
+
+        query = f"""
+        SELECT pkg_name, timestamp, message, user_meta
+        FROM {view_name}
+        WHERE json_extract_scalar(user_meta, '$.{key}') = '{value}'
+            AND timestamp = 'latest'
+        LIMIT 100
+        """
+
+        rows = self._execute_query(query)
+
+        self.logger.info(
+            "Query completed",
+            row_count=len(rows),
+            key=key,
+            value=value,
+            bucket=bucket,
+        )
+
+        package_info: Dict[str, Dict[str, Any]] = {}
+
+        for row in rows:
+            pkg_name = row["pkg_name"]
+            user_meta_str = row.get("user_meta", "{}")
+
+            try:
+                user_meta = json.loads(user_meta_str) if user_meta_str else {}
+            except json.JSONDecodeError:
+                self.logger.warning("Failed to parse user_meta JSON", pkg_name=pkg_name)
+                user_meta = {}
+
+            if pkg_name not in package_info:
+                package_info[pkg_name] = {
+                    "bucket": bucket,
+                    "versions": [],
+                    "metadata": user_meta,
+                    "timestamp": row.get("timestamp"),
+                    "message": row.get("message"),
+                }
+
+        packages = [
+            Package(
+                catalog_base_url=self.catalog_url,
+                bucket=info["bucket"],
+                package_name=name,
+            )
+            for name, info in sorted(package_info.items())
+        ]
+
+        return {
+            "packages": packages,
+            "results": {
+                "rows": rows,
+                "package_info": package_info,
+            },
+        }
+
     def find_unique_packages(self, key: str, value: str) -> Dict[str, Any]:
         """Find unique packages matching metadata key-value pair.
 
@@ -203,83 +285,50 @@ class PackageQuery:
             >>> for pkg in packages:
             ...     print(f"{pkg.package_name}: {pkg.catalog_url}")
         """
-        self.logger.info(
-            "Searching for packages by metadata",
-            key=key,
-            value=value,
-            bucket=self.bucket,
-        )
-
-        # Build the view name from bucket
-        view_name = f'"{self.database}"."{self.bucket}_packages-view"'
-
-        # Build SQL query using json_extract_scalar for proper JSON querying
-        # Filter by timestamp = 'latest' to get only the most recent version
-        query = f"""
-        SELECT pkg_name, timestamp, message, user_meta
-        FROM {view_name}
-        WHERE json_extract_scalar(user_meta, '$.{key}') = '{value}'
-            AND timestamp = 'latest'
-        LIMIT 100
-        """
-
         try:
-            rows = self._execute_query(query)
-
             self.logger.info(
-                "Query completed",
-                row_count=len(rows),
+                "Searching for packages by metadata",
                 key=key,
                 value=value,
+                bucket=self.bucket,
             )
+            if self.bucket:
+                result = self._find_unique_packages_in_bucket(self.bucket, key, value)
+            else:
+                buckets = self._list_package_view_buckets()
+                all_packages: List[Package] = []
+                rows: List[Dict[str, Any]] = []
+                package_info: Dict[str, Dict[str, Any]] = {}
+                errors: Dict[str, str] = {}
 
-            # Group results by package name
-            package_info: Dict[str, Dict[str, Any]] = {}
+                for bucket in buckets:
+                    try:
+                        bucket_result = self._find_unique_packages_in_bucket(bucket, key, value)
+                    except Exception as exc:
+                        errors[bucket] = str(exc)
+                        self.logger.warning("Bucket package lookup failed", bucket=bucket, error=str(exc))
+                        continue
+                    all_packages.extend(bucket_result["packages"])
+                    rows.extend(bucket_result["results"]["rows"])
+                    for name, info in bucket_result["results"]["package_info"].items():
+                        package_info[f"{info['bucket']}/{name}"] = info
 
-            for row in rows:
-                pkg_name = row["pkg_name"]
-                user_meta_str = row.get("user_meta", "{}")
-
-                # Parse metadata to get additional info
-                try:
-                    user_meta = json.loads(user_meta_str) if user_meta_str else {}
-                except json.JSONDecodeError:
-                    self.logger.warning("Failed to parse user_meta JSON", pkg_name=pkg_name)
-                    user_meta = {}
-
-                # Add to package_info
-                if pkg_name not in package_info:
-                    package_info[pkg_name] = {
-                        "bucket": self.bucket,
-                        "versions": [],
-                        "metadata": user_meta,
-                        "timestamp": row.get("timestamp"),
-                        "message": row.get("message"),
-                    }
-
-            # Create Package instances
-            packages = [
-                Package(
-                    catalog_base_url=self.catalog_url,
-                    bucket=info["bucket"],
-                    package_name=name,
-                )
-                for name, info in sorted(package_info.items())
-            ]
+                result = {
+                    "packages": sorted(all_packages, key=lambda p: (p.bucket, p.package_name)),
+                    "results": {
+                        "rows": rows,
+                        "package_info": package_info,
+                        "errors": errors,
+                    },
+                }
 
             self.logger.info(
                 "Found unique packages",
-                package_count=len(packages),
-                packages=[p.package_name for p in packages],
+                package_count=len(result["packages"]),
+                packages=[f"{p.bucket}/{p.package_name}" for p in result["packages"]],
             )
 
-            return {
-                "packages": packages,
-                "results": {
-                    "rows": rows,
-                    "package_info": package_info,
-                },
-            }
+            return result
 
         except Exception as e:
             error_msg = str(e)

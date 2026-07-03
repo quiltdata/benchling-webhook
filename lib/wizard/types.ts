@@ -129,7 +129,7 @@ export interface ParameterCollectionResult {
         appDefinitionId: string;
     };
     packages: {
-        bucket: string;
+        bucket?: string;
         prefix: string;
         metadataKey: string;
         workflow?: string;
