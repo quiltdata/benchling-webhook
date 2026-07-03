@@ -942,6 +942,10 @@ def create_app() -> FastAPI:
                     return handle_update_package(payload, entry_packager, benchling, config)
 
                 logger.warning("Unknown button action from /canvas", button_id=button_id)
+                return JSONResponse(
+                    {"status": "ignored", "message": f"Unknown button action: {button_id}"},
+                    status_code=200,
+                )
 
             if not config.auto_packaging:
                 # Auto-packaging disabled: render the canvas (package links +
