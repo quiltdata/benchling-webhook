@@ -312,7 +312,7 @@ export async function runParameterCollection(
     // =========================================================================
     console.log("\n" + chalk.cyan("Package Configuration:"));
 
-    let bucket: string;
+    let bucket: string | undefined;
     let prefix: string;
     let metadataKey: string;
     let workflow: string | undefined;
@@ -327,17 +327,13 @@ export async function runParameterCollection(
         console.log(`  Metadata Key: ${metadataKey} (from CLI)`);
         console.log(`  Workflow: ${workflow || "(default)"} (from ${input.workflow !== undefined ? "CLI" : "default"})`);
     } else if (yes) {
-        // In non-interactive mode, use CLI args or existing config or error
-        bucket = input.userBucket || existingConfig?.packages?.bucket || "";
+        // In non-interactive mode, use CLI args or existing config. Empty means bucketless mode.
+        bucket = input.userBucket || existingConfig?.packages?.bucket || undefined;
         prefix = input.pkgPrefix || existingConfig?.packages?.prefix || "benchling";
         metadataKey = input.pkgKey || existingConfig?.packages?.metadataKey || "experiment_id";
         workflow = input.workflow?.trim() || existingConfig?.packages?.workflow || undefined;
 
-        if (!bucket) {
-            throw new Error("--user-bucket is required in non-interactive mode");
-        }
-
-        console.log(`  Bucket: ${bucket} (from ${input.userBucket ? "CLI" : "existing config"})`);
+        console.log(`  Bucket: ${bucket || "(bucketless mode)"} (from ${input.userBucket ? "CLI" : existingConfig?.packages?.bucket ? "existing config" : "default"})`);
         console.log(`  Prefix: ${prefix} (from ${input.pkgPrefix ? "CLI" : existingConfig?.packages?.prefix ? "existing config" : "default"})`);
         console.log(`  Metadata Key: ${metadataKey} (from ${input.pkgKey ? "CLI" : existingConfig?.packages?.metadataKey ? "existing config" : "default"})`);
         console.log(`  Workflow: ${workflow || "(default)"} (from ${input.workflow !== undefined ? "CLI" : existingConfig?.packages?.workflow ? "existing config" : "default"})`);
@@ -347,10 +343,8 @@ export async function runParameterCollection(
             {
                 type: "input",
                 name: "bucket",
-                message: "Package S3 Bucket:",
+                message: "Package S3 Bucket (optional, empty for bucketless mode):",
                 default: existingConfig?.packages?.bucket || "",
-                validate: (value: string): boolean | string =>
-                    value.trim().length > 0 || "Bucket name is required",
             },
             {
                 type: "input",
@@ -371,7 +365,7 @@ export async function runParameterCollection(
                 default: existingConfig?.packages?.workflow || "",
             },
         ]);
-        bucket = packageAnswers.bucket;
+        bucket = packageAnswers.bucket.trim() || undefined;
         prefix = packageAnswers.prefix;
         metadataKey = packageAnswers.metadataKey;
         workflow = packageAnswers.workflow.trim() || undefined;
@@ -446,7 +440,7 @@ export async function runParameterCollection(
             appDefinitionId,
         },
         packages: {
-            bucket,
+            ...(bucket ? { bucket } : {}),
             prefix,
             metadataKey,
             workflow,

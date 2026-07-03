@@ -49,6 +49,42 @@ describe("config-transform", () => {
             expect(result.errors).toHaveLength(0);
         });
 
+        it("should pass validation for bucketless package configuration", () => {
+            const validConfig: ProfileConfig = {
+                benchling: {
+                    tenant: "test-tenant",
+                    clientId: "client_123",
+                    secretArn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-secret",
+                    appDefinitionId: "app_456",
+                },
+                quilt: {
+                    catalog: "quilt.example.com",
+                    database: "quilt_catalog",
+                    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+                    region: "us-east-1",
+                },
+                packages: {
+                    prefix: "benchling",
+                    metadataKey: "experiment_id",
+                },
+                deployment: {
+                    region: "us-east-1",
+                    imageTag: "latest",
+                },
+                _metadata: {
+                    version: "0.10.0",
+                    createdAt: "2025-12-24T00:00:00Z",
+                    updatedAt: "2025-12-24T00:00:00Z",
+                    source: "wizard",
+                },
+            };
+
+            const result = validateStackConfig(validConfig);
+
+            expect(result.isValid).toBe(true);
+            expect(result.errors).toHaveLength(0);
+        });
+
         it("should fail validation when benchling.secretArn is missing", () => {
             const invalidConfig: ProfileConfig = {
                 benchling: {

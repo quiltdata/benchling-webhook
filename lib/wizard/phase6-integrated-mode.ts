@@ -38,7 +38,7 @@ function buildProfileConfig(input: IntegratedModeInput): ProfileConfig {
             secretArn: benchlingSecretArn,
         },
         packages: {
-            bucket: parameters.packages.bucket,
+            ...(parameters.packages.bucket ? { bucket: parameters.packages.bucket } : {}),
             prefix: parameters.packages.prefix,
             metadataKey: parameters.packages.metadataKey,
         },

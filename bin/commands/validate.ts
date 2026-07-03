@@ -60,7 +60,7 @@ export async function validateCommand(options: ValidateOptions): Promise<void> {
         console.log();
 
         console.log(chalk.bold("Packages:"));
-        console.log(`  Bucket: ${config.packages.bucket}`);
+        console.log(`  Bucket: ${config.packages.bucket || "(bucketless mode)"}`);
         console.log(`  Prefix: ${config.packages.prefix}`);
         console.log(`  Metadata Key: ${config.packages.metadataKey}`);
         console.log();

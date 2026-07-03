@@ -11,7 +11,7 @@ Usage:
 """
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 import structlog
 from botocore.exceptions import ClientError
@@ -61,7 +61,8 @@ class BenchlingSecretData:
         pkg_prefix: Quilt package name prefix
         pkg_key: Metadata key for linking Benchling entries to Quilt packages
         workflow: Optional Quilt workflow name for package creation
-        user_bucket: S3 bucket name for Benchling exports
+        user_bucket: Optional S3 bucket name for Benchling exports. When absent,
+                     the webhook runs in bucketless mode.
         log_level: Application logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         enable_webhook_verification: Enable Lambda authorizer webhook verification (boolean)
         queue_url: SQS queue URL for package creation (optional, v0.8.0+ gets from env)
@@ -76,11 +77,10 @@ class BenchlingSecretData:
     # Quilt Package Configuration
     pkg_prefix: str
     pkg_key: str
-    user_bucket: str
-
     # Application Behavior
     log_level: str
     enable_webhook_verification: bool
+    user_bucket: Optional[str] = None
     workflow: str = ""
 
     # Optional: SQS queue URL (v0.8.0+ gets from environment variable instead)
@@ -190,7 +190,6 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
             "app_definition_id",
             "pkg_prefix",
             "pkg_key",
-            "user_bucket",
             "log_level",
             "enable_webhook_verification",
         ]
@@ -204,7 +203,7 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
                 "app_definition_id": "appdef_wqFfaXBVMu",
                 "pkg_prefix": "benchling",
                 "pkg_key": "experiment_id",
-                "user_bucket": "my-s3-bucket",
+                "user_bucket": "my-s3-bucket (optional)",
                 "log_level": "INFO",
                 "enable_webhook_verification": "true",
             }
@@ -244,7 +243,6 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
             "app_definition_id",
             "pkg_prefix",
             "pkg_key",
-            "user_bucket",
         ]
         for param in string_params:
             if not isinstance(data[param], str) or len(data[param]) == 0:
@@ -264,7 +262,7 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
             app_definition_id=data["app_definition_id"],
             pkg_prefix=data["pkg_prefix"],
             pkg_key=data["pkg_key"],
-            user_bucket=data["user_bucket"],
+            user_bucket=data.get("user_bucket") or None,
             workflow=data.get("workflow", ""),
             log_level=data["log_level"],
             enable_webhook_verification=enable_webhook_verification,

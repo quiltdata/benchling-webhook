@@ -45,7 +45,7 @@ export interface FargateServiceProps {
 
     // Runtime-configurable parameters (from CloudFormation)
     readonly benchlingSecret: string;
-    readonly packageBucket: string;
+    readonly packageBucket?: string;
     readonly quiltDatabase: string;
     readonly logLevel?: string;
 }
@@ -147,33 +147,35 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Grant S3 access for the specific package bucket
-        // Full Quilt-required permissions for versioned S3 objects
-        const packageBucketArn = `arn:aws:s3:::${props.packageBucket}`;
-        taskRole.addToPolicy(
-            new iam.PolicyStatement({
-                actions: [
-                    "s3:GetObject",
-                    "s3:GetObjectAttributes",
-                    "s3:GetObjectTagging",
-                    "s3:GetObjectVersion",
-                    "s3:GetObjectVersionAttributes",
-                    "s3:GetObjectVersionTagging",
-                    "s3:ListBucket",
-                    "s3:ListBucketVersions",
-                    "s3:DeleteObject",
-                    "s3:DeleteObjectVersion",
-                    "s3:PutObject",
-                    "s3:PutObjectTagging",
-                    "s3:GetBucketNotification",
-                    "s3:PutBucketNotification",
-                ],
-                resources: [
-                    packageBucketArn,
-                    `${packageBucketArn}/*`,
-                ],
-            }),
-        );
+        if (props.packageBucket) {
+            // Grant S3 access for the specific package bucket
+            // Full Quilt-required permissions for versioned S3 objects
+            const packageBucketArn = `arn:aws:s3:::${props.packageBucket}`;
+            taskRole.addToPolicy(
+                new iam.PolicyStatement({
+                    actions: [
+                        "s3:GetObject",
+                        "s3:GetObjectAttributes",
+                        "s3:GetObjectTagging",
+                        "s3:GetObjectVersion",
+                        "s3:GetObjectVersionAttributes",
+                        "s3:GetObjectVersionTagging",
+                        "s3:ListBucket",
+                        "s3:ListBucketVersions",
+                        "s3:DeleteObject",
+                        "s3:DeleteObjectVersion",
+                        "s3:PutObject",
+                        "s3:PutObjectTagging",
+                        "s3:GetBucketNotification",
+                        "s3:PutBucketNotification",
+                    ],
+                    resources: [
+                        packageBucketArn,
+                        `${packageBucketArn}/*`,
+                    ],
+                }),
+            );
+        }
 
         // Attach Quilt managed policies directly to task role
         // This eliminates the need for role assumption and trust policy coordination

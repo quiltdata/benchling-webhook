@@ -635,7 +635,9 @@ export async function deploy(
     const ecrRepository = config.deployment.ecrRepository || "quiltdata/benchling";
     const ecrImageUri = `${ecrAccount}.dkr.ecr.${ecrRegion}.amazonaws.com/${ecrRepository}:${options.imageTag}`;
     const packagePrefix = config.packages.prefix || "benchling";
-    const eventSummary = `bucket=${config.packages.bucket}, prefix=${packagePrefix}/ type=package-revision source=com.quiltdata bus=default`;
+    const eventSummary = config.packages.bucket
+        ? `bucket=${config.packages.bucket}, prefix=${packagePrefix}/ type=package-revision source=com.quiltdata bus=default`
+        : `bucketless, prefix=${packagePrefix}/ type=package-revision source=com.quiltdata bus=default`;
 
     // Display deployment plan
     console.log();
@@ -791,7 +793,7 @@ export async function deploy(
             // Legacy parameters
             `BenchlingSecretARN=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
-            `PackageBucket=${config.packages.bucket}`,
+            `PackageBucket=${config.packages.bucket || ""}`,
             `QuiltDatabase=${config.quilt.database || ""}`,  // IAM permissions only (same value as AthenaUserDatabase)
             `LogLevel=${config.logging?.level || "INFO"}`,
         ];
