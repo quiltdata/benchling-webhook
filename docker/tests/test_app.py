@@ -164,6 +164,65 @@ class TestFastAPIApp:
         published_payload = mock_publish.call_args.args[2]
         assert published_payload.canvas_id == "canvas_123"
 
+    def test_entry_event_skipped_when_auto_packaging_disabled(self, client, mock_config, mock_publish):
+        """Entry events must not enqueue packaging when auto_packaging is off."""
+        mock_config.resolve_auto_packaging.return_value = False
+        payload = {
+            "channel": "events",
+            "message": {"type": "v2.entry.updated.fields", "resourceId": "etr_123456"},
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        response = client.post("/event", json=payload)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "skipped"
+        mock_publish.assert_not_called()
+
+    def test_canvas_event_renders_without_packaging_when_disabled(self, client, mock_config, mock_publish):
+        """Canvas lifecycle events render the canvas but skip packaging when auto_packaging is off."""
+        mock_config.resolve_auto_packaging.return_value = False
+        payload = {
+            "channel": "events",
+            "message": {"type": "v2.canvas.initialized", "resourceId": "etr_123456"},
+            "baseURL": "https://tenant.benchling.com",
+            "context": {"canvasId": "canvas_123"},
+        }
+
+        with patch("src.app.CanvasManager") as mock_canvas_manager:
+            mock_manager_instance = MagicMock()
+            mock_canvas_manager.return_value = mock_manager_instance
+
+            response = client.post("/canvas", json=payload)
+
+            assert response.status_code == 202
+            data = response.json()
+            assert data["status"] == "ACCEPTED"
+            assert "without packaging" in data["message"]
+            mock_manager_instance.handle_async.assert_called_once()
+
+        mock_publish.assert_not_called()
+
+    def test_unknown_button_returns_ignored_without_packaging(self, client, mock_publish):
+        """Unknown canvas buttons must not fall through to the packaging path."""
+        payload = {
+            "channel": "app_signals",
+            "message": {
+                "type": "v2.canvas.userInteracted",
+                "buttonId": "some-unknown-button-etr_123",
+                "canvasId": "canvas_abc",
+            },
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ignored"
+        mock_publish.assert_not_called()
+
     @pytest.mark.local
     def test_canvas_endpoint_handles_browse_files_button(self, client, mock_benchling_client):
         """Test /canvas endpoint routes Browse Files button to correct handler.

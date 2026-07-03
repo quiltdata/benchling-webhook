@@ -236,9 +236,13 @@ App Configuration Items are read under the `["quilt"]` path namespace:
 - `["quilt", "default", "bucket" | "prefix" | "package_key" | "workflow"]`
 - `["quilt", "routing", "<event-type>", "<key>"]`
 - `["quilt", "projects", "<project-name>", "<key>"]`
-- `["quilt", "settings", "log_level" | "package_event_concurrency" | "packaging_request_concurrency"]`
+- `["quilt", "settings", "log_level" | "package_event_concurrency" | "packaging_request_concurrency" | "auto_packaging"]`
 
 Project routing is merged field-by-field over event defaults, global defaults, and legacy secret values. For example, a project rule that sets only `bucket` inherits `prefix`, `package_key`, and `workflow` from lower-priority tiers.
+
+### Disabling automatic packaging
+
+Setting `["quilt", "settings", "auto_packaging"]` to `false` stops entry and canvas lifecycle events from automatically enqueueing packaging work. The canvas still renders with the Update Package button, so scientists trigger packaging manually per entry. Button-driven packaging (Update Package) always works regardless of this setting. Defaults to `true` (current behavior) when unset. Toggling the item in the Benchling UI takes effect within one config-cache interval, or immediately when Benchling delivers a `configuration.updated` lifecycle event.
 
 CLI helpers:
 

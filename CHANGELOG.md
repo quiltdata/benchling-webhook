@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- `["quilt", "settings", "auto_packaging"]` App Configuration Item: when set to `false`, entry and canvas lifecycle events no longer auto-enqueue packaging; the canvas renders with the Update Package button for manual, per-entry packaging. Defaults to `true` (existing behavior) when unset
+- `/config` endpoint now reports the effective `auto_packaging` value
+
+### Fixed
+
+- Unknown canvas button interactions now return an explicit `ignored` response instead of falling through to the packaging path, which previously enqueued unintended packaging work
+
 ## [0.19.0] - 2026-07-02
 
 ### Added

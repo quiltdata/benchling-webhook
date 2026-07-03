@@ -58,6 +58,7 @@ class RuntimeSettings:
     log_level: str | None = None
     package_event_concurrency: int | None = None
     packaging_request_concurrency: int | None = None
+    auto_packaging: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -313,6 +314,7 @@ def _settings_from_mapping(values: Any) -> RuntimeSettings:
         log_level=_string_value(values, "log_level", "logLevel"),
         package_event_concurrency=_int_value(values.get("package_event_concurrency")),
         packaging_request_concurrency=_int_value(values.get("packaging_request_concurrency")),
+        auto_packaging=_bool_value(values.get("auto_packaging")),
     )
 
 
@@ -324,3 +326,20 @@ def _int_value(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed > 0 else None
+
+
+def _bool_value(value: Any) -> bool | None:
+    """Parse a boolean from App Config item values (stored as text).
+
+    Returns None for unset/unrecognized values so callers can distinguish
+    "not configured" from an explicit true/false.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("true", "1", "yes", "on"):
+            return True
+        if lowered in ("false", "0", "no", "off"):
+            return False
+    return None
