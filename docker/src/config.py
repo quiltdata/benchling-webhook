@@ -61,6 +61,10 @@ class Config:
     quilt_write_role_arn: str = ""
     package_event_concurrency: int = 5
     packaging_request_concurrency: int = 5
+    # When False, entry events render/refresh the canvas but do not enqueue
+    # packaging work; scientists trigger packaging via the canvas button.
+    # Configured via Benchling App Config: ["quilt", "settings", "auto_packaging"]
+    auto_packaging: bool = True
 
     # Secret fetching infrastructure (not the secrets themselves)
     _benchling_secret_name: str = ""
@@ -356,6 +360,21 @@ class Config:
             self.package_event_concurrency = routing_config.settings.package_event_concurrency
         if routing_config.settings.packaging_request_concurrency:
             self.packaging_request_concurrency = routing_config.settings.packaging_request_concurrency
+        if routing_config.settings.auto_packaging is not None:
+            self.auto_packaging = routing_config.settings.auto_packaging
+
+    def resolve_auto_packaging(self, benchling: Any, secret_data: BenchlingSecretData) -> bool:
+        """Resolve the auto_packaging setting from Tier 1 App Config at event time.
+
+        Reads through the TTL routing cache so toggling
+        ["quilt", "settings", "auto_packaging"] in the Benchling UI takes effect
+        within one cache interval (or immediately on configuration.updated).
+        Defaults to True when unset.
+        """
+        routing_config = self.get_routing_config(benchling, secret_data)
+        if routing_config.settings.auto_packaging is not None:
+            return routing_config.settings.auto_packaging
+        return self.auto_packaging
 
     def resolve_effective_routing(
         self,
