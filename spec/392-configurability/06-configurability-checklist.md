@@ -10,13 +10,13 @@ Phases can be developed independently but **all phases deploy together** in one 
 
 ## Prerequisite
 
-**Run `05a-list_app_configuration_items.md` first** to determine the correct `app_id` parameter for `benchling.apps.list_app_configuration_items()`. Update this checklist with the result before starting Phase 1.
+**Probe complete — see [`05b-probe_results.md`](05b-probe_results.md).** Key finding: `appDefinitionId` (format `appdef_XXXXX`) is NOT the `app_id` for config items. The correct value is the tenanted installation `id` (format `app_XXXXX`), discovered by calling `list_apps()` and matching `app.app_definition.id` to the `app_definition_id` from the Benchling secret.
 
 ---
 
 ## Phase 1 — App Config Items Read Path (Python runtime)
 
-1. **Add `benchling.apps.list_app_configuration_items()` call** at app startup in Docker Python code. Fetch all config items scoped to our app using the `app_id` identified by the prerequisite probe (likely `appDefinitionId` from the secret, or a separate `app.id` discovered via `list_apps()`).
+1. **Add `benchling.apps.list_app_configuration_items()` call** at app startup in Docker Python code. Fetch all config items scoped to our app using the `app.id` matched from `list_apps()` (`app.app_definition.id == secrets.app_definition_id`), **not** the `appDefinitionId` directly. See [`05b-probe_results.md`](05b-probe_results.md) for details.
 
 1. **Build a `RoutingConfig` model** from the config items, keyed by `path` convention:
    - `["quilt", "routing", "<event-type>", "<key>"]` — event-type routing
