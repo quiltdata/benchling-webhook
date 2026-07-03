@@ -14,6 +14,7 @@ from benchling_sdk.models import Entry
 
 from . import canvas_blocks as blocks
 from . import canvas_formatting as fmt
+from .bucket_router import resolve_bucket_for_entry
 from .config import Config
 from .package_files import PackageFile, PackageFileFetcher
 from .package_query import PackageQuery
@@ -65,17 +66,37 @@ class CanvasManager:
         self._errors: List[str] = []  # Track errors to display in notification section
         self._linked_packages: List[Package] = []  # Track linked packages for use in blocks
 
+        # Multi-bucket routing: resolve this entry's target bucket from the
+        # optional pkg_bucket_map. Only fetches the entry when a map is
+        # configured, so single-bucket deployments see no extra API calls.
+        self.bucket = config.s3_bucket_name
+        bucket_map = getattr(config, "pkg_bucket_map", {}) or {}
+        if bucket_map:
+            try:
+                entry = self.entry
+                self.bucket = resolve_bucket_for_entry(
+                    {"id": entry.id, "folder_id": getattr(entry, "folder_id", None)},
+                    bucket_map,
+                    config.s3_bucket_name,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to resolve target bucket for canvas; using default",
+                    error=str(exc),
+                    default_bucket=config.s3_bucket_name,
+                )
+
         # Dependency injection with fallback to default instances
 
         self._package_query = package_query or PackageQuery(
-            bucket=config.s3_bucket_name,
+            bucket=self.bucket,
             catalog_url=config.quilt_catalog,
             database=config.quilt_database,
             config=config,
         )
         self._package_file_fetcher = package_file_fetcher or PackageFileFetcher(
             catalog_url=config.quilt_catalog,
-            bucket=config.s3_bucket_name,
+            bucket=self.bucket,
             role_arn=config.quilt_write_role_arn,
             region=config.aws_region,
         )
@@ -109,7 +130,7 @@ class CanvasManager:
                 self.payload.set_display_id(self.entry.display_id)
             self._package = Package(
                 catalog_base_url=self.config.quilt_catalog,
-                bucket=self.config.s3_bucket_name,
+                bucket=self.bucket,
                 package_name=self.payload.package_name(self.config.s3_prefix, use_display_id=True),
             )
         return self._package
@@ -140,7 +161,7 @@ class CanvasManager:
             quilt+s3://bucket#package=benchdock/entry@hash&path=README.md&catalog=nightly.quilttest.com
         """
         # Build QuiltSync URI
-        uri = f"quilt+s3://{self.config.s3_bucket_name}#package={self.package_name}"
+        uri = f"quilt+s3://{self.bucket}#package={self.package_name}"
 
         # Add version if provided, otherwise default to :latest
         if version:
@@ -271,7 +292,7 @@ class CanvasManager:
         footer_markdown = fmt.format_canvas_footer(
             version=__version__,
             quilt_host=self.config.quilt_catalog,
-            bucket=self.config.s3_bucket_name,
+            bucket=self.bucket,
             updated_at=updated_at,
             is_updating=is_updating,
         )

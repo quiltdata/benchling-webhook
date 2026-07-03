@@ -11,7 +11,7 @@ Usage:
 """
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Dict, Optional
 
 import structlog
 from botocore.exceptions import ClientError
@@ -61,7 +61,15 @@ class BenchlingSecretData:
         pkg_prefix: Quilt package name prefix
         pkg_key: Metadata key for linking Benchling entries to Quilt packages
         workflow: Optional Quilt workflow name for package creation
-        user_bucket: S3 bucket name for Benchling exports
+        user_bucket: S3 bucket name for Benchling exports (default target)
+        pkg_bucket_map: Optional mapping of Benchling folder/project IDs to
+            target S3 buckets for multi-bucket routing (v0.19.0+). Keys are
+            Benchling folder IDs (``lib_…``/``fld_…``) or project IDs
+            (``src_…``); values are bucket names. Entries whose folder or
+            project is not in the map fall back to ``user_bucket``.
+        auto_packaging: When false, entry lifecycle events (v2.entry.*) do not
+            trigger packaging; the canvas is still created and packaging only
+            runs when a user clicks "Update Package" (v0.19.0+, default true).
         log_level: Application logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         enable_webhook_verification: Enable Lambda authorizer webhook verification (boolean)
         queue_url: SQS queue URL for package creation (optional, v0.8.0+ gets from env)
@@ -82,6 +90,8 @@ class BenchlingSecretData:
     log_level: str
     enable_webhook_verification: bool
     workflow: str = ""
+    pkg_bucket_map: Optional[Dict[str, str]] = None
+    auto_packaging: bool = True
 
     # Optional: SQS queue URL (v0.8.0+ gets from environment variable instead)
     queue_url: str = ""
@@ -254,6 +264,35 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
                     "Expected: non-empty string",
                 )
 
+        # Optional: pkg_bucket_map for multi-bucket routing (v0.19.0+)
+        pkg_bucket_map = data.get("pkg_bucket_map")
+        if pkg_bucket_map is not None:
+            if not isinstance(pkg_bucket_map, dict):
+                raise SecretsManagerError(
+                    "Invalid value for parameter 'pkg_bucket_map'",
+                    f"Received: {type(pkg_bucket_map).__name__}",
+                    "Expected: JSON object mapping Benchling folder/project IDs to bucket names, "
+                    'e.g. {"lib_abc123": "bucket-a", "src_def456": "bucket-b"}',
+                )
+            for key, value in pkg_bucket_map.items():
+                if not isinstance(key, str) or not key or not isinstance(value, str) or not value:
+                    raise SecretsManagerError(
+                        "Invalid entry in parameter 'pkg_bucket_map'",
+                        f"Received: {key!r}: {value!r}",
+                        "Expected: non-empty string keys (Benchling folder/project IDs) "
+                        "and non-empty string values (S3 bucket names)",
+                    )
+
+        # Optional: auto_packaging toggle (v0.19.0+, default true preserves existing behavior)
+        try:
+            auto_packaging = parse_bool(data.get("auto_packaging", True))
+        except ValueError as e:
+            raise SecretsManagerError(
+                "Invalid value for parameter 'auto_packaging'",
+                str(e),
+                "Expected: true, false, 'true', 'false', '1', or '0'",
+            )
+
         # Optional: queue_url (v0.8.0+ gets from environment variable instead)
         queue_url = data.get("queue_url", "")
 
@@ -266,6 +305,8 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
             pkg_key=data["pkg_key"],
             user_bucket=data["user_bucket"],
             workflow=data.get("workflow", ""),
+            pkg_bucket_map=pkg_bucket_map,
+            auto_packaging=auto_packaging,
             log_level=data["log_level"],
             enable_webhook_verification=enable_webhook_verification,
             queue_url=queue_url,

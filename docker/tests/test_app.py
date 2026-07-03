@@ -28,6 +28,8 @@ class TestFastAPIApp:
         config.pkg_key = "experiment_id"
         config.pkg_prefix = "benchling"
         config.log_level = "INFO"
+        config.pkg_bucket_map = {}
+        config.auto_packaging = True
         return config
 
     @pytest.fixture
@@ -163,6 +165,45 @@ class TestFastAPIApp:
         mock_publish.assert_called_once()
         published_payload = mock_publish.call_args.args[2]
         assert published_payload.canvas_id == "canvas_123"
+
+    def test_webhook_endpoint_skips_packaging_when_auto_packaging_disabled(self, client, mock_config, mock_publish):
+        """Entry events are acknowledged but not enqueued when auto_packaging is off."""
+        mock_config.auto_packaging = False
+        payload = {
+            "channel": "events",
+            "message": {"type": "v2.entry.updated.fields", "resourceId": "etr_123456"},
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        response = client.post("/event", json=payload)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "skipped"
+        mock_publish.assert_not_called()
+
+    def test_canvas_endpoint_renders_without_packaging_when_auto_packaging_disabled(
+        self, client, mock_config, mock_publish
+    ):
+        """Canvas init renders the canvas but does not enqueue packaging when auto_packaging is off."""
+        mock_config.auto_packaging = False
+        payload = {
+            "channel": "events",
+            "message": {"type": "v2.canvas.initialized", "resourceId": "etr_123456"},
+            "baseURL": "https://tenant.benchling.com",
+            "context": {"canvasId": "canvas_123"},
+        }
+
+        with patch("src.app.CanvasManager") as mock_canvas_manager:
+            response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "ACCEPTED"
+        assert "auto-packaging disabled" in data["message"]
+        mock_publish.assert_not_called()
+        mock_canvas_manager.assert_called_once()
+        mock_canvas_manager.return_value.handle_async.assert_called_once()
 
     @pytest.mark.local
     def test_canvas_endpoint_handles_browse_files_button(self, client, mock_benchling_client):

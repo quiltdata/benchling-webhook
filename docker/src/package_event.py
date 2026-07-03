@@ -80,8 +80,14 @@ def refresh_canvas_for_package_event(
     *,
     config: Config,
     benchling_factory: Callable[[], Benchling],
+    bucket: str | None = None,
 ) -> RefreshResult:
-    """Refresh a canvas after Quilt publishes a package revision event."""
+    """Refresh a canvas after Quilt publishes a package revision event.
+
+    Args:
+        bucket: Bucket the package event came from. Defaults to the configured
+            default bucket; multi-bucket deployments pass the event's bucket.
+    """
     try:
         active_benchling = benchling_factory()
         if active_benchling is None:
@@ -89,7 +95,7 @@ def refresh_canvas_for_package_event(
 
         package_fetcher = PackageFileFetcher(
             catalog_url=config.quilt_catalog,
-            bucket=config.s3_bucket_name,
+            bucket=bucket or config.s3_bucket_name,
             role_arn=config.quilt_write_role_arn or None,
             region=config.aws_region,
         )

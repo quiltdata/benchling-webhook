@@ -14,7 +14,7 @@ Module: config_schema
 """
 
 from enum import Enum
-from typing import Optional
+from typing import Dict, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -176,9 +176,23 @@ class BenchlingSecret(BaseModel):
     client_id: str = Field(..., description="Benchling OAuth client ID")
     client_secret: str = Field(..., description="Benchling OAuth client secret")
     app_definition_id: str = Field(..., description="Benchling app definition ID")
-    user_bucket: str = Field(..., description="S3 bucket for package storage")
+    user_bucket: str = Field(..., description="S3 bucket for package storage (default target)")
     pkg_prefix: str = Field("benchling", description="S3 key prefix for packages")
     pkg_key: str = Field("experiment_id", description="Package metadata key")
+    pkg_bucket_map: Optional[Dict[str, str]] = Field(
+        None,
+        description=(
+            "Optional map of Benchling folder/project IDs to target S3 buckets "
+            "for multi-bucket routing; unmapped entries use user_bucket"
+        ),
+    )
+    auto_packaging: str = Field(
+        "true",
+        description=(
+            "When 'false', entry events do not trigger packaging automatically; "
+            "packaging runs only from the canvas 'Update Package' button"
+        ),
+    )
     log_level: str = Field("INFO", description="Logging level")
     enable_webhook_verification: str = Field(
         "true", description="Enable Lambda authorizer for webhook signature verification (API Gateway)"
@@ -203,6 +217,14 @@ class BenchlingSecret(BaseModel):
         """Validate webhook verification flag"""
         if v.lower() not in ["true", "false"]:
             raise ValueError(f"Invalid webhook verification flag: {v}. Must be 'true' or 'false'")
+        return v.lower()
+
+    @field_validator("auto_packaging")
+    @classmethod
+    def validate_auto_packaging(cls, v: str) -> str:
+        """Validate auto packaging flag"""
+        if v.lower() not in ["true", "false"]:
+            raise ValueError(f"Invalid auto_packaging flag: {v}. Must be 'true' or 'false'")
         return v.lower()
 
 
