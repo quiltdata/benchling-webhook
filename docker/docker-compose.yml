@@ -17,6 +17,7 @@ services:
       - ATHENA_USER_DATABASE=${ATHENA_USER_DATABASE}
       - ATHENA_USER_WORKGROUP=${ATHENA_USER_WORKGROUP:-primary}
       - PACKAGER_SQS_URL=${PACKAGER_SQS_URL}
+      - PACKAGING_REQUEST_QUEUE_URL=${PACKAGING_REQUEST_QUEUE_URL}
 
       # Benchling Configuration (credentials from Secrets Manager)
       - BenchlingSecret=${BenchlingSecret}
@@ -62,6 +63,7 @@ services:
       - ATHENA_USER_DATABASE=${ATHENA_USER_DATABASE}
       - ATHENA_USER_WORKGROUP=${ATHENA_USER_WORKGROUP:-primary}
       - PACKAGER_SQS_URL=${PACKAGER_SQS_URL}
+      - PACKAGING_REQUEST_QUEUE_URL=${PACKAGING_REQUEST_QUEUE_URL}
 
       # Benchling Configuration (credentials from Secrets Manager)
       - BenchlingSecret=${BenchlingSecret}
