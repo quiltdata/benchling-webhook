@@ -2,7 +2,7 @@ import os
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Dict, Optional
 
 import boto3
 import structlog
@@ -52,6 +52,8 @@ class Config:
     pkg_prefix: str = ""
     workflow: str = ""
     quilt_write_role_arn: str = ""
+    pkg_bucket_map: Dict[str, str] = field(default_factory=dict)
+    auto_packaging: bool = True
 
     # Secret fetching infrastructure (not the secrets themselves)
     _benchling_secret_name: str = ""
@@ -306,6 +308,8 @@ class Config:
             self.pkg_prefix = self.s3_prefix
             self.package_key = secret_data.pkg_key or "experiment_id"
             self.workflow = secret_data.workflow or ""
+            self.pkg_bucket_map = secret_data.pkg_bucket_map or {}
+            self.auto_packaging = secret_data.auto_packaging
 
             # Security configuration from secret, unless env var explicitly disables it
             env_override = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "").lower()

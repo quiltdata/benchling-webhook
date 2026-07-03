@@ -602,6 +602,8 @@ def create_app() -> FastAPI:
                     "pkg_prefix": None,
                     "pkg_key": None,
                     "user_bucket": None,
+                    "pkg_bucket_map": None,
+                    "auto_packaging": None,
                     "log_level": os.getenv("LOG_LEVEL", "INFO"),
                     "enable_webhook_verification": False,
                 }
@@ -663,6 +665,8 @@ def create_app() -> FastAPI:
                     "pkg_prefix": config.pkg_prefix,
                     "pkg_key": config.package_key,
                     "user_bucket": config.s3_bucket_name,
+                    "pkg_bucket_map": config.pkg_bucket_map or None,
+                    "auto_packaging": config.auto_packaging,
                     "log_level": config.log_level,
                     "enable_webhook_verification": config.enable_webhook_verification,
                 },
@@ -710,6 +714,24 @@ def create_app() -> FastAPI:
                 error=str(exc),
             )
 
+    def _render_canvas_without_packaging(payload: Payload) -> None:
+        """Render the canvas directly, without enqueuing a packaging workflow.
+
+        Used when auto-packaging is disabled: the user gets the full canvas
+        (package links, 'Update Package' button) but no export/packaging runs
+        until they explicitly click 'Update Package'.
+        """
+        if not payload.canvas_id or benchling is None or config is None:
+            return
+        try:
+            CanvasManager(benchling, config, payload).handle_async()
+        except Exception as exc:
+            logger.warning(
+                "Failed to render canvas (auto-packaging disabled)",
+                canvas_id=payload.canvas_id,
+                error=str(exc),
+            )
+
     async def _handle_event_impl(request: Request, _verified: None = None):
         """Shared event webhook handling implementation."""
         try:
@@ -737,6 +759,17 @@ def create_app() -> FastAPI:
                     event_type=payload.event_type,
                     canvas_id=payload.canvas_id,
                 )
+                if not config.auto_packaging:
+                    _render_canvas_without_packaging(payload)
+                    logger.info(
+                        "Canvas rendered without packaging (auto-packaging disabled)",
+                        canvas_id=payload.canvas_id,
+                    )
+                    return JSONResponse(
+                        {"status": "ACCEPTED", "message": "Canvas rendered (auto-packaging disabled)"},
+                        status_code=202,
+                    )
+
                 _send_updating_canvas_best_effort(payload)
                 publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
 
@@ -756,6 +789,19 @@ def create_app() -> FastAPI:
                 return {
                     "status": "ignored",
                     "message": f"Event type {payload.event_type} not processed",
+                }
+
+            if not config.auto_packaging:
+                logger.info(
+                    "Auto-packaging disabled - entry event acknowledged without packaging",
+                    entry_id=payload.entry_id,
+                    event_type=payload.event_type,
+                )
+                return {
+                    "entry_id": payload.entry_id,
+                    "status": "skipped",
+                    "message": "Auto-packaging is disabled; use the canvas 'Update Package' button to package",
+                    "orchestration": "python",
                 }
 
             publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
@@ -896,6 +942,25 @@ def create_app() -> FastAPI:
                     return handle_update_package(payload, entry_packager, benchling, config)
 
                 logger.warning("Unknown button action from /canvas", button_id=button_id)
+
+            if not config.auto_packaging:
+                # Auto-packaging disabled: render the canvas (package links +
+                # "Update Package" button) but do not enqueue a packaging
+                # workflow. Packaging runs only from the explicit
+                # "Update Package" button (handled above).
+                _render_canvas_without_packaging(payload)
+
+                logger.info(
+                    "Canvas rendered without packaging (auto-packaging disabled)",
+                    canvas_id=payload.canvas_id,
+                    entry_id=payload.entry_id,
+                    event_type=payload.event_type,
+                )
+
+                return JSONResponse(
+                    {"status": "ACCEPTED", "message": "Canvas rendered (auto-packaging disabled)"},
+                    status_code=202,
+                )
 
             _send_updating_canvas_best_effort(payload)
             sqs_message_id = publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)

@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Multi-bucket routing** via the optional `pkg_bucket_map` secret parameter — a JSON object mapping Benchling folder IDs (`lib_…`) or project IDs (`src_…`) to S3 bucket names. An entry is routed by its folder first, then its project; unmapped entries fall back to `user_bucket`. Routing applies to exports, SQS packaging messages, canvas package links, and package-event canvas refreshes. Configured at runtime in AWS Secrets Manager (no redeploy); also settable via `packages.bucketMap` in the CLI profile config
+- **`auto_packaging` toggle** (secret parameter, default `"true"`) — when `"false"`, entry lifecycle events are acknowledged without triggering packaging and canvas creation renders the canvas (package links + buttons) without starting an export. Packaging then runs only from the explicit "Update Package" canvas button. Also settable via `packages.autoPackaging` in the CLI profile config
+
 ## [0.18.0] - 2026-06-15
 
 ### Added

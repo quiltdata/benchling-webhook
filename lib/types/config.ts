@@ -340,6 +340,24 @@ export interface PackageConfig {
      * @example "alpha"
      */
     workflow?: string;
+
+    /**
+     * Optional map of Benchling folder/project IDs to target S3 buckets
+     * for multi-bucket routing. Entries whose folder or project ID is not
+     * in the map fall back to `bucket`.
+     *
+     * @example { "lib_abc123": "bucket-a", "src_def456": "bucket-b" }
+     */
+    bucketMap?: Record<string, string>;
+
+    /**
+     * When false, Benchling entry events do not trigger packaging
+     * automatically; packaging runs only from the canvas
+     * "Update Package" button.
+     *
+     * @default true
+     */
+    autoPackaging?: boolean;
 }
 
 /**
@@ -766,6 +784,11 @@ export const ProfileConfigSchema = {
                 prefix: { type: "string", minLength: 1 },
                 metadataKey: { type: "string", minLength: 1 },
                 workflow: { type: "string", minLength: 1 },
+                bucketMap: {
+                    type: "object",
+                    additionalProperties: { type: "string", minLength: 3 },
+                },
+                autoPackaging: { type: "boolean" },
             },
         },
         deployment: {

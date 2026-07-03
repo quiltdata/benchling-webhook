@@ -197,14 +197,20 @@ class SqsConsumer(BaseSqsConsumer):
             top_hash = parsed.top_hash
 
             expected_prefix = f"{self.config.pkg_prefix}/"
-            if parsed.bucket != self.config.s3_bucket_name:
+            # Accept events from the default bucket plus any buckets configured
+            # for multi-bucket routing via pkg_bucket_map.
+            allowed_buckets = {self.config.s3_bucket_name}
+            bucket_map = getattr(self.config, "pkg_bucket_map", None)
+            if isinstance(bucket_map, dict):
+                allowed_buckets.update(bucket_map.values())
+            if parsed.bucket not in allowed_buckets:
                 outcome = "skipped_filtered"
                 should_delete = True
                 logger.info(
                     "Ignoring package event for unexpected bucket",
                     sqs_message_id=sqs_message_id,
                     bucket=parsed.bucket,
-                    expected_bucket=self.config.s3_bucket_name,
+                    expected_buckets=sorted(allowed_buckets),
                     package_handle=package_handle,
                 )
             elif not parsed.package_name.startswith(expected_prefix):
@@ -223,6 +229,7 @@ class SqsConsumer(BaseSqsConsumer):
                     parsed.top_hash,
                     config=self.config,
                     benchling_factory=self.benchling_factory,
+                    bucket=parsed.bucket,
                 )
                 outcome = result.outcome.value
                 should_delete = outcome in DELETE_OUTCOMES

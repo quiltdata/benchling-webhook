@@ -19,6 +19,7 @@ from benchling_sdk.benchling import Benchling
 from benchling_sdk.models import ExportItemRequest
 
 from .auth import RoleManager
+from .bucket_router import resolve_bucket_for_entry
 from .config import get_config
 from .entry_references import link_metadata, summarize_references
 from .payload import Payload
@@ -208,6 +209,18 @@ class EntryPackager:
         self.role_manager = RoleManager(
             role_arn=self.config.quilt_write_role_arn or None,
             region=self.config.aws_region,
+        )
+
+    def _resolve_target_bucket(self, entry_data: Optional[Dict[str, Any]]) -> str:
+        """Resolve the S3 bucket this entry's package belongs in.
+
+        Uses the optional ``pkg_bucket_map`` secret parameter (folder/project ID
+        -> bucket); entries with no mapping use the default ``user_bucket``.
+        """
+        return resolve_bucket_for_entry(
+            entry_data,
+            getattr(self.config, "pkg_bucket_map", {}) or {},
+            self.config.s3_bucket_name,
         )
 
     @REST_API_RETRY
@@ -482,8 +495,15 @@ class EntryPackager:
         payload.set_display_id(display_id)
         package_name = payload.package_name(self.config.s3_prefix, use_display_id=True)
 
+        # Resolve target bucket (multi-bucket routing via pkg_bucket_map)
+        target_bucket = self._resolve_target_bucket(entry_data)
+
         self.logger.info(
-            "Processing export inline", entry_id=entry_id, display_id=display_id, package_name=package_name
+            "Processing export inline",
+            entry_id=entry_id,
+            display_id=display_id,
+            package_name=package_name,
+            target_bucket=target_bucket,
         )
 
         try:
@@ -508,7 +528,7 @@ class EntryPackager:
             # event for the same package. Sequential FIFO processing per
             # entry_id makes a plain S3 read sufficient — no sidecar needed.
             if canvas_id is None:
-                canvas_id = self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
+                canvas_id = self._load_existing_canvas_id_from_entry_json(s3_client, package_name, target_bucket)
 
             # Extract and upload files from ZIP
             self.logger.info("Extracting and uploading files from in-memory ZIP buffer")
@@ -522,7 +542,7 @@ class EntryPackager:
 
                     # Upload to S3
                     s3_key = f"{package_name}/{file_info.filename}"
-                    s3_client.put_object(Bucket=self.config.s3_bucket_name, Key=s3_key, Body=file_content)
+                    s3_client.put_object(Bucket=target_bucket, Key=s3_key, Body=file_content)
 
                     uploaded_files.append(
                         {
@@ -544,6 +564,7 @@ class EntryPackager:
                 download_url=download_url,
                 entry_data=entry_data,
                 canvas_id=canvas_id,
+                target_bucket=target_bucket,
             )
 
             # Upload metadata files
@@ -554,7 +575,7 @@ class EntryPackager:
                     if isinstance(content, str)
                     else json.dumps(content, indent=2, cls=DateTimeEncoder).encode("utf-8")
                 )
-                s3_client.put_object(Bucket=self.config.s3_bucket_name, Key=s3_key, Body=body)
+                s3_client.put_object(Bucket=target_bucket, Key=s3_key, Body=body)
                 uploaded_files.append(
                     {
                         "filename": filename,
@@ -592,6 +613,7 @@ class EntryPackager:
         download_url: str,
         entry_data: Dict[str, Any],
         canvas_id: Optional[str] = None,
+        target_bucket: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create standardized metadata files.
 
@@ -604,6 +626,7 @@ class EntryPackager:
             uploaded_files: List of uploaded file info
             download_url: Export download URL
             entry_data: Complete entry data from Benchling API (includes display_id, name, etc.)
+            target_bucket: Resolved S3 bucket for this package (defaults to config bucket)
         """
         # Validate entry data and extract required fields
         validated_fields = validate_entry_data(entry_data, entry_id)
@@ -661,7 +684,7 @@ class EntryPackager:
             "processing_timestamp": timestamp,
             "package_metadata": {
                 "name": package_name,
-                "registry": self.config.s3_bucket_name,
+                "registry": target_bucket or self.config.s3_bucket_name,
                 "total_files": len(uploaded_files),
             },
         }
@@ -782,7 +805,9 @@ For questions about the data, refer to the original Benchling entry.
             if isinstance(record_name, str) and record_name:
                 link["name"] = record_name
 
-    def _load_existing_canvas_id_from_entry_json(self, s3_client: Any, package_name: str) -> Optional[str]:
+    def _load_existing_canvas_id_from_entry_json(
+        self, s3_client: Any, package_name: str, bucket: Optional[str] = None
+    ) -> Optional[str]:
         """Read canvas_id from a previously-written ``entry.json``, if any.
 
         Used when the current event has no ``canvas_id`` (e.g., a v2.entry.*
@@ -792,7 +817,7 @@ For questions about the data, refer to the original Benchling entry.
         """
         entry_key = f"{package_name}/entry.json"
         try:
-            response = s3_client.get_object(Bucket=self.config.s3_bucket_name, Key=entry_key)
+            response = s3_client.get_object(Bucket=bucket or self.config.s3_bucket_name, Key=entry_key)
             metadata = json.loads(response["Body"].read().decode("utf-8"))
             if isinstance(metadata, dict):
                 canvas_id = metadata.get("canvas_id")
@@ -810,13 +835,14 @@ For questions about the data, refer to the original Benchling entry.
         return None
 
     @REST_API_RETRY
-    def _send_to_sqs(self, package_name: str, payload: Payload) -> Dict[str, Any]:
+    def _send_to_sqs(self, package_name: str, payload: Payload, target_bucket: Optional[str] = None) -> Dict[str, Any]:
         """
         Send package creation message to Quilt SQS queue.
 
         Args:
             package_name: Quilt package name
             payload: Parsed webhook payload (used to build the commit message)
+            target_bucket: Resolved S3 bucket for this package (defaults to config bucket)
 
         Returns:
             SQS response with MessageId
@@ -824,12 +850,13 @@ For questions about the data, refer to the original Benchling entry.
         Raises:
             Exception: If SQS send fails after retries
         """
-        self.logger.info("Sending message to Quilt queue", package_name=package_name)
+        bucket = target_bucket or self.config.s3_bucket_name
+        self.logger.info("Sending message to Quilt queue", package_name=package_name, registry=bucket)
 
         # Message body matching state-machine.json format
         message_body = {
-            "source_prefix": f"s3://{self.config.s3_bucket_name}/{package_name}/",
-            "registry": self.config.s3_bucket_name,
+            "source_prefix": f"s3://{bucket}/{package_name}/",
+            "registry": bucket,
             "package_name": package_name,
             "metadata_uri": "entry.json",
             "commit_message": _format_commit_message(payload),
@@ -924,7 +951,8 @@ For questions about the data, refer to the original Benchling entry.
             )
 
             # Step 5: Send to Quilt queue
-            sqs_result = self._send_to_sqs(package_name, payload)
+            target_bucket = self._resolve_target_bucket(entry_data)
+            sqs_result = self._send_to_sqs(package_name, payload, target_bucket)
             self.logger.debug(
                 "SQS message sent",
                 message_id=sqs_result.get("MessageId"),
@@ -934,7 +962,9 @@ For questions about the data, refer to the original Benchling entry.
             # This provides an optimistic preview; the SQS consumer will send the
             # authoritative update once Quilt creates the package revision.
             s3_client = self.role_manager.get_s3_client()
-            canvas_id = payload.canvas_id or self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
+            canvas_id = payload.canvas_id or self._load_existing_canvas_id_from_entry_json(
+                s3_client, package_name, target_bucket
+            )
             if canvas_id and self.benchling:
                 try:
                     from .canvas import CanvasManager
