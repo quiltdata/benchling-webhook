@@ -19,3 +19,8 @@ subscriptions:
     - type: v2.entry.updated.fields
     - type: v2.entry.updated.reviewRecord
 #  - type: v2.entity.registered
+
+#  App Configuration lifecycle event: when the operator toggles a ["quilt"]
+#  App Config Item in the Benchling UI, the config cache is invalidated
+#  immediately so the new value is picked up on the next webhook event.
+    - type: v2-beta.app.configuration.updated
