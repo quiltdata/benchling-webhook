@@ -113,6 +113,7 @@ def seed_items(
         (["quilt", "settings", "log_level"], logging_config.get("level") or secrets.log_level or "INFO"),
         (["quilt", "settings", "package_event_concurrency"], "5"),
         (["quilt", "settings", "packaging_request_concurrency"], "5"),
+        (["quilt", "settings", "auto_packaging"], "true"),
     ]
 
     existing_by_path = {tuple(item_path(item)): getattr(item, "id", None) for item in existing_items}

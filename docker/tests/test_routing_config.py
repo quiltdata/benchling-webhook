@@ -62,3 +62,23 @@ def test_find_app_id_matches_app_definition_id():
     benchling = SimpleNamespace(apps=SimpleNamespace(list_apps=lambda: [[app]]))
 
     assert find_app_id(benchling, "appdef_123") == "app_123"
+
+
+def test_settings_parse_auto_packaging_true_false_and_unset():
+    config_true = RoutingConfig.from_app_configuration_items(
+        [item(["quilt", "settings", "auto_packaging"], "true")]
+    )
+    config_false = RoutingConfig.from_app_configuration_items(
+        [item(["quilt", "settings", "auto_packaging"], "False")]
+    )
+    config_unset = RoutingConfig.from_app_configuration_items(
+        [item(["quilt", "default", "bucket"], "some-bucket")]
+    )
+    config_garbage = RoutingConfig.from_app_configuration_items(
+        [item(["quilt", "settings", "auto_packaging"], "maybe")]
+    )
+
+    assert config_true.settings.auto_packaging is True
+    assert config_false.settings.auto_packaging is False
+    assert config_unset.settings.auto_packaging is None
+    assert config_garbage.settings.auto_packaging is None

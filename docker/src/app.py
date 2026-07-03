@@ -606,6 +606,7 @@ def create_app() -> FastAPI:
                     "user_bucket": None,
                     "log_level": os.getenv("LOG_LEVEL", "INFO"),
                     "enable_webhook_verification": False,
+                    "auto_packaging": None,
                 }
                 return degraded
 
@@ -667,6 +668,7 @@ def create_app() -> FastAPI:
                     "user_bucket": config.s3_bucket_name,
                     "log_level": config.log_level,
                     "enable_webhook_verification": config.enable_webhook_verification,
+                    "auto_packaging": config.auto_packaging,
                 },
             }
 
@@ -708,6 +710,41 @@ def create_app() -> FastAPI:
         except Exception as exc:
             logger.warning(
                 "Failed to send initial 'Updating...' canvas",
+                canvas_id=payload.canvas_id,
+                error=str(exc),
+            )
+
+    def _resolve_auto_packaging(payload: Payload) -> bool:
+        """Resolve auto_packaging from Tier 1 App Config for this event.
+
+        Defaults to True (current behavior) when unset or when config lookup
+        fails, so a Benchling API hiccup never silently drops packaging work.
+        """
+        assert benchling is not None and config is not None
+        try:
+            secrets = config.get_benchling_secrets()
+            return config.resolve_auto_packaging(benchling, secrets)
+        except Exception as exc:
+            logger.warning(
+                "Failed to resolve auto_packaging setting; defaulting to enabled",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            return True
+
+    def _render_canvas_without_packaging(payload: Payload) -> None:
+        """Render/refresh the canvas without enqueueing packaging work.
+
+        Used when auto_packaging is disabled: the canvas still appears with
+        the Update Package button so scientists can trigger packaging manually.
+        """
+        assert benchling is not None and config is not None
+        try:
+            canvas_manager = CanvasManager(benchling, config, payload)
+            canvas_manager.handle_async()
+        except Exception as exc:
+            logger.warning(
+                "Failed to render canvas without packaging",
                 canvas_id=payload.canvas_id,
                 error=str(exc),
             )
@@ -764,6 +801,17 @@ def create_app() -> FastAPI:
                     event_type=payload.event_type,
                     canvas_id=payload.canvas_id,
                 )
+                if not _resolve_auto_packaging(payload):
+                    logger.info(
+                        "auto_packaging disabled - rendering canvas without packaging",
+                        canvas_id=payload.canvas_id,
+                        event_type=payload.event_type,
+                    )
+                    _render_canvas_without_packaging(payload)
+                    return JSONResponse(
+                        {"status": "ACCEPTED", "message": "Canvas rendered without packaging"},
+                        status_code=202,
+                    )
                 _send_updating_canvas_best_effort(payload)
                 routing = _resolve_payload_routing(payload)
                 publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload, routing)
@@ -784,6 +832,18 @@ def create_app() -> FastAPI:
                 return {
                     "status": "ignored",
                     "message": f"Event type {payload.event_type} not processed",
+                }
+
+            if not _resolve_auto_packaging(payload):
+                logger.info(
+                    "auto_packaging disabled - entry event will not trigger packaging",
+                    entry_id=payload.entry_id,
+                    event_type=payload.event_type,
+                )
+                return {
+                    "entry_id": payload.entry_id,
+                    "status": "skipped",
+                    "message": "auto_packaging is disabled; use the canvas Update Package button",
                 }
 
             routing = _resolve_payload_routing(payload)
@@ -926,7 +986,26 @@ def create_app() -> FastAPI:
                 if button_id.startswith("update-package-"):
                     return handle_update_package(payload, entry_packager, benchling, config)
 
+                # Unknown buttons must not fall through to the packaging path below:
+                # with auto_packaging on that would enqueue unintended work, and with
+                # it off it would silently re-render the canvas.
                 logger.warning("Unknown button action from /canvas", button_id=button_id)
+                return JSONResponse(
+                    {"status": "ignored", "message": f"Unknown button action: {button_id}"},
+                    status_code=200,
+                )
+
+            if not _resolve_auto_packaging(payload):
+                logger.info(
+                    "auto_packaging disabled - rendering canvas without packaging",
+                    canvas_id=payload.canvas_id,
+                    event_type=payload.event_type,
+                )
+                _render_canvas_without_packaging(payload)
+                return JSONResponse(
+                    {"status": "ACCEPTED", "message": "Canvas rendered without packaging"},
+                    status_code=202,
+                )
 
             _send_updating_canvas_best_effort(payload)
             sqs_message_id = publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
