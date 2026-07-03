@@ -471,6 +471,7 @@ class EntryPackager:
         self,
         payload: Payload,
         download_url: str,
+        target_bucket: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Process export files inline (download ZIP, extract, upload to S3).
@@ -478,6 +479,11 @@ class EntryPackager:
         Args:
             payload: Parsed webhook payload
             download_url: Export download URL from task status
+            target_bucket: Pre-resolved S3 bucket for this package. When provided
+                (the normal path from execute_workflow), the bucket is used as-is
+                so S3 writes and the SQS message always agree. When omitted
+                (legacy / test path), the bucket is resolved from a fresh entry
+                fetch, which can race if the entry is re-foldered mid-workflow.
 
         Returns:
             Processing result with uploaded files
@@ -487,7 +493,7 @@ class EntryPackager:
         """
         entry_id = payload.entry_id
 
-        # Fetch entry data first to get display_id
+        # Fetch entry data to get display_id (and resolve bucket if not pre-resolved).
         entry_data = self._fetch_entry_data(entry_id)
         display_id = entry_data.get("display_id", entry_id)
 
@@ -495,8 +501,10 @@ class EntryPackager:
         payload.set_display_id(display_id)
         package_name = payload.package_name(self.config.s3_prefix, use_display_id=True)
 
-        # Resolve target bucket (multi-bucket routing via pkg_bucket_map)
-        target_bucket = self._resolve_target_bucket(entry_data)
+        # Use pre-resolved bucket when available to keep S3 writes and the SQS
+        # registry field consistent even if the entry is re-foldered mid-workflow.
+        if target_bucket is None:
+            target_bucket = self._resolve_target_bucket(entry_data)
 
         self.logger.info(
             "Processing export inline",
@@ -937,10 +945,16 @@ For questions about the data, refer to the original Benchling entry.
                 download_url=download_url[:100] if download_url else None,
             )
 
+            # Resolve the target bucket once from the Step 1 entry_data so that
+            # _process_export (S3 writes) and _send_to_sqs (SQS registry) always
+            # agree, even if the entry is re-foldered during the workflow.
+            target_bucket = self._resolve_target_bucket(entry_data)
+
             # Step 4: Process export
             process_result = self._process_export(
                 payload,
                 download_url,
+                target_bucket=target_bucket,
             )
             package_name = payload.package_name(self.config.s3_prefix, use_display_id=True)
             self.logger.debug(
@@ -951,7 +965,6 @@ For questions about the data, refer to the original Benchling entry.
             )
 
             # Step 5: Send to Quilt queue
-            target_bucket = self._resolve_target_bucket(entry_data)
             sqs_result = self._send_to_sqs(package_name, payload, target_bucket)
             self.logger.debug(
                 "SQS message sent",
