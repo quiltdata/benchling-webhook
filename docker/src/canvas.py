@@ -75,7 +75,11 @@ class CanvasManager:
             try:
                 entry = self.entry
                 self.bucket = resolve_bucket_for_entry(
-                    {"id": entry.id, "folder_id": getattr(entry, "folder_id", None)},
+                    {
+                        "id": entry.id,
+                        "folder_id": getattr(entry, "folder_id", None),
+                        "project_id": getattr(entry, "project_id", None),
+                    },
                     bucket_map,
                     config.s3_bucket_name,
                 )
