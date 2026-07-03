@@ -322,6 +322,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             // IAM managed policy ARNs for S3 and Athena access
             bucketWritePolicyArn: config.quilt.bucketWritePolicyArn,
             athenaUserPolicyArn: config.quilt.athenaUserPolicyArn,
+            extraPackageBuckets: config.packages?.extraBuckets,
             packageEventQueue,
             packagingRequestQueue,
             // Legacy parameters

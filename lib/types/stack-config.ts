@@ -31,7 +31,7 @@ export type { VpcConfig } from "./config";
  *
  * **What's NOT included:**
  * - Benchling OAuth credentials (stored in secret, referenced by ARN)
- * - Package configuration (passed as env vars to container)
+ * - Runtime package routing values (stored in Secrets Manager / Benchling App Config)
  * - Logging level (passed as env var to container)
  * - Metadata fields (_metadata, _inherits)
  *
@@ -175,6 +175,17 @@ export interface StackConfig {
          * @default Auto-generated based on profile name
          */
         stackName?: string;
+    };
+
+    /**
+     * Package infrastructure configuration.
+     */
+    packages?: {
+        /**
+         * Additional existing S3 buckets that need the same IAM access as the
+         * primary package bucket for Tier 1 routing.
+         */
+        extraBuckets?: string[];
     };
 
     /**

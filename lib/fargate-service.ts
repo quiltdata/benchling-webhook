@@ -40,6 +40,7 @@ export interface FargateServiceProps {
     // NEW: Optional IAM managed policy ARNs (from Quilt stack discovery)
     readonly bucketWritePolicyArn?: string;
     readonly athenaUserPolicyArn?: string;
+    readonly extraPackageBuckets?: string[];
     readonly packageEventQueue?: sqs.IQueue;
     readonly packagingRequestQueue?: sqs.IQueue;
 
@@ -147,9 +148,15 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Grant S3 access for the specific package bucket
-        // Full Quilt-required permissions for versioned S3 objects
-        const packageBucketArn = `arn:aws:s3:::${props.packageBucket}`;
+        // Grant S3 access for the primary package bucket and any additional
+        // existing buckets used by Tier 1 routing.
+        // Full Quilt-required permissions for versioned S3 objects.
+        const packageBucketArns = [
+            props.packageBucket,
+            ...(props.extraPackageBuckets || []),
+        ]
+            .filter((bucket): bucket is string => Boolean(bucket))
+            .map(bucket => `arn:aws:s3:::${bucket}`);
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
@@ -168,10 +175,7 @@ export class FargateService extends Construct {
                     "s3:GetBucketNotification",
                     "s3:PutBucketNotification",
                 ],
-                resources: [
-                    packageBucketArn,
-                    `${packageBucketArn}/*`,
-                ],
+                resources: packageBucketArns.flatMap(bucketArn => [bucketArn, `${bucketArn}/*`]),
             }),
         );
 

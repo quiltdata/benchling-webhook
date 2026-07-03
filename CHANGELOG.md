@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-07-02
+
+### Added
+
+- Benchling App Configuration Items can now drive runtime package routing with a three-tier fallback chain: Benchling App Config, Secrets Manager, then environment/defaults
+- Per-event and per-project routing supports field-level overrides for package bucket, prefix, metadata key, and workflow, with routing metadata preserved through the packaging SQS queue
+- New `config:inspect`, `config:seed`, and `config:clear` npm commands help inspect effective routing, seed App Configuration Items, and list items that require manual cleanup
+- Profile config now supports `packages.extraBuckets` so standalone stacks can grant the ECS task role access to additional routed package buckets
+
+### Changed
+
+- Runtime log level and package consumer concurrency can be supplied by Benchling App Configuration Items, falling back to existing values when Tier 1 config is unavailable
+- Integrated-stack deploys warn when `packages.extraBuckets` is set, because IAM is owned by the Quilt stack in that mode
+
 ## [0.18.0] - 2026-06-15
 
 ### Added

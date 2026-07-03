@@ -412,7 +412,9 @@ def create_app() -> FastAPI:
                 client_id=secrets.client_id,
                 client_secret=secrets.client_secret,
             )
-            return Benchling(url=f"https://{secrets.tenant}.benchling.com", auth_method=auth_method)
+            client = Benchling(url=f"https://{secrets.tenant}.benchling.com", auth_method=auth_method)
+            config.apply_global_routing_config(client, secrets)
+            return client
 
         # Create initial Benchling client and entry packager for startup validation
         # If secrets are unavailable, record the problem and continue in degraded mode
@@ -710,6 +712,31 @@ def create_app() -> FastAPI:
                 error=str(exc),
             )
 
+    def _resolve_payload_routing(payload: Payload):
+        assert benchling is not None and config is not None
+        secrets = config.get_benchling_secrets()
+        config.apply_benchling_secrets(secrets)
+        try:
+            entry_id = payload.entry_id
+        except ValueError:
+            entry_id = None
+        routing = config.resolve_effective_routing(
+            benchling=benchling,
+            secret_data=secrets,
+            event_type=payload.event_type,
+            entry_id=entry_id,
+        )
+        logger.info(
+            "Resolved routing for webhook event",
+            event_type=payload.event_type,
+            entry_id=entry_id,
+            routing_source=routing.source,
+            project_name=routing.project_name,
+            bucket=routing.target.bucket,
+            prefix=routing.target.prefix,
+        )
+        return routing
+
     async def _handle_event_impl(request: Request, _verified: None = None):
         """Shared event webhook handling implementation."""
         try:
@@ -738,7 +765,8 @@ def create_app() -> FastAPI:
                     canvas_id=payload.canvas_id,
                 )
                 _send_updating_canvas_best_effort(payload)
-                publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
+                routing = _resolve_payload_routing(payload)
+                publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload, routing)
 
                 logger.info("Canvas update initiated from /event endpoint", canvas_id=payload.canvas_id)
                 return JSONResponse(
@@ -758,7 +786,8 @@ def create_app() -> FastAPI:
                     "message": f"Event type {payload.event_type} not processed",
                 }
 
-            publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
+            routing = _resolve_payload_routing(payload)
+            publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload, routing)
 
             logger.info(
                 "Entry event processed - packaging request enqueued",
@@ -852,6 +881,8 @@ def create_app() -> FastAPI:
 
     def handle_app_configuration_updated(payload):
         logger.info("App configuration updated", installation_id=payload.get("installationId"))
+        if config is not None:
+            config.invalidate_routing_config()
         return {"status": "success", "message": "Configuration updated successfully"}
 
     async def _handle_canvas_impl(request: Request, _verified: None = None):

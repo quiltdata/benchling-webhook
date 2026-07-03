@@ -222,3 +222,32 @@ npx @quiltdata/benchling-webhook@latest logs --profile sales
 # Destroy stack
 npx @quiltdata/benchling-webhook@latest destroy --profile sales
 ```
+
+## Benchling App Configuration Routing
+
+Runtime routing uses a three-tier fallback chain:
+
+```text
+Benchling App Configuration Items -> AWS Secrets Manager -> environment/defaults
+```
+
+App Configuration Items are read under the `["quilt"]` path namespace:
+
+- `["quilt", "default", "bucket" | "prefix" | "package_key" | "workflow"]`
+- `["quilt", "routing", "<event-type>", "<key>"]`
+- `["quilt", "projects", "<project-name>", "<key>"]`
+- `["quilt", "settings", "log_level" | "package_event_concurrency" | "packaging_request_concurrency"]`
+
+Project routing is merged field-by-field over event defaults, global defaults, and legacy secret values. For example, a project rule that sets only `bucket` inherits `prefix`, `package_key`, and `workflow` from lower-priority tiers.
+
+CLI helpers:
+
+```bash
+npm run config:inspect -- --profile sales
+npm run config:seed -- --profile sales
+npm run config:clear -- --profile sales
+```
+
+`config:seed` requires matching App Configuration schema paths to be defined in the Benchling app manifest and deployed to Benchling first. With the current Benchling SDK, `config:clear` cannot delete/archive items automatically; it lists `["quilt"]` items and points you to manual cleanup in Benchling.
+
+For standalone stacks, add any routed destination buckets to `packages.extraBuckets` so the ECS task role gets S3 permissions. In `integratedStack: true` mode, the Quilt stack owns IAM, so Tier 1 routes can only use buckets covered by the Quilt stack's `BucketWritePolicy`.

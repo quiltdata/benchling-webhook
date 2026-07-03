@@ -14,6 +14,7 @@ import { installCommand } from "./commands/install";
 import { statusCommand } from "./commands/status";
 import { logsCommand } from "./commands/logs";
 import { cleanCommand } from "./commands/clean";
+import { appConfigCommand } from "./commands/app-config";
 import pkg from "../package.json";
 
 const DEFAULT_LOG_LIMIT = 5; // Number of log entries to show per log group (health checks dominate, so keep this small)
@@ -90,6 +91,46 @@ For more information: https://github.com/quiltdata/benchling-webhook#deployment
     .action(async (options) => {
         try {
             await deployCommand(options);
+        } catch (error) {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        }
+    });
+
+program
+    .command("config:inspect")
+    .description("Inspect Benchling App Configuration Items and effective routing config")
+    .option("--profile <name>", "Configuration profile to use (default: default)")
+    .option("--event-type <type>", "Event type to resolve for effective routing")
+    .action(async (options) => {
+        try {
+            await appConfigCommand("inspect", options);
+        } catch (error) {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        }
+    });
+
+program
+    .command("config:seed")
+    .description("Seed Benchling App Configuration Items from profile and Secrets Manager")
+    .option("--profile <name>", "Configuration profile to use (default: default)")
+    .action(async (options) => {
+        try {
+            await appConfigCommand("seed", options);
+        } catch (error) {
+            console.error(chalk.red((error as Error).message));
+            process.exit(1);
+        }
+    });
+
+program
+    .command("config:clear")
+    .description("List App Configuration Items that require manual cleanup")
+    .option("--profile <name>", "Configuration profile to use (default: default)")
+    .action(async (options) => {
+        try {
+            await appConfigCommand("clear", options);
         } catch (error) {
             console.error(chalk.red((error as Error).message));
             process.exit(1);
