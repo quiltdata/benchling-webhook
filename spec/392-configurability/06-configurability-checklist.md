@@ -12,6 +12,8 @@ Phases can be developed independently but **all phases deploy together** in one 
 
 **Probe complete — see [`05b-probe_results.md`](05b-probe_results.md).** Key finding: `appDefinitionId` (format `appdef_XXXXX`) is NOT the `app_id` for config items. The correct value is the tenanted installation `id` (format `app_XXXXX`), discovered by calling `list_apps()` and matching `app.app_definition.id` to the `app_definition_id` from the Benchling secret.
 
+**Hard prerequisite: Define and deploy config schema paths in `app-manifest.yaml`.** The Benchling SDK rejects `AppConfigItemGenericCreate` calls whose `path` doesn't match a pre-defined configuration schema/definition (see [`05b-probe_results.md`](05b-probe_results.md)). Before any seeding or config-item writes, the exact App Configuration schema paths/types must be declared in [`docker/app-manifest.yaml`](../../docker/app-manifest.yaml), then the app must be deployed/updated so Benchling registers the schema. Only then will `config:seed` work. The write-side features below assume this is done.
+
 ---
 
 ## Phase 1 — App Config Items Read Path (Python runtime)
@@ -24,7 +26,7 @@ Phases can be developed independently but **all phases deploy together** in one 
    - `["quilt", "settings", "<key>"]` — global settings (log level, concurrency)
    - `["quilt", "default", "<key>"]` — fallback values
 
-   All paths are namespaced under `"quilt"` so `config:clear` can safely delete only our items.
+   All paths are namespaced under `"quilt"` so `config:clear` can safely target only our items (SDK has no delete/archive path yet, so `config:clear` may only be an inspect/manual-cleanup helper unless API support is added).
 
 1. **Implement a fallback chain** — for each config value:
 
@@ -43,6 +45,8 @@ Phases can be developed independently but **all phases deploy together** in one 
    - Within TTL: return cached value
    - Past TTL, stale value exists: return stale, kick off background refresh thread
    - The `app_id` is also cached; if it needs to change the container restarts anyway
+
+1. **Invalidate Tier 1 cache on config lifecycle events.** The app already routes `v2-beta.app.configuration.updated` in [`app.py`](../../docker/src/app.py) — wire this handler to flush the Tier 1 cache so config changes take effect immediately instead of waiting up to 60s for TTL expiry.
 
 ## Phase 2 — Per-Project Routing (Python runtime)
 
@@ -66,7 +70,7 @@ Phases can be developed independently but **all phases deploy together** in one 
    Project override → Event-type default → Global default → Legacy fallback
    ```
 
-   **Merge strategy:** field-level merge, not whole-object replace. If a project rule sets only `bucket`, the `prefix` and `workflow` inherit from the event-type or global default. Supported event types: `entry.created`, `entry.updated.fields`, `v2.canvas.userInteracted` (matches existing `supported_event_types` set in `app.py`).
+   **Merge strategy:** field-level merge, not whole-object replace. If a project rule sets only `bucket`, the `prefix` and `workflow` inherit from the event-type or global default. Supported event types: `v2.entry.created`, `v2.entry.updated.fields`, `v2.entry.updated.reviewRecord` (matches existing `supported_event_types` set in [`app.py`](../../docker/src/app.py)).
 
 1. **Handle project lookup failure gracefully.** If folder/project API calls fail (network error, deleted folder, missing permissions), log the error and use event-type defaults. Must not crash the webhook handler.
 
@@ -82,9 +86,12 @@ Phases can be developed independently but **all phases deploy together** in one 
 
 ## Phase 4 — CLI: Seed / Clear App Config
 
-1. **Add `npm run config:seed` command.** Reads current routing values from `ProfileConfig` + Secrets Manager, creates equivalent App Configuration Items in Benchling via the SDK. Prints the Benchling UI URL where items can be edited.
+1. **Add `npm run config:seed` command.** Reads current routing values from `ProfileConfig` + Secrets Manager, creates/updates equivalent App Configuration Items in Benchling via the SDK. **Prerequisite:** The app's configuration schema paths must be defined (see hard Prerequisite section above) — without them the SDK rejects arbitrary paths. Prints the Benchling UI URL where items can be edited.
 
-1. **Add `npm run config:clear` command.** Deletes only App Configuration Items under the `["quilt"]` path namespace. Requires `--force`. Shows a dry-run preview of what will be deleted before confirming. App falls back to legacy config after items are removed.
+1. **Add `npm run config:clear` command** — **only if the Benchling SDK adds a usable delete/archive endpoint.** As of probe date ([`05b-probe_results.md`](05b-probe_results.md)), `archive_app_configuration_items` is commented out (TODO BNCH-52599) and no SDK delete path exists. If support is still absent when implementing:
+   - Provide a dry-run inspection command (`config:inspect --items`) that lists all items under the `["quilt"]` namespace and prints the Benchling UI URL for manual cleanup.
+   - Document the manual cleanup process.
+   - Skip the `--force` / auto-clear path entirely.
 
 1. **Add `npm run config:inspect` command.** Dumps current Tier 1 items and effective resolved config (Tier 1 → secret → env var) for debugging.
 
@@ -96,8 +103,6 @@ Phases can be developed independently but **all phases deploy together** in one 
    - `config:seed`, `config:clear`, `config:inspect` CLI commands
    - The fallback chain and backward compatibility guarantees
    - Integrated-mode IAM limitation: Tier 1 routes can only use buckets covered by the Quilt stack's BucketWritePolicy
-
-1. **Add `app-manifest.yaml` entries** for any new App Configuration Items the app expects (declares them to Benchling).
 
 ---
 
