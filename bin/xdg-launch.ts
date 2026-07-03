@@ -14,6 +14,8 @@
 import { spawn } from "child_process";
 import { resolve } from "path";
 import { existsSync } from "fs";
+import { config as dotenvConfig } from "dotenv";
+import { expand as dotenvExpand } from "dotenv-expand";
 import { XDGConfig } from "../lib/xdg-config";
 import { ProfileConfig } from "../lib/types/config";
 
@@ -142,6 +144,20 @@ function loadProfile(profileName: string): ProfileConfig {
     }
 
     return xdg.readProfile(profileName);
+}
+
+/**
+ * Load repository-local .env for local launch/test convenience.
+ *
+ * Profile config remains authoritative for managed deployment values; .env
+ * only fills process environment values that are not represented in profiles,
+ * such as local-only queue URLs.
+ */
+function loadLocalEnv(): void {
+    const envPath = resolve(__dirname, "..", ".env");
+    if (existsSync(envPath)) {
+        dotenvExpand(dotenvConfig({ path: envPath }));
+    }
 }
 
 /**
@@ -767,6 +783,9 @@ async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promis
  */
 async function main(): Promise<void> {
     try {
+        // Load local .env before building process-backed environment variables.
+        loadLocalEnv();
+
         // Parse command-line arguments
         const options = parseArguments(process.argv);
 
