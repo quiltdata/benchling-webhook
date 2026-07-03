@@ -292,6 +292,14 @@ export async function deploy(
 ): Promise<void> {
     // Check if this is an integrated stack - warn and ask user
     if (config.integratedStack === true) {
+        if (config.packages.extraBuckets?.length) {
+            console.warn(
+                chalk.yellow(
+                    `⚠️  packages.extraBuckets is ignored in integrated mode (${config.packages.extraBuckets.join(", ")}).\n` +
+                    "   The Quilt stack owns IAM; make sure its BucketWritePolicy covers every Tier 1 routing bucket.",
+                ),
+            );
+        }
         console.log();
         console.log(boxen(
             chalk.yellow.bold("⚠️  Integrated Stack Mode") + "\n\n" +

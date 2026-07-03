@@ -230,16 +230,17 @@ def _seed_app_config_items(
     for item_def in items:
         try:
             create = AppConfigItemGenericCreate(
-                type=AppConfigItemGenericCreateType("text"),
-                app_id=app_id,
-                path=item_def["path"],
-                value=item_def["value"],
+                AppConfigItemGenericCreateType("text"),
+                app_id,
+                item_def["path"],
+                item_def["value"],
             )
             result = benchling.apps.create_app_configuration_item(create)
-            created_ids.append(result.id)
+            result_id = str(getattr(result, "id", ""))
+            created_ids.append(result_id)
             if verbose:
                 print(
-                    f"  ✅ Created config item: {result.id}  path={item_def['path']}",
+                    f"  ✅ Created config item: {result_id}  path={item_def['path']}",
                     file=sys.stderr,
                 )
         except Exception as exc:
@@ -328,9 +329,7 @@ def main() -> None:
 
     secret_arn: str = benchling_cfg.get("secretArn", "") or benchling_cfg.get("secret_arn", "")
     tenant: str = benchling_cfg.get("tenant", "")
-    app_definition_id: str = benchling_cfg.get("appDefinitionId", "") or benchling_cfg.get(
-        "app_definition_id", ""
-    )
+    app_definition_id: str = benchling_cfg.get("appDefinitionId", "") or benchling_cfg.get("app_definition_id", "")
     region: str = deployment_cfg.get("region", "") or cfg.get("quilt", {}).get("region", "us-east-1")
 
     if not secret_arn:
@@ -364,13 +363,12 @@ def main() -> None:
     try:
         for page in benchling.apps.list_apps():
             for app in page:
+                app_definition = getattr(app, "app_definition", None)
                 installed_apps.append(
                     {
                         "id": app.id,
                         "name": app.name,
-                        "app_definition_id": getattr(app, "app_definition", None).id
-                        if getattr(app, "app_definition", None)
-                        else None,
+                        "app_definition_id": getattr(app_definition, "id", None),
                     }
                 )
     except Exception as exc:
@@ -381,26 +379,20 @@ def main() -> None:
     all_results: list[Result] = []
 
     # Candidate 1 — appDefinitionId (from the secret)
-    all_results.append(
-        try_candidate("appDefinitionId", benchling, app_id=secrets.app_definition_id)
-    )
+    all_results.append(try_candidate("appDefinitionId", benchling, app_id=secrets.app_definition_id))
 
     # Candidate 2 — enumerate installed apps and try each app.id
     if installed_apps:
         for app_info in installed_apps:
             label = f"app.id (name={app_info['name']})"
-            all_results.append(
-                try_candidate(label, benchling, app_id=app_info["id"])
-            )
+            all_results.append(try_candidate(label, benchling, app_id=app_info["id"]))
     else:
         # Fallback: try iterating the PageIterator directly
         try:
             for page in benchling.apps.list_apps():
                 for app in page:
                     label = f"app.id (name={app.name})"
-                    all_results.append(
-                        try_candidate(label, benchling, app_id=app.id)
-                    )
+                    all_results.append(try_candidate(label, benchling, app_id=app.id))
         except Exception as exc:
             all_results.append(
                 {
@@ -436,22 +428,16 @@ def main() -> None:
                 {"path": ["probe-test", "prefix"], "value": "probe-test-prefix"},
             ]
 
-            seeded_item_ids = _seed_app_config_items(
-                benchling, seed_app.id, seed_items, verbose=args.verbose
-            )
+            seeded_item_ids = _seed_app_config_items(benchling, seed_app.id, seed_items, verbose=args.verbose)
 
             if seeded_item_ids:
                 # List back by app_id to verify retrieval
-                result = try_candidate(
-                    f"after_seed (name={seed_app.name})", benchling, app_id=seed_app.id
-                )
+                result = try_candidate(f"after_seed (name={seed_app.name})", benchling, app_id=seed_app.id)
                 all_results.append(result)
 
                 # Also try get-by-id for each seeded item
                 for item_id in seeded_item_ids:
-                    all_results.append(
-                        try_candidate(f"get_by_id ({item_id})", benchling, config_item_id=item_id)
-                    )
+                    all_results.append(try_candidate(f"get_by_id ({item_id})", benchling, config_item_id=item_id))
 
                 # Clean up unless --no-cleanup
                 if not args.no_cleanup:
