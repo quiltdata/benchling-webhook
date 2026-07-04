@@ -51,36 +51,73 @@ def decode_package_name(encoded_name: str) -> str:
 
 
 def encode_bucket_name(bucket_name: str) -> str:
-    return bucket_name.replace("/", "--")
+    """Encode bucket name for button ID (identity function).
+
+    S3 bucket names are restricted to lowercase letters, numbers, dots,
+    and hyphens, so no encoding is needed — they embed safely in button IDs.
+
+    Args:
+        bucket_name: S3 bucket name (e.g., 'quiltdata-test')
+
+    Returns:
+        The bucket name unchanged.
+
+    Examples:
+        >>> encode_bucket_name('quiltdata-test')
+        'quiltdata-test'
+    """
+    return bucket_name
 
 
 def decode_bucket_name(encoded_name: str) -> str:
-    return encoded_name.replace("--", "/")
+    """Decode bucket name from button ID (identity function).
+
+    S3 bucket names are restricted to lowercase letters, numbers, dots,
+    and hyphens, so no decoding is needed.
+
+    Args:
+        encoded_name: Bucket name from button ID (e.g., 'quiltdata-test')
+
+    Returns:
+        The name unchanged.
+
+    Examples:
+        >>> decode_bucket_name('quiltdata-test')
+        'quiltdata-test'
+    """
+    return encoded_name
 
 
 def parse_browse_linked_button_id_with_bucket(button_id: str) -> tuple[str, str, Optional[str], int, int]:
     """Parse linked package button ID.
 
     Supports multiple button formats:
-    - browse-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
-    - next-page-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
-    - prev-page-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
-    - view-metadata-linked-{entry_id}-pkg-{encoded_pkg}-p{page}-s{size}
+    - browse-linked-{entry_id}-pkg-{encoded_pkg}[-bucket-{bucket_name}]-p{page}-s{size}
+    - next-page-linked-{entry_id}-pkg-{encoded_pkg}[-bucket-{bucket_name}]-p{page}-s{size}
+    - prev-page-linked-{entry_id}-pkg-{encoded_pkg}[-bucket-{bucket_name}]-p{page}-s{size}
+    - view-metadata-linked-{entry_id}-pkg-{encoded_pkg}[-bucket-{bucket_name}]-p{page}-s{size}
+
+    When a linked package belongs to a different bucket than the one configured for
+    the webhook, the bucket name is embedded as an optional `-bucket-` segment.
+    The bucket name segment is absent when the linked package is in the same bucket.
 
     Args:
         button_id: Button ID string to parse
 
     Returns:
-        Tuple of (entry_id, package_name, page_number, page_size)
+        Tuple of (entry_id, package_name, bucket_name, page_number, page_size)
+        bucket_name is None when no bucket segment was present.
 
     Raises:
         ValueError: If button ID format is invalid
 
     Examples:
-        >>> parse_browse_linked_button_id('browse-linked-etr_123-pkg-benchling--exp-001-p0-s15')
-        ('etr_123', 'benchling/exp-001', 0, 15)
-        >>> parse_browse_linked_button_id('next-page-linked-etr_abc-pkg-foo--bar--baz-p2-s20')
-        ('etr_abc', 'foo/bar/baz', 2, 20)
+        >>> parse_browse_linked_button_id_with_bucket('browse-linked-etr_123-pkg-benchling--exp-001-p0-s15')
+        ('etr_123', 'benchling/exp-001', None, 0, 15)
+        >>> parse_browse_linked_button_id_with_bucket('next-page-linked-etr_abc-pkg-foo--bar--baz-p2-s20')
+        ('etr_abc', 'foo/bar/baz', None, 2, 20)
+        >>> parse_browse_linked_button_id_with_bucket('browse-linked-etr_456-pkg-benchling--exp-002-bucket-quiltdata-test-p0-s10')
+        ('etr_456', 'benchling/exp-002', 'quiltdata-test', 0, 10)
     """
     # Check if this is a linked package button (contains "-linked-" and "-pkg-")
     if "-linked-" not in button_id or "-pkg-" not in button_id:
