@@ -710,6 +710,24 @@ def create_app() -> FastAPI:
                 error=str(exc),
             )
 
+    def _send_bucketless_final_canvas_best_effort(payload: Payload) -> None:
+        """Start the final bucketless Canvas render after the quick acknowledgment.
+
+        Bucketless mode has no packaging workflow to produce a later package
+        revision event, so the Canvas handler must render the final linked-package
+        view itself. Run it asynchronously to keep the webhook response fast.
+        """
+        if not payload.canvas_id or benchling is None or config is None:
+            return
+        try:
+            CanvasManager(benchling, config, payload).handle_async()
+        except Exception as exc:
+            logger.warning(
+                "Failed to start final bucketless canvas update",
+                canvas_id=payload.canvas_id,
+                error=str(exc),
+            )
+
     def _bucketless_response(payload: Payload, message: str) -> JSONResponse:
         logger.info(
             "Bucketless mode skipped package creation",
@@ -756,6 +774,7 @@ def create_app() -> FastAPI:
                 )
                 _send_updating_canvas_best_effort(payload)
                 if not config.s3_bucket_name:
+                    _send_bucketless_final_canvas_best_effort(payload)
                     return _bucketless_response(
                         payload,
                         "Bucketless mode does not create a default package for canvas events.",
@@ -927,6 +946,7 @@ def create_app() -> FastAPI:
 
             _send_updating_canvas_best_effort(payload)
             if not config.s3_bucket_name:
+                _send_bucketless_final_canvas_best_effort(payload)
                 return _bucketless_response(
                     payload,
                     "Bucketless mode does not create a default package for canvas initialization.",
