@@ -5,6 +5,7 @@ package operations to specialized services.
 """
 
 import threading
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 import structlog
@@ -293,7 +294,7 @@ class CanvasManager:
         result = [
             *blocks.create_main_navigation_buttons(
                 self.entry_id,
-                update_enabled=not is_updating,
+                update_enabled=not is_updating or not bool(self.config.s3_bucket_name),
                 browse_enabled=bool(self.config.s3_bucket_name),
                 bucketless=not bool(self.config.s3_bucket_name),
             ),
@@ -728,7 +729,10 @@ class CanvasManager:
         """Handle Canvas webhook payload."""
         try:
             logger.info("Updating canvas", canvas_id=self.canvas_id, entry_id=self.entry_id)
-            self.update_canvas()
+            updated_at = None
+            if not self.config.s3_bucket_name:
+                updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            self.update_canvas(updated_at=updated_at)
 
         except Exception as e:
             logger.error("Canvas operation failed", error=str(e), exc_info=True)
