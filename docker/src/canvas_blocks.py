@@ -270,7 +270,7 @@ def create_linked_package_browse_buttons(entry_id: str, packages: List[Package],
         button_id = f"browse-linked-{entry_id}-pkg-{encoded_pkg_name}{bucket_part}-p0-s15"
 
         # Create Browse button
-        button = create_button(button_id, pkg.package_name)
+        button = create_button(button_id, f"Browse {pkg.package_name}")
         buttons.append(button)
 
     # Create a section with all browse buttons in horizontal layout

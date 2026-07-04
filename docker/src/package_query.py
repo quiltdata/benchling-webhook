@@ -19,6 +19,7 @@ Requires:
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import structlog
@@ -30,6 +31,8 @@ if TYPE_CHECKING:
     from .config import Config
 
 logger = structlog.get_logger(__name__)
+
+DEFAULT_BUCKETLESS_SEARCH_WORKERS = 12
 
 
 class PackageQuery:
@@ -195,7 +198,13 @@ class PackageQuery:
                 buckets.append(table_name[: -len(suffix)])
         return sorted(set(buckets))
 
-    def _find_unique_packages_in_bucket(self, bucket: str, key: str, value: str) -> Dict[str, Any]:
+    def _find_unique_packages_in_bucket(
+        self,
+        bucket: str,
+        key: str,
+        value: str,
+        timeout: int = 30,
+    ) -> Dict[str, Any]:
         self.logger.info(
             "Searching for packages by metadata",
             key=key,
@@ -213,7 +222,7 @@ class PackageQuery:
         LIMIT 100
         """
 
-        rows = self._execute_query(query)
+        rows = self._execute_query(query, timeout=timeout)
 
         self.logger.info(
             "Query completed",
@@ -261,6 +270,67 @@ class PackageQuery:
             },
         }
 
+    def _bucketless_worker_count(self, bucket_count: int) -> int:
+        configured = os.getenv("BUCKETLESS_SEARCH_WORKERS")
+        if configured:
+            try:
+                worker_count = int(configured)
+            except ValueError:
+                self.logger.warning("Ignoring invalid BUCKETLESS_SEARCH_WORKERS value", value=configured)
+                worker_count = DEFAULT_BUCKETLESS_SEARCH_WORKERS
+        else:
+            worker_count = DEFAULT_BUCKETLESS_SEARCH_WORKERS
+
+        return max(1, min(worker_count, bucket_count))
+
+    def _find_unique_packages_in_all_buckets(self, key: str, value: str) -> Dict[str, Any]:
+        buckets = self._list_package_view_buckets()
+        all_packages: List[Package] = []
+        rows: List[Dict[str, Any]] = []
+        package_info: Dict[str, Dict[str, Any]] = {}
+        errors: Dict[str, str] = {}
+
+        if not buckets:
+            return {
+                "packages": all_packages,
+                "results": {
+                    "rows": rows,
+                    "package_info": package_info,
+                    "errors": errors,
+                },
+            }
+
+        workers = self._bucketless_worker_count(len(buckets))
+        self.logger.info("Searching package views concurrently", bucket_count=len(buckets), workers=workers)
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(self._find_unique_packages_in_bucket, bucket, key, value, 10): bucket
+                for bucket in buckets
+            }
+            for future in as_completed(futures):
+                bucket = futures[future]
+                try:
+                    bucket_result = future.result()
+                except Exception as exc:
+                    errors[bucket] = str(exc)
+                    self.logger.warning("Bucket package lookup failed", bucket=bucket, error=str(exc))
+                    continue
+
+                all_packages.extend(bucket_result["packages"])
+                rows.extend(bucket_result["results"]["rows"])
+                for name, info in bucket_result["results"]["package_info"].items():
+                    package_info[f"{info['bucket']}/{name}"] = info
+
+        return {
+            "packages": sorted(all_packages, key=lambda p: (p.bucket, p.package_name)),
+            "results": {
+                "rows": rows,
+                "package_info": package_info,
+                "errors": errors,
+            },
+        }
+
     def find_unique_packages(self, key: str, value: str) -> Dict[str, Any]:
         """Find unique packages matching metadata key-value pair.
 
@@ -295,32 +365,7 @@ class PackageQuery:
             if self.bucket:
                 result = self._find_unique_packages_in_bucket(self.bucket, key, value)
             else:
-                buckets = self._list_package_view_buckets()
-                all_packages: List[Package] = []
-                rows: List[Dict[str, Any]] = []
-                package_info: Dict[str, Dict[str, Any]] = {}
-                errors: Dict[str, str] = {}
-
-                for bucket in buckets:
-                    try:
-                        bucket_result = self._find_unique_packages_in_bucket(bucket, key, value)
-                    except Exception as exc:
-                        errors[bucket] = str(exc)
-                        self.logger.warning("Bucket package lookup failed", bucket=bucket, error=str(exc))
-                        continue
-                    all_packages.extend(bucket_result["packages"])
-                    rows.extend(bucket_result["results"]["rows"])
-                    for name, info in bucket_result["results"]["package_info"].items():
-                        package_info[f"{info['bucket']}/{name}"] = info
-
-                result = {
-                    "packages": sorted(all_packages, key=lambda p: (p.bucket, p.package_name)),
-                    "results": {
-                        "rows": rows,
-                        "package_info": package_info,
-                        "errors": errors,
-                    },
-                }
+                result = self._find_unique_packages_in_all_buckets(key, value)
 
             self.logger.info(
                 "Found unique packages",
