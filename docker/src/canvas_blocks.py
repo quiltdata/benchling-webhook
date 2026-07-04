@@ -90,8 +90,13 @@ def create_section(section_id: str, buttons: List[ButtonUiBlock]) -> SectionUiBl
     )
 
 
-def create_main_navigation_buttons(entry_id: str, update_enabled: bool = True, browse_enabled: bool = True) -> List:
-    """Create main view navigation buttons (Browse Package, Update Package).
+def create_main_navigation_buttons(
+    entry_id: str,
+    update_enabled: bool = True,
+    browse_enabled: bool = True,
+    bucketless: bool = False,
+) -> List:
+    """Create main view navigation buttons.
 
     Args:
         entry_id: Entry identifier for button IDs
@@ -99,22 +104,34 @@ def create_main_navigation_buttons(entry_id: str, update_enabled: bool = True, b
             Used during the initial 'Updating...' state so a second click cannot
             spawn a concurrent export workflow. Browse stays enabled — on a
             re-export the previous package version is still valid.
+        browse_enabled: Whether the primary package browse button is enabled.
+        bucketless: If True, render bucketless controls instead of primary-package
+            controls. Bucketless mode has no default package to browse or update.
 
     Returns:
         List containing section with navigation buttons
     """
-    buttons = [
-        create_button(
-            button_id=f"browse-files-{entry_id}-p0-s15",
-            text="Browse Package",
-            enabled=browse_enabled,
-        ),
-        create_button(
-            button_id=f"update-package-{entry_id}",
-            text="Update Package",
-            enabled=update_enabled,
-        ),
-    ]
+    if bucketless:
+        buttons = [
+            create_button(
+                button_id=f"refresh-canvas-{entry_id}",
+                text="Refresh Canvas",
+                enabled=update_enabled,
+            ),
+        ]
+    else:
+        buttons = [
+            create_button(
+                button_id=f"browse-files-{entry_id}-p0-s15",
+                text="Browse Package",
+                enabled=browse_enabled,
+            ),
+            create_button(
+                button_id=f"update-package-{entry_id}",
+                text="Update Package",
+                enabled=update_enabled,
+            ),
+        ]
 
     return [create_section("button-section-main", buttons)]
 
@@ -124,6 +141,7 @@ def create_browser_navigation_buttons(
     page_state: PageState,
     package_name: Optional[str] = None,
     bucket_name: Optional[str] = None,
+    bucketless: bool = False,
 ) -> List:
     """Create browser view navigation buttons (Prev, Next, Back, Metadata).
 
@@ -169,7 +187,7 @@ def create_browser_navigation_buttons(
         ),
         create_button(
             button_id=f"back-to-package-{entry_id}",
-            text="Back to Package",
+            text="Back to Entry" if bucketless else "Back to Package",
             enabled=True,
         ),
         create_button(
@@ -187,6 +205,7 @@ def create_metadata_navigation_buttons(
     page_state: PageState,
     package_name: Optional[str] = None,
     bucket_name: Optional[str] = None,
+    bucketless: bool = False,
 ) -> List:
     """Create metadata view navigation buttons (Back to Browser, Back to Package).
 
@@ -216,7 +235,7 @@ def create_metadata_navigation_buttons(
         ),
         create_button(
             button_id=f"back-to-package-{entry_id}",
-            text="Back to Package",
+            text="Back to Entry" if bucketless else "Back to Package",
             enabled=True,
         ),
     ]

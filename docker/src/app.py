@@ -939,6 +939,8 @@ def create_app() -> FastAPI:
                     return handle_view_metadata_linked(payload, button_id, benchling, config)
                 if button_id.startswith("view-metadata-"):
                     return handle_view_metadata(payload, button_id, benchling, config)
+                if button_id.startswith("refresh-canvas-"):
+                    return handle_refresh_canvas(payload, button_id, benchling, config)
                 if button_id.startswith("update-package-"):
                     return handle_update_package(payload, entry_packager, benchling, config)
 
@@ -1166,7 +1168,7 @@ def create_app() -> FastAPI:
 
     def handle_back_to_main(payload, button_id, benchling, config):
         """Handle Back to Package button click."""
-        logger.info("Back to package requested", entry_id=payload.entry_id)
+        logger.info("Back to main canvas requested", entry_id=payload.entry_id)
 
         canvas_manager = CanvasManager(benchling, config, payload)
 
@@ -1175,13 +1177,27 @@ def create_app() -> FastAPI:
                 blocks = canvas_manager._make_blocks()
                 canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
                 benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
-                logger.info("Canvas updated with main package view", canvas_id=payload.canvas_id)
+                logger.info("Canvas updated with main view", canvas_id=payload.canvas_id)
             except Exception as e:
-                logger.error("Failed to return to main package view", error=str(e), exc_info=True)
+                logger.error("Failed to return to main canvas view", error=str(e), exc_info=True)
 
         threading.Thread(target=async_update, daemon=True).start()
 
-        return JSONResponse({"status": "ACCEPTED", "message": "Returning to package view..."}, status_code=202)
+        return JSONResponse({"status": "ACCEPTED", "message": "Returning to canvas..."}, status_code=202)
+
+    def handle_refresh_canvas(payload, button_id, benchling, config):
+        """Handle bucketless Refresh Canvas button click."""
+        logger.info("Refresh canvas requested", entry_id=payload.entry_id, button_id=button_id)
+
+        if config.s3_bucket_name:
+            return JSONResponse(
+                {"status": "ignored", "message": "Refresh Canvas is only available in bucketless mode."},
+                status_code=400,
+            )
+
+        _send_updating_canvas_best_effort(payload)
+        _send_bucketless_final_canvas_best_effort(payload)
+        return JSONResponse({"status": "ACCEPTED", "message": "Refreshing canvas..."}, status_code=202)
 
     def handle_view_metadata(payload, button_id, benchling, config):
         """Handle View Metadata button click for primary package."""

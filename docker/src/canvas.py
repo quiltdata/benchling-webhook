@@ -18,7 +18,7 @@ from .config import Config
 from .package_files import PackageFile, PackageFileFetcher
 from .package_query import PackageQuery
 from .packages import Package
-from .pagination import PageState, paginate_items
+from .pagination import PageState, encode_bucket_name, encode_package_name, paginate_items
 from .payload import Payload
 from .version import __version__
 
@@ -220,7 +220,7 @@ class CanvasManager:
             content = (
                 f"## Benchling Entry\n\n"
                 f"**Entry**: {self.entry.display_id}\n\n"
-                "No default package bucket is configured. Linked packages are shown when found in accessible buckets.\n"
+                "No default package bucket is configured. Use **Refresh Canvas** to search accessible buckets for linked packages.\n"
             )
 
         # Linked packages
@@ -237,7 +237,10 @@ class CanvasManager:
             # Store linked packages as instance variable
             self._linked_packages = linked_packages
 
-            content += fmt.format_linked_packages(linked_packages)
+            if linked_packages:
+                content += fmt.format_linked_packages(linked_packages)
+            elif not self.config.s3_bucket_name:
+                content += "\n### Linked Packages\n\nNo linked packages found in accessible buckets.\n"
 
         except Exception as e:
             error_msg = f"Failed to search for linked packages: {str(e)}"
@@ -290,8 +293,9 @@ class CanvasManager:
         result = [
             *blocks.create_main_navigation_buttons(
                 self.entry_id,
-                update_enabled=not is_updating and bool(self.config.s3_bucket_name),
+                update_enabled=not is_updating,
                 browse_enabled=bool(self.config.s3_bucket_name),
+                bucketless=not bool(self.config.s3_bucket_name),
             ),
             markdown_block,
         ]
@@ -335,7 +339,7 @@ class CanvasManager:
             logger.info(
                 "Updating Canvas",
                 canvas_id=self.canvas_id,
-                package_name=self.package_name,
+                package_name=self.package_name if self.config.s3_bucket_name else None,
                 blocks_count=len(blocks),
             )
 
@@ -479,17 +483,30 @@ class CanvasManager:
         if context == "main":
             return blocks.create_main_navigation_buttons(
                 self.entry_id,
-                update_enabled=bool(self.config.s3_bucket_name),
+                update_enabled=True,
                 browse_enabled=bool(self.config.s3_bucket_name),
+                bucketless=not bool(self.config.s3_bucket_name),
             )
         if context == "browser":
             if page_state is None:
                 raise ValueError("page_state required for browser context")
-            return blocks.create_browser_navigation_buttons(self.entry_id, page_state, package_name, bucket_name)
+            return blocks.create_browser_navigation_buttons(
+                self.entry_id,
+                page_state,
+                package_name,
+                bucket_name,
+                bucketless=not bool(self.config.s3_bucket_name),
+            )
         if context == "metadata":
             if page_state is None:
                 raise ValueError("page_state required for metadata context")
-            return blocks.create_metadata_navigation_buttons(self.entry_id, page_state, package_name, bucket_name)
+            return blocks.create_metadata_navigation_buttons(
+                self.entry_id,
+                page_state,
+                package_name,
+                bucket_name,
+                bucketless=not bool(self.config.s3_bucket_name),
+            )
         raise ValueError(f"Unknown context: {context}")
 
     def get_package_browser_blocks(
@@ -566,21 +583,43 @@ class CanvasManager:
             error_msg = str(e).lower()
             if "does not exist" in error_msg or "not found" in error_msg or "no such package" in error_msg:
                 # Package doesn't exist yet
-                markdown = fmt.format_package_not_found(browsing_package_name)
+                markdown = fmt.format_package_not_found(
+                    browsing_package_name,
+                    can_create=bool(self.config.s3_bucket_name),
+                )
+                if self.config.s3_bucket_name:
+                    actions = [
+                        blocks.create_button_block(f"update-package-{self.entry_id}", "Update Package"),
+                        blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
+                    ]
+                else:
+                    actions = [
+                        blocks.create_button_block(f"refresh-canvas-{self.entry_id}", "Refresh Canvas"),
+                        blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Entry"),
+                    ]
 
                 return [
                     blocks.create_markdown_block(markdown, "md-no-package"),
-                    blocks.create_button_block(f"update-package-{self.entry_id}", "Update Package"),
-                    blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
+                    *actions,
                 ]
 
             # Other error (API failure, network error, etc.)
             markdown = fmt.format_error_loading_files(browsing_package_name, str(e))
+            retry_id = f"browse-files-{self.entry_id}-p{page_number}-s{page_size}"
+            if package_name:
+                bucket_part = f"-bucket-{encode_bucket_name(bucket_name)}" if bucket_name else ""
+                retry_id = (
+                    f"browse-linked-{self.entry_id}-pkg-{encode_package_name(package_name)}"
+                    f"{bucket_part}-p{page_number}-s{page_size}"
+                )
 
             return [
                 blocks.create_markdown_block(markdown, "md-error"),
-                blocks.create_button_block(f"browse-files-{self.entry_id}-p{page_number}-s{page_size}", "Retry"),
-                blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
+                blocks.create_button_block(retry_id, "Retry"),
+                blocks.create_button_block(
+                    f"back-to-package-{self.entry_id}",
+                    "Back to Entry" if not self.config.s3_bucket_name else "Back to Package",
+                ),
             ]
 
     def get_package_browser_response(
@@ -661,7 +700,10 @@ class CanvasManager:
 
             return [
                 blocks.create_markdown_block(markdown, "md-error"),
-                blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
+                blocks.create_button_block(
+                    f"back-to-package-{self.entry_id}",
+                    "Back to Entry" if not self.config.s3_bucket_name else "Back to Package",
+                ),
             ]
 
     def get_metadata_response(
