@@ -184,7 +184,7 @@ class PackageQuery:
         SELECT table_name
         FROM information_schema.tables
         WHERE table_schema = '{self.database}'
-            AND table_name LIKE '%_packages-view'
+            AND table_name LIKE '%\\_packages-view' ESCAPE '\\'
         """
         rows = self._execute_query(query)
         buckets: List[str] = []

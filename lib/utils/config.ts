@@ -202,7 +202,6 @@ export function validateConfig(config: Partial<Config>): ValidationResult {
     // Required user-provided values (CANNOT be inferred)
     const requiredUserFields: Array<[keyof Config, string, string]> = [
         ["quiltCatalog", "Quilt catalog URL", "Your Quilt catalog domain (e.g., quilt-catalog.company.com)"],
-        ["quiltUserBucket", "S3 bucket for data", "Optional. When omitted, bucketless mode searches linked packages without creating default packages."],
         ["benchlingTenant", "Benchling tenant", "Your Benchling tenant name (use XXX if you login to XXX.benchling.com)"],
         ["benchlingClientId", "Benchling OAuth client ID", "OAuth client ID from your Benchling app"],
         ["benchlingClientSecret", "Benchling OAuth client secret", "OAuth client secret from your Benchling app"],
