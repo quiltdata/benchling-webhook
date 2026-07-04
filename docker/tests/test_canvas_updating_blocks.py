@@ -66,6 +66,15 @@ def canvas_manager(mock_benchling, mock_config, mock_payload):
     return CanvasManager(benchling=mock_benchling, config=mock_config, payload=mock_payload)
 
 
+@pytest.fixture
+def bucketless_canvas_manager(mock_benchling, mock_config, mock_payload):
+    mock_config.s3_bucket_name = ""
+    manager = CanvasManager(benchling=mock_benchling, config=mock_config, payload=mock_payload)
+    manager._package_query = Mock()
+    manager._package_query.find_unique_packages.return_value = {"packages": []}
+    return manager
+
+
 def _dump_blocks(label: str, block_dicts: list) -> None:
     """Pretty-print a set of blocks so the UX can be eyeballed."""
     print(f"\n================ {label} ================")
@@ -194,3 +203,28 @@ class TestUpdatingCanvasBlocks:
         assert "FINAL 'Updated at ...' CANVAS" in captured.out
         assert "Updating..." in captured.out
         assert "Updated at 2026-04-15 12:00 UTC" in captured.out
+
+    def test_bucketless_updating_canvas_has_disabled_refresh(self, bucketless_canvas_manager):
+        """Bucketless checking state should show Refresh Canvas, disabled until final render."""
+        updating = bucketless_canvas_manager._make_blocks(is_updating=True)
+        buttons = updating[0].children
+
+        assert len(buttons) == 1
+        assert buttons[0].text == "Refresh Canvas"
+        assert buttons[0].enabled is False
+        assert "Bucketless mode is checking for linked packages" in updating[1].value
+        assert "Updating..." in updating[-1].value
+
+    def test_bucketless_final_canvas_has_refresh_and_no_package_buttons(self, bucketless_canvas_manager):
+        """Final bucketless Canvas should be actionable without implying a default package exists."""
+        final = bucketless_canvas_manager._make_blocks()
+        buttons = final[0].children
+
+        assert len(buttons) == 1
+        assert buttons[0].text == "Refresh Canvas"
+        assert buttons[0].enabled is True
+        assert "Browse Package" not in json.dumps(blocks_to_dict(final))
+        assert "Update Package" not in json.dumps(blocks_to_dict(final))
+        assert "No default package bucket is configured" in final[1].value
+        assert "No linked packages found in accessible buckets" in final[1].value
+        assert "Updating..." not in final[-1].value

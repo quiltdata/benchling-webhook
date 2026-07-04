@@ -206,6 +206,34 @@ class TestFastAPIApp:
         updating_manager.send_updating_canvas.assert_called_once()
         final_manager.handle_async.assert_called_once()
 
+    def test_canvas_endpoint_bucketless_refresh_canvas_button(self, client, mock_config, mock_publish):
+        """Refresh Canvas should rerun the bucketless linked-package lookup."""
+        mock_config.s3_bucket_name = ""
+        payload = {
+            "channel": "app_signals",
+            "message": {
+                "type": "v2.canvas.userInteracted",
+                "buttonId": "refresh-canvas-etr_123456",
+                "canvasId": "canvas_123",
+            },
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        with patch("src.app.CanvasManager") as mock_canvas_manager:
+            updating_manager = MagicMock()
+            final_manager = MagicMock()
+            mock_canvas_manager.side_effect = [updating_manager, final_manager]
+
+            response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "ACCEPTED"
+        assert data["message"] == "Refreshing canvas..."
+        mock_publish.assert_not_called()
+        updating_manager.send_updating_canvas.assert_called_once()
+        final_manager.handle_async.assert_called_once()
+
     @pytest.mark.local
     def test_canvas_endpoint_handles_browse_files_button(self, client, mock_benchling_client):
         """Test /canvas endpoint routes Browse Files button to correct handler.

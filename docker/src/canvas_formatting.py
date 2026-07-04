@@ -149,21 +149,26 @@ Package `{package_name}` exists but contains no files.
 """
 
 
-def format_package_not_found(package_name: str) -> str:
+def format_package_not_found(package_name: str, can_create: bool = True) -> str:
     """Format package not found message.
 
     Args:
         package_name: Name of the package
+        can_create: Whether the current mode can create the missing package.
 
     Returns:
         Formatted markdown string
     """
-    return f"""## Package Not Created
+    md = f"""## Package Not Created
 
 Package `{package_name}` has not been created yet.
 
+"""
+    if can_create:
+        md += """\
 Click **Update Package** to create it.
 """
+    return md
 
 
 def format_error_loading_files(package_name: str, error: str) -> str:
