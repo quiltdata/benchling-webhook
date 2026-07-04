@@ -181,6 +181,31 @@ class TestFastAPIApp:
         published_payload = mock_publish.call_args.args[2]
         assert published_payload.canvas_id == "canvas_123"
 
+    def test_canvas_endpoint_bucketless_starts_final_canvas_update(self, client, mock_config, mock_publish):
+        """Bucketless Canvas initialization should not leave the updating placeholder forever."""
+        mock_config.s3_bucket_name = ""
+        payload = {
+            "channel": "events",
+            "message": {"type": "v2.canvas.initialized", "resourceId": "etr_123456"},
+            "baseURL": "https://tenant.benchling.com",
+            "context": {"canvasId": "canvas_123"},
+        }
+
+        with patch("src.app.CanvasManager") as mock_canvas_manager:
+            updating_manager = MagicMock()
+            final_manager = MagicMock()
+            mock_canvas_manager.side_effect = [updating_manager, final_manager]
+
+            response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "SKIPPED"
+        assert data["mode"] == "bucketless"
+        mock_publish.assert_not_called()
+        updating_manager.send_updating_canvas.assert_called_once()
+        final_manager.handle_async.assert_called_once()
+
     @pytest.mark.local
     def test_canvas_endpoint_handles_browse_files_button(self, client, mock_benchling_client):
         """Test /canvas endpoint routes Browse Files button to correct handler.
