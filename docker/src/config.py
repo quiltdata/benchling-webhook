@@ -52,6 +52,7 @@ class Config:
     pkg_prefix: str = ""
     workflow: str = ""
     quilt_write_role_arn: str = ""
+    quilt_iceberg_database: str = ""
 
     # Secret fetching infrastructure (not the secrets themselves)
     _benchling_secret_name: str = ""
@@ -97,6 +98,11 @@ class Config:
 
         # Optional IAM role ARN for cross-account S3 access (v1.1.0+)
         self.quilt_write_role_arn = os.getenv("QUILT_WRITE_ROLE_ARN", "")
+
+        # Optional Iceberg database for bucketless search (v0.19.0+)
+        # When set, bucketless mode searches Iceberg manifest tables instead of
+        # fanning out concurrent Athena queries against _packages-view tables.
+        self.quilt_iceberg_database = os.getenv("QUILT_ICEBERG_DATABASE", "")
 
         # Optional Quilt service configuration (v0.8.0+)
         # Used by PackageQuery for Athena queries
