@@ -309,6 +309,7 @@ class TestPackageQueryIceberg:
 
         query._list_package_view_buckets.assert_called_once()
         assert query._find_unique_packages_in_bucket.call_count == 0  # no buckets to search
+        assert result["packages"] == []
 
     @patch("src.package_query.RoleManager")
     def test_single_bucket_taken_when_bucket_set(self, mock_role_manager_class):
@@ -341,6 +342,7 @@ class TestPackageQueryIceberg:
         result = query.find_unique_packages("experiment_id", "EXP-1")
 
         query._find_unique_packages_in_bucket.assert_called_once_with("my-bucket", "experiment_id", "EXP-1")
+        assert len(result["packages"]) == 1
 
     @patch("src.package_query.RoleManager")
     def test_iceberg_empty_when_no_tables_found(self, mock_role_manager_class):

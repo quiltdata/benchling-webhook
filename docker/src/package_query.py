@@ -27,7 +27,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-import boto3
 import structlog
 
 from src.auth.role_manager import RoleManager
