@@ -35,7 +35,11 @@ def _summarize_hit(hit: dict[str, Any]) -> dict[str, Any]:
         "score": hit.get("_score"),
         "handle": source.get("handle") or hit.get("handle"),
         "registry": source.get("registry") or source.get("bucket") or hit.get("registry"),
-        "metadata": {k: metadata.get(k) for k in sorted(metadata) if k in {"entry_id", "display_id", "experiment_id", "package_name"}},
+        "metadata": {
+            k: metadata.get(k)
+            for k in sorted(metadata)
+            if k in {"entry_id", "display_id", "experiment_id", "package_name"}
+        },
     }
 
 
@@ -83,7 +87,7 @@ def main() -> None:
     refresh_token = os.getenv(args.refresh_token_env, "").strip()
     if refresh_token:
         print(f"auth: logging in with refresh token from ${args.refresh_token_env}")
-        quilt3.login_with_token(refresh_token)
+        quilt3.login_with_token(refresh_token)  # type: ignore[attr-defined]
     else:
         print("auth: using existing quilt3 auth, if any")
 
