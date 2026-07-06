@@ -796,6 +796,7 @@ export async function deploy(
             `PackageBucket=${config.packages.bucket || ""}`,
             `QuiltDatabase=${config.quilt.database || ""}`,  // IAM permissions only (same value as AthenaUserDatabase)
             `LogLevel=${config.logging?.level || "INFO"}`,
+            `IcebergDatabase=${(config.quilt as Record<string, unknown>).icebergDatabase as string || ""}`,
         ];
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");

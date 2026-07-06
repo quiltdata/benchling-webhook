@@ -48,6 +48,7 @@ export interface FargateServiceProps {
     readonly packageBucket?: string;
     readonly quiltDatabase: string;
     readonly logLevel?: string;
+    readonly icebergDatabase?: string;
 }
 
 export class FargateService extends Construct {
@@ -302,6 +303,9 @@ export class FargateService extends Construct {
             // Application Configuration
             APP_ENV: "production",
             LOG_LEVEL: props.logLevel || "INFO",  // StackConfig doesn't include logging level - use parameter default
+
+            // Optional Iceberg database for bucketless search (v0.19.0+)
+            QUILT_ICEBERG_DATABASE: props.icebergDatabase || "",
         };
 
         if (props.packageEventQueue) {
