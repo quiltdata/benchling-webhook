@@ -419,14 +419,123 @@ class TestPackageQueryIceberg:
         assert "bucket-b" in sql
         # Should access metadata as STRUCT
         assert "metadata.experiment_id" in sql
+        # Should serialize metadata deterministically for Python parsing
+        assert "json_format(CAST(m.metadata AS JSON)) AS user_meta" in sql
         # Should have _src_bucket alias
         assert "_src_bucket" in sql
         # Should filter on 'latest' tag
         assert "tag_name = 'latest'" in sql
+        # Should constrain the selected revision to the latest tag top_hash
+        assert "r.top_hash = t.top_hash" in sql
         # Should join package_revision + package_manifest + package_tag
         assert "package_revision" in sql
         assert "package_manifest" in sql
         assert "package_tag" in sql
+
+    @patch("src.package_query.RoleManager")
+    def test_iceberg_rejects_unsafe_metadata_key(self, mock_role_manager_class):
+        """Metadata keys used as SQL identifiers must be validated."""
+        mock_athena = Mock()
+        mock_role_manager = Mock()
+        mock_session = Mock()
+        mock_session.client.return_value = mock_athena
+        mock_role_manager._get_or_create_session.return_value = (mock_session, None)
+        mock_role_manager.role_arn = None
+        mock_role_manager._session = None
+        mock_role_manager._expires_at = None
+        mock_role_manager_class.return_value = mock_role_manager
+
+        query = PackageQuery(
+            bucket="",
+            catalog_url="catalog.example.com",
+            database="test_db",
+            region="us-west-2",
+            iceberg_database="iceberg_db",
+        )
+
+        with pytest.raises(RuntimeError, match="Invalid metadata key"):
+            query.find_unique_packages("experiment-id", "EXP-1")
+
+    @patch("src.package_query.RoleManager")
+    def test_iceberg_non_object_metadata_keeps_package_match(self, mock_role_manager_class):
+        """Athena STRUCT serialization problems should not hide package matches."""
+        mock_athena = Mock()
+        mock_glue = Mock()
+
+        mock_role_manager = Mock()
+        mock_session = Mock()
+        mock_session.client.side_effect = lambda service, **kw: {
+            "athena": mock_athena,
+            "glue": mock_glue,
+        }[service]
+        mock_role_manager._get_or_create_session.return_value = (mock_session, None)
+        mock_role_manager.role_arn = None
+        mock_role_manager._session = None
+        mock_role_manager._expires_at = None
+        mock_role_manager_class.return_value = mock_role_manager
+
+        query = PackageQuery(
+            bucket="",
+            catalog_url="catalog.example.com",
+            database="test_db",
+            region="us-west-2",
+            iceberg_database="iceberg_db",
+        )
+
+        query._list_iceberg_manifest_buckets = Mock(return_value=["bucket-a"])
+        query._execute_query = Mock(
+            return_value=[
+                {
+                    "pkg_name": "benchling/pkg-a",
+                    "timestamp": "latest",
+                    "message": "A",
+                    "user_meta": '["EXP-1"]',
+                    "_src_bucket": "bucket-a",
+                }
+            ]
+        )
+
+        result = query.find_unique_packages("experiment_id", "EXP-1")
+
+        assert [(pkg.bucket, pkg.package_name) for pkg in result["packages"]] == [
+            ("bucket-a", "benchling/pkg-a"),
+        ]
+        assert result["results"]["package_info"]["bucket-a/benchling/pkg-a"]["metadata"] == {
+            "experiment_id": "EXP-1",
+        }
+
+    @patch("src.package_query.RoleManager")
+    def test_iceberg_glue_access_denied_reports_glue_database(self, mock_role_manager_class):
+        """Glue table-list permission failures should not be reported as Athena DB failures."""
+        mock_athena = Mock()
+
+        class FakeGlueAccessDenied(Exception):
+            operation_name = "GetTables"
+            response = {"Error": {"Code": "AccessDeniedException"}}
+
+            def __str__(self):
+                return "AccessDeniedException: not authorized"
+
+        mock_role_manager = Mock()
+        mock_session = Mock()
+        mock_session.client.return_value = mock_athena
+        mock_role_manager._get_or_create_session.return_value = (mock_session, None)
+        mock_role_manager.role_arn = None
+        mock_role_manager._session = None
+        mock_role_manager._expires_at = None
+        mock_role_manager_class.return_value = mock_role_manager
+
+        query = PackageQuery(
+            bucket="",
+            catalog_url="catalog.example.com",
+            database="test_db",
+            region="us-west-2",
+            iceberg_database="iceberg_db",
+        )
+        query._list_iceberg_manifest_buckets = Mock(side_effect=FakeGlueAccessDenied())
+
+        with pytest.raises(RuntimeError, match="AWS Glue access denied"):
+            query.find_unique_packages("experiment_id", "EXP-1")
 
     @patch("src.package_query.RoleManager")
     def test_iceberg_with_multiple_matches_per_bucket(self, mock_role_manager_class):

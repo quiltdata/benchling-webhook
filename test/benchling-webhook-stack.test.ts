@@ -293,6 +293,33 @@ describe("BenchlingWebhookStack", () => {
         });
     });
 
+    test("passes Iceberg database parameter to all ECS containers", () => {
+        const taskDefinitions = template.findResources("AWS::ECS::TaskDefinition");
+        const taskDefinition = Object.values(taskDefinitions)[0] as any;
+        const containerDefinitions = taskDefinition.Properties.ContainerDefinitions;
+
+        for (const container of containerDefinitions) {
+            expect(container.Environment).toEqual(
+                expect.arrayContaining([
+                    {
+                        Name: "QUILT_ICEBERG_DATABASE",
+                        Value: { Ref: "IcebergDatabase" },
+                    },
+                ]),
+            );
+        }
+    });
+
+    test("grants Glue access for Iceberg table discovery and package tables", () => {
+        const policies = template.findResources("AWS::IAM::Policy");
+        const policyText = JSON.stringify(policies);
+
+        expect(policyText).toContain("glue:GetTables");
+        expect(policyText).toContain("IcebergDatabase");
+        expect(policyText).toContain("database/");
+        expect(policyText).toContain("table/");
+    });
+
     test("configures auto-scaling", () => {
         template.hasResourceProperties("AWS::ApplicationAutoScaling::ScalableTarget", {
             MinCapacity: 2,
@@ -324,6 +351,7 @@ describe("BenchlingWebhookStack", () => {
                     database: "test_database",
                     queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
                     region: "us-east-1",
+                    icebergDatabase: "iceberg_database",
                 },
             });
             const stack = new BenchlingWebhookStack(app, "TestStack", {
@@ -345,6 +373,9 @@ describe("BenchlingWebhookStack", () => {
             });
             testTemplate.hasParameter("PackagerQueueUrl", {
                 Default: "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue",
+            });
+            testTemplate.hasParameter("IcebergDatabase", {
+                Default: "iceberg_database",
             });
         });
 

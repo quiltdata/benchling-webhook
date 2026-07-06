@@ -121,7 +121,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const icebergDatabaseParam = new cdk.CfnParameter(this, "IcebergDatabase", {
             type: "String",
             description: "Iceberg Glue database for single-query bucketless search (optional)",
-            default: "",
+            default: config.quilt.icebergDatabase || "",
         });
 
         const imageTagParam = new cdk.CfnParameter(this, "ImageTag", {

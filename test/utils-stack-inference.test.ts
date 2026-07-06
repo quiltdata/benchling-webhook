@@ -84,6 +84,28 @@ describe("stack-inference utility", () => {
             expect(vars.QUILT_DATABASE).toBe("my_catalog_db");
         });
 
+        it("should extract Iceberg database from exact Iceberg output without replacing Quilt database", () => {
+            const stackDetails: StackDetails = {
+                outputs: [
+                    { OutputKey: "UserAthenaDatabaseName", OutputValue: "my_catalog_db" },
+                    { OutputKey: "IcebergDatabase", OutputValue: "iceberg_db" },
+                ],
+                parameters: [],
+            };
+
+            const vars = buildInferredConfig(
+                mockConfig,
+                "my-stack",
+                stackDetails,
+                "us-east-1",
+                "123456789012",
+                "https://catalog.example.com",
+            );
+
+            expect(vars.QUILT_DATABASE).toBe("my_catalog_db");
+            expect(vars.QUILT_ICEBERG_DATABASE).toBe("iceberg_db");
+        });
+
         it("should infer database from catalog name when not in outputs", () => {
             const stackDetails: StackDetails = {
                 outputs: [],

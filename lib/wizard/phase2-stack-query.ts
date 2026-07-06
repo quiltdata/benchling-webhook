@@ -80,6 +80,7 @@ export async function runStackQuery(
         const athenaUserWorkgroup = inferenceResult.athenaUserWorkgroup;
         const bucketWritePolicyArn = inferenceResult.bucketWritePolicyArn;
         const athenaUserPolicyArn = inferenceResult.athenaUserPolicyArn;
+        const icebergDatabase = inferenceResult.icebergDatabase;
 
         // Show IAM managed policies (these are logged by inferQuiltConfig)
         if (bucketWritePolicyArn) {
@@ -87,6 +88,9 @@ export async function runStackQuery(
         }
         if (athenaUserPolicyArn) {
             console.log(chalk.dim(`✓ UserAthenaNonManagedRolePolicy discovered: ${athenaUserPolicyArn}`));
+        }
+        if (icebergDatabase) {
+            console.log(chalk.dim(`✓ IcebergDatabase discovered: ${icebergDatabase}`));
         }
 
         // Log what we found
@@ -96,6 +100,7 @@ export async function runStackQuery(
         console.log(chalk.dim(`✓ Region: ${region}`));
         console.log(chalk.dim(`✓ Queue URL: ${queueUrl}`));
         console.log(chalk.dim(`✓ Database: ${database}`));
+        console.log(chalk.dim(`✓ Iceberg Database: ${icebergDatabase || "(not configured)"}`));
         console.log(chalk.dim(`✓ Workgroup: ${athenaUserWorkgroup}`));
         console.log(athenaUserPolicyArn
             ? chalk.dim(`✓ Athena User Policy: ${athenaUserPolicyArn}`)
@@ -202,6 +207,7 @@ export async function runStackQuery(
             athenaUserWorkgroup,
             bucketWritePolicyArn,
             athenaUserPolicyArn,
+            icebergDatabase,
             discoveredVpc: discoveredVpcInfo,
             stackQuerySucceeded: true,
         };

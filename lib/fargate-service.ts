@@ -217,20 +217,27 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Grant Glue access for the specific Quilt database
+        // Grant Glue access for Quilt catalog tables and optional Iceberg package tables.
+        // The Iceberg database is a CloudFormation parameter, so include it in
+        // the policy resources even when the default is empty; deployed stacks
+        // with a non-empty parameter receive the matching table grants.
         const region = config.deployment.region;
+        const glueResources = [
+            `arn:aws:glue:${region}:*:catalog`,
+            `arn:aws:glue:${region}:*:database/${props.quiltDatabase}`,
+            `arn:aws:glue:${region}:*:table/${props.quiltDatabase}/*`,
+            `arn:aws:glue:${region}:*:database/${props.icebergDatabase || ""}`,
+            `arn:aws:glue:${region}:*:table/${props.icebergDatabase || ""}/*`,
+        ];
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
                     "glue:GetDatabase",
                     "glue:GetTable",
+                    "glue:GetTables",
                     "glue:GetPartitions",
                 ],
-                resources: [
-                    `arn:aws:glue:${region}:*:catalog`,
-                    `arn:aws:glue:${region}:*:database/${props.quiltDatabase}`,
-                    `arn:aws:glue:${region}:*:table/${props.quiltDatabase}/*`,
-                ],
+                resources: glueResources,
             }),
         );
 

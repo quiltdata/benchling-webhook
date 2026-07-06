@@ -217,6 +217,7 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         QUILT_WEB_HOST: config.quilt.catalog,
         ATHENA_USER_DATABASE: config.quilt.database,
         ATHENA_USER_WORKGROUP: config.quilt.athenaUserWorkgroup || "primary",
+        QUILT_ICEBERG_DATABASE: config.quilt.icebergDatabase || "",
         PACKAGER_SQS_URL: config.quilt.queueUrl,
 
         // IAM Policy ARNs for ECS task role (attached directly, no role assumption needed)
@@ -352,7 +353,7 @@ function spawnDockerCompose(
     stdio: "inherit" | "pipe" = "inherit",
 ): ReturnType<typeof spawn> {
     // Debug: Log key environment variables being passed
-    const keyVars = ["QUILT_WEB_HOST", "ATHENA_USER_DATABASE", "PACKAGER_SQS_URL", "BenchlingSecret"];
+    const keyVars = ["QUILT_WEB_HOST", "ATHENA_USER_DATABASE", "QUILT_ICEBERG_DATABASE", "PACKAGER_SQS_URL", "BenchlingSecret"];
     const debug = process.env.DEBUG_XDG === "true";
     if (debug) {
         console.log("DEBUG: Spawning docker-compose with environment:");

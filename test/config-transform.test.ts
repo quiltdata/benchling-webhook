@@ -25,6 +25,7 @@ describe("config-transform", () => {
                     region: "us-east-1",
                     bucketWritePolicyArn: "arn:aws:iam::123456789012:policy/test-bucket-write-policy",
                     athenaUserPolicyArn: "arn:aws:iam::123456789012:policy/test-athena-policy",
+                    icebergDatabase: "iceberg_db",
                 },
                 packages: {
                     bucket: "test-bucket",
@@ -297,6 +298,7 @@ describe("config-transform", () => {
                     region: "us-east-1",
                     bucketWritePolicyArn: "arn:aws:iam::123456789012:policy/test-bucket-write-policy",
                     athenaUserPolicyArn: "arn:aws:iam::123456789012:policy/test-athena-policy",
+                    icebergDatabase: "iceberg_db",
                 },
                 packages: {
                     bucket: "test-bucket",
@@ -332,6 +334,7 @@ describe("config-transform", () => {
                     region: "us-east-1",
                     bucketWritePolicyArn: "arn:aws:iam::123456789012:policy/test-bucket-write-policy",
                     athenaUserPolicyArn: "arn:aws:iam::123456789012:policy/test-athena-policy",
+                    icebergDatabase: "iceberg_db",
                 },
                 deployment: {
                     region: "us-east-1",
@@ -429,6 +432,7 @@ describe("config-transform", () => {
 
             expect(stackConfig.quilt.bucketWritePolicyArn).toBeUndefined();
             expect(stackConfig.quilt.athenaUserPolicyArn).toBeUndefined();
+            expect(stackConfig.quilt.icebergDatabase).toBeUndefined();
             expect(stackConfig.deployment.imageTag).toBeUndefined();
             expect(stackConfig.deployment.vpc).toBeUndefined();
             expect(stackConfig.deployment.stackName).toBeUndefined();
