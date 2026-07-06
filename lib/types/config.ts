@@ -759,6 +759,7 @@ export const ProfileConfigSchema = {
                 athenaUserWorkgroup: { type: "string", minLength: 1 },
                 bucketWritePolicyArn: { type: "string", pattern: "^arn:aws:iam::\\d{12}:policy/.+" },
                 athenaUserPolicyArn: { type: "string", pattern: "^arn:aws:iam::\\d{12}:policy/.+" },
+                icebergDatabase: { type: "string", minLength: 1 },
             },
         },
         benchling: {

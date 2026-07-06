@@ -23,6 +23,7 @@ For Iceberg-backed bucketless search (v0.19.0+):
 
 import json
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -44,6 +45,8 @@ _ICEBERG_MANIFEST_SUFFIX = "_package_manifest"
 
 # Suffix for the per-bucket parquet-backed packages-view.
 _PACKAGES_VIEW_SUFFIX = "_packages-view"
+
+_METADATA_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class PackageQuery:
@@ -213,6 +216,73 @@ class PackageQuery:
 
         return data_rows
 
+    def _validate_metadata_key(self, key: str) -> str:
+        """Validate a metadata key before using it as a SQL identifier."""
+        if not _METADATA_KEY_RE.match(key):
+            raise ValueError(
+                f"Invalid metadata key '{key}'. Iceberg metadata keys must be SQL-safe identifiers "
+                "matching [A-Za-z_][A-Za-z0-9_]*."
+            )
+        return key
+
+    def _parse_user_meta(self, raw_meta: Optional[str], *, pkg_name: str, key: str, value: str) -> Dict[str, Any]:
+        """Parse metadata returned from Athena, falling back to the matched key/value."""
+        if not raw_meta:
+            return {key: value}
+
+        try:
+            parsed = json.loads(raw_meta)
+            if isinstance(parsed, dict):
+                return parsed
+            self.logger.warning(
+                "Athena metadata JSON was not an object",
+                pkg_name=pkg_name,
+                metadata_type=type(parsed).__name__,
+            )
+        except json.JSONDecodeError:
+            self.logger.warning("Failed to parse user_meta JSON", pkg_name=pkg_name)
+
+        return {key: value}
+
+    def _format_aws_error(self, error: Exception) -> str:
+        """Return an actionable error message for common AWS query failures."""
+        error_msg = str(error)
+        response = getattr(error, "response", None)
+        operation = getattr(error, "operation_name", "") or ""
+        code = ""
+        if isinstance(response, dict):
+            code = response.get("Error", {}).get("Code", "")
+            operation = operation or response.get("ResponseMetadata", {}).get("OperationName", "")
+
+        lowered = error_msg.lower()
+        access_denied = (
+            "accessdenied" in lowered
+            or "access denied" in lowered
+            or "not authorized" in lowered
+            or code in {"AccessDenied", "AccessDeniedException", "UnauthorizedOperation"}
+        )
+
+        if not access_denied:
+            return error_msg
+
+        if operation.lower() == "gettables" or "get_tables" in lowered or "glue" in lowered:
+            return (
+                "AWS Glue access denied. Please check IAM permissions for "
+                f"glue:GetTables on Iceberg database '{self.iceberg_database or '(not configured)'}'."
+            )
+
+        if operation.lower() in {"startqueryexecution", "getqueryexecution", "getqueryresults"} or "athena" in lowered:
+            return (
+                "AWS Athena access denied. Please check IAM permissions for "
+                f"athena query execution on workgroup '{self.workgroup}'."
+            )
+
+        return (
+            "AWS access denied while searching for linked packages. Please check task role "
+            f"permissions for Athena workgroup '{self.workgroup}' and Iceberg database "
+            f"'{self.iceberg_database or '(not configured)'}'."
+        )
+
     # ------------------------------------------------------------------
     # Parquet-backed _packages-view search (legacy, for non-Iceberg deployments)
     # ------------------------------------------------------------------
@@ -272,11 +342,7 @@ class PackageQuery:
             pkg_name = row["pkg_name"]
             user_meta_str = row.get("user_meta", "{}")
 
-            try:
-                user_meta = json.loads(user_meta_str) if user_meta_str else {}
-            except json.JSONDecodeError:
-                self.logger.warning("Failed to parse user_meta JSON", pkg_name=pkg_name)
-                user_meta = {}
+            user_meta = self._parse_user_meta(user_meta_str, pkg_name=pkg_name, key=key, value=value)
 
             if pkg_name not in package_info:
                 package_info[pkg_name] = {
@@ -438,11 +504,14 @@ class PackageQuery:
                 r.pkg_name,
                 r.timestamp,
                 m.message,
-                m.metadata AS user_meta,
+                json_format(CAST(m.metadata AS JSON)) AS user_meta,
                 '{b}' AS _src_bucket
             FROM "{idb}"."{b}_package_revision" r
             JOIN "{idb}"."{b}_package_manifest" m ON r.top_hash = m.top_hash
-            JOIN "{idb}"."{b}_package_tag" t ON r.pkg_name = t.pkg_name AND t.tag_name = 'latest'
+            JOIN "{idb}"."{b}_package_tag" t
+                ON r.pkg_name = t.pkg_name
+                AND r.top_hash = t.top_hash
+                AND t.tag_name = 'latest'
             WHERE m.metadata.{key} = '{escaped_value}'
             """
             branches.append(branch)
@@ -492,11 +561,7 @@ class PackageQuery:
             pkg_name = row["pkg_name"]
             user_meta_str = row.get("user_meta", "{}")
 
-            try:
-                user_meta = json.loads(user_meta_str) if user_meta_str else {}
-            except json.JSONDecodeError:
-                self.logger.warning("Failed to parse user_meta JSON", pkg_name=pkg_name)
-                user_meta = {}
+            user_meta = self._parse_user_meta(user_meta_str, pkg_name=pkg_name, key=key, value=value)
 
             composite_key = f"{bucket}/{pkg_name}"
             if composite_key not in package_info:
@@ -556,6 +621,8 @@ class PackageQuery:
             ...     print(f"{pkg.package_name}: {pkg.catalog_url}")
         """
         try:
+            self._validate_metadata_key(key)
+
             self.logger.info(
                 "Searching for packages by metadata",
                 key=key,
@@ -583,13 +650,7 @@ class PackageQuery:
             return result
 
         except Exception as e:
-            error_msg = str(e)
-            # Extract more helpful information from AWS errors
-            if "AccessDeniedException" in error_msg or "not authorized" in error_msg.lower():
-                error_msg = (
-                    "AWS Athena access denied. Please check IAM permissions for "
-                    f"athena:StartQueryExecution on database '{self.database}'"
-                )
+            error_msg = self._format_aws_error(e)
 
             self.logger.error(
                 "Query failed",

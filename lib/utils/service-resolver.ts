@@ -43,6 +43,12 @@ export interface QuiltServices {
      * @example "quilt-user-workgroup"
      */
     athenaUserWorkgroup?: string;
+
+    /**
+     * Iceberg Glue database for single-query bucketless search (optional)
+     * @example "icebergdatabase-v9cxuqnwjj5a"
+     */
+    icebergDatabase?: string;
 }
 
 /**
@@ -183,6 +189,7 @@ export function validateQueueUrl(url: string): boolean {
  *
  * **Optional Stack Outputs**:
  * - `UserAthenaWorkgroupName`: Athena workgroup for user queries
+ * - `IcebergDatabase`/`IcebergDatabaseName`: Iceberg Glue database for package metadata
  *
  * @param options - Service resolver options
  * @returns Resolved service endpoints
@@ -279,11 +286,13 @@ export async function resolveQuiltServices(
 
     // Step 6: Extract optional Athena resources (NEW - from Quilt stack discovery)
     const athenaUserWorkgroup = outputs.UserAthenaWorkgroupName;
+    const icebergDatabase = outputs.IcebergDatabase || outputs.IcebergDatabaseName;
 
     return {
         packagerQueueUrl,
         athenaUserDatabase,
         quiltWebHost,
         ...(athenaUserWorkgroup && { athenaUserWorkgroup }),
+        ...(icebergDatabase && { icebergDatabase }),
     };
 }

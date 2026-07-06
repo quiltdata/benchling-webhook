@@ -46,6 +46,9 @@ function applyDiscoveredResources(config: ProfileConfig, stackQuery: StackQueryR
     if (stackQuery.athenaUserPolicyArn) {
         config.quilt.athenaUserPolicyArn = stackQuery.athenaUserPolicyArn;
     }
+    if (stackQuery.icebergDatabase) {
+        config.quilt.icebergDatabase = stackQuery.icebergDatabase;
+    }
 }
 
 /**
@@ -157,6 +160,7 @@ export function buildProfileConfigFromExisting(input: ConfigFromExistingInput): 
             athenaUserWorkgroup: existingConfig?.quilt?.athenaUserWorkgroup,
             bucketWritePolicyArn: existingConfig?.quilt?.bucketWritePolicyArn,
             athenaUserPolicyArn: existingConfig?.quilt?.athenaUserPolicyArn,
+            icebergDatabase: existingConfig?.quilt?.icebergDatabase,
         },
         benchling: benchlingConfig,
         packages: packagesConfig,

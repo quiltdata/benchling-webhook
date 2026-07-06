@@ -43,6 +43,7 @@ interface QuiltStackInfo {
     athenaUserWorkgroup?: string;
     bucketWritePolicyArn?: string;
     athenaUserPolicyArn?: string;
+    icebergDatabase?: string;
 }
 
 /**
@@ -60,6 +61,7 @@ interface InferenceResult {
     athenaUserWorkgroup?: string;
     bucketWritePolicyArn?: string;
     athenaUserPolicyArn?: string;
+    icebergDatabase?: string;
     source: string;
 }
 
@@ -168,8 +170,10 @@ async function findQuiltStacks(region: string = "us-east-1", profile?: string, t
 
                     if (key === "QuiltWebHost") {
                         stackInfo.catalogUrl = value;
-                    } else if (key === "UserAthenaDatabaseName" || key.includes("Database")) {
+                    } else if (key === "UserAthenaDatabaseName") {
                         stackInfo.database = value;
+                    } else if (key === "IcebergDatabase" || key === "IcebergDatabaseName") {
+                        stackInfo.icebergDatabase = value;
                     } else if (key.includes("Queue")) {
                         if (isQueueUrl(value)) {
                             stackInfo.queueUrl = value;
@@ -501,6 +505,10 @@ export async function inferQuiltConfig(options: {
     if (selectedStack.athenaUserPolicyArn) {
         result.athenaUserPolicyArn = selectedStack.athenaUserPolicyArn;
     }
+    if (selectedStack.icebergDatabase) {
+        result.icebergDatabase = selectedStack.icebergDatabase;
+        console.log(`✓ IcebergDatabase discovered: ${selectedStack.icebergDatabase}`);
+    }
     // NEW: Add IAM managed policy ARNs to result
     // IAM managed policies for S3 and Athena access (attached directly to task role)
     if (selectedStack.bucketWritePolicyArn) {
@@ -555,6 +563,7 @@ async function main(): Promise<void> {
     if (result.queueUrl) console.log(`Queue URL: ${result.queueUrl}`);
     if (result.bucketWritePolicyArn) console.log(`Bucket Write Policy ARN: ${result.bucketWritePolicyArn}`);
     if (result.athenaUserPolicyArn) console.log(`Athena User Policy ARN: ${result.athenaUserPolicyArn}`);
+    if (result.icebergDatabase) console.log(`Iceberg Database: ${result.icebergDatabase}`);
 }
 
 // Run main if executed directly

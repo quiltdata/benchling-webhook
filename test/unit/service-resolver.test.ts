@@ -228,6 +228,40 @@ describe("resolveQuiltServices", () => {
         expect(services.athenaUserWorkgroup).toBe("user-wg");
     });
 
+    test("includes optional Iceberg database when available", async () => {
+        cfnMock.on(DescribeStacksCommand).resolves({
+            Stacks: [
+                mockStack([
+                    {
+                        OutputKey: "PackagerQueueUrl",
+                        OutputValue:
+                            "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
+                    },
+                    {
+                        OutputKey: "UserAthenaDatabaseName",
+                        OutputValue: "quilt_catalog",
+                    },
+                    {
+                        OutputKey: "QuiltWebHost",
+                        OutputValue: "quilt.example.com",
+                    },
+                    {
+                        OutputKey: "IcebergDatabase",
+                        OutputValue: "iceberg_db",
+                    },
+                ]),
+            ],
+        });
+
+        const services = await resolveQuiltServices({
+            stackArn:
+                "arn:aws:cloudformation:us-east-1:123456789012:stack/QuiltStack/id",
+            mockCloudFormation: cfnMock as unknown as CloudFormationClient,
+        });
+
+        expect(services.icebergDatabase).toBe("iceberg_db");
+    });
+
     test("omits optional Athena metadata when not available", async () => {
         cfnMock.on(DescribeStacksCommand).resolves({
             Stacks: [
