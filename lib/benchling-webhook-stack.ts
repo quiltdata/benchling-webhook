@@ -118,6 +118,12 @@ export class BenchlingWebhookStack extends cdk.Stack {
             allowedValues: ["DEBUG", "INFO", "WARNING", "ERROR"],
         });
 
+        const icebergDatabaseParam = new cdk.CfnParameter(this, "IcebergDatabase", {
+            type: "String",
+            description: "Iceberg Glue database for single-query bucketless search (optional)",
+            default: "",
+        });
+
         const imageTagParam = new cdk.CfnParameter(this, "ImageTag", {
             type: "String",
             description: "Docker image tag to deploy (e.g., latest, 0.7.0, 0.7.0-20251104T123456Z)",
@@ -143,6 +149,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
         const athenaUserWorkgroupValue = athenaUserWorkgroupParam.valueAsString;
         const benchlingSecretValue = benchlingSecretParam.valueAsString;
         const logLevelValue = logLevelParam.valueAsString;
+        const icebergDatabaseValue = icebergDatabaseParam.valueAsString;
         const imageTagValue = imageTagParam.valueAsString;
         const packageBucketValue = packageBucketParam.valueAsString;
         const quiltDatabaseValue = quiltDatabaseParam.valueAsString;
@@ -329,6 +336,7 @@ export class BenchlingWebhookStack extends cdk.Stack {
             packageBucket: packageBucketValue,
             quiltDatabase: quiltDatabaseValue,
             logLevel: logLevelValue,
+            icebergDatabase: icebergDatabaseValue,
         });
 
         // Create REST API v1 that routes through VPC Link to the NLB

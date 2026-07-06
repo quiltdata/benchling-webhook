@@ -250,6 +250,17 @@ export interface QuiltConfig {
      * @example "arn:aws:iam::123456789012:policy/quilt-staging-UserAthenaNonManagedRolePolicy-XXXXX"
      */
     athenaUserPolicyArn?: string;
+
+    /**
+     * Iceberg Glue database for single-query bucketless search (optional)
+     *
+     * When set, bucketless PackageQuery searches Iceberg manifest tables instead
+     * of fanning out concurrent Athena queries. Passed to container as
+     * QUILT_ICEBERG_DATABASE.
+     *
+     * @example "icebergdatabase-v9cxuqnwjj5a"
+     */
+    icebergDatabase?: string;
 }
 
 /**
