@@ -17,7 +17,8 @@
 # This script verifies the json_extract_scalar form that avoids that.
 #
 # Config is read from the profile at ~/.config/benchling-webhook/<profile>/config.json
-# (quilt.database is used as the Iceberg Glue database, matching the CDK default).
+# (quilt.icebergDatabase is the Iceberg Glue database, matching QUILT_ICEBERG_DATABASE
+# at runtime; falls back to quilt.database when the Iceberg field is absent).
 #
 # Usage:
 #   scripts/check-iceberg-search.sh --value EXP26000016
@@ -29,7 +30,7 @@
 #   --profile <name>   Profile under ~/.config/benchling-webhook (default: default)
 #   --key <name>       Metadata key to filter on (default: packages.metadataKey from config)
 #   --value <val>      Metadata value to match (required)
-#   --database <name>  Override Iceberg Glue database (default: quilt.database from config)
+#   --database <name>  Override Iceberg Glue database (default: quilt.icebergDatabase, then quilt.database)
 #   --region <name>    Override AWS region (default: quilt.region from config)
 #   --workgroup <name> Override Athena workgroup (default: quilt.athenaUserWorkgroup from config)
 #   --show-buggy       Also run the old STRUCT-access form to demonstrate the failure
@@ -71,6 +72,9 @@ for k in p:
     v = v.get(k, '') if isinstance(v, dict) else ''
 print(v if v is not None else '')"; }
 
+# Prefer the dedicated Iceberg Glue database (matches QUILT_ICEBERG_DATABASE at
+# runtime); fall back to quilt.database only when it is absent.
+DATABASE="${DATABASE:-$(cfg quilt.icebergDatabase)}"
 DATABASE="${DATABASE:-$(cfg quilt.database)}"
 REGION="${REGION:-$(cfg quilt.region)}"
 WORKGROUP="${WORKGROUP:-$(cfg quilt.athenaUserWorkgroup)}"

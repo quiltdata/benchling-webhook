@@ -9,6 +9,12 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
+# S3 bucket naming rules: 3-63 chars, lowercase letters/digits/dots/hyphens,
+# beginning and ending with a letter or digit. Used to disambiguate the optional
+# "-bucket-" segment in linked-package button IDs from package names that happen
+# to contain the literal substring "-bucket-".
+_BUCKET_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
+
 
 def encode_package_name(package_name: str) -> str:
     """Encode package name for button ID.
@@ -146,7 +152,12 @@ def parse_browse_linked_button_id_with_bucket(button_id: str) -> tuple[str, str,
 
     encoded_bucket = None
     if "-bucket-" in encoded_pkg:
-        encoded_pkg, encoded_bucket = encoded_pkg.rsplit("-bucket-", 1)
+        candidate_pkg, candidate_bucket = encoded_pkg.rsplit("-bucket-", 1)
+        # Only treat the trailing segment as a bucket when it is a valid S3 bucket
+        # name; otherwise "-bucket-" is part of the package name itself and must
+        # not be split off (which would corrupt both package and bucket names).
+        if _BUCKET_NAME_RE.match(candidate_bucket):
+            encoded_pkg, encoded_bucket = candidate_pkg, candidate_bucket
 
     package_name = decode_package_name(encoded_pkg)
     bucket_name = decode_bucket_name(encoded_bucket) if encoded_bucket else None
