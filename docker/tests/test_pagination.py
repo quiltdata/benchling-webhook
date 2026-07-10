@@ -14,9 +14,7 @@ class TestParseBrowseLinkedButtonIdWithBucket:
     """Tests for the optional '-bucket-' segment parsing."""
 
     def test_no_bucket_segment(self):
-        result = parse_browse_linked_button_id_with_bucket(
-            "browse-linked-etr_123-pkg-benchling--exp-001-p0-s15"
-        )
+        result = parse_browse_linked_button_id_with_bucket("browse-linked-etr_123-pkg-benchling--exp-001-p0-s15")
         assert result == ("etr_123", "benchling/exp-001", None, 0, 15)
 
     def test_valid_bucket_segment(self):
@@ -29,9 +27,7 @@ class TestParseBrowseLinkedButtonIdWithBucket:
         """A package name containing '-bucket-' must not be mis-parsed as a bucket
         suffix when the trailing segment is not a valid S3 bucket name."""
         # Trailing "x" is too short to be a valid bucket name (min 3 chars).
-        result = parse_browse_linked_button_id_with_bucket(
-            "browse-linked-etr_789-pkg-foo--my-bucket-x-p1-s20"
-        )
+        result = parse_browse_linked_button_id_with_bucket("browse-linked-etr_789-pkg-foo--my-bucket-x-p1-s20")
         assert result == ("etr_789", "foo/my-bucket-x", None, 1, 20)
 
 
