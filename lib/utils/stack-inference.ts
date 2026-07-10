@@ -64,12 +64,14 @@ export interface StackResourceMap {
  * - BenchlingAthenaWorkgroup (AWS::Athena::WorkGroup)
  * - UserAthenaNonManagedRolePolicy (AWS::IAM::ManagedPolicy)
  * - BucketWritePolicy (AWS::IAM::ManagedPolicy)
+ * - IcebergDatabase (AWS::Glue::Database)
  * - BenchlingSecret (AWS::SecretsManager::Secret)
  */
 export interface DiscoveredQuiltResources {
     athenaUserWorkgroup?: string;
     athenaUserPolicyArn?: string;
     bucketWritePolicyArn?: string;
+    icebergDatabase?: string;
     benchlingSecretArn?: string;
 }
 
@@ -155,6 +157,7 @@ export function toRoleArn(roleNameOrArn: string, account: string): string {
  * - BenchlingAthenaWorkgroup (AWS::Athena::WorkGroup)
  * - UserAthenaNonManagedRolePolicy (AWS::IAM::ManagedPolicy)
  * - BucketWritePolicy (AWS::IAM::ManagedPolicy)
+ * - IcebergDatabase (AWS::Glue::Database)
  * - BenchlingSecret (AWS::SecretsManager::Secret)
  *
  * @param resources Stack resource map from getStackResources
@@ -172,6 +175,7 @@ export function extractQuiltResources(
         BenchlingAthenaWorkgroup: "athenaUserWorkgroup",
         UserAthenaNonManagedRolePolicy: "athenaUserPolicyArn",
         BucketWritePolicy: "bucketWritePolicyArn",
+        IcebergDatabase: "icebergDatabase",
         BenchlingSecret: "benchlingSecretArn",
     };
 
@@ -463,6 +467,13 @@ export function buildInferredConfig(
         // Infer database name from catalog (common pattern)
         const dbGuess = catalog.replace(/[.-]/g, "_") + "_db";
         vars.QUILT_DATABASE = `${dbGuess} # VERIFY THIS - inferred from catalog name`;
+    }
+
+    const icebergDatabaseOutput = stackDetails.outputs.find(
+        (o) => o.OutputKey === "IcebergDatabase" || o.OutputKey === "IcebergDatabaseName",
+    );
+    if (icebergDatabaseOutput?.OutputValue) {
+        vars.QUILT_ICEBERG_DATABASE = icebergDatabaseOutput.OutputValue;
     }
 
     // SQS Queue URL (normalize from URL or ARN)

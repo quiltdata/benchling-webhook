@@ -88,38 +88,42 @@ async function checkStackStatus(region: string, stackName: string): Promise<Stac
     }
 }
 
-async function resolveQuiltAthenaWorkgroup(
+async function resolveQuiltDeploymentResources(
     stackArn: string,
     region: string,
     quiltStackName: string,
-): Promise<string | undefined> {
+): Promise<Pick<QuiltServices, "athenaUserWorkgroup" | "icebergDatabase">> {
     try {
         const resources = await getStackResources(region, stackArn);
         const discovered = extractQuiltResources(resources);
         const workgroup = discovered.athenaUserWorkgroup;
+        const result: Pick<QuiltServices, "athenaUserWorkgroup" | "icebergDatabase"> = {};
 
-        if (!workgroup) {
-            return undefined;
+        if (workgroup) {
+            const expectedPrefix = `${quiltStackName}-`;
+            if (!workgroup.startsWith(expectedPrefix)) {
+                console.log(
+                    chalk.yellow(
+                        `⚠️  Ignoring Athena workgroup '${workgroup}' (expected prefix '${expectedPrefix}')`,
+                    ),
+                );
+            } else {
+                result.athenaUserWorkgroup = workgroup;
+            }
         }
 
-        const expectedPrefix = `${quiltStackName}-`;
-        if (!workgroup.startsWith(expectedPrefix)) {
-            console.log(
-                chalk.yellow(
-                    `⚠️  Ignoring Athena workgroup '${workgroup}' (expected prefix '${expectedPrefix}')`,
-                ),
-            );
-            return undefined;
+        if (discovered.icebergDatabase) {
+            result.icebergDatabase = discovered.icebergDatabase;
         }
 
-        return workgroup;
+        return result;
     } catch (error) {
         console.log(
             chalk.yellow(
-                `⚠️  Failed to discover Athena workgroup from Quilt stack: ${(error as Error).message}`,
+                `⚠️  Failed to discover Quilt resources from Quilt stack: ${(error as Error).message}`,
             ),
         );
-        return undefined;
+        return {};
     }
 }
 
@@ -608,24 +612,30 @@ export async function deploy(
 
     spinner.succeed("Quilt configuration loaded");
 
-    spinner.start("Resolving Quilt Athena workgroup...");
-    const discoveredAthenaWorkgroup = await resolveQuiltAthenaWorkgroup(
+    spinner.start("Resolving Quilt deployment resources...");
+    const discoveredResources = await resolveQuiltDeploymentResources(
         stackArn,
         deployRegion,
         parsed.stackName,
     );
-    if (discoveredAthenaWorkgroup) {
-        spinner.succeed(`Resolved Athena workgroup: ${discoveredAthenaWorkgroup}`);
+    if (discoveredResources.athenaUserWorkgroup) {
+        spinner.succeed(`Resolved Athena workgroup: ${discoveredResources.athenaUserWorkgroup}`);
     } else {
         spinner.succeed("No Quilt-managed Athena workgroup found; will create one in webhook stack");
     }
+    if (discoveredResources.icebergDatabase && !config.quilt.icebergDatabase) {
+        console.log(chalk.dim(`✓ Resolved Iceberg database from Quilt stack: ${discoveredResources.icebergDatabase}`));
+    }
+
+    const icebergDatabase = config.quilt.icebergDatabase || discoveredResources.icebergDatabase || "";
 
     // Convert to QuiltServices format for display
     const services: QuiltServices = {
         packagerQueueUrl: config.quilt.queueUrl,
         athenaUserDatabase: config.quilt.database,
         quiltWebHost: config.quilt.catalog,
-        athenaUserWorkgroup: discoveredAthenaWorkgroup,
+        athenaUserWorkgroup: discoveredResources.athenaUserWorkgroup,
+        ...(icebergDatabase && { icebergDatabase }),
     };
 
     // Build ECR image URI for display
@@ -635,7 +645,9 @@ export async function deploy(
     const ecrRepository = config.deployment.ecrRepository || "quiltdata/benchling";
     const ecrImageUri = `${ecrAccount}.dkr.ecr.${ecrRegion}.amazonaws.com/${ecrRepository}:${options.imageTag}`;
     const packagePrefix = config.packages.prefix || "benchling";
-    const eventSummary = `bucket=${config.packages.bucket}, prefix=${packagePrefix}/ type=package-revision source=com.quiltdata bus=default`;
+    const eventSummary = config.packages.bucket
+        ? `bucket=${config.packages.bucket}, prefix=${packagePrefix}/ type=package-revision source=com.quiltdata bus=default`
+        : `bucketless, prefix=${packagePrefix}/ type=package-revision source=com.quiltdata bus=default`;
 
     // Display deployment plan
     console.log();
@@ -655,6 +667,11 @@ export async function deploy(
         console.log(`    ${chalk.bold("Athena Workgroup:")}        ${services.athenaUserWorkgroup}`);
     } else {
         console.log(`    ${chalk.bold("Athena Workgroup:")}        ${stackName}-athena-workgroup ${chalk.dim("(webhook-managed)")}`);
+    }
+    if (services.icebergDatabase) {
+        console.log(`    ${chalk.bold("Iceberg Database:")}       ${services.icebergDatabase}`);
+    } else {
+        console.log(`    ${chalk.bold("Iceberg Database:")}       ${chalk.gray("(not configured; legacy fanout fallback)")}`);
     }
     console.log();
     console.log(chalk.bold("  Stack Parameters:"));
@@ -765,7 +782,13 @@ export async function deploy(
         };
 
         // Transform ProfileConfig → StackConfig (minimal interface)
-        const stackConfig = profileToStackConfig(deployConfig);
+        const stackConfig = profileToStackConfig({
+            ...deployConfig,
+            quilt: {
+                ...deployConfig.quilt,
+                ...(icebergDatabase ? { icebergDatabase } : {}),
+            },
+        });
         const result = createStack(stackConfig, {
             account: deployAccount,
             region: deployRegion,
@@ -791,9 +814,10 @@ export async function deploy(
             // Legacy parameters
             `BenchlingSecretARN=${benchlingSecret}`,
             `ImageTag=${options.imageTag}`,
-            `PackageBucket=${config.packages.bucket}`,
+            `PackageBucket=${config.packages.bucket || ""}`,
             `QuiltDatabase=${config.quilt.database || ""}`,  // IAM permissions only (same value as AthenaUserDatabase)
             `LogLevel=${config.logging?.level || "INFO"}`,
+            `IcebergDatabase=${services.icebergDatabase || ""}`,
         ];
 
         const parametersArg = parameters.map(p => `--parameters ${p}`).join(" ");

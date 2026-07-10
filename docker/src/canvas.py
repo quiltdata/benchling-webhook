@@ -5,6 +5,7 @@ package operations to specialized services.
 """
 
 import threading
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 import structlog
@@ -18,7 +19,7 @@ from .config import Config
 from .package_files import PackageFile, PackageFileFetcher
 from .package_query import PackageQuery
 from .packages import Package
-from .pagination import PageState, paginate_items
+from .pagination import PageState, encode_bucket_name, encode_package_name, paginate_items
 from .payload import Payload
 from .version import __version__
 
@@ -64,6 +65,7 @@ class CanvasManager:
         self._package = None
         self._errors: List[str] = []  # Track errors to display in notification section
         self._linked_packages: List[Package] = []  # Track linked packages for use in blocks
+        self._package_file_fetcher_injected = package_file_fetcher is not None
 
         # Dependency injection with fallback to default instances
 
@@ -104,6 +106,8 @@ class CanvasManager:
     def package(self) -> Package:
         """Get Package instance for this entry."""
         if self._package is None:
+            if not self.config.s3_bucket_name:
+                raise ValueError("No configured package bucket in bucketless mode")
             # Ensure display_id is set on payload for package naming
             if not self.payload.display_id:
                 self.payload.set_display_id(self.entry.display_id)
@@ -157,6 +161,18 @@ class CanvasManager:
 
         return uri
 
+    def _file_fetcher_for_bucket(self, bucket_name: Optional[str]) -> PackageFileFetcher:
+        if self._package_file_fetcher_injected:
+            return self._package_file_fetcher
+        if not bucket_name or bucket_name == self._package_file_fetcher.bucket:
+            return self._package_file_fetcher
+        return PackageFileFetcher(
+            catalog_url=self.config.quilt_catalog,
+            bucket=bucket_name,
+            role_arn=self.config.quilt_write_role_arn,
+            region=self.config.aws_region,
+        )
+
     def sync_uri(self, path: Optional[str] = None, version: Optional[str] = None) -> str:
         """Generate URL-encoded redirect URI for the package.
 
@@ -194,13 +210,19 @@ class CanvasManager:
         Returns:
             Formatted markdown string with package links
         """
-        # Primary package header
-        content = fmt.format_package_header(
-            package_name=self.package_name,
-            display_id=self.entry.display_id,
-            catalog_url=self.catalog_url,
-            sync_url=self.sync_uri(),
-        )
+        if self.config.s3_bucket_name:
+            content = fmt.format_package_header(
+                package_name=self.package_name,
+                display_id=self.entry.display_id,
+                catalog_url=self.catalog_url,
+                sync_url=self.sync_uri(),
+            )
+        else:
+            content = (
+                f"## Benchling Entry\n\n"
+                f"**Entry**: {self.entry.display_id}\n\n"
+                "No default package bucket is configured. Use **Refresh Canvas** to search accessible buckets for linked packages.\n"
+            )
 
         # Linked packages
         try:
@@ -210,12 +232,16 @@ class CanvasManager:
             linked_packages = search_result["packages"]
 
             # Filter out the primary package
-            linked_packages = [pkg for pkg in linked_packages if pkg.package_name != self.package_name]
+            if self.config.s3_bucket_name:
+                linked_packages = [pkg for pkg in linked_packages if pkg.package_name != self.package_name]
 
             # Store linked packages as instance variable
             self._linked_packages = linked_packages
 
-            content += fmt.format_linked_packages(linked_packages)
+            if linked_packages:
+                content += fmt.format_linked_packages(linked_packages)
+            elif not self.config.s3_bucket_name:
+                content += "\n### Linked Packages\n\nNo linked packages found in accessible buckets.\n"
 
         except Exception as e:
             error_msg = f"Failed to search for linked packages: {str(e)}"
@@ -247,25 +273,43 @@ class CanvasManager:
         if is_updating:
             # Render only the primary package header — skip the Athena query for
             # linked packages so the initial update returns quickly.
-            markdown_content = fmt.format_package_header(
-                package_name=self.package_name,
-                display_id=self.entry.display_id,
-                catalog_url=self.catalog_url,
-                sync_url=self.sync_uri(),
-            )
+            if self.config.s3_bucket_name:
+                markdown_content = fmt.format_package_header(
+                    package_name=self.package_name,
+                    display_id=self.entry.display_id,
+                    catalog_url=self.catalog_url,
+                    sync_url=self.sync_uri(),
+                )
+            else:
+                markdown_content = (
+                    f"## Benchling Entry\n\n"
+                    f"**Entry**: {self.entry.display_id}\n\n"
+                    "Bucketless mode is checking for linked packages.\n"
+                )
         else:
             markdown_content = self._make_markdown_content()
 
         markdown_block = blocks.create_markdown_block(markdown_content, "md1")
 
         result = [
-            *blocks.create_main_navigation_buttons(self.entry_id, update_enabled=not is_updating),
+            *blocks.create_main_navigation_buttons(
+                self.entry_id,
+                update_enabled=not is_updating or not bool(self.config.s3_bucket_name),
+                browse_enabled=bool(self.config.s3_bucket_name),
+                bucketless=not bool(self.config.s3_bucket_name),
+            ),
             markdown_block,
         ]
 
         # Add linked package browse buttons if any exist (skipped during initial update)
         if not is_updating and self._linked_packages:
-            result.extend(blocks.create_linked_package_browse_buttons(self.entry_id, self._linked_packages))
+            result.extend(
+                blocks.create_linked_package_browse_buttons(
+                    self.entry_id,
+                    self._linked_packages,
+                    include_bucket=not bool(self.config.s3_bucket_name),
+                )
+            )
 
         # Add footer as markdown block
         footer_markdown = fmt.format_canvas_footer(
@@ -296,7 +340,7 @@ class CanvasManager:
             logger.info(
                 "Updating Canvas",
                 canvas_id=self.canvas_id,
-                package_name=self.package_name,
+                package_name=self.package_name if self.config.s3_bucket_name else None,
                 blocks_count=len(blocks),
             )
 
@@ -424,6 +468,7 @@ class CanvasManager:
         context: str,
         page_state: Optional[PageState] = None,
         package_name: Optional[str] = None,
+        bucket_name: Optional[str] = None,
     ) -> List:
         """
         Create navigation buttons based on context, grouped in a section for horizontal layout.
@@ -437,15 +482,32 @@ class CanvasManager:
             List containing a SectionUiBlockUpdate with button children
         """
         if context == "main":
-            return blocks.create_main_navigation_buttons(self.entry_id)
+            return blocks.create_main_navigation_buttons(
+                self.entry_id,
+                update_enabled=True,
+                browse_enabled=bool(self.config.s3_bucket_name),
+                bucketless=not bool(self.config.s3_bucket_name),
+            )
         if context == "browser":
             if page_state is None:
                 raise ValueError("page_state required for browser context")
-            return blocks.create_browser_navigation_buttons(self.entry_id, page_state, package_name)
+            return blocks.create_browser_navigation_buttons(
+                self.entry_id,
+                page_state,
+                package_name,
+                bucket_name,
+                bucketless=not bool(self.config.s3_bucket_name),
+            )
         if context == "metadata":
             if page_state is None:
                 raise ValueError("page_state required for metadata context")
-            return blocks.create_metadata_navigation_buttons(self.entry_id, page_state, package_name)
+            return blocks.create_metadata_navigation_buttons(
+                self.entry_id,
+                page_state,
+                package_name,
+                bucket_name,
+                bucketless=not bool(self.config.s3_bucket_name),
+            )
         raise ValueError(f"Unknown context: {context}")
 
     def get_package_browser_blocks(
@@ -453,6 +515,7 @@ class CanvasManager:
         page_number: int = 0,
         page_size: int = 15,
         package_name: Optional[str] = None,
+        bucket_name: Optional[str] = None,
     ) -> List:
         """Generate Package Entry Browser blocks for SDK use.
 
@@ -469,6 +532,7 @@ class CanvasManager:
         """
         # Use explicit package name if provided, otherwise use the default package name
         browsing_package_name = package_name or self.package_name
+        browsing_bucket_name = bucket_name or self.config.s3_bucket_name
 
         logger.info(
             "Generating Package Entry Browser blocks",
@@ -480,7 +544,7 @@ class CanvasManager:
 
         try:
             # Fetch all files - will raise exception if package doesn't exist
-            all_files = self._package_file_fetcher.get_package_files(browsing_package_name)
+            all_files = self._file_fetcher_for_bucket(browsing_bucket_name).get_package_files(browsing_package_name)
 
             if len(all_files) == 0:
                 # Package exists but empty
@@ -500,7 +564,7 @@ class CanvasManager:
             # Create blocks with package context for linked packages
             canvas_blocks = [
                 blocks.create_markdown_block(markdown, "md-browser"),
-                *self._make_navigation_buttons("browser", page_state, package_name),
+                *self._make_navigation_buttons("browser", page_state, package_name, browsing_bucket_name),
             ]
 
             logger.info(
@@ -520,21 +584,43 @@ class CanvasManager:
             error_msg = str(e).lower()
             if "does not exist" in error_msg or "not found" in error_msg or "no such package" in error_msg:
                 # Package doesn't exist yet
-                markdown = fmt.format_package_not_found(browsing_package_name)
+                markdown = fmt.format_package_not_found(
+                    browsing_package_name,
+                    can_create=bool(self.config.s3_bucket_name),
+                )
+                if self.config.s3_bucket_name:
+                    actions = [
+                        blocks.create_button_block(f"update-package-{self.entry_id}", "Update Package"),
+                        blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
+                    ]
+                else:
+                    actions = [
+                        blocks.create_button_block(f"refresh-canvas-{self.entry_id}", "Refresh Canvas"),
+                        blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Entry"),
+                    ]
 
                 return [
                     blocks.create_markdown_block(markdown, "md-no-package"),
-                    blocks.create_button_block(f"update-package-{self.entry_id}", "Update Package"),
-                    blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
+                    *actions,
                 ]
 
             # Other error (API failure, network error, etc.)
             markdown = fmt.format_error_loading_files(browsing_package_name, str(e))
+            retry_id = f"browse-files-{self.entry_id}-p{page_number}-s{page_size}"
+            if package_name:
+                bucket_part = f"-bucket-{encode_bucket_name(bucket_name)}" if bucket_name else ""
+                retry_id = (
+                    f"browse-linked-{self.entry_id}-pkg-{encode_package_name(package_name)}"
+                    f"{bucket_part}-p{page_number}-s{page_size}"
+                )
 
             return [
                 blocks.create_markdown_block(markdown, "md-error"),
-                blocks.create_button_block(f"browse-files-{self.entry_id}-p{page_number}-s{page_size}", "Retry"),
-                blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
+                blocks.create_button_block(retry_id, "Retry"),
+                blocks.create_button_block(
+                    f"back-to-package-{self.entry_id}",
+                    "Back to Entry" if not self.config.s3_bucket_name else "Back to Package",
+                ),
             ]
 
     def get_package_browser_response(
@@ -560,6 +646,7 @@ class CanvasManager:
         page_number: int = 0,
         page_size: int = 15,
         package_name: Optional[str] = None,
+        bucket_name: Optional[str] = None,
     ) -> List:
         """Generate metadata view blocks for SDK use.
 
@@ -576,6 +663,7 @@ class CanvasManager:
         """
         # Use explicit package name if provided, otherwise use the default package name
         browsing_package_name = package_name or self.package_name
+        browsing_bucket_name = bucket_name or self.config.s3_bucket_name
 
         logger.info(
             "Generating metadata blocks",
@@ -584,7 +672,7 @@ class CanvasManager:
         )
 
         try:
-            metadata = self._package_file_fetcher.get_package_metadata(browsing_package_name)
+            metadata = self._file_fetcher_for_bucket(browsing_bucket_name).get_package_metadata(browsing_package_name)
 
             # Generate markdown
             markdown = self._make_metadata_markdown(metadata, browsing_package_name)
@@ -595,7 +683,7 @@ class CanvasManager:
             # Create blocks with package context for linked packages
             canvas_blocks = [
                 blocks.create_markdown_block(markdown, "md-metadata"),
-                *self._make_navigation_buttons("metadata", page_state, package_name),
+                *self._make_navigation_buttons("metadata", page_state, package_name, browsing_bucket_name),
             ]
 
             logger.info(
@@ -613,7 +701,10 @@ class CanvasManager:
 
             return [
                 blocks.create_markdown_block(markdown, "md-error"),
-                blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
+                blocks.create_button_block(
+                    f"back-to-package-{self.entry_id}",
+                    "Back to Entry" if not self.config.s3_bucket_name else "Back to Package",
+                ),
             ]
 
     def get_metadata_response(
@@ -638,7 +729,10 @@ class CanvasManager:
         """Handle Canvas webhook payload."""
         try:
             logger.info("Updating canvas", canvas_id=self.canvas_id, entry_id=self.entry_id)
-            self.update_canvas()
+            updated_at = None
+            if not self.config.s3_bucket_name:
+                updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            self.update_canvas(updated_at=updated_at)
 
         except Exception as e:
             logger.error("Canvas operation failed", error=str(e), exc_info=True)

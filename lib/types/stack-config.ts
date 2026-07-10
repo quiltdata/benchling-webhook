@@ -135,6 +135,16 @@ export interface StackConfig {
          * @example "arn:aws:iam::123456789012:policy/quilt-staging-UserAthenaNonManagedRolePolicy-XXXXX"
          */
         athenaUserPolicyArn?: string;
+
+        /**
+         * Iceberg Glue database for single-query bucketless linked-package search (optional)
+         *
+         * Passed to the container as QUILT_ICEBERG_DATABASE and used by the
+         * stack to grant Glue access for Iceberg package metadata tables.
+         *
+         * @example "icebergdatabase-v9cxuqnwjj5a"
+         */
+        icebergDatabase?: string;
     };
 
     /**

@@ -80,6 +80,7 @@ def refresh_canvas_for_package_event(
     *,
     config: Config,
     benchling_factory: Callable[[], Benchling],
+    bucket: str | None = None,
 ) -> RefreshResult:
     """Refresh a canvas after Quilt publishes a package revision event."""
     try:
@@ -89,7 +90,7 @@ def refresh_canvas_for_package_event(
 
         package_fetcher = PackageFileFetcher(
             catalog_url=config.quilt_catalog,
-            bucket=config.s3_bucket_name,
+            bucket=bucket or config.s3_bucket_name,
             role_arn=config.quilt_write_role_arn or None,
             region=config.aws_region,
         )

@@ -710,6 +710,41 @@ def create_app() -> FastAPI:
                 error=str(exc),
             )
 
+    def _send_bucketless_final_canvas_best_effort(payload: Payload) -> None:
+        """Start the final bucketless Canvas render after the quick acknowledgment.
+
+        Bucketless mode has no packaging workflow to produce a later package
+        revision event, so the Canvas handler must render the final linked-package
+        view itself. Run it asynchronously to keep the webhook response fast.
+        """
+        if not payload.canvas_id or benchling is None or config is None:
+            return
+        try:
+            CanvasManager(benchling, config, payload).handle_async()
+        except Exception as exc:
+            logger.warning(
+                "Failed to start final bucketless canvas update",
+                canvas_id=payload.canvas_id,
+                error=str(exc),
+            )
+
+    def _bucketless_response(payload: Payload, message: str) -> JSONResponse:
+        logger.info(
+            "Bucketless mode skipped package creation",
+            entry_id=payload.entry_id,
+            event_type=payload.event_type,
+            canvas_id=payload.canvas_id,
+        )
+        return JSONResponse(
+            {
+                "entry_id": payload.entry_id,
+                "status": "SKIPPED",
+                "mode": "bucketless",
+                "message": message,
+            },
+            status_code=202,
+        )
+
     async def _handle_event_impl(request: Request, _verified: None = None):
         """Shared event webhook handling implementation."""
         try:
@@ -738,6 +773,12 @@ def create_app() -> FastAPI:
                     canvas_id=payload.canvas_id,
                 )
                 _send_updating_canvas_best_effort(payload)
+                if not config.s3_bucket_name:
+                    _send_bucketless_final_canvas_best_effort(payload)
+                    return _bucketless_response(
+                        payload,
+                        "Bucketless mode does not create a default package for canvas events.",
+                    )
                 publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
 
                 logger.info("Canvas update initiated from /event endpoint", canvas_id=payload.canvas_id)
@@ -757,6 +798,12 @@ def create_app() -> FastAPI:
                     "status": "ignored",
                     "message": f"Event type {payload.event_type} not processed",
                 }
+
+            if not config.s3_bucket_name:
+                return _bucketless_response(
+                    payload,
+                    "Bucketless mode does not create a default package for entry events.",
+                )
 
             publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
 
@@ -892,12 +939,20 @@ def create_app() -> FastAPI:
                     return handle_view_metadata_linked(payload, button_id, benchling, config)
                 if button_id.startswith("view-metadata-"):
                     return handle_view_metadata(payload, button_id, benchling, config)
+                if button_id.startswith("refresh-canvas-"):
+                    return handle_refresh_canvas(payload, button_id, benchling, config)
                 if button_id.startswith("update-package-"):
                     return handle_update_package(payload, entry_packager, benchling, config)
 
                 logger.warning("Unknown button action from /canvas", button_id=button_id)
 
             _send_updating_canvas_best_effort(payload)
+            if not config.s3_bucket_name:
+                _send_bucketless_final_canvas_best_effort(payload)
+                return _bucketless_response(
+                    payload,
+                    "Bucketless mode does not create a default package for canvas initialization.",
+                )
             sqs_message_id = publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
 
             logger.info(
@@ -937,6 +992,11 @@ def create_app() -> FastAPI:
         from .pagination import parse_button_id
 
         try:
+            if not config.s3_bucket_name:
+                return _bucketless_response(
+                    payload,
+                    "Bucketless mode has no default package to browse.",
+                )
             _, entry_id, page_state = parse_button_id(button_id)
 
             page_number = page_state.page_number if page_state else 0
@@ -965,10 +1025,12 @@ def create_app() -> FastAPI:
 
     def handle_browse_linked(payload, button_id, benchling, config):
         """Handle Browse Linked Package button click."""
-        from .pagination import parse_browse_linked_button_id
+        from .pagination import parse_browse_linked_button_id_with_bucket
 
         try:
-            entry_id, package_name, page_number, page_size = parse_browse_linked_button_id(button_id)
+            entry_id, package_name, bucket_name, page_number, page_size = parse_browse_linked_button_id_with_bucket(
+                button_id
+            )
         except ValueError as e:
             logger.error("Invalid browse-linked button ID", button_id=button_id, error=str(e))
             return JSONResponse({"error": "Invalid button ID"}, status_code=400)
@@ -977,6 +1039,7 @@ def create_app() -> FastAPI:
             "Browse linked package requested",
             entry_id=entry_id,
             package_name=package_name,
+            bucket=bucket_name,
             page=page_number,
             size=page_size,
         )
@@ -984,7 +1047,7 @@ def create_app() -> FastAPI:
         canvas_manager = CanvasManager(benchling, config, payload)
 
         try:
-            blocks = canvas_manager.get_package_browser_blocks(page_number, page_size, package_name)
+            blocks = canvas_manager.get_package_browser_blocks(page_number, page_size, package_name, bucket_name)
         except Exception as e:
             logger.error(
                 "Failed to get package browser blocks",
@@ -1001,6 +1064,7 @@ def create_app() -> FastAPI:
                     "Canvas updated with linked package browser",
                     entry_id=entry_id,
                     package_name=package_name,
+                    bucket=bucket_name,
                     page=page_number,
                 )
             except Exception as e:
@@ -1023,6 +1087,11 @@ def create_app() -> FastAPI:
         from .pagination import parse_button_id
 
         try:
+            if not config.s3_bucket_name:
+                return _bucketless_response(
+                    payload,
+                    "Bucketless mode has no default package pages to browse.",
+                )
             action, entry_id, page_state = parse_button_id(button_id)
 
             page_number = page_state.page_number if page_state else 0
@@ -1053,15 +1122,18 @@ def create_app() -> FastAPI:
 
     def handle_page_navigation_linked(payload, button_id, benchling, config):
         """Handle Next/Previous page button clicks for linked packages."""
-        from .pagination import parse_browse_linked_button_id
+        from .pagination import parse_browse_linked_button_id_with_bucket
 
         try:
-            entry_id, package_name, page_number, page_size = parse_browse_linked_button_id(button_id)
+            entry_id, package_name, bucket_name, page_number, page_size = parse_browse_linked_button_id_with_bucket(
+                button_id
+            )
 
             logger.info(
                 "Linked package page navigation",
                 entry_id=entry_id,
                 package_name=package_name,
+                bucket=bucket_name,
                 page=page_number,
             )
 
@@ -1069,13 +1141,16 @@ def create_app() -> FastAPI:
 
             def async_update():
                 try:
-                    blocks = canvas_manager.get_package_browser_blocks(page_number, page_size, package_name)
+                    blocks = canvas_manager.get_package_browser_blocks(
+                        page_number, page_size, package_name, bucket_name
+                    )
                     canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
                     benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
                     logger.info(
                         "Canvas updated with linked package page",
                         canvas_id=payload.canvas_id,
                         package_name=package_name,
+                        bucket=bucket_name,
                         page=page_number,
                     )
                 except Exception as e:
@@ -1093,7 +1168,7 @@ def create_app() -> FastAPI:
 
     def handle_back_to_main(payload, button_id, benchling, config):
         """Handle Back to Package button click."""
-        logger.info("Back to package requested", entry_id=payload.entry_id)
+        logger.info("Back to main canvas requested", entry_id=payload.entry_id)
 
         canvas_manager = CanvasManager(benchling, config, payload)
 
@@ -1102,19 +1177,63 @@ def create_app() -> FastAPI:
                 blocks = canvas_manager._make_blocks()
                 canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
                 benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
-                logger.info("Canvas updated with main package view", canvas_id=payload.canvas_id)
+                logger.info("Canvas updated with main view", canvas_id=payload.canvas_id)
             except Exception as e:
-                logger.error("Failed to return to main package view", error=str(e), exc_info=True)
+                logger.error("Failed to return to main canvas view", error=str(e), exc_info=True)
 
         threading.Thread(target=async_update, daemon=True).start()
 
-        return JSONResponse({"status": "ACCEPTED", "message": "Returning to package view..."}, status_code=202)
+        return JSONResponse({"status": "ACCEPTED", "message": "Returning to canvas..."}, status_code=202)
+
+    def handle_refresh_canvas(payload, button_id, benchling, config):
+        """Handle Refresh Canvas button click.
+
+        The button is rendered on the bucketless canvas. Re-check the current
+        config: if a default package bucket has since been configured (e.g. the
+        webhook was reconfigured and restarted with a bucket after this canvas
+        was drawn), transition to the bucketed flow — enqueue a packaging
+        request to create the default package and render the standard canvas.
+        Otherwise, re-run the bucketless linked-package lookup.
+        """
+        logger.info("Refresh canvas requested", entry_id=payload.entry_id, button_id=button_id)
+
+        _send_updating_canvas_best_effort(payload)
+
+        if config.s3_bucket_name:
+            # A bucket was configured after this (bucketless) canvas was drawn:
+            # initiate default package creation instead of re-rendering bucketless.
+            assert entry_packager is not None
+            assert packaging_queue_url is not None, "packaging_queue_url must be set when not in degraded mode"
+            sqs_message_id = publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
+            CanvasManager(benchling, config, payload).handle_async()
+            logger.info(
+                "Refresh canvas initiated default package creation",
+                entry_id=payload.entry_id,
+                canvas_id=payload.canvas_id,
+                sqs_message_id=sqs_message_id,
+            )
+            return JSONResponse(
+                {
+                    "status": "ACCEPTED",
+                    "message": "Creating default package...",
+                    "sqs_message_id": sqs_message_id,
+                },
+                status_code=202,
+            )
+
+        _send_bucketless_final_canvas_best_effort(payload)
+        return JSONResponse({"status": "ACCEPTED", "message": "Refreshing canvas..."}, status_code=202)
 
     def handle_view_metadata(payload, button_id, benchling, config):
         """Handle View Metadata button click for primary package."""
         from .pagination import parse_button_id
 
         try:
+            if not config.s3_bucket_name:
+                return _bucketless_response(
+                    payload,
+                    "Bucketless mode has no default package metadata to view.",
+                )
             _, entry_id, page_state = parse_button_id(button_id)
 
             page_number = page_state.page_number if page_state else 0
@@ -1143,24 +1262,32 @@ def create_app() -> FastAPI:
 
     def handle_view_metadata_linked(payload, button_id, benchling, config):
         """Handle View Metadata button click for linked packages."""
-        from .pagination import parse_browse_linked_button_id
+        from .pagination import parse_browse_linked_button_id_with_bucket
 
         try:
-            entry_id, package_name, page_number, page_size = parse_browse_linked_button_id(button_id)
+            entry_id, package_name, bucket_name, page_number, page_size = parse_browse_linked_button_id_with_bucket(
+                button_id
+            )
 
-            logger.info("Metadata view requested for linked package", entry_id=entry_id, package_name=package_name)
+            logger.info(
+                "Metadata view requested for linked package",
+                entry_id=entry_id,
+                package_name=package_name,
+                bucket=bucket_name,
+            )
 
             canvas_manager = CanvasManager(benchling, config, payload)
 
             def async_update():
                 try:
-                    blocks = canvas_manager.get_metadata_blocks(page_number, page_size, package_name)
+                    blocks = canvas_manager.get_metadata_blocks(page_number, page_size, package_name, bucket_name)
                     canvas_update = AppCanvasUpdate(blocks=blocks, enabled=True)  # type: ignore
                     benchling.apps.update_canvas(canvas_id=payload.canvas_id, canvas=canvas_update)
                     logger.info(
                         "Canvas updated with linked package metadata view",
                         canvas_id=payload.canvas_id,
                         package_name=package_name,
+                        bucket=bucket_name,
                     )
                 except Exception as e:
                     logger.error("Failed to update canvas with linked package metadata", error=str(e), exc_info=True)
@@ -1177,6 +1304,11 @@ def create_app() -> FastAPI:
         """Handle Update Package button click (existing functionality)."""
         logger.info("Update package requested", entry_id=payload.entry_id)
         assert packaging_queue_url is not None, "packaging_queue_url must be set when not in degraded mode"
+        if not config.s3_bucket_name:
+            return _bucketless_response(
+                payload,
+                "Bucketless mode does not create a default package from the update action.",
+            )
 
         sqs_message_id = publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
 

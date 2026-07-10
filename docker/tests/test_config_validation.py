@@ -99,6 +99,15 @@ class TestSecretValidation:
         assert secret.enable_webhook_verification is True
         assert secret.workflow == ""
 
+    def test_secret_without_user_bucket_is_bucketless(self, mock_sm_client, valid_secret_data):
+        """Test that user_bucket is optional for bucketless mode."""
+        del valid_secret_data["user_bucket"]
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
+
+        secret = fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
+
+        assert secret.user_bucket is None
+
     def test_optional_workflow_is_accepted(self, mock_sm_client, valid_secret_data):
         """Test that optional workflow is parsed when present."""
         valid_secret_data["workflow"] = "custom-workflow"
@@ -136,7 +145,6 @@ class TestSecretValidation:
         """Test that missing multiple parameters lists all missing."""
         del valid_secret_data["log_level"]
         del valid_secret_data["pkg_prefix"]
-        del valid_secret_data["user_bucket"]
 
         mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
 
@@ -147,7 +155,6 @@ class TestSecretValidation:
         assert "Missing required parameters" in error_message
         assert "log_level" in error_message
         assert "pkg_prefix" in error_message
-        assert "user_bucket" in error_message
 
     def test_invalid_log_level(self, mock_sm_client, valid_secret_data):
         """Test that invalid log level raises error."""

@@ -120,6 +120,23 @@ class TestFastAPIApp:
         assert data["status"] == "ACCEPTED"
         mock_publish.assert_called_once()
 
+    def test_webhook_endpoint_bucketless_skips_packaging(self, client, mock_config, mock_publish):
+        """Bucketless entry events should not enqueue default package creation."""
+        mock_config.s3_bucket_name = ""
+        payload = {
+            "channel": "events",
+            "message": {"type": "v2.entry.created", "resourceId": "etr_123456"},
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        response = client.post("/event", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "SKIPPED"
+        assert data["mode"] == "bucketless"
+        mock_publish.assert_not_called()
+
     def test_webhook_endpoint_no_payload(self, client):
         """Test webhook endpoint with no JSON payload."""
         response = client.post("/event", data="", headers={"Content-Type": "application/json"})
@@ -163,6 +180,91 @@ class TestFastAPIApp:
         mock_publish.assert_called_once()
         published_payload = mock_publish.call_args.args[2]
         assert published_payload.canvas_id == "canvas_123"
+
+    def test_canvas_endpoint_bucketless_starts_final_canvas_update(self, client, mock_config, mock_publish):
+        """Bucketless Canvas initialization should not leave the updating placeholder forever."""
+        mock_config.s3_bucket_name = ""
+        payload = {
+            "channel": "events",
+            "message": {"type": "v2.canvas.initialized", "resourceId": "etr_123456"},
+            "baseURL": "https://tenant.benchling.com",
+            "context": {"canvasId": "canvas_123"},
+        }
+
+        with patch("src.app.CanvasManager") as mock_canvas_manager:
+            updating_manager = MagicMock()
+            final_manager = MagicMock()
+            mock_canvas_manager.side_effect = [updating_manager, final_manager]
+
+            response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "SKIPPED"
+        assert data["mode"] == "bucketless"
+        mock_publish.assert_not_called()
+        updating_manager.send_updating_canvas.assert_called_once()
+        final_manager.handle_async.assert_called_once()
+
+    def test_canvas_endpoint_bucketless_refresh_canvas_button(self, client, mock_config, mock_publish):
+        """Refresh Canvas should rerun the bucketless linked-package lookup."""
+        mock_config.s3_bucket_name = ""
+        payload = {
+            "channel": "app_signals",
+            "message": {
+                "type": "v2.canvas.userInteracted",
+                "buttonId": "refresh-canvas-etr_123456",
+                "canvasId": "canvas_123",
+            },
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        with patch("src.app.CanvasManager") as mock_canvas_manager:
+            updating_manager = MagicMock()
+            final_manager = MagicMock()
+            mock_canvas_manager.side_effect = [updating_manager, final_manager]
+
+            response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "ACCEPTED"
+        assert data["message"] == "Refreshing canvas..."
+        mock_publish.assert_not_called()
+        updating_manager.send_updating_canvas.assert_called_once()
+        final_manager.handle_async.assert_called_once()
+
+    def test_canvas_endpoint_refresh_canvas_creates_default_package_when_bucket_configured(
+        self, client, mock_config, mock_publish
+    ):
+        """Refresh Canvas on a stale bucketless canvas should create the default
+        package once a bucket has been configured (not return an error)."""
+        mock_config.s3_bucket_name = "test-bucket"
+        payload = {
+            "channel": "app_signals",
+            "message": {
+                "type": "v2.canvas.userInteracted",
+                "buttonId": "refresh-canvas-etr_123456",
+                "canvasId": "canvas_123",
+            },
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        with patch("src.app.CanvasManager") as mock_canvas_manager:
+            updating_manager = MagicMock()
+            final_manager = MagicMock()
+            mock_canvas_manager.side_effect = [updating_manager, final_manager]
+
+            response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "ACCEPTED"
+        assert data["message"] == "Creating default package..."
+        assert data["sqs_message_id"] == "msg-id-test"
+        mock_publish.assert_called_once()
+        updating_manager.send_updating_canvas.assert_called_once()
+        final_manager.handle_async.assert_called_once()
 
     @pytest.mark.local
     def test_canvas_endpoint_handles_browse_files_button(self, client, mock_benchling_client):

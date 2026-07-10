@@ -197,7 +197,7 @@ class SqsConsumer(BaseSqsConsumer):
             top_hash = parsed.top_hash
 
             expected_prefix = f"{self.config.pkg_prefix}/"
-            if parsed.bucket != self.config.s3_bucket_name:
+            if self.config.s3_bucket_name and parsed.bucket != self.config.s3_bucket_name:
                 outcome = "skipped_filtered"
                 should_delete = True
                 logger.info(
@@ -223,6 +223,7 @@ class SqsConsumer(BaseSqsConsumer):
                     parsed.top_hash,
                     config=self.config,
                     benchling_factory=self.benchling_factory,
+                    bucket=parsed.bucket,
                 )
                 outcome = result.outcome.value
                 should_delete = outcome in DELETE_OUTCOMES

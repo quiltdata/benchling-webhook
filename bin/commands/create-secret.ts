@@ -43,7 +43,7 @@ interface BenchlingSecretData {
   app_definition_id: string;
   pkg_prefix: string;
   pkg_key: string;
-  user_bucket: string;
+  user_bucket?: string;
   log_level: string;
   enable_webhook_verification: string;
   webhook_allow_list: string;
@@ -56,7 +56,6 @@ const REQUIRED_PARAMS = [
     "BENCHLING_APP_DEFINITION_ID",
     "BENCHLING_PKG_PREFIX",
     "BENCHLING_PKG_KEY",
-    "BENCHLING_USER_BUCKET",
     "BENCHLING_LOG_LEVEL",
     "BENCHLING_ENABLE_WEBHOOK_VERIFICATION",
     "BENCHLING_WEBHOOK_ALLOW_LIST",
@@ -122,7 +121,7 @@ function validateParameters(params: Record<string, string>): BenchlingSecretData
         app_definition_id: params.BENCHLING_APP_DEFINITION_ID,
         pkg_prefix: params.BENCHLING_PKG_PREFIX,
         pkg_key: params.BENCHLING_PKG_KEY,
-        user_bucket: params.BENCHLING_USER_BUCKET,
+        ...(params.BENCHLING_USER_BUCKET ? { user_bucket: params.BENCHLING_USER_BUCKET } : {}),
         log_level: logLevel,
         enable_webhook_verification: verification,
         webhook_allow_list: params.BENCHLING_WEBHOOK_ALLOW_LIST,
@@ -151,11 +150,12 @@ async function createOrUpdateSecret(
     const secretString = JSON.stringify(secretData, null, 2);
 
     if (dryRun) {
+        const maskedData = { ...secretData, client_secret: "***REDACTED***" };
         console.log(chalk.blue("\n🔍 DRY RUN MODE - No changes will be made\n"));
         console.log(chalk.cyan("Secret Name:"), secretName);
         console.log(chalk.cyan("Region:"), region);
         console.log(chalk.cyan("Secret Content:"));
-        console.log(chalk.gray(secretString));
+        console.log(chalk.gray(JSON.stringify(maskedData, null, 2)));
         return;
     }
 
@@ -228,7 +228,7 @@ async function main(): Promise<void> {
     console.log(chalk.gray(`  app_definition_id: ${secretData.app_definition_id}`));
     console.log(chalk.gray(`  pkg_prefix: ${secretData.pkg_prefix}`));
     console.log(chalk.gray(`  pkg_key: ${secretData.pkg_key}`));
-    console.log(chalk.gray(`  user_bucket: ${secretData.user_bucket}`));
+    console.log(chalk.gray(`  user_bucket: ${secretData.user_bucket || "(bucketless mode)"}`));
     console.log(chalk.gray(`  log_level: ${secretData.log_level}`));
     console.log(chalk.gray(`  enable_webhook_verification: ${secretData.enable_webhook_verification}`));
     console.log(chalk.gray(`  webhook_allow_list: ${secretData.webhook_allow_list || "(empty)"}`));
