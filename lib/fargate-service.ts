@@ -218,16 +218,28 @@ export class FargateService extends Construct {
         );
 
         // Grant Glue access for Quilt catalog tables and optional Iceberg package tables.
-        // The Iceberg database is a CloudFormation parameter, so include it in
-        // the policy resources even when the default is empty; deployed stacks
-        // with a non-empty parameter receive the matching table grants.
+        // The Iceberg database is a CloudFormation parameter (token), so gate the
+        // Iceberg grants behind a condition: when the parameter is empty, drop them
+        // entirely rather than synthesizing invalid `database/` / `table//*` ARNs
+        // (which would break deployment in the common "no Iceberg" case).
         const region = config.deployment.region;
+        const hasIcebergDatabase = new cdk.CfnCondition(this, "HasIcebergDatabase", {
+            expression: cdk.Fn.conditionNot(cdk.Fn.conditionEquals(props.icebergDatabase || "", "")),
+        });
         const glueResources = [
             `arn:aws:glue:${region}:*:catalog`,
             `arn:aws:glue:${region}:*:database/${props.quiltDatabase}`,
             `arn:aws:glue:${region}:*:table/${props.quiltDatabase}/*`,
-            `arn:aws:glue:${region}:*:database/${props.icebergDatabase || ""}`,
-            `arn:aws:glue:${region}:*:table/${props.icebergDatabase || ""}/*`,
+            cdk.Fn.conditionIf(
+                hasIcebergDatabase.logicalId,
+                `arn:aws:glue:${region}:*:database/${props.icebergDatabase}`,
+                cdk.Aws.NO_VALUE,
+            ).toString(),
+            cdk.Fn.conditionIf(
+                hasIcebergDatabase.logicalId,
+                `arn:aws:glue:${region}:*:table/${props.icebergDatabase}/*`,
+                cdk.Aws.NO_VALUE,
+            ).toString(),
         ];
         taskRole.addToPolicy(
             new iam.PolicyStatement({
