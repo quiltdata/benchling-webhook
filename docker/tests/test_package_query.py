@@ -417,10 +417,12 @@ class TestPackageQueryIceberg:
         # Should reference both buckets
         assert "bucket-a" in sql
         assert "bucket-b" in sql
-        # Should access metadata as STRUCT
-        assert "metadata.experiment_id" in sql
         # Should serialize metadata deterministically for Python parsing
         assert "json_format(CAST(m.metadata AS JSON)) AS user_meta" in sql
+        # metadata is a JSON string (from user_meta), not a native STRUCT, so
+        # it must be filtered via json_extract_scalar to avoid TYPE_MISMATCH.
+        assert "json_extract_scalar(m.metadata, '$.experiment_id')" in sql
+        assert "m.metadata.experiment_id" not in sql
         # Should have _src_bucket alias
         assert "_src_bucket" in sql
         # Should filter on 'latest' tag

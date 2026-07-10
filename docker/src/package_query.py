@@ -481,15 +481,18 @@ class PackageQuery:
         """Build a single UNION ALL query across Iceberg tables for all buckets.
 
         Joins package_revision ↔ package_manifest on top_hash, filtered to
-        'latest' tag via package_tag, and filters on metadata.{key} = '{value}'.
-        STRUCT field access is schema-native — no json_extract_scalar needed.
+        'latest' tag via package_tag, and filters on the metadata key/value.
 
-        The metadata column in Iceberg is a native Athena STRUCT, so accessing
-        a field by name is faster than json_extract_scalar on a raw JSON string.
+        The Iceberg package_manifest.metadata column is populated from the
+        packages-view user_meta column (see quilt_shared.iceberg_queries:
+        ``user_meta AS metadata``), which is a raw JSON string — NOT a native
+        Athena STRUCT. Accessing it as ``m.metadata.{key}`` raises
+        ``TYPE_MISMATCH: Expression m.metadata is not of type ROW``, so we use
+        json_extract_scalar just like the parquet _packages-view path.
 
         Args:
             buckets: List of bucket names to search
-            key: Metadata key to filter on (used as STRUCT field name)
+            key: Metadata key to filter on (JSON path field name)
             value: Metadata value to match
 
         Returns:
@@ -512,7 +515,7 @@ class PackageQuery:
                 ON r.pkg_name = t.pkg_name
                 AND r.top_hash = t.top_hash
                 AND t.tag_name = 'latest'
-            WHERE m.metadata.{key} = '{escaped_value}'
+            WHERE json_extract_scalar(m.metadata, '$.{key}') = '{escaped_value}'
             """
             branches.append(branch)
 
