@@ -23,6 +23,7 @@ def isolate_environment(monkeypatch):
         "QUEUE_URL",
         "QUILT_CATALOG",
         "QUILT_DATABASE",
+        "QUILT_ICEBERG_DATABASE",
         "AWS_REGION",
         "PKG_PREFIX",
         "PKG_KEY",

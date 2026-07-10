@@ -203,4 +203,79 @@ describe("sync-secrets CLI", () => {
         const secretPayload = JSON.parse(updateCalls[0].SecretString as string);
         expect(secretPayload.workflow).toBe("custom-workflow");
     });
+
+    test("dry-run never prints the plaintext client secret", async () => {
+        const profileName = "default";
+        const existingSecretArn =
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:existing-secret-abc123";
+        const timestamp = new Date().toISOString();
+        const plaintextSecret = "super-secret-value";
+
+        const profileConfig: ProfileConfig = {
+            benchling: {
+                tenant: "test-tenant",
+                clientId: "client-xyz",
+                clientSecret: plaintextSecret,
+                secretArn: existingSecretArn,
+                appDefinitionId: "app_123",
+            },
+            quilt: {
+                stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
+                catalog: "quilt.example.com",
+                database: "quilt_db",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue/test",
+                region: "us-east-1",
+            },
+            packages: {
+                bucket: "packages-bucket",
+                prefix: "benchling",
+                metadataKey: "experiment_id",
+            },
+            deployment: {
+                region: "us-east-1",
+                imageTag: "latest",
+            },
+            logging: {
+                level: "INFO",
+            },
+            security: {
+                enableVerification: true,
+                webhookAllowList: "",
+            },
+            _metadata: {
+                version: "0.7.0-test",
+                createdAt: timestamp,
+                updatedAt: timestamp,
+                source: "cli",
+            },
+        };
+
+        mockStorage.writeProfile(profileName, profileConfig);
+
+        sendMock.mockImplementation(async (command) => {
+            if (command instanceof DescribeSecretCommand) {
+                return { ARN: existingSecretArn };
+            }
+            if (command instanceof UpdateSecretCommand || command instanceof CreateSecretCommand) {
+                throw new Error("Dry-run must not write to Secrets Manager");
+            }
+            throw new Error(`Unexpected command: ${command.constructor.name}`);
+        });
+
+        const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+        try {
+            await syncSecretsToAWS({
+                profile: profileName,
+                region: "us-east-1",
+                dryRun: true,
+                configStorage: mockStorage,
+            });
+
+            const output = logSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+            expect(output).not.toContain(plaintextSecret);
+            expect(output).toContain("***REDACTED***");
+        } finally {
+            logSpy.mockRestore();
+        }
+    });
 });

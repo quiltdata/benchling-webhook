@@ -48,7 +48,6 @@ export class ConfigurationValidator {
         "benchlingClientId",
         "benchlingClientSecret",
         "benchlingAppDefinitionId",
-        "quiltUserBucket",
         "quiltRegion",
     ];
 

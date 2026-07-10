@@ -333,12 +333,18 @@ describe("XDG Launch Pure Functions - Integration", () => {
                     resourceType: "AWS::IAM::Policy",
                     resourceStatus: "CREATE_COMPLETE",
                 },
+                IcebergDatabase: {
+                    physicalResourceId: "iceberg_db",
+                    resourceType: "AWS::Glue::Database",
+                    resourceStatus: "CREATE_COMPLETE",
+                },
             };
 
             const discovered: DiscoveredQuiltResources = extractQuiltResources(mockResources);
 
             expect(discovered.athenaUserWorkgroup).toBe("my-user-workgroup");
             expect(discovered.athenaUserPolicyArn).toBe("my-user-policy-ABCDEF");
+            expect(discovered.icebergDatabase).toBe("iceberg_db");
         });
 
         it("should handle empty resource map gracefully", () => {

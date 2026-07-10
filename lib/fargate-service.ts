@@ -45,9 +45,10 @@ export interface FargateServiceProps {
 
     // Runtime-configurable parameters (from CloudFormation)
     readonly benchlingSecret: string;
-    readonly packageBucket: string;
+    readonly packageBucket?: string;
     readonly quiltDatabase: string;
     readonly logLevel?: string;
+    readonly icebergDatabase?: string;
 }
 
 export class FargateService extends Construct {
@@ -147,33 +148,35 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Grant S3 access for the specific package bucket
-        // Full Quilt-required permissions for versioned S3 objects
-        const packageBucketArn = `arn:aws:s3:::${props.packageBucket}`;
-        taskRole.addToPolicy(
-            new iam.PolicyStatement({
-                actions: [
-                    "s3:GetObject",
-                    "s3:GetObjectAttributes",
-                    "s3:GetObjectTagging",
-                    "s3:GetObjectVersion",
-                    "s3:GetObjectVersionAttributes",
-                    "s3:GetObjectVersionTagging",
-                    "s3:ListBucket",
-                    "s3:ListBucketVersions",
-                    "s3:DeleteObject",
-                    "s3:DeleteObjectVersion",
-                    "s3:PutObject",
-                    "s3:PutObjectTagging",
-                    "s3:GetBucketNotification",
-                    "s3:PutBucketNotification",
-                ],
-                resources: [
-                    packageBucketArn,
-                    `${packageBucketArn}/*`,
-                ],
-            }),
-        );
+        if (props.packageBucket) {
+            // Grant S3 access for the specific package bucket
+            // Full Quilt-required permissions for versioned S3 objects
+            const packageBucketArn = `arn:aws:s3:::${props.packageBucket}`;
+            taskRole.addToPolicy(
+                new iam.PolicyStatement({
+                    actions: [
+                        "s3:GetObject",
+                        "s3:GetObjectAttributes",
+                        "s3:GetObjectTagging",
+                        "s3:GetObjectVersion",
+                        "s3:GetObjectVersionAttributes",
+                        "s3:GetObjectVersionTagging",
+                        "s3:ListBucket",
+                        "s3:ListBucketVersions",
+                        "s3:DeleteObject",
+                        "s3:DeleteObjectVersion",
+                        "s3:PutObject",
+                        "s3:PutObjectTagging",
+                        "s3:GetBucketNotification",
+                        "s3:PutBucketNotification",
+                    ],
+                    resources: [
+                        packageBucketArn,
+                        `${packageBucketArn}/*`,
+                    ],
+                }),
+            );
+        }
 
         // Attach Quilt managed policies directly to task role
         // This eliminates the need for role assumption and trust policy coordination
@@ -214,20 +217,39 @@ export class FargateService extends Construct {
             }),
         );
 
-        // Grant Glue access for the specific Quilt database
+        // Grant Glue access for Quilt catalog tables and optional Iceberg package tables.
+        // The Iceberg database is a CloudFormation parameter (token), so gate the
+        // Iceberg grants behind a condition: when the parameter is empty, drop them
+        // entirely rather than synthesizing invalid `database/` / `table//*` ARNs
+        // (which would break deployment in the common "no Iceberg" case).
         const region = config.deployment.region;
+        const hasIcebergDatabase = new cdk.CfnCondition(this, "HasIcebergDatabase", {
+            expression: cdk.Fn.conditionNot(cdk.Fn.conditionEquals(props.icebergDatabase || "", "")),
+        });
+        const glueResources = [
+            `arn:aws:glue:${region}:*:catalog`,
+            `arn:aws:glue:${region}:*:database/${props.quiltDatabase}`,
+            `arn:aws:glue:${region}:*:table/${props.quiltDatabase}/*`,
+            cdk.Fn.conditionIf(
+                hasIcebergDatabase.logicalId,
+                `arn:aws:glue:${region}:*:database/${props.icebergDatabase}`,
+                cdk.Aws.NO_VALUE,
+            ).toString(),
+            cdk.Fn.conditionIf(
+                hasIcebergDatabase.logicalId,
+                `arn:aws:glue:${region}:*:table/${props.icebergDatabase}/*`,
+                cdk.Aws.NO_VALUE,
+            ).toString(),
+        ];
         taskRole.addToPolicy(
             new iam.PolicyStatement({
                 actions: [
                     "glue:GetDatabase",
                     "glue:GetTable",
+                    "glue:GetTables",
                     "glue:GetPartitions",
                 ],
-                resources: [
-                    `arn:aws:glue:${region}:*:catalog`,
-                    `arn:aws:glue:${region}:*:database/${props.quiltDatabase}`,
-                    `arn:aws:glue:${region}:*:table/${props.quiltDatabase}/*`,
-                ],
+                resources: glueResources,
             }),
         );
 
@@ -300,6 +322,9 @@ export class FargateService extends Construct {
             // Application Configuration
             APP_ENV: "production",
             LOG_LEVEL: props.logLevel || "INFO",  // StackConfig doesn't include logging level - use parameter default
+
+            // Optional Iceberg database for bucketless search (v0.19.0+)
+            QUILT_ICEBERG_DATABASE: props.icebergDatabase || "",
         };
 
         if (props.packageEventQueue) {

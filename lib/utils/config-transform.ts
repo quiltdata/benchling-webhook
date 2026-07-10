@@ -25,7 +25,7 @@ import type { StackConfig } from "../types/stack-config";
  *
  * **Transformation logic:**
  * - Benchling: Only secretArn (credentials stored in secret)
- * - Quilt: Service endpoints (catalog, database, queueUrl, region, bucketWritePolicyArn, athenaUserPolicyArn)
+ * - Quilt: Service endpoints (catalog, database, queueUrl, region, bucketWritePolicyArn, athenaUserPolicyArn, icebergDatabase)
  * - Deployment: Infrastructure settings (region, imageTag, vpc, stackName)
  * - Security: Optional IP allowlist
  *
@@ -83,6 +83,9 @@ export function profileToStackConfig(
     }
     if (profile.quilt.athenaUserPolicyArn) {
         stackConfig.quilt.athenaUserPolicyArn = profile.quilt.athenaUserPolicyArn;
+    }
+    if (profile.quilt.icebergDatabase) {
+        stackConfig.quilt.icebergDatabase = profile.quilt.icebergDatabase;
     }
 
     // Deployment image tag

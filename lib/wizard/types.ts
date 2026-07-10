@@ -76,6 +76,8 @@ export interface StackQueryResult {
     bucketWritePolicyArn?: string;
     /** IAM managed policy ARN for Athena query access (from UserAthenaNonManagedRolePolicy) */
     athenaUserPolicyArn?: string;
+    /** Iceberg Glue database for single-query bucketless search (from IcebergDatabase) */
+    icebergDatabase?: string;
     /** Discovered VPC from Quilt stack (optional) */
     discoveredVpc?: DiscoveredVpcInfo;
 }
@@ -129,7 +131,7 @@ export interface ParameterCollectionResult {
         appDefinitionId: string;
     };
     packages: {
-        bucket: string;
+        bucket?: string;
         prefix: string;
         metadataKey: string;
         workflow?: string;

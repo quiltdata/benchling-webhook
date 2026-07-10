@@ -15,7 +15,7 @@ from benchling_api_client.v2.stable.models.section_ui_block_type import SectionU
 from benchling_api_client.v2.stable.models.section_ui_block_update import SectionUiBlockUpdate
 
 from .packages import Package
-from .pagination import PageState, encode_package_name
+from .pagination import PageState, encode_bucket_name, encode_package_name
 
 
 def create_markdown_block(content: str, block_id: str = "md1") -> MarkdownUiBlockUpdate:
@@ -90,8 +90,13 @@ def create_section(section_id: str, buttons: List[ButtonUiBlock]) -> SectionUiBl
     )
 
 
-def create_main_navigation_buttons(entry_id: str, update_enabled: bool = True) -> List:
-    """Create main view navigation buttons (Browse Package, Update Package).
+def create_main_navigation_buttons(
+    entry_id: str,
+    update_enabled: bool = True,
+    browse_enabled: bool = True,
+    bucketless: bool = False,
+) -> List:
+    """Create main view navigation buttons.
 
     Args:
         entry_id: Entry identifier for button IDs
@@ -99,21 +104,34 @@ def create_main_navigation_buttons(entry_id: str, update_enabled: bool = True) -
             Used during the initial 'Updating...' state so a second click cannot
             spawn a concurrent export workflow. Browse stays enabled — on a
             re-export the previous package version is still valid.
+        browse_enabled: Whether the primary package browse button is enabled.
+        bucketless: If True, render bucketless controls instead of primary-package
+            controls. Bucketless mode has no default package to browse or update.
 
     Returns:
         List containing section with navigation buttons
     """
-    buttons = [
-        create_button(
-            button_id=f"browse-files-{entry_id}-p0-s15",
-            text="Browse Package",
-        ),
-        create_button(
-            button_id=f"update-package-{entry_id}",
-            text="Update Package",
-            enabled=update_enabled,
-        ),
-    ]
+    if bucketless:
+        buttons = [
+            create_button(
+                button_id=f"refresh-canvas-{entry_id}",
+                text="Refresh Canvas",
+                enabled=update_enabled,
+            ),
+        ]
+    else:
+        buttons = [
+            create_button(
+                button_id=f"browse-files-{entry_id}-p0-s15",
+                text="Browse Package",
+                enabled=browse_enabled,
+            ),
+            create_button(
+                button_id=f"update-package-{entry_id}",
+                text="Update Package",
+                enabled=update_enabled,
+            ),
+        ]
 
     return [create_section("button-section-main", buttons)]
 
@@ -122,6 +140,8 @@ def create_browser_navigation_buttons(
     entry_id: str,
     page_state: PageState,
     package_name: Optional[str] = None,
+    bucket_name: Optional[str] = None,
+    bucketless: bool = False,
 ) -> List:
     """Create browser view navigation buttons (Prev, Next, Back, Metadata).
 
@@ -140,11 +160,14 @@ def create_browser_navigation_buttons(
     # If browsing a linked package, include package name in button IDs
     if package_name:
         encoded_pkg_name = encode_package_name(package_name)
-        prev_button_id = f"prev-page-linked-{entry_id}-pkg-{encoded_pkg_name}-p{prev_page}-s{page_state.page_size}"
-        next_button_id = f"next-page-linked-{entry_id}-pkg-{encoded_pkg_name}-p{next_page}-s{page_state.page_size}"
-        metadata_button_id = (
-            f"view-metadata-linked-{entry_id}-pkg-{encoded_pkg_name}-p{page_state.page_number}-s{page_state.page_size}"
+        bucket_part = f"-bucket-{encode_bucket_name(bucket_name)}" if bucket_name else ""
+        prev_button_id = (
+            f"prev-page-linked-{entry_id}-pkg-{encoded_pkg_name}{bucket_part}-p{prev_page}-s{page_state.page_size}"
         )
+        next_button_id = (
+            f"next-page-linked-{entry_id}-pkg-{encoded_pkg_name}{bucket_part}-p{next_page}-s{page_state.page_size}"
+        )
+        metadata_button_id = f"view-metadata-linked-{entry_id}-pkg-{encoded_pkg_name}{bucket_part}-p{page_state.page_number}-s{page_state.page_size}"
     else:
         # Default browsing (primary package)
         prev_button_id = f"prev-page-{entry_id}-p{prev_page}-s{page_state.page_size}"
@@ -164,7 +187,7 @@ def create_browser_navigation_buttons(
         ),
         create_button(
             button_id=f"back-to-package-{entry_id}",
-            text="Back to Package",
+            text="Back to Entry" if bucketless else "Back to Package",
             enabled=True,
         ),
         create_button(
@@ -181,6 +204,8 @@ def create_metadata_navigation_buttons(
     entry_id: str,
     page_state: PageState,
     package_name: Optional[str] = None,
+    bucket_name: Optional[str] = None,
+    bucketless: bool = False,
 ) -> List:
     """Create metadata view navigation buttons (Back to Browser, Back to Package).
 
@@ -196,9 +221,8 @@ def create_metadata_navigation_buttons(
     # If browsing a linked package, include package name in "Back to Browser" button
     if package_name:
         encoded_pkg_name = encode_package_name(package_name)
-        back_to_browser_button_id = (
-            f"browse-linked-{entry_id}-pkg-{encoded_pkg_name}-p{page_state.page_number}-s{page_state.page_size}"
-        )
+        bucket_part = f"-bucket-{encode_bucket_name(bucket_name)}" if bucket_name else ""
+        back_to_browser_button_id = f"browse-linked-{entry_id}-pkg-{encoded_pkg_name}{bucket_part}-p{page_state.page_number}-s{page_state.page_size}"
     else:
         # Default browsing (primary package)
         back_to_browser_button_id = f"browse-files-{entry_id}-p{page_state.page_number}-s{page_state.page_size}"
@@ -211,7 +235,7 @@ def create_metadata_navigation_buttons(
         ),
         create_button(
             button_id=f"back-to-package-{entry_id}",
-            text="Back to Package",
+            text="Back to Entry" if bucketless else "Back to Package",
             enabled=True,
         ),
     ]
@@ -219,7 +243,7 @@ def create_metadata_navigation_buttons(
     return [create_section("button-section-metadata", buttons)]
 
 
-def create_linked_package_browse_buttons(entry_id: str, packages: List[Package]) -> List:
+def create_linked_package_browse_buttons(entry_id: str, packages: List[Package], include_bucket: bool = False) -> List:
     """Create Browse buttons for linked packages.
 
     Creates a horizontal row of Browse buttons below the Linked Packages section.
@@ -242,11 +266,11 @@ def create_linked_package_browse_buttons(entry_id: str, packages: List[Package])
         # Encode package name for button ID (replace / with --)
         encoded_pkg_name = encode_package_name(pkg.package_name)
 
-        # Create button ID with default pagination (page 0, size 15)
-        button_id = f"browse-linked-{entry_id}-pkg-{encoded_pkg_name}-p0-s15"
+        bucket_part = f"-bucket-{encode_bucket_name(pkg.bucket)}" if include_bucket else ""
+        button_id = f"browse-linked-{entry_id}-pkg-{encoded_pkg_name}{bucket_part}-p0-s15"
 
         # Create Browse button
-        button = create_button(button_id, pkg.package_name)
+        button = create_button(button_id, f"Browse {pkg.package_name}")
         buttons.append(button)
 
     # Create a section with all browse buttons in horizontal layout

@@ -4,7 +4,8 @@
  * Tests the QuiltConfig interface updates for service environment variables.
  */
 
-import { QuiltConfig } from "../../lib/types/config";
+import Ajv from "ajv";
+import { ProfileConfigSchema, QuiltConfig } from "../../lib/types/config";
 
 describe("QuiltConfig", () => {
     test("stackArn is optional for explicit service configuration", () => {
@@ -54,5 +55,51 @@ describe("QuiltConfig", () => {
         };
         expect(config).toBeDefined();
         expect(config.athenaUserWorkgroup).toBe("quilt-workgroup");
+    });
+
+    test("icebergDatabase can be provided for bucketless Iceberg search", () => {
+        const config: QuiltConfig = {
+            catalog: "quilt.example.com",
+            database: "quilt_db",
+            queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
+            region: "us-east-1",
+            icebergDatabase: "iceberg_db",
+        };
+        expect(config.icebergDatabase).toBe("iceberg_db");
+    });
+
+    test("profile schema accepts optional icebergDatabase", () => {
+        const ajv = new Ajv({ allErrors: true, strict: false });
+        const validate = ajv.compile(ProfileConfigSchema);
+        const valid = validate({
+            quilt: {
+                catalog: "quilt.example.com",
+                database: "quilt_db",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue",
+                region: "us-east-1",
+                icebergDatabase: "iceberg_db",
+            },
+            benchling: {
+                tenant: "test-tenant",
+                clientId: "client_123",
+                appDefinitionId: "app_123",
+            },
+            packages: {
+                prefix: "benchling",
+                metadataKey: "experiment_id",
+            },
+            deployment: {
+                region: "us-east-1",
+            },
+            _metadata: {
+                version: "0.19.0",
+                createdAt: "2026-07-06T00:00:00Z",
+                updatedAt: "2026-07-06T00:00:00Z",
+                source: "wizard",
+            },
+        });
+
+        expect(validate.errors).toBeNull();
+        expect(valid).toBe(true);
     });
 });

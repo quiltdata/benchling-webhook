@@ -875,6 +875,18 @@ For questions about the data, refer to the original Benchling entry.
         """
         entry_id = payload.entry_id
 
+        if not self.config.s3_bucket_name:
+            self.logger.info(
+                "Bucketless mode skipped entry packaging workflow",
+                entry_id=entry_id,
+                event_type=payload.event_type,
+            )
+            return {
+                "status": "SKIPPED",
+                "entryId": entry_id,
+                "message": "Bucketless mode does not create a default package.",
+            }
+
         self.logger.info(
             "Starting workflow execution",
             entry_id=entry_id,

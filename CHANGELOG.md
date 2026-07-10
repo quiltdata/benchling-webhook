@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-07-03
+
+### Added
+
+- Bucketless deployments are now supported: the package bucket configuration is optional, setup and secret creation can omit it, and runtime entry/canvas events skip default package creation when no bucket is configured.
+- Linked package discovery now searches all available Quilt package-view buckets in bucketless mode and preserves the source bucket when browsing linked package files or metadata from Benchling canvases.
+
+### Changed
+
+- Bucket-specific S3 IAM permissions are only added when a package bucket is configured, avoiding invalid empty-bucket resource ARNs for bucketless stacks.
+
 ## [0.18.0] - 2026-06-15
 
 ### Added

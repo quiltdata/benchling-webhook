@@ -14,6 +14,8 @@
 import { spawn } from "child_process";
 import { resolve } from "path";
 import { existsSync } from "fs";
+import { config as dotenvConfig } from "dotenv";
+import { expand as dotenvExpand } from "dotenv-expand";
 import { XDGConfig } from "../lib/xdg-config";
 import { ProfileConfig } from "../lib/types/config";
 
@@ -145,6 +147,20 @@ function loadProfile(profileName: string): ProfileConfig {
 }
 
 /**
+ * Load repository-local .env for local launch/test convenience.
+ *
+ * Profile config remains authoritative for managed deployment values; .env
+ * only fills process environment values that are not represented in profiles,
+ * such as local-only queue URLs.
+ */
+function loadLocalEnv(): void {
+    const envPath = resolve(__dirname, "..", ".env");
+    if (existsSync(envPath)) {
+        dotenvExpand(dotenvConfig({ path: envPath }));
+    }
+}
+
+/**
  * Extract secret name from Secrets Manager ARN
  *
  * AWS Secrets Manager automatically appends a 6-character random suffix to secret names
@@ -201,6 +217,7 @@ function buildEnvVars(config: ProfileConfig, mode: LaunchMode, options: LaunchOp
         QUILT_WEB_HOST: config.quilt.catalog,
         ATHENA_USER_DATABASE: config.quilt.database,
         ATHENA_USER_WORKGROUP: config.quilt.athenaUserWorkgroup || "primary",
+        QUILT_ICEBERG_DATABASE: config.quilt.icebergDatabase || "",
         PACKAGER_SQS_URL: config.quilt.queueUrl,
 
         // IAM Policy ARNs for ECS task role (attached directly, no role assumption needed)
@@ -336,7 +353,7 @@ function spawnDockerCompose(
     stdio: "inherit" | "pipe" = "inherit",
 ): ReturnType<typeof spawn> {
     // Debug: Log key environment variables being passed
-    const keyVars = ["QUILT_WEB_HOST", "ATHENA_USER_DATABASE", "PACKAGER_SQS_URL", "BenchlingSecret"];
+    const keyVars = ["QUILT_WEB_HOST", "ATHENA_USER_DATABASE", "QUILT_ICEBERG_DATABASE", "PACKAGER_SQS_URL", "BenchlingSecret"];
     const debug = process.env.DEBUG_XDG === "true";
     if (debug) {
         console.log("DEBUG: Spawning docker-compose with environment:");
@@ -767,6 +784,9 @@ async function launchDockerDev(envVars: EnvVars, options: LaunchOptions): Promis
  */
 async function main(): Promise<void> {
     try {
+        // Load local .env before building process-backed environment variables.
+        loadLocalEnv();
+
         // Parse command-line arguments
         const options = parseArguments(process.argv);
 

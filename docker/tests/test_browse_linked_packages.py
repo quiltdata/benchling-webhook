@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.canvas_blocks import create_linked_package_browse_buttons
+from src.canvas_blocks import create_linked_package_browse_buttons, create_main_navigation_buttons
 from src.packages import Package
 from src.pagination import decode_package_name, encode_package_name, parse_browse_linked_button_id
 
@@ -294,7 +294,7 @@ class TestLinkedPackageBrowseButtons:
         buttons = result[0].children
         assert len(buttons) == 1
         assert buttons[0].type == "BUTTON"
-        assert buttons[0].text == "benchling/exp-001"
+        assert buttons[0].text == "Browse benchling/exp-001"
         assert buttons[0].id == "browse-linked-etr_123-pkg-benchling--exp-001-p0-s15"
         assert buttons[0].enabled is True
 
@@ -320,6 +320,9 @@ class TestLinkedPackageBrowseButtons:
         assert buttons[0].id == "browse-linked-etr_abc-pkg-benchling--exp-001-p0-s15"
         assert buttons[1].id == "browse-linked-etr_abc-pkg-benchling--exp-002-p0-s15"
         assert buttons[2].id == "browse-linked-etr_abc-pkg-benchling--exp-003-p0-s15"
+        assert buttons[0].text == "Browse benchling/exp-001"
+        assert buttons[1].text == "Browse benchling/exp-002"
+        assert buttons[2].text == "Browse benchling/exp-003"
 
         # All buttons should be enabled
         assert all(btn.enabled is True for btn in buttons)
@@ -430,7 +433,26 @@ class TestLinkedPackageBrowseButtons:
         assert hasattr(button, "id")
         assert hasattr(button, "text")
         assert hasattr(button, "enabled")
-        assert button.type == "BUTTON"
+
+    def test_bucketless_main_navigation_has_refresh_only(self):
+        """Bucketless main Canvas should not show unusable primary package buttons."""
+        result = create_main_navigation_buttons("etr_123", bucketless=True)
+
+        assert len(result) == 1
+        buttons = result[0].children
+        assert len(buttons) == 1
+        assert buttons[0].id == "refresh-canvas-etr_123"
+        assert buttons[0].text == "Refresh Canvas"
+        assert buttons[0].enabled is True
+
+    def test_bucketless_main_navigation_disables_refresh_while_updating(self):
+        """The initial checking state should not allow duplicate refresh clicks."""
+        result = create_main_navigation_buttons("etr_123", update_enabled=False, bucketless=True)
+
+        buttons = result[0].children
+        assert len(buttons) == 1
+        assert buttons[0].text == "Refresh Canvas"
+        assert buttons[0].enabled is False
 
 
 class TestRoundtripIntegration:

@@ -2,7 +2,33 @@
 
 import pytest
 
-from src.pagination import PageState, paginate_items, parse_button_id
+from src.pagination import (
+    PageState,
+    paginate_items,
+    parse_browse_linked_button_id_with_bucket,
+    parse_button_id,
+)
+
+
+class TestParseBrowseLinkedButtonIdWithBucket:
+    """Tests for the optional '-bucket-' segment parsing."""
+
+    def test_no_bucket_segment(self):
+        result = parse_browse_linked_button_id_with_bucket("browse-linked-etr_123-pkg-benchling--exp-001-p0-s15")
+        assert result == ("etr_123", "benchling/exp-001", None, 0, 15)
+
+    def test_valid_bucket_segment(self):
+        result = parse_browse_linked_button_id_with_bucket(
+            "browse-linked-etr_456-pkg-benchling--exp-002-bucket-quiltdata-test-p0-s10"
+        )
+        assert result == ("etr_456", "benchling/exp-002", "quiltdata-test", 0, 10)
+
+    def test_bucket_literal_in_package_name_is_not_split(self):
+        """A package name containing '-bucket-' must not be mis-parsed as a bucket
+        suffix when the trailing segment is not a valid S3 bucket name."""
+        # Trailing "x" is too short to be a valid bucket name (min 3 chars).
+        result = parse_browse_linked_button_id_with_bucket("browse-linked-etr_789-pkg-foo--my-bucket-x-p1-s20")
+        assert result == ("etr_789", "foo/my-bucket-x", None, 1, 20)
 
 
 class TestPageState:

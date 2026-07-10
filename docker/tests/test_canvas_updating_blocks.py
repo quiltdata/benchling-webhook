@@ -63,7 +63,27 @@ def mock_benchling():
 
 @pytest.fixture
 def canvas_manager(mock_benchling, mock_config, mock_payload):
-    return CanvasManager(benchling=mock_benchling, config=mock_config, payload=mock_payload)
+    package_query = Mock()
+    package_query.find_unique_packages.return_value = {"packages": []}
+    return CanvasManager(
+        benchling=mock_benchling,
+        config=mock_config,
+        payload=mock_payload,
+        package_query=package_query,
+    )
+
+
+@pytest.fixture
+def bucketless_canvas_manager(mock_benchling, mock_config, mock_payload):
+    mock_config.s3_bucket_name = ""
+    package_query = Mock()
+    package_query.find_unique_packages.return_value = {"packages": []}
+    return CanvasManager(
+        benchling=mock_benchling,
+        config=mock_config,
+        payload=mock_payload,
+        package_query=package_query,
+    )
 
 
 def _dump_blocks(label: str, block_dicts: list) -> None:
@@ -194,3 +214,37 @@ class TestUpdatingCanvasBlocks:
         assert "FINAL 'Updated at ...' CANVAS" in captured.out
         assert "Updating..." in captured.out
         assert "Updated at 2026-04-15 12:00 UTC" in captured.out
+
+    def test_bucketless_updating_canvas_has_active_refresh(self, bucketless_canvas_manager):
+        """Bucketless checking state should leave Refresh Canvas clickable."""
+        updating = bucketless_canvas_manager._make_blocks(is_updating=True)
+        buttons = updating[0].children
+
+        assert len(buttons) == 1
+        assert buttons[0].text == "Refresh Canvas"
+        assert buttons[0].enabled is True
+        assert "Bucketless mode is checking for linked packages" in updating[1].value
+        assert "Updating..." in updating[-1].value
+
+    def test_bucketless_final_canvas_has_refresh_and_no_package_buttons(self, bucketless_canvas_manager):
+        """Final bucketless Canvas should be actionable without implying a default package exists."""
+        final = bucketless_canvas_manager._make_blocks()
+        buttons = final[0].children
+
+        assert len(buttons) == 1
+        assert buttons[0].text == "Refresh Canvas"
+        assert buttons[0].enabled is True
+        assert "Browse Package" not in json.dumps(blocks_to_dict(final))
+        assert "Update Package" not in json.dumps(blocks_to_dict(final))
+        assert "No default package bucket is configured" in final[1].value
+        assert "No linked packages found in accessible buckets" in final[1].value
+        assert "Updating..." not in final[-1].value
+
+    def test_bucketless_async_handle_sets_updated_at(self, bucketless_canvas_manager):
+        """Bucketless final render should mark the Canvas as updated, not pending."""
+        bucketless_canvas_manager.update_canvas = Mock()
+
+        bucketless_canvas_manager._handle()
+
+        kwargs = bucketless_canvas_manager.update_canvas.call_args.kwargs
+        assert kwargs["updated_at"].endswith(" UTC")

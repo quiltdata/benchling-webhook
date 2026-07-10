@@ -296,7 +296,7 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
         client_id: config.benchling.clientId,
         client_secret: clientSecret,
         app_definition_id: config.benchling.appDefinitionId,
-        user_bucket: config.packages.bucket,
+        ...(config.packages.bucket ? { user_bucket: config.packages.bucket } : {}),
         pkg_prefix: config.packages.prefix,
         pkg_key: config.packages.metadataKey,
         ...(config.packages.workflow ? { workflow: config.packages.workflow } : {}),
@@ -306,6 +306,27 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
     };
 
     return JSON.stringify(secretData, null, 2);
+}
+
+/**
+ * Redacts sensitive fields from a secret value JSON string for safe display.
+ *
+ * Never expose the plaintext client secret in console output (e.g. dry-run).
+ *
+ * @param secretValue - Secret value as JSON string (from buildSecretValue)
+ * @returns JSON string with client_secret masked
+ */
+function maskSecretValue(secretValue: string): string {
+    try {
+        const parsed = JSON.parse(secretValue) as Record<string, unknown>;
+        if (typeof parsed.client_secret === "string" && parsed.client_secret.length > 0) {
+            parsed.client_secret = "***REDACTED***";
+        }
+        return JSON.stringify(parsed, null, 2);
+    } catch {
+        // If parsing fails, do not risk leaking the raw value
+        return "<unable to render secret value>";
+    }
 }
 
 /**
@@ -389,7 +410,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
         console.log("\n=== DRY RUN MODE ===");
         console.log(`Mode: ${isIntegratedMode ? "Integrated" : "Standalone"}`);
         console.log(`Would sync secret: ${secretName}`);
-        console.log(`Secret value:\n${secretValue}`);
+        console.log(`Secret value:\n${maskSecretValue(secretValue)}`);
         return results;
     }
 
