@@ -150,11 +150,12 @@ async function createOrUpdateSecret(
     const secretString = JSON.stringify(secretData, null, 2);
 
     if (dryRun) {
+        const maskedData = { ...secretData, client_secret: "***REDACTED***" };
         console.log(chalk.blue("\n🔍 DRY RUN MODE - No changes will be made\n"));
         console.log(chalk.cyan("Secret Name:"), secretName);
         console.log(chalk.cyan("Region:"), region);
         console.log(chalk.cyan("Secret Content:"));
-        console.log(chalk.gray(secretString));
+        console.log(chalk.gray(JSON.stringify(maskedData, null, 2)));
         return;
     }
 
