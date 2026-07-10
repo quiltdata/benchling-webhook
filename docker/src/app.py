@@ -1202,6 +1202,7 @@ def create_app() -> FastAPI:
         if config.s3_bucket_name:
             # A bucket was configured after this (bucketless) canvas was drawn:
             # initiate default package creation instead of re-rendering bucketless.
+            assert entry_packager is not None
             assert packaging_queue_url is not None, "packaging_queue_url must be set when not in degraded mode"
             sqs_message_id = publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
             CanvasManager(benchling, config, payload).handle_async()
