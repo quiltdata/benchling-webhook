@@ -234,6 +234,38 @@ class TestFastAPIApp:
         updating_manager.send_updating_canvas.assert_called_once()
         final_manager.handle_async.assert_called_once()
 
+    def test_canvas_endpoint_refresh_canvas_creates_default_package_when_bucket_configured(
+        self, client, mock_config, mock_publish
+    ):
+        """Refresh Canvas on a stale bucketless canvas should create the default
+        package once a bucket has been configured (not return an error)."""
+        mock_config.s3_bucket_name = "test-bucket"
+        payload = {
+            "channel": "app_signals",
+            "message": {
+                "type": "v2.canvas.userInteracted",
+                "buttonId": "refresh-canvas-etr_123456",
+                "canvasId": "canvas_123",
+            },
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        with patch("src.app.CanvasManager") as mock_canvas_manager:
+            updating_manager = MagicMock()
+            final_manager = MagicMock()
+            mock_canvas_manager.side_effect = [updating_manager, final_manager]
+
+            response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "ACCEPTED"
+        assert data["message"] == "Creating default package..."
+        assert data["sqs_message_id"] == "msg-id-test"
+        mock_publish.assert_called_once()
+        updating_manager.send_updating_canvas.assert_called_once()
+        final_manager.handle_async.assert_called_once()
+
     @pytest.mark.local
     def test_canvas_endpoint_handles_browse_files_button(self, client, mock_benchling_client):
         """Test /canvas endpoint routes Browse Files button to correct handler.
