@@ -1186,16 +1186,40 @@ def create_app() -> FastAPI:
         return JSONResponse({"status": "ACCEPTED", "message": "Returning to canvas..."}, status_code=202)
 
     def handle_refresh_canvas(payload, button_id, benchling, config):
-        """Handle bucketless Refresh Canvas button click."""
+        """Handle Refresh Canvas button click.
+
+        The button is rendered on the bucketless canvas. Re-check the current
+        config: if a default package bucket has since been configured (e.g. the
+        webhook was reconfigured and restarted with a bucket after this canvas
+        was drawn), transition to the bucketed flow — enqueue a packaging
+        request to create the default package and render the standard canvas.
+        Otherwise, re-run the bucketless linked-package lookup.
+        """
         logger.info("Refresh canvas requested", entry_id=payload.entry_id, button_id=button_id)
 
+        _send_updating_canvas_best_effort(payload)
+
         if config.s3_bucket_name:
+            # A bucket was configured after this (bucketless) canvas was drawn:
+            # initiate default package creation instead of re-rendering bucketless.
+            assert packaging_queue_url is not None, "packaging_queue_url must be set when not in degraded mode"
+            sqs_message_id = publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
+            CanvasManager(benchling, config, payload).handle_async()
+            logger.info(
+                "Refresh canvas initiated default package creation",
+                entry_id=payload.entry_id,
+                canvas_id=payload.canvas_id,
+                sqs_message_id=sqs_message_id,
+            )
             return JSONResponse(
-                {"status": "ignored", "message": "Refresh Canvas is only available in bucketless mode."},
-                status_code=400,
+                {
+                    "status": "ACCEPTED",
+                    "message": "Creating default package...",
+                    "sqs_message_id": sqs_message_id,
+                },
+                status_code=202,
             )
 
-        _send_updating_canvas_best_effort(payload)
         _send_bucketless_final_canvas_best_effort(payload)
         return JSONResponse({"status": "ACCEPTED", "message": "Refreshing canvas..."}, status_code=202)
 
