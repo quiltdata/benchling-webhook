@@ -343,7 +343,9 @@ export async function runParameterCollection(
             {
                 type: "input",
                 name: "bucket",
-                message: "Package S3 Bucket (optional, empty for bucketless mode):",
+                message: existingConfig?.packages?.bucket
+                    ? "Package S3 Bucket (Enter keeps current, '-' clears to bucketless mode):"
+                    : "Package S3 Bucket (optional, empty for bucketless mode):",
                 default: existingConfig?.packages?.bucket || "",
             },
             {
@@ -365,7 +367,11 @@ export async function runParameterCollection(
                 default: existingConfig?.packages?.workflow || "",
             },
         ]);
-        bucket = packageAnswers.bucket.trim() || undefined;
+        // "-" is an explicit sentinel to clear a previously-configured bucket
+        // (bucketless mode). inquirer returns the default on empty input, so a
+        // sentinel is the only way to unset an existing value from the wizard.
+        const bucketInput = packageAnswers.bucket.trim();
+        bucket = bucketInput === "-" ? undefined : bucketInput || undefined;
         prefix = packageAnswers.prefix;
         metadataKey = packageAnswers.metadataKey;
         workflow = packageAnswers.workflow.trim() || undefined;
