@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-07-14
+
+### Fixed
+
+- Bucketless Iceberg lookup no longer double-encodes `user_meta`. The query projected `json_format(CAST(m.metadata AS JSON))`, but Trino's VARCHAR→JSON cast wraps the JSON document string as a JSON *string value* instead of parsing it — so every returned row logged "Athena metadata JSON was not an object" and the result's metadata silently degraded to the matched `{key: value}` fallback (canvas rendering was unaffected). The projection now selects the column raw, matching the legacy `_packages-view` path, and `_parse_user_meta` defensively decodes a double-encoded string (#399)
+
 ## [0.19.0] - 2026-07-03
 
 ### Added
