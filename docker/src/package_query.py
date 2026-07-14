@@ -232,6 +232,13 @@ class PackageQuery:
 
         try:
             parsed = json.loads(raw_meta)
+            if isinstance(parsed, str):
+                # Double-encoded (e.g. a JSON string wrapping the document, as
+                # produced by Trino's VARCHAR→JSON cast, #399): decode once more.
+                try:
+                    parsed = json.loads(parsed)
+                except json.JSONDecodeError:
+                    pass  # genuinely a string value; falls to the warning below
             if isinstance(parsed, dict):
                 return parsed
             self.logger.warning(
@@ -490,6 +497,13 @@ class PackageQuery:
         ``TYPE_MISMATCH: Expression m.metadata is not of type ROW``, so we use
         json_extract_scalar just like the parquet _packages-view path.
 
+        The projection selects the column raw (``m.metadata AS user_meta``),
+        also like the parquet path. Do NOT wrap it in
+        ``json_format(CAST(m.metadata AS JSON))``: Trino's VARCHAR→JSON cast
+        does not parse the string — it wraps it as a JSON *string value* —
+        so json_format double-encodes and json.loads yields a str, not a
+        dict (#399).
+
         Args:
             buckets: List of bucket names to search
             key: Metadata key to filter on (JSON path field name)
@@ -507,7 +521,7 @@ class PackageQuery:
                 r.pkg_name,
                 r.timestamp,
                 m.message,
-                json_format(CAST(m.metadata AS JSON)) AS user_meta,
+                m.metadata AS user_meta,
                 '{b}' AS _src_bucket
             FROM "{idb}"."{b}_package_revision" r
             JOIN "{idb}"."{b}_package_manifest" m ON r.top_hash = m.top_hash
