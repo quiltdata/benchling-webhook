@@ -1,5 +1,6 @@
 """Tests for package_query module."""
 
+import json
 from unittest.mock import Mock, patch
 
 import pytest
@@ -417,8 +418,11 @@ class TestPackageQueryIceberg:
         # Should reference both buckets
         assert "bucket-a" in sql
         assert "bucket-b" in sql
-        # Should serialize metadata deterministically for Python parsing
-        assert "json_format(CAST(m.metadata AS JSON)) AS user_meta" in sql
+        # metadata is already a JSON document string; project it raw. Wrapping
+        # it in json_format(CAST(... AS JSON)) double-encodes, because Trino's
+        # VARCHAR→JSON cast wraps the string instead of parsing it (#399).
+        assert "m.metadata AS user_meta" in sql
+        assert "json_format" not in sql
         # metadata is a JSON string (from user_meta), not a native STRUCT, so
         # it must be filtered via json_extract_scalar to avoid TYPE_MISMATCH.
         assert "json_extract_scalar(m.metadata, '$.experiment_id')" in sql
@@ -505,6 +509,52 @@ class TestPackageQueryIceberg:
         assert result["results"]["package_info"]["bucket-a/benchling/pkg-a"]["metadata"] == {
             "experiment_id": "EXP-1",
         }
+
+    @patch("src.package_query.RoleManager")
+    def test_iceberg_double_encoded_metadata_parses(self, mock_role_manager_class):
+        """Double-encoded user_meta (a JSON string wrapping the document, as
+        produced by Trino's VARCHAR→JSON cast, #399) must round-trip to the
+        full metadata dict, not the {key: value} fallback."""
+        mock_athena = Mock()
+        mock_glue = Mock()
+
+        mock_role_manager = Mock()
+        mock_session = Mock()
+        mock_session.client.side_effect = lambda service, **kw: {
+            "athena": mock_athena,
+            "glue": mock_glue,
+        }[service]
+        mock_role_manager._get_or_create_session.return_value = (mock_session, None)
+        mock_role_manager.role_arn = None
+        mock_role_manager._session = None
+        mock_role_manager._expires_at = None
+        mock_role_manager_class.return_value = mock_role_manager
+
+        query = PackageQuery(
+            bucket="",
+            catalog_url="catalog.example.com",
+            database="test_db",
+            region="us-west-2",
+            iceberg_database="iceberg_db",
+        )
+
+        metadata = {"experiment_id": "EXP-1", "entry_id": "etr_123", "canvas_id": "cnvs_abc"}
+        query._list_iceberg_manifest_buckets = Mock(return_value=["bucket-a"])
+        query._execute_query = Mock(
+            return_value=[
+                {
+                    "pkg_name": "benchling/pkg-a",
+                    "timestamp": "latest",
+                    "message": "A",
+                    "user_meta": json.dumps(json.dumps(metadata)),
+                    "_src_bucket": "bucket-a",
+                }
+            ]
+        )
+
+        result = query.find_unique_packages("experiment_id", "EXP-1")
+
+        assert result["results"]["package_info"]["bucket-a/benchling/pkg-a"]["metadata"] == metadata
 
     @patch("src.package_query.RoleManager")
     def test_iceberg_glue_access_denied_reports_glue_database(self, mock_role_manager_class):
