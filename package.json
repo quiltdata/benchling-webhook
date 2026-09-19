@@ -80,7 +80,7 @@
     "url": "git+https://github.com/quiltdata/benchling-webhook.git"
   },
   "devDependencies": {
-    "@eslint/js": "^9.22.0",
+    "@eslint/js": "^10.0.0",
     "@types/adm-zip": "^0.5.7",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
@@ -91,7 +91,7 @@
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
     "esbuild": "0.28.0",
-    "eslint": "^9.22.0",
+    "eslint": "^10.0.0",
     "globals": "^17.0.0",
     "jest": "^30.0.0",
     "ts-jest": "^29.2.5",
