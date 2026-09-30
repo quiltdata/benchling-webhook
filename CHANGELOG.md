@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-29
+
+### Added
+
+- Linked packages now include packages built from an RO-Crate that conforms to the [Quilt RO-Crate profile](https://w3id.org/quilt/ro-crate) and names the entry. Alongside the configured `pkg_key` (default `experiment_id`), the lookup matches packages whose `eln_entry` list contains the entry's display ID, on the `_packages-view`, bucketless fanout, and Iceberg search paths. No configuration is needed; `experiment_id` links are unchanged, and a package linked both ways is listed once (#401)
+- Linked packages built from an RO-Crate show the crate's creator, producer, instrument, and instrument ID on the App Canvas (#401)
+- README section on linking data to an entry by writing an RO-Crate (#401)
+
+### Fixed
+
+- Bucketless Iceberg lookup no longer double-encodes `user_meta`. The query projected `json_format(CAST(m.metadata AS JSON))`, which wraps the JSON document as a JSON string, so every row logged "Athena metadata JSON was not an object" and its metadata degraded to the matched key/value pair. The projection now selects the column raw, and `_parse_user_meta` decodes a double-encoded string defensively (#399)
+- The `_packages-view` lookup now escapes quotes in the entry display ID, as the Iceberg lookup already did
+- `scripts/check-iceberg-search.sh` now joins the `latest` tag on `top_hash`, as the service does, so it no longer reports matches from older revisions
+
 ## [0.19.0] - 2026-07-03
 
 ### Added
