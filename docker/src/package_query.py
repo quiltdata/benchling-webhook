@@ -51,6 +51,10 @@ _ICEBERG_MANIFEST_SUFFIX = "_package_manifest"
 # Suffix for the per-bucket parquet-backed packages-view.
 _PACKAGES_VIEW_SUFFIX = "_packages-view"
 
+# Most packages one _packages-view search returns per bucket. The canvas shows a
+# line and a Browse button for each linked package, so the list stays bounded.
+_PACKAGES_VIEW_LIMIT = 100
+
 _METADATA_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 # Package-metadata key where the Quilt RO-Crate profile records the notebook
@@ -376,12 +380,22 @@ class PackageQuery:
         view_name = f'"{self.database}"."{bucket}_packages-view"'
         predicate = self._metadata_match_predicate("user_meta", key, value, array_key)
 
+        # Fill the LIMIT deterministically. Packages linked by `key` rank ahead of
+        # those matched only through `array_key`, so crate packages never push out
+        # a package that was linked before array matching existed. Ties break by
+        # name.
+        order_by = "pkg_name"
+        if array_key:
+            key_match = self._metadata_match_predicate("user_meta", key, value)
+            order_by = f"CASE WHEN {key_match} THEN 0 ELSE 1 END, pkg_name"
+
         query = f"""
         SELECT pkg_name, timestamp, message, user_meta
         FROM {view_name}
         WHERE {predicate}
             AND timestamp = 'latest'
-        LIMIT 100
+        ORDER BY {order_by}
+        LIMIT {_PACKAGES_VIEW_LIMIT}
         """
 
         rows = self._execute_query(query, timeout=timeout)

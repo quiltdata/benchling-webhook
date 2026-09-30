@@ -13,6 +13,10 @@ All notable changes to this project will be documented in this file.
 - Linked packages built from an RO-Crate show the crate's creator, producer, instrument, and instrument ID on the App Canvas (#401)
 - README section on linking data to an entry by writing an RO-Crate (#401)
 
+### Changed
+
+- The `_packages-view` lookup still lists at most 100 packages per bucket, but now picks them deterministically: packages linked by `pkg_key` first, then those linked only by `eln_entry`, each in name order, so crate packages never displace a tagged one (#401)
+
 ### Fixed
 
 - Bucketless Iceberg lookup no longer double-encodes `user_meta`. The query projected `json_format(CAST(m.metadata AS JSON))`, which wraps the JSON document as a JSON string, so every row logged "Athena metadata JSON was not an object" and its metadata degraded to the matched key/value pair. The projection now selects the column raw, and `_parse_user_meta` decodes a double-encoded string defensively (#399)

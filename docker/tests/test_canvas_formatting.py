@@ -2,6 +2,7 @@
 
 from src.canvas_formatting import (
     dict_to_markdown_list,
+    escape_markdown,
     format_crate_roles,
     format_linked_packages,
     format_package_header,
@@ -156,8 +157,9 @@ class TestFormatLinkedPackages:
         assert format_linked_packages([]) == ""
 
     def test_tagged_package_renders_link_only(self):
-        """A package tagged with experiment_id renders exactly as before."""
-        pkg = Package("catalog.example.com", "bucket", "lab/tagged", metadata={"experiment_id": "EXP25000017"})
+        """A package tagged with experiment_id renders exactly as before, even with list-valued role keys."""
+        metadata = {"experiment_id": "EXP25000017", "creator": ["Lab team"], "instrument": ["Plate Reader 1"]}
+        pkg = Package("catalog.example.com", "bucket", "lab/tagged", metadata=metadata)
 
         assert format_linked_packages([pkg]) == (
             "\n### Linked Packages\n\n" f"* [lab/tagged]({pkg.catalog_url}) [[🔄 sync]]({pkg.make_sync_url()})\n"
@@ -194,12 +196,23 @@ class TestFormatCrateRoles:
             "  * **Creator**: Jane Doe\n"
         )
 
+    def test_only_crate_packages_get_roles(self):
+        """Roles are shown only when the metadata carries the profile's eln_entry list."""
+        tagged = {"experiment_id": "EXP25000017", "creator": ["Lab team"]}
+
+        assert format_crate_roles(tagged) == ""
+        assert format_crate_roles({**tagged, "eln_entry": "EXP25000017"}) == ""
+        assert format_crate_roles({**tagged, "eln_entry": ["EXP25000017"]}) == "  * **Creator**: Lab team\n"
+
     def test_skips_scalar_values(self):
-        """Webhook-created packages carry creator as a string from entry.json; that is not a crate role."""
-        assert format_crate_roles({"creator": "Jane Doe <jane@example.com>", "authors": ["Jane Doe"]}) == ""
+        """A scalar role, like the creator string in a webhook package's entry.json, is not a crate role."""
+        metadata = {"eln_entry": ["EXP25000017"], "creator": "Jane Doe <jane@example.com>", "authors": ["Jane Doe"]}
+
+        assert format_crate_roles(metadata) == ""
 
     def test_skips_empty_and_non_string_values(self):
         metadata = {
+            "eln_entry": ["EXP25000017"],
             "creator": [],
             "producer": ["", "  ", None, 7, {"name": "Lab"}],
             "instrument": ["Plate Reader 1"],
@@ -208,6 +221,29 @@ class TestFormatCrateRoles:
         assert format_crate_roles(metadata) == "  * **Instrument**: Plate Reader 1\n"
 
     def test_collapses_whitespace_so_values_stay_in_their_bullet(self):
-        assert format_crate_roles({"creator": ["Jane\n# Heading", "  John   Roe "]}) == (
-            "  * **Creator**: Jane # Heading, John Roe\n"
+        metadata = {"eln_entry": ["EXP25000017"], "creator": ["Jane\n# Heading", "  John   Roe "]}
+
+        assert format_crate_roles(metadata) == "  * **Creator**: Jane # Heading, John Roe\n"
+
+    def test_escapes_markdown_so_values_cannot_inject_links(self):
+        metadata = {
+            "eln_entry": ["EXP25000017"],
+            "creator": ["[Support](https://attacker.example)"],
+            "producer": ["<img src=x>", r"a*b_c`d\e"],
+        }
+
+        assert format_crate_roles(metadata) == (
+            r"  * **Creator**: \[Support\](https://attacker.example)" + "\n"
+            r"  * **Producer**: \<img src=x\>, a\*b\_c\`d\\e" + "\n"
         )
+
+
+class TestEscapeMarkdown:
+    """Test suite for escape_markdown function."""
+
+    def test_plain_names_are_unchanged(self):
+        for name in ["Jane Doe", "Assay Development", "Plate Reader 1", "INST-000456", "O'Brien (Lab)"]:
+            assert escape_markdown(name) == name
+
+    def test_escapes_every_inline_markdown_character(self):
+        assert escape_markdown(r"\`*_[]<>") == r"\\\`\*\_\[\]\<\>"
