@@ -16,6 +16,17 @@ URL_PATTERN = re.compile(
     r"(?![\]\)])"  # Negative lookahead: not followed by ] or )
 )
 
+# Roles the Quilt RO-Crate profile projects into package metadata, with their
+# canvas labels, in display order. Each value is a list, since a crate may name
+# several people, groups, or instruments.
+# https://github.com/quiltdata/quilt-ro-crate-profile/blob/main/spec/profile.md#consumer-requirements
+RO_CRATE_ROLES = (
+    ("creator", "Creator"),
+    ("producer", "Producer"),
+    ("instrument", "Instrument"),
+    ("instrument_id", "Instrument ID"),
+)
+
 
 def linkify_urls(text: str) -> str:
     """Convert plain URLs in text to markdown links.
@@ -57,8 +68,36 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
 """
 
 
+def format_crate_roles(metadata: Dict[str, Any]) -> str:
+    """Format the RO-Crate roles in a package's metadata as nested bullets.
+
+    Only list-valued roles are shown, which is how the profile projects them.
+    A scalar under the same key, such as the ``creator`` string in a
+    webhook-created package's ``entry.json``, is not a crate role and is skipped.
+
+    Args:
+        metadata: Package-level user metadata
+
+    Returns:
+        One indented bullet per role present, or empty string if none
+    """
+    content = ""
+    for key, label in RO_CRATE_ROLES:
+        values = metadata.get(key)
+        if not isinstance(values, list):
+            continue
+        # Collapse whitespace so a value cannot break out of its list item.
+        names = [" ".join(value.split()) for value in values if isinstance(value, str) and value.strip()]
+        if names:
+            content += f"  * **{label}**: {', '.join(names)}\n"
+    return content
+
+
 def format_linked_packages(packages: List[Package]) -> str:
     """Format linked packages section.
+
+    Packages built from an RO-Crate also list the crate's roles (creator,
+    producer, instrument) beneath the package link.
 
     Args:
         packages: List of Package instances to display
@@ -72,6 +111,7 @@ def format_linked_packages(packages: List[Package]) -> str:
     content = "\n### Linked Packages\n\n"
     for pkg in packages:
         content += f"* [{pkg.package_name}]({pkg.catalog_url}) [[🔄 sync]]({pkg.make_sync_url()})\n"
+        content += format_crate_roles(pkg.metadata)
     return content
 
 
