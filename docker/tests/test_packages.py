@@ -20,6 +20,14 @@ class TestPackage:
         expected = "https://nightly.quilttest.com/b/test-bucket/packages/benchling/etr_123"
         assert package.catalog_url == expected
 
+    def test_metadata_defaults_to_empty_dict(self, package):
+        assert package.metadata == {}
+
+    def test_metadata_is_kept_when_given(self):
+        metadata = {"eln_entry": ["EXP25000017"], "creator": ["Jane Doe"]}
+        package = Package("nightly.quilttest.com", "test-bucket", "lab/crate", metadata=metadata)
+        assert package.metadata == metadata
+
     def test_catalog_url_with_special_characters(self):
         """Test catalog_url with package names containing special characters."""
         package = Package(

@@ -15,7 +15,7 @@ Does NOT handle:
 - Package search/query (see package_query.py)
 """
 
-from typing import Optional
+from typing import Any, Dict, Optional
 from urllib.parse import quote
 
 import structlog
@@ -36,17 +36,26 @@ class Package:
     but does not fetch data or interact with the Quilt API.
     """
 
-    def __init__(self, catalog_base_url: str, bucket: str, package_name: str):
+    def __init__(
+        self,
+        catalog_base_url: str,
+        bucket: str,
+        package_name: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
         """Initialize a Package.
 
         Args:
             catalog_base_url: Quilt catalog URL (e.g., "nightly.quilttest.com")
             bucket: S3 bucket name
             package_name: Package name (e.g., "benchling/etr_123")
+            metadata: Package-level user metadata, when the caller already has it
+                (e.g., from a PackageQuery match). Defaults to an empty dict.
         """
         self.catalog_base_url = catalog_base_url
         self.bucket = bucket
         self.package_name = package_name
+        self.metadata: Dict[str, Any] = metadata or {}
 
     @property
     def catalog_url(self) -> str:
