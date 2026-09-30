@@ -762,15 +762,31 @@ class TestPackageQueryElnEntry:
         ) in sql
 
     @patch("src.package_query.RoleManager")
-    def test_bucket_query_without_array_key_is_unchanged(self, mock_role_manager_class):
+    def test_bucket_query_ranks_key_matches_first_under_the_limit(self, mock_role_manager_class):
+        """Crate matches compete for the LIMIT only after every package linked by the scalar key."""
+        query = _make_query(mock_role_manager_class, bucket="lab-bucket")
+        query._execute_query = Mock(return_value=[])
+
+        query.find_unique_packages("experiment_id", "EXP-1", array_key=ELN_ENTRY_KEY)
+
+        sql = " ".join(query._execute_query.call_args.args[0].split())
+        assert sql.endswith(
+            "AND timestamp = 'latest'"
+            " ORDER BY CASE WHEN (json_extract_scalar(user_meta, '$.experiment_id') = 'EXP-1') THEN 0 ELSE 1 END,"
+            " pkg_name LIMIT 100"
+        )
+
+    @patch("src.package_query.RoleManager")
+    def test_bucket_query_without_array_key_is_scalar_only(self, mock_role_manager_class):
         """Callers that pass no array key (e.g. scripts/test_query.py) keep the scalar-only lookup."""
         query = _make_query(mock_role_manager_class, bucket="lab-bucket")
         query._execute_query = Mock(return_value=[])
 
         query.find_unique_packages("experiment_id", "EXP-1")
 
-        sql = query._execute_query.call_args.args[0]
-        assert "json_extract_scalar(user_meta, '$.experiment_id') = 'EXP-1'" in sql
+        sql = " ".join(query._execute_query.call_args.args[0].split())
+        assert "WHERE (json_extract_scalar(user_meta, '$.experiment_id') = 'EXP-1') AND timestamp = 'latest'" in sql
+        assert sql.endswith("ORDER BY pkg_name LIMIT 100")
         assert "json_array_contains" not in sql
 
     @patch("src.package_query.RoleManager")
