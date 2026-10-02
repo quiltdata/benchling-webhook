@@ -29,6 +29,8 @@ CRATE_META = {
     "eln_entry": [DISPLAY_ID],
 }
 TAGGED_META = {"experiment_id": DISPLAY_ID}
+# eln_entry typed by hand in the catalog: a string, and no crate roles.
+HAND_TYPED_META = {"eln_entry": DISPLAY_ID}
 
 CRATE_ROLE_LINES = (
     "  * **Creator**: Ernest Prabhakar\n"
@@ -141,8 +143,9 @@ class TestLinkedPackageLookup:
 def _fake_athena(sql, timeout=30):
     """Stand in for Athena: return each package only if the SQL would select it.
 
-    The crate package is returned only when the query checks eln_entry for the
-    display ID; the tagged package only when it checks the scalar pkg_key.
+    The crate package is returned only when the query checks the eln_entry list
+    for the display ID, the hand-typed package only when it compares eln_entry
+    as a string, and the tagged package only when it checks the scalar pkg_key.
     """
     if "information_schema.tables" in sql:
         return [{"table_name": "lab-bucket_packages-view"}]
@@ -152,6 +155,8 @@ def _fake_athena(sql, timeout=30):
     rows = []
     if f"json_array_contains(json_extract({column}, '$.eln_entry'), '{DISPLAY_ID}')" in sql:
         rows.append(("test/ro-crate-ingest", CRATE_META))
+    if f"json_extract_scalar({column}, '$.eln_entry') = '{DISPLAY_ID}'" in sql:
+        rows.append(("lab/hand-typed", HAND_TYPED_META))
     if f"json_extract_scalar({column}, '$.experiment_id') = '{DISPLAY_ID}'" in sql:
         rows.append(("lab/tagged", TAGGED_META))
     return [
@@ -178,7 +183,7 @@ def _fake_athena(sql, timeout=30):
 def test_crate_package_reaches_canvas_on_every_search_path(
     mock_role_manager_class, bucket, iceberg_database, mock_benchling, mock_config, mock_payload
 ):
-    """End to end from canvas to SQL: the crate package appears, with its roles, on every path."""
+    """End to end from canvas to SQL: crate, hand-typed, and tagged packages all appear, on every path."""
     mock_role_manager_class.return_value._get_or_create_session.return_value = (Mock(), None)
     mock_config.s3_bucket_name = bucket
     package_query = PackageQuery(
@@ -193,8 +198,11 @@ def test_crate_package_reaches_canvas_on_every_search_path(
     content = _canvas(mock_benchling, mock_config, mock_payload, package_query)._make_markdown_content()
 
     crate = Package("test.quiltdata.com", "lab-bucket", "test/ro-crate-ingest")
+    hand_typed = Package("test.quiltdata.com", "lab-bucket", "lab/hand-typed")
     tagged = Package("test.quiltdata.com", "lab-bucket", "lab/tagged")
-    assert f"* [test/ro-crate-ingest]({crate.catalog_url}) [[🔄 sync]]({crate.make_sync_url()})\n" in content
-    assert CRATE_ROLE_LINES in content
-    assert f"* [lab/tagged]({tagged.catalog_url}) [[🔄 sync]]({tagged.make_sync_url()})\n" in content
+    crate_line = f"* [test/ro-crate-ingest]({crate.catalog_url}) [[🔄 sync]]({crate.make_sync_url()})\n"
+    hand_typed_line = f"* [lab/hand-typed]({hand_typed.catalog_url}) [[🔄 sync]]({hand_typed.make_sync_url()})\n"
+    tagged_line = f"* [lab/tagged]({tagged.catalog_url}) [[🔄 sync]]({tagged.make_sync_url()})\n"
+    # Sorted by name. A hand-typed eln_entry string links its package, but it isn't a crate, so no roles follow it.
+    assert hand_typed_line + tagged_line + crate_line + CRATE_ROLE_LINES in content
     assert "Failed to search for linked packages" not in content
