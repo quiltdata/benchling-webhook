@@ -73,7 +73,7 @@ A lab can also link data to a notebook entry without editing package metadata, b
 
 When Quilt packages the crate, it records the entry in the package metadata as `"eln_entry": ["EXP00001234"]`. The entry's App Canvas then lists the package under Linked Packages, along with the creator, producer, and instrument the crate names. See the profile for how to describe those, and its [example crate](https://w3id.org/quilt/ro-crate/0.2/example1/ro-crate-metadata.json).
 
-You can also set `eln_entry` yourself in the catalog's metadata editor, as either a list or a single display ID (`"eln_entry": "EXP00001234"`). Either form links the package, but only a package built from a crate shows the crate's creator, producer, and instrument.
+You can also set `eln_entry` yourself in the catalog's metadata editor, as either a list or a single display ID (`"eln_entry": "EXP00001234"`). Either form links the package. When `eln_entry` is a list, list-valued `creator`, `producer`, `instrument`, and `instrument_id` metadata also appear on the canvas, whether Quilt wrote them from a crate or you entered them by hand. A single display ID shows the link alone.
 
 ### Benchling App Canvas
 
