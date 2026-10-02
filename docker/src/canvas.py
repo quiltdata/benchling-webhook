@@ -17,7 +17,7 @@ from . import canvas_blocks as blocks
 from . import canvas_formatting as fmt
 from .config import Config
 from .package_files import PackageFile, PackageFileFetcher
-from .package_query import PackageQuery
+from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packages import Package
 from .pagination import PageState, encode_bucket_name, encode_package_name, paginate_items
 from .payload import Payload
@@ -224,10 +224,13 @@ class CanvasManager:
                 "No default package bucket is configured. Use **Refresh Canvas** to search accessible buckets for linked packages.\n"
             )
 
-        # Linked packages
+        # Linked packages: tagged with the configured key (e.g. experiment_id),
+        # or built from an RO-Crate whose eln_entry list names this entry.
         try:
             search_result = self._package_query.find_unique_packages(
-                key=self.config.package_key, value=self.entry.display_id
+                key=self.config.package_key,
+                value=self.entry.display_id,
+                array_key=ELN_ENTRY_KEY,
             )
             linked_packages = search_result["packages"]
 

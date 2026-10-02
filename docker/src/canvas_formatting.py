@@ -7,6 +7,7 @@ code duplication across canvas views.
 import re
 from typing import Any, Dict, List
 
+from .package_query import ELN_ENTRY_KEY
 from .packages import Package
 
 # URL pattern for detecting URLs in text
@@ -15,6 +16,21 @@ URL_PATTERN = re.compile(
     r"(https?://[^\s\)>\]]+)"  # Match http:// or https:// followed by non-whitespace chars
     r"(?![\]\)])"  # Negative lookahead: not followed by ] or )
 )
+
+# Roles the Quilt RO-Crate profile projects into package metadata, with their
+# canvas labels, in display order. Each value is a list, since a crate may name
+# several people, groups, or instruments.
+# https://github.com/quiltdata/quilt-ro-crate-profile/blob/main/spec/profile.md#consumer-requirements
+RO_CRATE_ROLES = (
+    ("creator", "Creator"),
+    ("producer", "Producer"),
+    ("instrument", "Instrument"),
+    ("instrument_id", "Instrument ID"),
+)
+
+# Characters that begin inline markdown: escapes, code spans, emphasis, links,
+# images, autolinks, and inline HTML.
+_MARKDOWN_SPECIAL = re.compile(r"([\\`*_\[\]<>])")
 
 
 def linkify_urls(text: str) -> str:
@@ -57,8 +73,61 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
 """
 
 
+def escape_markdown(text: str) -> str:
+    """Backslash-escape the characters that begin inline markdown.
+
+    Covers links, images, autolinks, inline HTML, code spans, and emphasis, so
+    text from package metadata renders as typed.
+
+    Args:
+        text: Plain text to embed in a markdown line
+
+    Returns:
+        The text with markdown syntax characters escaped
+    """
+    return _MARKDOWN_SPECIAL.sub(r"\\\1", text)
+
+
+def format_crate_roles(metadata: Dict[str, Any]) -> str:
+    """Format the RO-Crate roles in a package's metadata as nested bullets.
+
+    Only packages built from an RO-Crate get roles. Their metadata carries the
+    profile's ``eln_entry`` list, which is also what links a crate package to an
+    entry. A package tagged by hand keeps its plain link even when its metadata
+    uses a role key.
+
+    Within a crate package, only list values are shown, which is how the profile
+    projects roles. A scalar under the same key, such as the ``creator`` string
+    in a webhook-created package's ``entry.json``, is skipped. Values are names,
+    so markdown in them is escaped and never renders as a link or formatting.
+
+    Args:
+        metadata: Package-level user metadata
+
+    Returns:
+        One indented bullet per role present, or empty string if none
+    """
+    if not isinstance(metadata.get(ELN_ENTRY_KEY), list):
+        return ""
+    content = ""
+    for key, label in RO_CRATE_ROLES:
+        values = metadata.get(key)
+        if not isinstance(values, list):
+            continue
+        # Collapse whitespace so a value cannot break out of its list item.
+        names = [
+            escape_markdown(" ".join(value.split())) for value in values if isinstance(value, str) and value.strip()
+        ]
+        if names:
+            content += f"  * **{label}**: {', '.join(names)}\n"
+    return content
+
+
 def format_linked_packages(packages: List[Package]) -> str:
     """Format linked packages section.
+
+    Packages built from an RO-Crate also list the crate's roles (creator,
+    producer, instrument) beneath the package link.
 
     Args:
         packages: List of Package instances to display
@@ -72,6 +141,7 @@ def format_linked_packages(packages: List[Package]) -> str:
     content = "\n### Linked Packages\n\n"
     for pkg in packages:
         content += f"* [{pkg.package_name}]({pkg.catalog_url}) [[🔄 sync]]({pkg.make_sync_url()})\n"
+        content += format_crate_roles(pkg.metadata)
     return content
 
 

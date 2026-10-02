@@ -36,6 +36,45 @@ From inside the Quilt Catalog:
 4. In the bottom row, enter `experiment_id` as key and the display ID as the value.
 5. Set the commit message and click 'Save'
 
+#### Linking with an RO-Crate
+
+A lab can also link data to a notebook entry without editing package metadata, by writing an [RO-Crate](https://www.researchobject.org/ro-crate/) that conforms to the [Quilt RO-Crate profile](https://w3id.org/quilt/ro-crate). In the crate's `ro-crate-metadata.json`, name the entry as an `ELNEntry` under the root dataset's `subjectOf`, with the entry's display ID as its `name` and its Benchling URL as its `@id`:
+
+```json
+{
+  "@context": "https://w3id.org/ro/crate/1.2/context",
+  "@graph": [
+    {
+      "@id": "ro-crate-metadata.json",
+      "@type": "CreativeWork",
+      "conformsTo": { "@id": "https://w3id.org/ro/crate/1.2" },
+      "about": { "@id": "./" }
+    },
+    {
+      "@id": "./",
+      "@type": "Dataset",
+      "name": "Plate reader run",
+      "description": "Absorbance at 600 nm for notebook entry EXP00001234",
+      "datePublished": "2026-09-29",
+      "license": { "@id": "https://example.org/legal/internal-research-use/1.0" },
+      "hasPart": [{ "@id": "absorbance.csv" }],
+      "subjectOf": { "@id": "https://example.benchling.com/lab/f/lib_Xy12Ab34-assays/etr_AbC123-plate-reader-run/edit" }
+    },
+    { "@id": "absorbance.csv", "@type": "File" },
+    {
+      "@id": "https://example.benchling.com/lab/f/lib_Xy12Ab34-assays/etr_AbC123-plate-reader-run/edit",
+      "@type": "CreativeWork",
+      "additionalType": { "@id": "https://w3id.org/quilt/ro-crate#ELNEntry" },
+      "name": "EXP00001234"
+    }
+  ]
+}
+```
+
+When Quilt packages the crate, it records the entry in the package metadata as `"eln_entry": ["EXP00001234"]`. The entry's App Canvas then lists the package under Linked Packages, along with the creator, producer, and instrument the crate names. See the profile for how to describe those, and its [example crate](https://w3id.org/quilt/ro-crate/0.2/example1/ro-crate-metadata.json).
+
+You can also set `eln_entry` yourself in the catalog's metadata editor, as either a list or a single display ID (`"eln_entry": "EXP00001234"`). Either form links the package. When `eln_entry` is a list, list-valued `creator`, `producer`, `instrument`, and `instrument_id` metadata also appear on the canvas, whether Quilt wrote them from a crate or you entered them by hand. A single display ID shows the link alone.
+
 ### Benchling App Canvas
 
 ![App Canvas - Home](imgs/benchling-canvas.png)
@@ -43,6 +82,7 @@ From inside the Quilt Catalog:
 The webhook includes a Benchling App Canvas, which allows Benchling users to view, browse, and sync the associated Quilt packages.
 
 - Clicking the package name opens it in the Quilt Catalog
+- Linked packages built from an RO-Crate also show the crate's creator, producer, and instrument
 - The `sync` button will open the package or file in [QuiltSync](https://www.quilt.bio/quiltsync), if you have it installed.
 - The `Update` button refreshes the package, as Benchling only notifies Quilt of changes when the metadata fields are modified.
 

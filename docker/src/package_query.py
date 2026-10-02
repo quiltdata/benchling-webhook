@@ -19,6 +19,11 @@ For Iceberg-backed bucketless search (v0.19.0+):
 - QUILT_ICEBERG_DATABASE environment variable with Iceberg Glue database name
   When set, bucketless mode uses a single Iceberg query instead of fanning out
   concurrent Athena queries.
+
+RO-Crate linking (v0.20.0+):
+- Callers may also pass an ``array_key`` (the canvas passes ``ELN_ENTRY_KEY``) to
+  match packages whose metadata list under that key contains the value, as the
+  Quilt RO-Crate profile writes ``eln_entry``.
 """
 
 import json
@@ -46,7 +51,17 @@ _ICEBERG_MANIFEST_SUFFIX = "_package_manifest"
 # Suffix for the per-bucket parquet-backed packages-view.
 _PACKAGES_VIEW_SUFFIX = "_packages-view"
 
+# Most packages one _packages-view search returns per bucket. The canvas shows a
+# line and a Browse button for each linked package, so the list stays bounded.
+_PACKAGES_VIEW_LIMIT = 100
+
 _METADATA_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+# Package-metadata key where the Quilt RO-Crate profile records the notebook
+# entries a crate names (by display ID). The value is always a list, because a
+# crate may name several entries.
+# https://github.com/quiltdata/quilt-ro-crate-profile/blob/main/spec/profile.md#consumer-requirements
+ELN_ENTRY_KEY = "eln_entry"
 
 
 class PackageQuery:
@@ -225,6 +240,50 @@ class PackageQuery:
             )
         return key
 
+    def _metadata_match_predicate(
+        self,
+        column: str,
+        key: str,
+        value: str,
+        array_key: Optional[str] = None,
+    ) -> str:
+        """Build the SQL predicate that matches package metadata to ``value``.
+
+        Matches packages whose ``key`` is the scalar string ``value`` (e.g. an
+        ``experiment_id`` set in the catalog). When ``array_key`` is given, also
+        matches packages whose ``array_key`` list contains ``value`` (e.g. the
+        ``eln_entry`` list the Quilt RO-Crate profile writes), or whose
+        ``array_key`` is ``value`` itself, as a string typed by hand in the
+        catalog's metadata editor.
+        ``json_extract_scalar`` returns NULL for an array, so the list needs
+        ``json_array_contains``, which returns NULL rather than failing when the
+        value is not an array. Each check is NULL for the other shape, so the
+        two never conflict.
+
+        The predicate is parenthesized so callers can AND further conditions onto
+        it without the OR swallowing them.
+
+        Args:
+            column: SQL expression holding the metadata JSON string
+            key: Metadata key matched as a scalar string
+            value: Value to match (escaped here as a SQL string literal)
+            array_key: Optional metadata key matched as a list of strings, or as a
+                single string
+
+        Returns:
+            Parenthesized SQL boolean expression.
+        """
+        self._validate_metadata_key(key)
+        literal = "'" + value.replace("'", "''") + "'"
+        predicate = f"json_extract_scalar({column}, '$.{key}') = {literal}"
+        if array_key:
+            self._validate_metadata_key(array_key)
+            predicate += (
+                f" OR json_array_contains(json_extract({column}, '$.{array_key}'), {literal})"
+                f" OR json_extract_scalar({column}, '$.{array_key}') = {literal}"
+            )
+        return f"({predicate})"
+
     def _parse_user_meta(self, raw_meta: Optional[str], *, pkg_name: str, key: str, value: str) -> Dict[str, Any]:
         """Parse metadata returned from Athena, falling back to the matched key/value."""
         if not raw_meta:
@@ -232,6 +291,13 @@ class PackageQuery:
 
         try:
             parsed = json.loads(raw_meta)
+            if isinstance(parsed, str):
+                # Double-encoded (e.g. a JSON string wrapping the document, as
+                # produced by Trino's VARCHAR→JSON cast, #399): decode once more.
+                try:
+                    parsed = json.loads(parsed)
+                except json.JSONDecodeError:
+                    pass  # genuinely a string value; falls to the warning below
             if isinstance(parsed, dict):
                 return parsed
             self.logger.warning(
@@ -308,22 +374,35 @@ class PackageQuery:
         key: str,
         value: str,
         timeout: int = 30,
+        array_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         self.logger.info(
             "Searching for packages by metadata",
             key=key,
+            array_key=array_key,
             value=value,
             bucket=bucket,
         )
 
         view_name = f'"{self.database}"."{bucket}_packages-view"'
+        predicate = self._metadata_match_predicate("user_meta", key, value, array_key)
+
+        # Fill the LIMIT deterministically. Packages linked by `key` rank ahead of
+        # those matched only through `array_key`, so crate packages never push out
+        # a package that was linked before array matching existed. Ties break by
+        # name.
+        order_by = "pkg_name"
+        if array_key:
+            key_match = self._metadata_match_predicate("user_meta", key, value)
+            order_by = f"CASE WHEN {key_match} THEN 0 ELSE 1 END, pkg_name"
 
         query = f"""
         SELECT pkg_name, timestamp, message, user_meta
         FROM {view_name}
-        WHERE json_extract_scalar(user_meta, '$.{key}') = '{value}'
+        WHERE {predicate}
             AND timestamp = 'latest'
-        LIMIT 100
+        ORDER BY {order_by}
+        LIMIT {_PACKAGES_VIEW_LIMIT}
         """
 
         rows = self._execute_query(query, timeout=timeout)
@@ -358,6 +437,7 @@ class PackageQuery:
                 catalog_base_url=self.catalog_url,
                 bucket=info["bucket"],
                 package_name=name,
+                metadata=info["metadata"],
             )
             for name, info in sorted(package_info.items())
         ]
@@ -383,7 +463,9 @@ class PackageQuery:
 
         return max(1, min(worker_count, bucket_count))
 
-    def _find_unique_packages_in_all_buckets(self, key: str, value: str) -> Dict[str, Any]:
+    def _find_unique_packages_in_all_buckets(
+        self, key: str, value: str, array_key: Optional[str] = None
+    ) -> Dict[str, Any]:
         buckets = self._list_package_view_buckets()
         all_packages: List[Package] = []
         rows: List[Dict[str, Any]] = []
@@ -405,7 +487,9 @@ class PackageQuery:
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
-                executor.submit(self._find_unique_packages_in_bucket, bucket, key, value, 10): bucket
+                executor.submit(
+                    self._find_unique_packages_in_bucket, bucket, key, value, 10, array_key=array_key
+                ): bucket
                 for bucket in buckets
             }
             for future in as_completed(futures):
@@ -477,11 +561,14 @@ class PackageQuery:
 
         return sorted(set(buckets))
 
-    def _build_iceberg_union_query(self, buckets: List[str], key: str, value: str) -> str:
+    def _build_iceberg_union_query(
+        self, buckets: List[str], key: str, value: str, array_key: Optional[str] = None
+    ) -> str:
         """Build a single UNION ALL query across Iceberg tables for all buckets.
 
         Joins package_revision ↔ package_manifest on top_hash, filtered to
-        'latest' tag via package_tag, and filters on the metadata key/value.
+        'latest' tag via package_tag, and filters on the metadata key/value
+        (and, when ``array_key`` is given, on that list containing the value).
 
         The Iceberg package_manifest.metadata column is populated from the
         packages-view user_meta column (see quilt_shared.iceberg_queries:
@@ -490,15 +577,23 @@ class PackageQuery:
         ``TYPE_MISMATCH: Expression m.metadata is not of type ROW``, so we use
         json_extract_scalar just like the parquet _packages-view path.
 
+        The projection selects the column raw (``m.metadata AS user_meta``),
+        also like the parquet path. Do NOT wrap it in
+        ``json_format(CAST(m.metadata AS JSON))``: Trino's VARCHAR→JSON cast
+        does not parse the string — it wraps it as a JSON *string value* —
+        so json_format double-encodes and json.loads yields a str, not a
+        dict (#399).
+
         Args:
             buckets: List of bucket names to search
             key: Metadata key to filter on (JSON path field name)
             value: Metadata value to match
+            array_key: Optional metadata key whose list must contain the value
 
         Returns:
             Complete SQL query string with one UNION ALL branch per bucket.
         """
-        escaped_value = value.replace("'", "''")
+        predicate = self._metadata_match_predicate("m.metadata", key, value, array_key)
         idb = self.iceberg_database
         branches: List[str] = []
         for b in buckets:
@@ -507,7 +602,7 @@ class PackageQuery:
                 r.pkg_name,
                 r.timestamp,
                 m.message,
-                json_format(CAST(m.metadata AS JSON)) AS user_meta,
+                m.metadata AS user_meta,
                 '{b}' AS _src_bucket
             FROM "{idb}"."{b}_package_revision" r
             JOIN "{idb}"."{b}_package_manifest" m ON r.top_hash = m.top_hash
@@ -515,13 +610,15 @@ class PackageQuery:
                 ON r.pkg_name = t.pkg_name
                 AND r.top_hash = t.top_hash
                 AND t.tag_name = 'latest'
-            WHERE json_extract_scalar(m.metadata, '$.{key}') = '{escaped_value}'
+            WHERE {predicate}
             """
             branches.append(branch)
 
         return "\nUNION ALL\n".join(branches)
 
-    def _find_unique_packages_in_iceberg(self, key: str, value: str) -> Dict[str, Any]:
+    def _find_unique_packages_in_iceberg(
+        self, key: str, value: str, array_key: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Search for packages across all Iceberg-managed buckets using a single query.
 
         Replaces the concurrent fanout with one Athena query using UNION ALL
@@ -548,10 +645,11 @@ class PackageQuery:
             bucket_count=len(buckets),
             iceberg_database=self.iceberg_database,
             key=key,
+            array_key=array_key,
             value=value,
         )
 
-        query = self._build_iceberg_union_query(buckets, key, value)
+        query = self._build_iceberg_union_query(buckets, key, value, array_key)
         rows = self._execute_query(query, timeout=60)
 
         self.logger.info("Iceberg query completed", row_count=len(rows))
@@ -582,6 +680,7 @@ class PackageQuery:
                 catalog_base_url=self.catalog_url,
                 bucket=info["bucket"],
                 package_name=info["pkg_name"],
+                metadata=info["metadata"],
             )
             for info in sorted(package_info.values(), key=lambda i: (i["bucket"], i["pkg_name"]))
         ]
@@ -595,11 +694,13 @@ class PackageQuery:
             },
         }
 
-    def find_unique_packages(self, key: str, value: str) -> Dict[str, Any]:
+    def find_unique_packages(self, key: str, value: str, array_key: Optional[str] = None) -> Dict[str, Any]:
         """Find unique packages matching metadata key-value pair.
 
         Queries the {bucket}_packages-view for packages with user_meta containing
-        the specified key-value pair using json_extract_scalar.
+        the specified key-value pair using json_extract_scalar. When ``array_key``
+        is given, packages whose ``array_key`` list contains ``value`` also match;
+        a package that matches both ways is returned once.
 
         When in bucketless mode (bucket is empty) and an Iceberg database is
         configured, uses a single-query Iceberg UNION ALL instead of concurrent
@@ -608,10 +709,13 @@ class PackageQuery:
         Args:
             key: Metadata key to search for (e.g., "entry_id", "id", "display_id")
             value: Metadata value to search for (e.g., "etr_EK1AQMQiQn", "EXP25000076")
+            array_key: Optional metadata key holding a list that may contain
+                ``value`` (e.g., ``ELN_ENTRY_KEY`` for RO-Crate packages)
 
         Returns:
             Dict with:
-                - packages: List of Package instances (from packages.py)
+                - packages: List of Package instances (from packages.py), each
+                  carrying its parsed user metadata as ``Package.metadata``
                 - results: Dict with raw query results for debugging
                     - rows: List of matching rows from database
                     - package_info: Dict mapping package names to version info
@@ -625,10 +729,15 @@ class PackageQuery:
         """
         try:
             self._validate_metadata_key(key)
+            if array_key:
+                # Validate up front: the fanout path would otherwise report a bad
+                # key as a per-bucket error instead of failing the search.
+                self._validate_metadata_key(array_key)
 
             self.logger.info(
                 "Searching for packages by metadata",
                 key=key,
+                array_key=array_key,
                 value=value,
                 bucket=self.bucket or "(bucketless)",
                 iceberg_database=self.iceberg_database or "(not configured)",
@@ -636,13 +745,13 @@ class PackageQuery:
 
             # Bucketless with Iceberg: single-query path (fastest)
             if not self.bucket and self.iceberg_database:
-                result = self._find_unique_packages_in_iceberg(key, value)
+                result = self._find_unique_packages_in_iceberg(key, value, array_key=array_key)
             # Bucketless without Iceberg: concurrent fanout (legacy fallback)
             elif not self.bucket:
-                result = self._find_unique_packages_in_all_buckets(key, value)
+                result = self._find_unique_packages_in_all_buckets(key, value, array_key=array_key)
             # Specific bucket: direct single-bucket query
             else:
-                result = self._find_unique_packages_in_bucket(self.bucket, key, value)
+                result = self._find_unique_packages_in_bucket(self.bucket, key, value, array_key=array_key)
 
             self.logger.info(
                 "Found unique packages",
@@ -658,6 +767,7 @@ class PackageQuery:
             self.logger.error(
                 "Query failed",
                 key=key,
+                array_key=array_key,
                 value=value,
                 error=error_msg,
                 error_type=type(e).__name__,
