@@ -1,10 +1,11 @@
 """Tests for package_query module."""
 
-from unittest.mock import Mock, patch
+import json
+from unittest.mock import Mock, call, patch
 
 import pytest
 
-from src.package_query import PackageQuery
+from src.package_query import ELN_ENTRY_KEY, PackageQuery
 from src.packages import Package
 
 
@@ -153,7 +154,7 @@ class TestPackageQuery:
         query = PackageQuery(bucket="", catalog_url="catalog.example.com", database="test_db")
         query._list_package_view_buckets = Mock(return_value=["bucket-a", "bucket-b"])
         query._find_unique_packages_in_bucket = Mock(
-            side_effect=lambda bucket, _key, _value, _timeout=30: {
+            side_effect=lambda bucket, _key, _value, _timeout=30, array_key=None: {
                 "packages": [Package("catalog.example.com", bucket, f"benchling/pkg-{bucket[-1]}")],
                 "results": {
                     "rows": [{"pkg_name": f"benchling/pkg-{bucket[-1]}"}],
@@ -195,7 +196,7 @@ class TestPackageQuery:
         query = PackageQuery(bucket="", catalog_url="catalog.example.com", database="test_db")
         query._list_package_view_buckets = Mock(return_value=["bucket-a", "bucket-b"])
 
-        def search_bucket(bucket, _key, _value, _timeout=30):
+        def search_bucket(bucket, _key, _value, _timeout=30, array_key=None):
             if bucket == "bucket-a":
                 raise RuntimeError("Access denied")
             return {
@@ -341,7 +342,9 @@ class TestPackageQueryIceberg:
 
         result = query.find_unique_packages("experiment_id", "EXP-1")
 
-        query._find_unique_packages_in_bucket.assert_called_once_with("my-bucket", "experiment_id", "EXP-1")
+        query._find_unique_packages_in_bucket.assert_called_once_with(
+            "my-bucket", "experiment_id", "EXP-1", array_key=None
+        )
         assert len(result["packages"]) == 1
 
     @patch("src.package_query.RoleManager")
@@ -417,8 +420,11 @@ class TestPackageQueryIceberg:
         # Should reference both buckets
         assert "bucket-a" in sql
         assert "bucket-b" in sql
-        # Should serialize metadata deterministically for Python parsing
-        assert "json_format(CAST(m.metadata AS JSON)) AS user_meta" in sql
+        # metadata is already a JSON document string; project it raw. Wrapping
+        # it in json_format(CAST(... AS JSON)) double-encodes, because Trino's
+        # VARCHAR→JSON cast wraps the string instead of parsing it (#399).
+        assert "m.metadata AS user_meta" in sql
+        assert "json_format" not in sql
         # metadata is a JSON string (from user_meta), not a native STRUCT, so
         # it must be filtered via json_extract_scalar to avoid TYPE_MISMATCH.
         assert "json_extract_scalar(m.metadata, '$.experiment_id')" in sql
@@ -505,6 +511,52 @@ class TestPackageQueryIceberg:
         assert result["results"]["package_info"]["bucket-a/benchling/pkg-a"]["metadata"] == {
             "experiment_id": "EXP-1",
         }
+
+    @patch("src.package_query.RoleManager")
+    def test_iceberg_double_encoded_metadata_parses(self, mock_role_manager_class):
+        """Double-encoded user_meta (a JSON string wrapping the document, as
+        produced by Trino's VARCHAR→JSON cast, #399) must round-trip to the
+        full metadata dict, not the {key: value} fallback."""
+        mock_athena = Mock()
+        mock_glue = Mock()
+
+        mock_role_manager = Mock()
+        mock_session = Mock()
+        mock_session.client.side_effect = lambda service, **kw: {
+            "athena": mock_athena,
+            "glue": mock_glue,
+        }[service]
+        mock_role_manager._get_or_create_session.return_value = (mock_session, None)
+        mock_role_manager.role_arn = None
+        mock_role_manager._session = None
+        mock_role_manager._expires_at = None
+        mock_role_manager_class.return_value = mock_role_manager
+
+        query = PackageQuery(
+            bucket="",
+            catalog_url="catalog.example.com",
+            database="test_db",
+            region="us-west-2",
+            iceberg_database="iceberg_db",
+        )
+
+        metadata = {"experiment_id": "EXP-1", "entry_id": "etr_123", "canvas_id": "cnvs_abc"}
+        query._list_iceberg_manifest_buckets = Mock(return_value=["bucket-a"])
+        query._execute_query = Mock(
+            return_value=[
+                {
+                    "pkg_name": "benchling/pkg-a",
+                    "timestamp": "latest",
+                    "message": "A",
+                    "user_meta": json.dumps(json.dumps(metadata)),
+                    "_src_bucket": "bucket-a",
+                }
+            ]
+        )
+
+        result = query.find_unique_packages("experiment_id", "EXP-1")
+
+        assert result["results"]["package_info"]["bucket-a/benchling/pkg-a"]["metadata"] == metadata
 
     @patch("src.package_query.RoleManager")
     def test_iceberg_glue_access_denied_reports_glue_database(self, mock_role_manager_class):
@@ -597,3 +649,237 @@ class TestPackageQueryIceberg:
             ("bucket-a", "benchling/pkg-1"),
             ("bucket-a", "benchling/pkg-2"),
         ]
+
+
+# --- RO-Crate linking by eln_entry (#401) -----------------------------------
+
+# Package metadata as the Quilt RO-Crate profile projects it: every role is a list.
+CRATE_META = {
+    "package_name": "lab/crate",
+    "creator": ["Jane Doe"],
+    "producer": ["Assay Development", "Laboratory Operations"],
+    "instrument": ["Plate Reader 1"],
+    "instrument_id": ["INST-000456"],
+    "eln_entry": ["EXP-1"],
+}
+# A package tagged by hand in the catalog with the scalar pkg_key.
+TAGGED_META = {"experiment_id": "EXP-1"}
+# A crate package that was also tagged by hand: matches both ways.
+BOTH_META = {"experiment_id": "EXP-1", "eln_entry": ["EXP-1"]}
+# eln_entry typed by hand in the catalog's metadata editor: a string, not a list.
+HAND_TYPED_META = {"eln_entry": "EXP-1"}
+
+
+def _make_query(mock_role_manager_class, *, bucket, iceberg_database=None, athena=None):
+    """Build a PackageQuery whose AWS clients are mocks."""
+    clients = {"athena": athena or Mock(), "glue": Mock()}
+    mock_session = Mock()
+    mock_session.client.side_effect = lambda service, **kw: clients[service]
+    mock_role_manager = Mock()
+    mock_role_manager._get_or_create_session.return_value = (mock_session, None)
+    mock_role_manager.role_arn = None
+    mock_role_manager._session = None
+    mock_role_manager._expires_at = None
+    mock_role_manager_class.return_value = mock_role_manager
+    return PackageQuery(
+        bucket=bucket,
+        catalog_url="catalog.example.com",
+        database="test_db",
+        region="us-west-2",
+        iceberg_database=iceberg_database,
+    )
+
+
+def _row(pkg_name, metadata, bucket=None):
+    row = {"pkg_name": pkg_name, "timestamp": "latest", "message": None, "user_meta": json.dumps(metadata)}
+    if bucket:
+        row["_src_bucket"] = bucket
+    return row
+
+
+class TestPackageQueryElnEntry:
+    """Packages link to an entry through eln_entry: a list from an RO-Crate, or a string typed in the catalog."""
+
+    def test_eln_entry_key_matches_profile(self):
+        assert ELN_ENTRY_KEY == "eln_entry"
+
+    @patch("src.package_query.RoleManager")
+    def test_predicate_matches_scalar_key_or_array_key(self, mock_role_manager_class):
+        query = _make_query(mock_role_manager_class, bucket="lab-bucket")
+
+        predicate = query._metadata_match_predicate("user_meta", "experiment_id", "EXP-1", ELN_ENTRY_KEY)
+
+        assert predicate == (
+            "(json_extract_scalar(user_meta, '$.experiment_id') = 'EXP-1'"
+            " OR json_array_contains(json_extract(user_meta, '$.eln_entry'), 'EXP-1')"
+            " OR json_extract_scalar(user_meta, '$.eln_entry') = 'EXP-1')"
+        )
+
+    @patch("src.package_query.RoleManager")
+    def test_predicate_without_array_key_is_scalar_only(self, mock_role_manager_class):
+        query = _make_query(mock_role_manager_class, bucket="lab-bucket")
+
+        predicate = query._metadata_match_predicate("user_meta", "experiment_id", "EXP-1")
+
+        assert predicate == "(json_extract_scalar(user_meta, '$.experiment_id') = 'EXP-1')"
+
+    @patch("src.package_query.RoleManager")
+    def test_predicate_escapes_quotes_in_value(self, mock_role_manager_class):
+        query = _make_query(mock_role_manager_class, bucket="lab-bucket")
+
+        predicate = query._metadata_match_predicate("m.metadata", "experiment_id", "O'Brien-1", ELN_ENTRY_KEY)
+
+        assert predicate.count("'O''Brien-1'") == 3
+        assert "'O'Brien-1'" not in predicate
+
+    @patch("src.package_query.RoleManager")
+    def test_unsafe_array_key_is_rejected_before_any_query(self, mock_role_manager_class):
+        """A bad array key must fail the search, not become a per-bucket fanout error."""
+        query = _make_query(mock_role_manager_class, bucket="")
+        query._list_package_view_buckets = Mock(return_value=["bucket-a"])
+        query._execute_query = Mock(return_value=[])
+
+        with pytest.raises(RuntimeError, match="Invalid metadata key"):
+            query.find_unique_packages("experiment_id", "EXP-1", array_key="eln_entry') OR (1=1")
+
+        query._list_package_view_buckets.assert_not_called()
+        query._execute_query.assert_not_called()
+
+    @patch("src.package_query.RoleManager")
+    def test_bucket_query_ands_latest_onto_parenthesized_predicate(self, mock_role_manager_class):
+        """Without parentheses, `a OR b AND timestamp = 'latest'` would return old revisions."""
+        athena = Mock()
+        athena.start_query_execution.return_value = {"QueryExecutionId": "q-1"}
+        athena.get_query_execution.return_value = {"QueryExecution": {"Status": {"State": "SUCCEEDED"}}}
+        athena.get_query_results.return_value = {"ResultSet": {"Rows": []}}
+        query = _make_query(mock_role_manager_class, bucket="lab-bucket", athena=athena)
+
+        query.find_unique_packages("experiment_id", "EXP-1", array_key=ELN_ENTRY_KEY)
+
+        sql = " ".join(athena.start_query_execution.call_args.kwargs["QueryString"].split())
+        assert '"test_db"."lab-bucket_packages-view"' in sql
+        assert (
+            "WHERE (json_extract_scalar(user_meta, '$.experiment_id') = 'EXP-1'"
+            " OR json_array_contains(json_extract(user_meta, '$.eln_entry'), 'EXP-1')"
+            " OR json_extract_scalar(user_meta, '$.eln_entry') = 'EXP-1')"
+            " AND timestamp = 'latest'"
+        ) in sql
+
+    @patch("src.package_query.RoleManager")
+    def test_bucket_query_ranks_key_matches_first_under_the_limit(self, mock_role_manager_class):
+        """Crate matches compete for the LIMIT only after every package linked by the scalar key."""
+        query = _make_query(mock_role_manager_class, bucket="lab-bucket")
+        query._execute_query = Mock(return_value=[])
+
+        query.find_unique_packages("experiment_id", "EXP-1", array_key=ELN_ENTRY_KEY)
+
+        sql = " ".join(query._execute_query.call_args.args[0].split())
+        assert sql.endswith(
+            "AND timestamp = 'latest'"
+            " ORDER BY CASE WHEN (json_extract_scalar(user_meta, '$.experiment_id') = 'EXP-1') THEN 0 ELSE 1 END,"
+            " pkg_name LIMIT 100"
+        )
+
+    @patch("src.package_query.RoleManager")
+    def test_bucket_query_without_array_key_is_scalar_only(self, mock_role_manager_class):
+        """Callers that pass no array key (e.g. scripts/test_query.py) keep the scalar-only lookup."""
+        query = _make_query(mock_role_manager_class, bucket="lab-bucket")
+        query._execute_query = Mock(return_value=[])
+
+        query.find_unique_packages("experiment_id", "EXP-1")
+
+        sql = " ".join(query._execute_query.call_args.args[0].split())
+        assert "WHERE (json_extract_scalar(user_meta, '$.experiment_id') = 'EXP-1') AND timestamp = 'latest'" in sql
+        assert sql.endswith("ORDER BY pkg_name LIMIT 100")
+        assert "json_array_contains" not in sql
+        assert "eln_entry" not in sql
+
+    @patch("src.package_query.RoleManager")
+    def test_bucket_lists_crate_tagged_and_both_once(self, mock_role_manager_class):
+        query = _make_query(mock_role_manager_class, bucket="lab-bucket")
+        query._execute_query = Mock(
+            return_value=[
+                _row("lab/crate", CRATE_META),
+                _row("lab/tagged", TAGGED_META),
+                _row("lab/both", BOTH_META),
+                _row("lab/hand-typed", HAND_TYPED_META),
+            ]
+        )
+
+        result = query.find_unique_packages("experiment_id", "EXP-1", array_key=ELN_ENTRY_KEY)
+
+        # One query covers every link style, so a package matching several is one row.
+        assert query._execute_query.call_count == 1
+        assert [(p.bucket, p.package_name) for p in result["packages"]] == [
+            ("lab-bucket", "lab/both"),
+            ("lab-bucket", "lab/crate"),
+            ("lab-bucket", "lab/hand-typed"),
+            ("lab-bucket", "lab/tagged"),
+        ]
+        metadata = {p.package_name: p.metadata for p in result["packages"]}
+        assert metadata == {
+            "lab/both": BOTH_META,
+            "lab/crate": CRATE_META,
+            "lab/hand-typed": HAND_TYPED_META,
+            "lab/tagged": TAGGED_META,
+        }
+
+    @patch("src.package_query.RoleManager")
+    def test_bucketless_fanout_passes_array_key_to_every_bucket(self, mock_role_manager_class):
+        query = _make_query(mock_role_manager_class, bucket="")
+        query._list_package_view_buckets = Mock(return_value=["bucket-a", "bucket-b"])
+        query._find_unique_packages_in_bucket = Mock(
+            return_value={"packages": [], "results": {"rows": [], "package_info": {}}}
+        )
+
+        query.find_unique_packages("experiment_id", "EXP-1", array_key=ELN_ENTRY_KEY)
+
+        query._find_unique_packages_in_bucket.assert_has_calls(
+            [
+                call("bucket-a", "experiment_id", "EXP-1", 10, array_key=ELN_ENTRY_KEY),
+                call("bucket-b", "experiment_id", "EXP-1", 10, array_key=ELN_ENTRY_KEY),
+            ],
+            any_order=True,
+        )
+
+    @patch("src.package_query.RoleManager")
+    def test_iceberg_query_matches_eln_entry_in_every_branch(self, mock_role_manager_class):
+        query = _make_query(mock_role_manager_class, bucket="", iceberg_database="iceberg_db")
+
+        sql = query._build_iceberg_union_query(["bucket-a", "bucket-b"], "experiment_id", "EXP-1", ELN_ENTRY_KEY)
+
+        where = (
+            "WHERE (json_extract_scalar(m.metadata, '$.experiment_id') = 'EXP-1'"
+            " OR json_array_contains(json_extract(m.metadata, '$.eln_entry'), 'EXP-1')"
+            " OR json_extract_scalar(m.metadata, '$.eln_entry') = 'EXP-1')"
+        )
+        assert sql.count(where) == 2
+        # The #399 fix still holds: metadata is projected raw.
+        assert "m.metadata AS user_meta" in sql
+
+    @patch("src.package_query.RoleManager")
+    def test_iceberg_lists_crate_tagged_and_both_once(self, mock_role_manager_class):
+        query = _make_query(mock_role_manager_class, bucket="", iceberg_database="iceberg_db")
+        query._list_iceberg_manifest_buckets = Mock(return_value=["bucket-a", "bucket-b"])
+        query._execute_query = Mock(
+            return_value=[
+                _row("lab/crate", CRATE_META, "bucket-a"),
+                _row("lab/both", BOTH_META, "bucket-b"),
+                # Two revisions sharing the latest top_hash join to the tag twice.
+                _row("lab/both", BOTH_META, "bucket-b"),
+                _row("lab/tagged", TAGGED_META, "bucket-b"),
+            ]
+        )
+
+        result = query.find_unique_packages("experiment_id", "EXP-1", array_key=ELN_ENTRY_KEY)
+
+        assert query._execute_query.call_count == 1
+        sql = query._execute_query.call_args.args[0]
+        assert "json_array_contains(json_extract(m.metadata, '$.eln_entry'), 'EXP-1')" in sql
+        assert [(p.bucket, p.package_name) for p in result["packages"]] == [
+            ("bucket-a", "lab/crate"),
+            ("bucket-b", "lab/both"),
+            ("bucket-b", "lab/tagged"),
+        ]
+        assert result["packages"][0].metadata == CRATE_META
+        assert result["packages"][2].metadata == TAGGED_META
