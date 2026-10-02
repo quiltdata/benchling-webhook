@@ -24,7 +24,7 @@
 # BASE STAGE: Shared base image for both builder and runtime stages
 # ============================================================================
 ARG TARGETARCH
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023.11.20260413.0@sha256:fe4122f41784670c960b28c8a32036d8ca268bb56a002ce1e191271b6ddf3293 AS base
+FROM public.ecr.aws/amazonlinux/amazonlinux:2027.0.20260928.1@sha256:3ad14f0ff21381755f96e7c44d4f3bbe12bd8369214d1f9b17e78842441f98dd AS base
 ARG TARGETARCH
 
 # ============================================================================
