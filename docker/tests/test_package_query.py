@@ -666,6 +666,8 @@ CRATE_META = {
 TAGGED_META = {"experiment_id": "EXP-1"}
 # A crate package that was also tagged by hand: matches both ways.
 BOTH_META = {"experiment_id": "EXP-1", "eln_entry": ["EXP-1"]}
+# eln_entry typed by hand in the catalog's metadata editor: a string, not a list.
+HAND_TYPED_META = {"eln_entry": "EXP-1"}
 
 
 def _make_query(mock_role_manager_class, *, bucket, iceberg_database=None, athena=None):
@@ -696,7 +698,7 @@ def _row(pkg_name, metadata, bucket=None):
 
 
 class TestPackageQueryElnEntry:
-    """Packages built from an RO-Crate link to an entry through their eln_entry list."""
+    """Packages link to an entry through eln_entry: a list from an RO-Crate, or a string typed in the catalog."""
 
     def test_eln_entry_key_matches_profile(self):
         assert ELN_ENTRY_KEY == "eln_entry"
@@ -709,7 +711,8 @@ class TestPackageQueryElnEntry:
 
         assert predicate == (
             "(json_extract_scalar(user_meta, '$.experiment_id') = 'EXP-1'"
-            " OR json_array_contains(json_extract(user_meta, '$.eln_entry'), 'EXP-1'))"
+            " OR json_array_contains(json_extract(user_meta, '$.eln_entry'), 'EXP-1')"
+            " OR json_extract_scalar(user_meta, '$.eln_entry') = 'EXP-1')"
         )
 
     @patch("src.package_query.RoleManager")
@@ -726,7 +729,7 @@ class TestPackageQueryElnEntry:
 
         predicate = query._metadata_match_predicate("m.metadata", "experiment_id", "O'Brien-1", ELN_ENTRY_KEY)
 
-        assert predicate.count("'O''Brien-1'") == 2
+        assert predicate.count("'O''Brien-1'") == 3
         assert "'O'Brien-1'" not in predicate
 
     @patch("src.package_query.RoleManager")
@@ -757,7 +760,8 @@ class TestPackageQueryElnEntry:
         assert '"test_db"."lab-bucket_packages-view"' in sql
         assert (
             "WHERE (json_extract_scalar(user_meta, '$.experiment_id') = 'EXP-1'"
-            " OR json_array_contains(json_extract(user_meta, '$.eln_entry'), 'EXP-1'))"
+            " OR json_array_contains(json_extract(user_meta, '$.eln_entry'), 'EXP-1')"
+            " OR json_extract_scalar(user_meta, '$.eln_entry') = 'EXP-1')"
             " AND timestamp = 'latest'"
         ) in sql
 
@@ -788,6 +792,7 @@ class TestPackageQueryElnEntry:
         assert "WHERE (json_extract_scalar(user_meta, '$.experiment_id') = 'EXP-1') AND timestamp = 'latest'" in sql
         assert sql.endswith("ORDER BY pkg_name LIMIT 100")
         assert "json_array_contains" not in sql
+        assert "eln_entry" not in sql
 
     @patch("src.package_query.RoleManager")
     def test_bucket_lists_crate_tagged_and_both_once(self, mock_role_manager_class):
@@ -797,20 +802,27 @@ class TestPackageQueryElnEntry:
                 _row("lab/crate", CRATE_META),
                 _row("lab/tagged", TAGGED_META),
                 _row("lab/both", BOTH_META),
+                _row("lab/hand-typed", HAND_TYPED_META),
             ]
         )
 
         result = query.find_unique_packages("experiment_id", "EXP-1", array_key=ELN_ENTRY_KEY)
 
-        # One query covers both link styles, so a package matching both is one row.
+        # One query covers every link style, so a package matching several is one row.
         assert query._execute_query.call_count == 1
         assert [(p.bucket, p.package_name) for p in result["packages"]] == [
             ("lab-bucket", "lab/both"),
             ("lab-bucket", "lab/crate"),
+            ("lab-bucket", "lab/hand-typed"),
             ("lab-bucket", "lab/tagged"),
         ]
         metadata = {p.package_name: p.metadata for p in result["packages"]}
-        assert metadata == {"lab/both": BOTH_META, "lab/crate": CRATE_META, "lab/tagged": TAGGED_META}
+        assert metadata == {
+            "lab/both": BOTH_META,
+            "lab/crate": CRATE_META,
+            "lab/hand-typed": HAND_TYPED_META,
+            "lab/tagged": TAGGED_META,
+        }
 
     @patch("src.package_query.RoleManager")
     def test_bucketless_fanout_passes_array_key_to_every_bucket(self, mock_role_manager_class):
@@ -838,7 +850,8 @@ class TestPackageQueryElnEntry:
 
         where = (
             "WHERE (json_extract_scalar(m.metadata, '$.experiment_id') = 'EXP-1'"
-            " OR json_array_contains(json_extract(m.metadata, '$.eln_entry'), 'EXP-1'))"
+            " OR json_array_contains(json_extract(m.metadata, '$.eln_entry'), 'EXP-1')"
+            " OR json_extract_scalar(m.metadata, '$.eln_entry') = 'EXP-1')"
         )
         assert sql.count(where) == 2
         # The #399 fix still holds: metadata is projected raw.

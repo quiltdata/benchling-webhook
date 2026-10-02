@@ -9,7 +9,8 @@
 #   2. the `metadata` column is a JSON *string* (not a native STRUCT), and
 #   3. the filter returns the expected linked packages: the scalar key match
 #      (json_extract_scalar) OR an `eln_entry` list containing the value
-#      (json_array_contains), as written by the Quilt RO-Crate profile.
+#      (json_array_contains), as written by the Quilt RO-Crate profile, OR an
+#      `eln_entry` string typed by hand in the catalog.
 #
 # Background: metadata is populated from `user_meta AS metadata`
 # (quilt_shared.iceberg_queries), i.e. a raw JSON string. Filtering it as a
@@ -100,7 +101,7 @@ echo "catalog:   $CATALOG"
 echo "database:  $DATABASE (Iceberg Glue database)"
 echo "region:    $REGION"
 echo "workgroup: $WORKGROUP"
-echo "filter:    $KEY = $VALUE, or $ARRAY_KEY contains $VALUE"
+echo "filter:    $KEY = $VALUE, or $ARRAY_KEY contains or equals $VALUE"
 echo
 
 # --- 1. Discover per-bucket Iceberg manifest tables -------------------------
@@ -181,7 +182,7 @@ build_query() {
         if [[ "$accessor" == "struct" ]]; then
             predicate="m.metadata.$KEY = '$ESCAPED_VALUE'"
         else
-            predicate="(json_extract_scalar(m.metadata, '\$.$KEY') = '$ESCAPED_VALUE' OR json_array_contains(json_extract(m.metadata, '\$.$ARRAY_KEY'), '$ESCAPED_VALUE'))"
+            predicate="(json_extract_scalar(m.metadata, '\$.$KEY') = '$ESCAPED_VALUE' OR json_array_contains(json_extract(m.metadata, '\$.$ARRAY_KEY'), '$ESCAPED_VALUE') OR json_extract_scalar(m.metadata, '\$.$ARRAY_KEY') = '$ESCAPED_VALUE')"
         fi
         local branch="SELECT r.pkg_name, r.timestamp, m.message, m.metadata AS user_meta, '$bucket' AS _src_bucket
 FROM \"$DATABASE\".\"${bucket}_package_revision\" r

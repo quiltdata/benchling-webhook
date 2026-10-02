@@ -252,10 +252,13 @@ class PackageQuery:
         Matches packages whose ``key`` is the scalar string ``value`` (e.g. an
         ``experiment_id`` set in the catalog). When ``array_key`` is given, also
         matches packages whose ``array_key`` list contains ``value`` (e.g. the
-        ``eln_entry`` list the Quilt RO-Crate profile writes).
+        ``eln_entry`` list the Quilt RO-Crate profile writes), or whose
+        ``array_key`` is ``value`` itself, as a string typed by hand in the
+        catalog's metadata editor.
         ``json_extract_scalar`` returns NULL for an array, so the list needs
         ``json_array_contains``, which returns NULL rather than failing when the
-        value is not an array.
+        value is not an array. Each check is NULL for the other shape, so the
+        two never conflict.
 
         The predicate is parenthesized so callers can AND further conditions onto
         it without the OR swallowing them.
@@ -264,7 +267,8 @@ class PackageQuery:
             column: SQL expression holding the metadata JSON string
             key: Metadata key matched as a scalar string
             value: Value to match (escaped here as a SQL string literal)
-            array_key: Optional metadata key matched as a list of strings
+            array_key: Optional metadata key matched as a list of strings, or as a
+                single string
 
         Returns:
             Parenthesized SQL boolean expression.
@@ -274,7 +278,10 @@ class PackageQuery:
         predicate = f"json_extract_scalar({column}, '$.{key}') = {literal}"
         if array_key:
             self._validate_metadata_key(array_key)
-            predicate += f" OR json_array_contains(json_extract({column}, '$.{array_key}'), {literal})"
+            predicate += (
+                f" OR json_array_contains(json_extract({column}, '$.{array_key}'), {literal})"
+                f" OR json_extract_scalar({column}, '$.{array_key}') = {literal}"
+            )
         return f"({predicate})"
 
     def _parse_user_meta(self, raw_meta: Optional[str], *, pkg_name: str, key: str, value: str) -> Dict[str, Any]:
