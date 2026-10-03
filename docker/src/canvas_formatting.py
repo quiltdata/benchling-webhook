@@ -5,7 +5,7 @@ code duplication across canvas views.
 """
 
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .package_query import ELN_ENTRY_KEY
 from .packages import Package
@@ -55,7 +55,9 @@ def linkify_urls(text: str) -> str:
     return URL_PATTERN.sub(replace_url, text)
 
 
-def format_package_header(package_name: str, display_id: str, catalog_url: str, sync_url: str) -> str:
+def format_package_header(
+    package_name: str, display_id: str, catalog_url: str, sync_url: str, sealed_at: Optional[str] = None
+) -> str:
     """Format primary package header with action links.
 
     Args:
@@ -63,13 +65,15 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
         display_id: Entry display ID
         catalog_url: URL to catalog view
         sync_url: URL for sync action
+        sealed_at: Acceptance date, when the package is sealed
 
     Returns:
         Formatted markdown string
     """
+    sealed = f"**Sealed {sealed_at}**\n\n" if sealed_at is not None else ""
     return f"""## {display_id}
 
-* Package: [{package_name}]({catalog_url}) [[🔄 sync]]({sync_url})
+{sealed}* Package: [{package_name}]({catalog_url}) [[🔄 sync]]({sync_url})
 """
 
 

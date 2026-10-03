@@ -6,7 +6,7 @@ package operations to specialized services.
 
 import threading
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 import structlog
 from benchling_api_client.v2.stable.models.app_canvas_update import AppCanvasUpdate
@@ -65,6 +65,7 @@ class CanvasManager:
         self._package = None
         self._errors: List[str] = []  # Track errors to display in notification section
         self._linked_packages: List[Package] = []  # Track linked packages for use in blocks
+        self._sealed = False
         self._package_file_fetcher_injected = package_file_fetcher is not None
 
         # Dependency injection with fallback to default instances
@@ -210,6 +211,10 @@ class CanvasManager:
         Returns:
             Formatted markdown string with package links
         """
+        seal = self._load_seal()
+        if seal:
+            return self._make_sealed_markdown(*seal)
+
         if self.config.s3_bucket_name:
             content = fmt.format_package_header(
                 package_name=self.package_name,
@@ -264,6 +269,35 @@ class CanvasManager:
 
         return content
 
+    def _load_seal(self) -> Optional[Tuple[str, dict]]:
+        """Return the entry package's sealed top hash and seal, or None if it is unsealed."""
+        if not self.config.s3_bucket_name:
+            return None
+        try:
+            return self._package_file_fetcher.get_seal(self.package_name)
+        except Exception as e:
+            self._errors.append(f"Failed to check whether the package is sealed: {str(e)}")
+            logger.error("Failed to load package seal", entry_id=self.entry_id, error=str(e))
+            return None
+
+    def _make_sealed_markdown(self, top_hash: str, seal: dict) -> str:
+        """Render the sealed revision and the linked packages frozen at acceptance."""
+        self._sealed = True
+        self.package.top_hash = top_hash
+        content = fmt.format_package_header(
+            package_name=self.package_name,
+            display_id=self.entry.display_id,
+            catalog_url=self.catalog_url,
+            sync_url=self.sync_uri(),
+            sealed_at=(seal.get("accepted_at") or "")[:10],
+        )
+        linked = [
+            Package(self.config.quilt_catalog, pkg["bucket"], pkg["name"], top_hash=pkg["top_hash"])
+            for pkg in seal.get("linked_packages", [])
+        ]
+        content += fmt.format_linked_packages(linked)
+        return content + fmt.format_error_notification(self._errors)
+
     def _make_blocks(self, updated_at: str | None = None, is_updating: bool = False) -> list:
         """Create UI blocks for the Canvas.
 
@@ -300,6 +334,7 @@ class CanvasManager:
                 update_enabled=not is_updating or not bool(self.config.s3_bucket_name),
                 browse_enabled=bool(self.config.s3_bucket_name),
                 bucketless=not bool(self.config.s3_bucket_name),
+                sealed=self._sealed,
             ),
             markdown_block,
         ]
