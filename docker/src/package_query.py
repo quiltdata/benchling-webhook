@@ -375,6 +375,7 @@ class PackageQuery:
         value: str,
         timeout: int = 30,
         array_key: Optional[str] = None,
+        pinned: bool = False,
     ) -> Dict[str, Any]:
         self.logger.info(
             "Searching for packages by metadata",
@@ -397,7 +398,7 @@ class PackageQuery:
             order_by = f"CASE WHEN {key_match} THEN 0 ELSE 1 END, pkg_name"
 
         query = f"""
-        SELECT pkg_name, timestamp, message, user_meta
+        SELECT pkg_name, timestamp, message, user_meta, top_hash
         FROM {view_name}
         WHERE {predicate}
             AND timestamp = 'latest'
@@ -430,6 +431,7 @@ class PackageQuery:
                     "metadata": user_meta,
                     "timestamp": row.get("timestamp"),
                     "message": row.get("message"),
+                    "top_hash": row.get("top_hash"),
                 }
 
         packages = [
@@ -438,6 +440,7 @@ class PackageQuery:
                 bucket=info["bucket"],
                 package_name=name,
                 metadata=info["metadata"],
+                top_hash=info["top_hash"] if pinned else None,
             )
             for name, info in sorted(package_info.items())
         ]
@@ -464,7 +467,7 @@ class PackageQuery:
         return max(1, min(worker_count, bucket_count))
 
     def _find_unique_packages_in_all_buckets(
-        self, key: str, value: str, array_key: Optional[str] = None
+        self, key: str, value: str, array_key: Optional[str] = None, pinned: bool = False
     ) -> Dict[str, Any]:
         buckets = self._list_package_view_buckets()
         all_packages: List[Package] = []
@@ -488,7 +491,7 @@ class PackageQuery:
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
                 executor.submit(
-                    self._find_unique_packages_in_bucket, bucket, key, value, 10, array_key=array_key
+                    self._find_unique_packages_in_bucket, bucket, key, value, 10, array_key=array_key, pinned=pinned
                 ): bucket
                 for bucket in buckets
             }
@@ -601,6 +604,7 @@ class PackageQuery:
             SELECT
                 r.pkg_name,
                 r.timestamp,
+                r.top_hash,
                 m.message,
                 m.metadata AS user_meta,
                 '{b}' AS _src_bucket
@@ -617,7 +621,7 @@ class PackageQuery:
         return "\nUNION ALL\n".join(branches)
 
     def _find_unique_packages_in_iceberg(
-        self, key: str, value: str, array_key: Optional[str] = None
+        self, key: str, value: str, array_key: Optional[str] = None, pinned: bool = False
     ) -> Dict[str, Any]:
         """Search for packages across all Iceberg-managed buckets using a single query.
 
@@ -673,6 +677,7 @@ class PackageQuery:
                     "metadata": user_meta,
                     "timestamp": row.get("timestamp"),
                     "message": row.get("message"),
+                    "top_hash": row.get("top_hash"),
                 }
 
         packages = [
@@ -681,6 +686,7 @@ class PackageQuery:
                 bucket=info["bucket"],
                 package_name=info["pkg_name"],
                 metadata=info["metadata"],
+                top_hash=info["top_hash"] if pinned else None,
             )
             for info in sorted(package_info.values(), key=lambda i: (i["bucket"], i["pkg_name"]))
         ]
@@ -694,7 +700,9 @@ class PackageQuery:
             },
         }
 
-    def find_unique_packages(self, key: str, value: str, array_key: Optional[str] = None) -> Dict[str, Any]:
+    def find_unique_packages(
+        self, key: str, value: str, array_key: Optional[str] = None, pinned: bool = False
+    ) -> Dict[str, Any]:
         """Find unique packages matching metadata key-value pair.
 
         Queries the {bucket}_packages-view for packages with user_meta containing
@@ -711,6 +719,8 @@ class PackageQuery:
             value: Metadata value to search for (e.g., "etr_EK1AQMQiQn", "EXP25000076")
             array_key: Optional metadata key holding a list that may contain
                 ``value`` (e.g., ``ELN_ENTRY_KEY`` for RO-Crate packages)
+            pinned: If True, each Package carries its latest ``top_hash``, so its
+                URLs name that revision instead of ``latest``
 
         Returns:
             Dict with:
@@ -745,13 +755,15 @@ class PackageQuery:
 
             # Bucketless with Iceberg: single-query path (fastest)
             if not self.bucket and self.iceberg_database:
-                result = self._find_unique_packages_in_iceberg(key, value, array_key=array_key)
+                result = self._find_unique_packages_in_iceberg(key, value, array_key=array_key, pinned=pinned)
             # Bucketless without Iceberg: concurrent fanout (legacy fallback)
             elif not self.bucket:
-                result = self._find_unique_packages_in_all_buckets(key, value, array_key=array_key)
+                result = self._find_unique_packages_in_all_buckets(key, value, array_key=array_key, pinned=pinned)
             # Specific bucket: direct single-bucket query
             else:
-                result = self._find_unique_packages_in_bucket(self.bucket, key, value, array_key=array_key)
+                result = self._find_unique_packages_in_bucket(
+                    self.bucket, key, value, array_key=array_key, pinned=pinned
+                )
 
             self.logger.info(
                 "Found unique packages",

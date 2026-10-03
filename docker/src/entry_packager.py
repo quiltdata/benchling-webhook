@@ -21,6 +21,8 @@ from benchling_sdk.models import ExportItemRequest
 from .auth import RoleManager
 from .config import get_config
 from .entry_references import link_metadata, summarize_references
+from .package_files import SEAL_FILE, PackageFileFetcher
+from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .payload import Payload
 from .retry_utils import LAMBDA_INVOKE_RETRY, REST_API_RETRY
 
@@ -858,6 +860,66 @@ For questions about the data, refer to the original Benchling entry.
             self.logger.error("Failed to send message to SQS", package_name=package_name, error=str(e))
             raise
 
+    def _package_file_fetcher(self) -> PackageFileFetcher:
+        return PackageFileFetcher(
+            catalog_url=self.config.quilt_catalog,
+            bucket=self.config.s3_bucket_name,
+            role_manager=self.role_manager,
+        )
+
+    def _write_seal(self, package_name: str, display_id: str, payload: Payload) -> None:
+        """Stage ``linked_packages.json``: the entry's linked packages, pinned to their latest revisions."""
+        query = PackageQuery(
+            bucket=self.config.s3_bucket_name,
+            catalog_url=self.config.quilt_catalog,
+            database=self.config.quilt_database,
+            config=self.config,
+        )
+        linked = query.find_unique_packages(
+            key=self.config.package_key, value=display_id, array_key=ELN_ENTRY_KEY, pinned=True
+        )["packages"]
+        seal = {
+            "event_id": payload.event_id,
+            "accepted_at": payload.webhook_data.get("createdAt"),
+            "linked_packages": [
+                {
+                    "bucket": pkg.bucket,
+                    "name": pkg.package_name,
+                    "top_hash": pkg.top_hash,
+                    "catalog_url": pkg.catalog_url,
+                    "quilt_uri": f"quilt+s3://{pkg.bucket}#package={pkg.package_name}@{pkg.top_hash}",
+                }
+                for pkg in linked
+                if pkg.package_name != package_name
+            ],
+        }
+        self.role_manager.get_s3_client().put_object(
+            Bucket=self.config.s3_bucket_name,
+            Key=f"{package_name}/{SEAL_FILE}",
+            Body=json.dumps(seal, indent=2).encode("utf-8"),
+        )
+        self.logger.info("Sealed entry package", package_name=package_name, linked=len(seal["linked_packages"]))
+
+    def _redraw_canvas(self, payload: Payload, package_name: str) -> None:
+        """Best-effort canvas update; failures are logged, never raised."""
+        s3_client = self.role_manager.get_s3_client()
+        canvas_id = payload.canvas_id or self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
+        if canvas_id and self.benchling:
+            try:
+                from .canvas import CanvasManager
+
+                updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                cm_payload = Payload({"message": {"canvasId": canvas_id, "resourceId": payload.entry_id}})
+                cm = CanvasManager(self.benchling, self.config, cm_payload)
+                cm.update_canvas(updated_at=updated_at)
+                self.logger.info("Canvas updated directly after workflow", canvas_id=canvas_id)
+            except Exception as canvas_err:
+                self.logger.warning(
+                    "Direct canvas update failed (SQS consumer will retry)",
+                    canvas_id=canvas_id,
+                    error=str(canvas_err),
+                )
+
     def execute_workflow(self, payload: Payload) -> Dict[str, Any]:
         """
         Execute complete workflow for Benchling entry processing.
@@ -904,6 +966,23 @@ For questions about the data, refer to the original Benchling entry.
                 entry_name=entry_data.get("name"),
             )
 
+            package_name = payload.package_name(self.config.s3_prefix, use_display_id=True)
+            accepted = (
+                payload.event_type == "v2.entry.updated.reviewRecord"
+                and (entry_data.get("reviewRecord") or {}).get("status") == "ACCEPTED"
+            )
+            if not accepted and self._package_file_fetcher().get_seal(package_name):
+                self.logger.info(
+                    "Entry package is sealed; skipping push", entry_id=entry_id, package_name=package_name
+                )
+                self._redraw_canvas(payload, package_name)
+                return {
+                    "status": "SEALED",
+                    "packageName": package_name,
+                    "entryId": entry_id,
+                    "message": "Entry package is sealed by an accepted review",
+                }
+
             # Step 2: Initiate export
             export_task = self._initiate_export(entry_id)
             task_id = export_task["id"]
@@ -927,13 +1006,15 @@ For questions about the data, refer to the original Benchling entry.
                 payload,
                 download_url,
             )
-            package_name = payload.package_name(self.config.s3_prefix, use_display_id=True)
             self.logger.debug(
                 "Export processed",
                 entry_id=entry_id,
                 package_name=package_name,
                 files_count=len(process_result.get("uploaded_files", [])),
             )
+
+            if accepted:
+                self._write_seal(package_name, display_id, payload)
 
             # Step 5: Send to Quilt queue
             sqs_result = self._send_to_sqs(package_name, payload)
@@ -945,23 +1026,7 @@ For questions about the data, refer to the original Benchling entry.
             # Step 6: Best-effort canvas update (don't fail workflow if this fails).
             # This provides an optimistic preview; the SQS consumer will send the
             # authoritative update once Quilt creates the package revision.
-            s3_client = self.role_manager.get_s3_client()
-            canvas_id = payload.canvas_id or self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
-            if canvas_id and self.benchling:
-                try:
-                    from .canvas import CanvasManager
-
-                    updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-                    cm_payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
-                    cm = CanvasManager(self.benchling, self.config, cm_payload)
-                    cm.update_canvas(updated_at=updated_at)
-                    self.logger.info("Canvas updated directly after workflow", canvas_id=canvas_id)
-                except Exception as canvas_err:
-                    self.logger.warning(
-                        "Direct canvas update failed (SQS consumer will retry)",
-                        canvas_id=canvas_id,
-                        error=str(canvas_err),
-                    )
+            self._redraw_canvas(payload, package_name)
 
             result = {
                 "status": "SUCCESS",
