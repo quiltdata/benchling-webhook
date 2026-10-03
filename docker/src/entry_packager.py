@@ -878,16 +878,29 @@ For questions about the data, refer to the original Benchling entry.
             raise
 
     def _write_seal(self, package_name: str, display_id: str, payload: Payload) -> None:
-        """Stage ``linked_packages.json``: the entry's linked packages, pinned to their latest revisions."""
-        query = PackageQuery(
-            bucket=self.config.s3_bucket_name,
-            catalog_url=self.config.quilt_catalog,
-            database=self.config.quilt_database,
-            config=self.config,
-        )
-        linked = query.find_unique_packages(
-            key=self.config.package_key, value=display_id, array_key=ELN_ENTRY_KEY, pinned=True
-        )["packages"]
+        """Stage ``linked_packages.json``: the entry's linked packages, pinned to their latest revisions.
+
+        If the search fails, the revision is pushed unsealed (dropping any earlier
+        seal) rather than stall the entry's queue; the next acceptance can seal it.
+        """
+        s3_client = self.role_manager.get_s3_client()
+        seal_key = f"{package_name}/{SEAL_FILE}"
+        try:
+            query = PackageQuery(
+                bucket=self.config.s3_bucket_name,
+                catalog_url=self.config.quilt_catalog,
+                database=self.config.quilt_database,
+                config=self.config,
+            )
+            linked = query.find_unique_packages(
+                key=self.config.package_key, value=display_id, array_key=ELN_ENTRY_KEY, pinned=True
+            )["packages"]
+        except Exception as exc:
+            self.logger.error(
+                "Linked package search failed; pushing unsealed", package_name=package_name, error=str(exc)
+            )
+            s3_client.delete_object(Bucket=self.config.s3_bucket_name, Key=seal_key)
+            return
         seal = {
             "event_id": payload.event_id,
             "accepted_at": payload.webhook_data.get("createdAt") or datetime.now(timezone.utc).isoformat(),
@@ -903,9 +916,9 @@ For questions about the data, refer to the original Benchling entry.
                 if pkg.package_name != package_name
             ],
         }
-        self.role_manager.get_s3_client().put_object(
+        s3_client.put_object(
             Bucket=self.config.s3_bucket_name,
-            Key=f"{package_name}/{SEAL_FILE}",
+            Key=seal_key,
             Body=json.dumps(seal, indent=2).encode("utf-8"),
         )
         self.logger.info("Sealed entry package", package_name=package_name, linked=len(seal["linked_packages"]))

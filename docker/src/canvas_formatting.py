@@ -70,7 +70,7 @@ def format_package_header(
     Returns:
         Formatted markdown string
     """
-    sealed = f"**Sealed {sealed_at}**\n\n" if sealed_at is not None else ""
+    sealed = f"**{' '.join(filter(None, ['Sealed', sealed_at]))}**\n\n" if sealed_at is not None else ""
     return f"""## {display_id}
 
 {sealed}* Package: [{package_name}]({catalog_url}) [[🔄 sync]]({sync_url})

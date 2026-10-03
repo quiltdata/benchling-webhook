@@ -894,6 +894,23 @@ def test_review_accepted_seals_linked_packages(mock_query_class):
     packager._send_to_sqs.assert_called_once()
 
 
+@patch("src.entry_packager.PackageQuery")
+def test_review_accepted_pushes_unsealed_when_search_fails(mock_query_class):
+    packager = _workflow_packager("ACCEPTED")
+    mock_query_class.return_value.find_unique_packages.side_effect = RuntimeError("Athena down")
+    s3_client = Mock()
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
+
+    assert result["status"] == "SUCCESS"
+    s3_client.put_object.assert_not_called()
+    s3_client.delete_object.assert_called_once_with(
+        Bucket="test-bucket", Key="benchling/EXP26000008/linked_packages.json"
+    )
+    packager._send_to_sqs.assert_called_once()
+
+
 @pytest.mark.parametrize("review_status", [None, "RETRACTED"])
 def test_sealed_package_refuses_other_events_but_redraws(review_status):
     packager = _workflow_packager(review_status)
