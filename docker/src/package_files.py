@@ -194,7 +194,10 @@ class PackageFileFetcher:
             return None
 
     def get_seal(self, package_name: str) -> Optional[Tuple[str, dict]]:
-        """Return the latest revision's top hash and seal, or None if it is unsealed or absent."""
+        """Return the latest revision's top hash and seal, or None if it is unsealed or absent.
+
+        Any S3 error other than a missing package raises, so a sealed package is never treated as unsealed.
+        """
         try:
             top_hash = self.get_package_top_hash(package_name)
         except ClientError as exc:
