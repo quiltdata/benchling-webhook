@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- An accepted Benchling review now seals the entry package, freezing its linked packages at their current revisions in `linked_packages.json`; the webhook stops updating a sealed package until the next acceptance, and its App Canvas links to the sealed revisions instead of `latest` (#404)
+
 ## [0.20.0] - 2026-09-29
 
 ### Added

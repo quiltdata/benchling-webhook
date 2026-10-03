@@ -81,7 +81,7 @@ def _canvas(benchling, config, payload, package_query):
         config=config,
         payload=payload,
         package_query=package_query,
-        package_file_fetcher=Mock(),
+        package_file_fetcher=Mock(get_seal=Mock(return_value=None)),
     )
 
 
@@ -206,3 +206,24 @@ def test_crate_package_reaches_canvas_on_every_search_path(
     # Sorted by name. A hand-typed eln_entry string links its package, but it isn't a crate, so no roles follow it.
     assert hand_typed_line + tagged_line + crate_line + CRATE_ROLE_LINES in content
     assert "Failed to search for linked packages" not in content
+
+
+def test_sealed_canvas_renders_frozen_list_without_search_or_update(mock_benchling, mock_config, mock_payload):
+    seal = {
+        "event_id": "evt_coYeepNKIpIi",
+        "accepted_at": "2026-04-16T00:28:41.650775+00:00",
+        "linked_packages": [{"bucket": "lab-bucket", "name": "lab/data", "top_hash": "abc123"}],
+    }
+    package_query = Mock()
+    fetcher = Mock(get_seal=Mock(return_value=("b07c91cf", seal)))
+    manager = CanvasManager(mock_benchling, mock_config, mock_payload, package_query, fetcher)
+
+    rendered = json.dumps(blocks_to_dict(manager._make_blocks()))
+
+    package_query.find_unique_packages.assert_not_called()
+    assert "Sealed 2026-04-16" in rendered
+    assert f"packages/benchling/{DISPLAY_ID}/tree/b07c91cf" in rendered
+    assert "packages/lab/data/tree/abc123" in rendered
+    assert "update-package-" not in rendered
+    assert "browse-linked-" not in rendered
+    assert "tree/latest" not in rendered

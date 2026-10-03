@@ -55,7 +55,12 @@ class TestCanvasFooterBlocks:
         mock_benchling.entries.get_entry_by_id.return_value = mock_entry
 
         # Create canvas manager
-        canvas_manager = CanvasManager(benchling=mock_benchling, config=mock_config, payload=mock_payload)
+        canvas_manager = CanvasManager(
+            benchling=mock_benchling,
+            config=mock_config,
+            payload=mock_payload,
+            package_file_fetcher=Mock(get_seal=Mock(return_value=None)),
+        )
 
         # Generate blocks
         blocks = canvas_manager._make_blocks()
@@ -95,7 +100,12 @@ class TestCanvasFooterBlocks:
         mock_benchling.entries.get_entry_by_id.return_value = mock_entry
 
         # Create canvas manager
-        canvas_manager = CanvasManager(benchling=mock_benchling, config=mock_config, payload=mock_payload)
+        canvas_manager = CanvasManager(
+            benchling=mock_benchling,
+            config=mock_config,
+            payload=mock_payload,
+            package_file_fetcher=Mock(get_seal=Mock(return_value=None)),
+        )
 
         # Generate blocks
         blocks = canvas_manager._make_blocks()

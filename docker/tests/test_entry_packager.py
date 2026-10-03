@@ -7,9 +7,11 @@ Following TDD methodology for Phase 2 implementation.
 import io
 import json
 import zipfile
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from src.entry_packager import (
     BenchlingAPIError,
@@ -21,6 +23,7 @@ from src.entry_packager import (
     parse_creator,
     validate_entry_data,
 )
+from src.packages import Package
 from src.payload import Payload
 
 
@@ -563,6 +566,7 @@ class TestEntryPackager:
         with (
             patch.object(orchestrator, "_process_export", return_value=mock_process_result),
             patch.object(orchestrator.sqs_client, "send_message", return_value=mock_sqs_response),
+            patch.object(orchestrator, "_is_sealed", return_value=False),
         ):
             payload = Payload(
                 {
@@ -815,3 +819,123 @@ class TestEntryPackager:
 
         assert written_entry_json is not None
         assert written_entry_json["canvas_id"] == "canvas_preserved"
+
+
+# Shape of the review-accepted webhook delivered for an entry in April 2026.
+REVIEW_ACCEPTED_EVENT = {
+    "baseURL": "https://example.benchling.com",
+    "message": {
+        "id": "evt_coYeepNKIpIi",
+        "type": "v2.entry.updated.reviewRecord",
+        "resourceId": "etr_cQjoaEdURo",
+        "createdAt": "2026-04-16T00:28:41.650775+00:00",
+        "updates": ["reviewRecord.status"],
+        "deprecated": False,
+        "schema": None,
+    },
+}
+
+
+def _workflow_packager(review_status) -> Any:
+    config = Mock()
+    config.s3_bucket_name = "test-bucket"
+    config.s3_prefix = "benchling"
+    config.quilt_catalog = "test.quiltdata.com"
+    config.package_key = "experiment_id"
+    config.aws_region = "us-east-1"
+    config.quilt_write_role_arn = ""
+    benchling = Mock()
+    benchling.entries.get_entry_by_id.return_value.to_dict.return_value = {
+        "id": "etr_cQjoaEdURo",
+        "display_id": "EXP26000008",
+        "reviewRecord": {"comment": "", "status": review_status},
+    }
+    packager = EntryPackager(benchling=benchling, config=config)
+    packager._initiate_export = Mock(return_value={"id": "task_1"})
+    packager._poll_export_status = Mock(return_value={"downloadURL": "https://example.com/export.zip"})
+    packager._process_export = Mock(return_value={})
+    packager._send_to_sqs = Mock(return_value={"MessageId": "msg_1"})
+    packager._redraw_canvas = Mock()
+    packager._is_sealed = Mock(return_value=True)
+    return packager
+
+
+@patch("src.entry_packager.PackageQuery")
+def test_review_accepted_seals_linked_packages(mock_query_class):
+    packager = _workflow_packager("ACCEPTED")
+    linked = Package("test.quiltdata.com", "lab-bucket", "lab/data", top_hash="abc123")
+    primary = Package("test.quiltdata.com", "test-bucket", "benchling/EXP26000008", top_hash="b07c91cf")
+    mock_query_class.return_value.find_unique_packages.return_value = {"packages": [linked, primary]}
+    s3_client = Mock()
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
+
+    assert result["status"] == "SUCCESS"
+    packager._is_sealed.assert_not_called()  # an existing seal never blocks a reseal
+    mock_query_class.return_value.find_unique_packages.assert_called_once_with(
+        key="experiment_id", value="EXP26000008", array_key="eln_entry", pinned=True
+    )
+    put = s3_client.put_object.call_args.kwargs
+    assert put["Key"] == "benchling/EXP26000008/linked_packages.json"
+    assert json.loads(put["Body"]) == {
+        "event_id": "evt_coYeepNKIpIi",
+        "accepted_at": "2026-04-16T00:28:41.650775+00:00",
+        "linked_packages": [
+            {
+                "bucket": "lab-bucket",
+                "name": "lab/data",
+                "top_hash": "abc123",
+                "catalog_url": "https://test.quiltdata.com/b/lab-bucket/packages/lab/data/tree/abc123",
+                "quilt_uri": "quilt+s3://lab-bucket#package=lab/data@abc123",
+            }
+        ],
+    }
+    packager._send_to_sqs.assert_called_once()
+
+
+@patch("src.entry_packager.PackageQuery")
+def test_review_accepted_pushes_unsealed_when_search_fails(mock_query_class):
+    packager = _workflow_packager("ACCEPTED")
+    mock_query_class.return_value.find_unique_packages.side_effect = RuntimeError("Athena down")
+    s3_client = Mock()
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
+
+    assert result["status"] == "SUCCESS"
+    s3_client.put_object.assert_not_called()
+    s3_client.delete_object.assert_called_once_with(
+        Bucket="test-bucket", Key="benchling/EXP26000008/linked_packages.json"
+    )
+    packager._send_to_sqs.assert_called_once()
+
+
+@pytest.mark.parametrize("review_status", [None, "RETRACTED"])
+def test_sealed_package_refuses_other_events_but_redraws(review_status):
+    packager = _workflow_packager(review_status)
+    event = json.loads(json.dumps(REVIEW_ACCEPTED_EVENT))
+    if review_status is None:
+        event["message"]["type"] = "v2.entry.updated.fields"
+
+    result = packager.execute_workflow(Payload(event))
+
+    assert result["status"] == "SEALED"
+    packager._initiate_export.assert_not_called()
+    packager._send_to_sqs.assert_not_called()
+    packager._redraw_canvas.assert_called_once()
+
+
+def test_is_sealed_reads_the_source_prefix():
+    packager = _workflow_packager("ACCEPTED")
+    s3_client = Mock()
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        assert EntryPackager._is_sealed(packager, "benchling/EXP1") is True
+        s3_client.head_object.assert_called_once_with(Bucket="test-bucket", Key="benchling/EXP1/linked_packages.json")
+
+        s3_client.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadObject")
+        assert EntryPackager._is_sealed(packager, "benchling/EXP1") is False
+
+        s3_client.head_object.side_effect = ClientError({"Error": {"Code": "403"}}, "HeadObject")
+        with pytest.raises(ClientError):
+            EntryPackager._is_sealed(packager, "benchling/EXP1")

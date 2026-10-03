@@ -4,6 +4,7 @@ import json
 from unittest.mock import patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from src.package_files import PackageFile, PackageFileFetcher
 
@@ -234,3 +235,30 @@ class TestPackageFileFetcher:
 
         assert len(files) == 1
         assert files[0].size == 0  # Default when size not available
+
+    def test_get_seal(self, fetcher):
+        entries = [{"logical_key": "linked_packages.json", "physical_keys": ["s3://test-bucket/seal"]}]
+        seal = {"event_id": "evt_1", "linked_packages": []}
+        with (
+            patch.object(fetcher, "get_package_top_hash", return_value="abc123"),
+            patch.object(fetcher, "_load_manifest_data", return_value=({}, entries)) as load,
+            patch.object(fetcher, "_fetch_physical_key_bytes", return_value=json.dumps(seal).encode()),
+        ):
+            assert fetcher.get_seal("benchling/EXP1") == ("abc123", seal)
+        load.assert_called_once_with("benchling/EXP1", "abc123")
+
+    def test_get_seal_unsealed_or_missing(self, fetcher):
+        with (
+            patch.object(fetcher, "get_package_top_hash", return_value="abc123"),
+            patch.object(fetcher, "_load_manifest_data", return_value=({}, [])),
+        ):
+            assert fetcher.get_seal("benchling/EXP1") is None
+
+        missing = ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+        with patch.object(fetcher, "get_package_top_hash", side_effect=missing):
+            assert fetcher.get_seal("benchling/EXP1") is None
+
+        denied = ClientError({"Error": {"Code": "AccessDenied"}}, "GetObject")
+        with patch.object(fetcher, "get_package_top_hash", side_effect=denied):
+            with pytest.raises(ClientError):
+                fetcher.get_seal("benchling/EXP1")

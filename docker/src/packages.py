@@ -42,6 +42,7 @@ class Package:
         bucket: str,
         package_name: str,
         metadata: Optional[Dict[str, Any]] = None,
+        top_hash: Optional[str] = None,
     ):
         """Initialize a Package.
 
@@ -51,11 +52,13 @@ class Package:
             package_name: Package name (e.g., "benchling/etr_123")
             metadata: Package-level user metadata, when the caller already has it
                 (e.g., from a PackageQuery match). Defaults to an empty dict.
+            top_hash: Revision to pin catalog and sync URLs to. Defaults to latest.
         """
         self.catalog_base_url = catalog_base_url
         self.bucket = bucket
         self.package_name = package_name
         self.metadata: Dict[str, Any] = metadata or {}
+        self.top_hash = top_hash
 
     @property
     def catalog_url(self) -> str:
@@ -67,6 +70,11 @@ class Package:
         Example:
             'https://nightly.quilttest.com/b/my-bucket/packages/benchling/etr_123'
         """
+        url = self._package_url
+        return f"{url}/tree/{self.top_hash}" if self.top_hash else url
+
+    @property
+    def _package_url(self) -> str:
         return f"https://{self.catalog_base_url}/b/{self.bucket}/packages/{self.package_name}"
 
     def make_catalog_url(self, logical_key: str) -> str:
@@ -82,15 +90,14 @@ class Package:
             'https://nightly.quilttest.com/b/my-bucket/packages/benchling/etr_123/tree/latest/data%2Ffile.csv'
         """
         encoded_key = quote(logical_key, safe="")
-        base_url = f"https://{self.catalog_base_url}/b/{self.bucket}/packages/{self.package_name}"
-        return f"{base_url}/tree/latest/{encoded_key}"
+        return f"{self._package_url}/tree/{self.top_hash or 'latest'}/{encoded_key}"
 
     def make_sync_url(self, path: Optional[str] = None, version: Optional[str] = None) -> str:
         """Generate QuiltSync download URL for the package or a file within it.
 
         Args:
             path: Optional file path within package (e.g., "data/file.csv")
-            version: Optional package version hash (defaults to ":latest")
+            version: Optional package version hash (defaults to top_hash, then ":latest")
 
         Returns:
             URL-encoded redirect URI for QuiltSync
@@ -103,6 +110,7 @@ class Package:
         uri = f"quilt+s3://{self.bucket}#package={self.package_name}"
 
         # Add version or default to :latest
+        version = version or self.top_hash
         if version:
             uri += f"@{version}"
         else:
@@ -129,4 +137,4 @@ class Package:
         Example:
             'https://nightly.quilttest.com/b/my-bucket/packages/benchling/etr_123?action=revisePackage'
         """
-        return f"{self.catalog_url}?action=revisePackage"
+        return f"{self._package_url}?action=revisePackage"
