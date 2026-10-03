@@ -70,6 +70,7 @@ def canvas_manager(mock_benchling, mock_config, mock_payload):
         config=mock_config,
         payload=mock_payload,
         package_query=package_query,
+        package_file_fetcher=Mock(get_seal=Mock(return_value=None)),
     )
 
 

@@ -11,6 +11,7 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from src.entry_packager import (
     BenchlingAPIError,
@@ -565,7 +566,7 @@ class TestEntryPackager:
         with (
             patch.object(orchestrator, "_process_export", return_value=mock_process_result),
             patch.object(orchestrator.sqs_client, "send_message", return_value=mock_sqs_response),
-            patch.object(orchestrator, "_package_file_fetcher", return_value=Mock(get_seal=Mock(return_value=None))),
+            patch.object(orchestrator, "_is_sealed", return_value=False),
         ):
             payload = Payload(
                 {
@@ -855,7 +856,7 @@ def _workflow_packager(review_status) -> Any:
     packager._process_export = Mock(return_value={})
     packager._send_to_sqs = Mock(return_value={"MessageId": "msg_1"})
     packager._redraw_canvas = Mock()
-    packager._package_file_fetcher = Mock(return_value=Mock(get_seal=Mock(return_value=("b07c91cf", {}))))
+    packager._is_sealed = Mock(return_value=True)
     return packager
 
 
@@ -871,7 +872,7 @@ def test_review_accepted_seals_linked_packages(mock_query_class):
         result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
 
     assert result["status"] == "SUCCESS"
-    packager._package_file_fetcher.assert_not_called()  # an existing seal never blocks a reseal
+    packager._is_sealed.assert_not_called()  # an existing seal never blocks a reseal
     mock_query_class.return_value.find_unique_packages.assert_called_once_with(
         key="experiment_id", value="EXP26000008", array_key="eln_entry", pinned=True
     )
@@ -906,3 +907,18 @@ def test_sealed_package_refuses_other_events_but_redraws(review_status):
     packager._initiate_export.assert_not_called()
     packager._send_to_sqs.assert_not_called()
     packager._redraw_canvas.assert_called_once()
+
+
+def test_is_sealed_reads_the_source_prefix():
+    packager = _workflow_packager("ACCEPTED")
+    s3_client = Mock()
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        assert EntryPackager._is_sealed(packager, "benchling/EXP1") is True
+        s3_client.head_object.assert_called_once_with(Bucket="test-bucket", Key="benchling/EXP1/linked_packages.json")
+
+        s3_client.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadObject")
+        assert EntryPackager._is_sealed(packager, "benchling/EXP1") is False
+
+        s3_client.head_object.side_effect = ClientError({"Error": {"Code": "403"}}, "HeadObject")
+        with pytest.raises(ClientError):
+            EntryPackager._is_sealed(packager, "benchling/EXP1")

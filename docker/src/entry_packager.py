@@ -17,11 +17,12 @@ import requests
 import structlog
 from benchling_sdk.benchling import Benchling
 from benchling_sdk.models import ExportItemRequest
+from botocore.exceptions import ClientError
 
 from .auth import RoleManager
 from .config import get_config
 from .entry_references import link_metadata, summarize_references
-from .package_files import SEAL_FILE, PackageFileFetcher
+from .package_files import SEAL_FILE
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .payload import Payload
 from .retry_utils import LAMBDA_INVOKE_RETRY, REST_API_RETRY
@@ -860,12 +861,21 @@ For questions about the data, refer to the original Benchling entry.
             self.logger.error("Failed to send message to SQS", package_name=package_name, error=str(e))
             raise
 
-    def _package_file_fetcher(self) -> PackageFileFetcher:
-        return PackageFileFetcher(
-            catalog_url=self.config.quilt_catalog,
-            bucket=self.config.s3_bucket_name,
-            role_manager=self.role_manager,
-        )
+    def _is_sealed(self, package_name: str) -> bool:
+        """Whether the package's source prefix holds a seal.
+
+        Every revision is built from this prefix, so this also covers a seal
+        that Quilt has not published yet. Errors other than a missing seal raise.
+        """
+        try:
+            self.role_manager.get_s3_client().head_object(
+                Bucket=self.config.s3_bucket_name, Key=f"{package_name}/{SEAL_FILE}"
+            )
+            return True
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404"}:
+                return False
+            raise
 
     def _write_seal(self, package_name: str, display_id: str, payload: Payload) -> None:
         """Stage ``linked_packages.json``: the entry's linked packages, pinned to their latest revisions."""
@@ -971,7 +981,7 @@ For questions about the data, refer to the original Benchling entry.
                 payload.event_type == "v2.entry.updated.reviewRecord"
                 and (entry_data.get("reviewRecord") or {}).get("status") == "ACCEPTED"
             )
-            if not accepted and self._package_file_fetcher().get_seal(package_name):
+            if not accepted and self._is_sealed(package_name):
                 self.logger.info(
                     "Entry package is sealed; skipping push", entry_id=entry_id, package_name=package_name
                 )

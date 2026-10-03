@@ -270,15 +270,13 @@ class CanvasManager:
         return content
 
     def _load_seal(self) -> Optional[Tuple[str, dict]]:
-        """Return the entry package's sealed top hash and seal, or None if it is unsealed."""
+        """Return the entry package's sealed top hash and seal, or None if it is unsealed.
+
+        A read failure raises, failing the canvas update, rather than render a sealed package as live.
+        """
         if not self.config.s3_bucket_name:
             return None
-        try:
-            return self._package_file_fetcher.get_seal(self.package_name)
-        except Exception as e:
-            self._errors.append(f"Failed to check whether the package is sealed: {str(e)}")
-            logger.error("Failed to load package seal", entry_id=self.entry_id, error=str(e))
-            return None
+        return self._package_file_fetcher.get_seal(self.package_name)
 
     def _make_sealed_markdown(self, top_hash: str, seal: dict) -> str:
         """Render the sealed revision and the linked packages frozen at acceptance."""
