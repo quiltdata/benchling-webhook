@@ -880,7 +880,7 @@ For questions about the data, refer to the original Benchling entry.
         )["packages"]
         seal = {
             "event_id": payload.event_id,
-            "accepted_at": payload.webhook_data.get("createdAt"),
+            "accepted_at": payload.webhook_data.get("createdAt") or datetime.now(timezone.utc).isoformat(),
             "linked_packages": [
                 {
                     "bucket": pkg.bucket,
