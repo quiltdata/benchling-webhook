@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - An accepted Benchling review now seals the entry package, freezing its linked packages at their current revisions in `linked_packages.json`; the webhook stops updating a sealed package until the review is re-opened, and its App Canvas, titled "🔒 Locked", links to the sealed revisions instead of `latest` (#404)
-- A sealed entry package is also locked in Quilt when the Benchling secret carries a Quilt admin's API key as `quilt_api_key`; the App Canvas shows the Quilt package lock under its title, or why the sealed revision is not locked (#LOCKPR)
+- A sealed entry package is also locked in Quilt when the Benchling secret carries a Quilt admin's API key as `quilt_api_key`; the App Canvas shows the Quilt package lock under its title, or why the sealed revision is not locked (#405)
 
 ## [0.20.0] - 2026-09-29
 
