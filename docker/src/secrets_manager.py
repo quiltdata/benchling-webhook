@@ -10,7 +10,7 @@ Usage:
     print(f"Tenant: {secret.tenant}")
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import structlog
@@ -66,6 +66,8 @@ class BenchlingSecretData:
         log_level: Application logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         enable_webhook_verification: Enable Lambda authorizer webhook verification (boolean)
         queue_url: SQS queue URL for package creation (optional, v0.8.0+ gets from env)
+        quilt_api_key: Optional Quilt API key of an admin user; when set, accepted
+                       entry packages are locked in the registry
     """
 
     # Benchling Authentication
@@ -85,6 +87,7 @@ class BenchlingSecretData:
 
     # Optional: SQS queue URL (v0.8.0+ gets from environment variable instead)
     queue_url: str = ""
+    quilt_api_key: str = field(default="", repr=False)
 
 
 def parse_bool(value: Any) -> bool:
@@ -267,6 +270,7 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
             log_level=data["log_level"],
             enable_webhook_verification=enable_webhook_verification,
             queue_url=queue_url,
+            quilt_api_key=data.get("quilt_api_key") or "",
         )
 
     except ClientError as e:
