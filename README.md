@@ -107,9 +107,7 @@ If the App Canvas is not already part of your standard notebook template, Benchl
 
 #### Accepted Reviews
 
-When an entry's review is accepted, the webhook seals the entry package: it records the linked packages' current revisions in `linked_packages.json`, stops updating the package, and the canvas links to those revisions instead of `latest`.
-
-To also lock the sealed revision in Quilt, add an API key belonging to a Quilt admin to the Benchling secret as `quilt_api_key`. `sync-secrets` keeps the key when it rewrites the secret. API keys expire (90 days by default), and each locked entry uses one of the stack's package locks (about 30), so past that limit entries stay sealed but not locked. The webhook never unlocks, so a later acceptance of a locked entry leaves the earlier lock in place.
+When an entry's review is accepted, the webhook seals the entry package: it records the linked packages' current revisions in `linked_packages.json`, stops updating the package, and the canvas links to those revisions instead of `latest`. Accepting the review again reseals it at the linked packages' new revisions.
 
 ### Security Features
 

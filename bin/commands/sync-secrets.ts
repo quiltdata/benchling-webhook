@@ -309,37 +309,6 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
 }
 
 /**
- * Carries the existing secret's `quilt_api_key` into the new value. The key is set
- * in Secrets Manager directly and is not in the profile, so a sync must not drop it.
- *
- * @param client - Secrets Manager client
- * @param secretName - Secret being updated
- * @param secretValue - New secret value (from buildSecretValue)
- * @returns The new secret value, with the existing `quilt_api_key` if there is one
- */
-async function keepQuiltApiKey(
-    client: SecretsManagerClient,
-    secretName: string,
-    secretValue: string,
-): Promise<string> {
-    let existing: Record<string, unknown>;
-    try {
-        existing = JSON.parse(await getSecret(client, secretName));
-    } catch (error) {
-        // A secret with no value yet, or not JSON, holds no key to keep.
-        if (error instanceof ResourceNotFoundException || error instanceof SyntaxError) {
-            return secretValue;
-        }
-        throw error;
-    }
-    const key = existing?.quilt_api_key;
-    if (typeof key !== "string" || key.length === 0) {
-        return secretValue;
-    }
-    return JSON.stringify({ ...JSON.parse(secretValue), quilt_api_key: key }, null, 2);
-}
-
-/**
  * Redacts sensitive fields from a secret value JSON string for safe display.
  *
  * Never expose the plaintext client secret in console output (e.g. dry-run).
@@ -457,7 +426,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
             console.log(`Updating BenchlingSecret from Quilt stack: ${secretName}...`);
             secretArn = await updateSecret(client, {
                 name: secretName,
-                value: await keepQuiltApiKey(client, secretName, secretValue),
+                value: secretValue,
                 description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile}, integrated mode)`,
             });
             action = "updated";
@@ -467,7 +436,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
             console.log(`Updating existing secret: ${secretName}...`);
             secretArn = await updateSecret(client, {
                 name: secretName,
-                value: await keepQuiltApiKey(client, secretName, secretValue),
+                value: secretValue,
                 description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile}, standalone mode)`,
             });
             action = "updated";

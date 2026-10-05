@@ -86,7 +86,6 @@ describe("sync-secrets CLI", () => {
             log_level: "INFO",
             webhook_allow_list: "",
             enable_webhook_verification: "true",
-            quilt_api_key: "qk_existing",
         };
 
         const updateCalls: UpdateSecretCommandInput[] = [];
@@ -127,7 +126,6 @@ describe("sync-secrets CLI", () => {
         expect(secretPayload.client_secret).not.toBe(generatedSecretName);
         expect(secretPayload.client_id).toBe("client-xyz");
         expect(secretPayload.tenant).toBe(tenant);
-        expect(secretPayload.quilt_api_key).toBe("qk_existing");
     });
 
     test("includes workflow in synced secret when configured", async () => {
@@ -183,9 +181,6 @@ describe("sync-secrets CLI", () => {
         sendMock.mockImplementation(async (command) => {
             if (command instanceof DescribeSecretCommand) {
                 return { ARN: existingSecretArn };
-            }
-            if (command instanceof GetSecretValueCommand) {
-                return { SecretString: "{}" };
             }
             if (command instanceof UpdateSecretCommand) {
                 updateCalls.push(command.input);

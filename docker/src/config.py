@@ -53,7 +53,6 @@ class Config:
     workflow: str = ""
     quilt_write_role_arn: str = ""
     quilt_iceberg_database: str = ""
-    quilt_api_key: str = field(default="", repr=False)
 
     # Secret fetching infrastructure (not the secrets themselves)
     _benchling_secret_name: str = ""
@@ -313,7 +312,6 @@ class Config:
             self.pkg_prefix = self.s3_prefix
             self.package_key = secret_data.pkg_key or "experiment_id"
             self.workflow = secret_data.workflow or ""
-            self.quilt_api_key = secret_data.quilt_api_key
 
             # Security configuration from secret, unless env var explicitly disables it
             env_override = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "").lower()
