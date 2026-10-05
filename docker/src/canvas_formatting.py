@@ -56,7 +56,7 @@ def linkify_urls(text: str) -> str:
 
 
 def format_package_header(
-    package_name: str, display_id: str, catalog_url: str, sync_url: str, sealed_at: Optional[str] = None
+    package_name: str, display_id: str, catalog_url: str, sync_url: str, status: Optional[str] = None
 ) -> str:
     """Format primary package header with action links.
 
@@ -65,15 +65,15 @@ def format_package_header(
         display_id: Entry display ID
         catalog_url: URL to catalog view
         sync_url: URL for sync action
-        sealed_at: Acceptance date, when the package is sealed
+        status: Seal or lock status, when the package is sealed
 
     Returns:
         Formatted markdown string
     """
-    sealed = f"**{' '.join(filter(None, ['Sealed', sealed_at]))}**\n\n" if sealed_at is not None else ""
+    status = f"{status}\n\n" if status else ""
     return f"""## {display_id}
 
-{sealed}* Package: [{package_name}]({catalog_url}) [[🔄 sync]]({sync_url})
+{status}* Package: [{package_name}]({catalog_url}) [[🔄 sync]]({sync_url})
 """
 
 

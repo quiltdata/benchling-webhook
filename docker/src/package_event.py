@@ -3,7 +3,7 @@ import socket
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Callable
+from typing import Callable, Optional
 
 import requests
 import structlog
@@ -14,6 +14,7 @@ from .canvas import CanvasManager
 from .config import Config
 from .package_files import PackageFileFetcher
 from .payload import Payload
+from .registry import Registry, lock_sealed_revision
 
 logger = structlog.get_logger(__name__)
 
@@ -74,6 +75,26 @@ def _classify_exception(exc: Exception) -> RefreshOutcome:
     return RefreshOutcome.TRANSIENT_ERROR
 
 
+_lock_unconfigured_logged = False
+
+
+def _lock_if_sealed(
+    package_fetcher: PackageFileFetcher, config: Config, package_name: str, display_id: str
+) -> Optional[str]:
+    """Lock the entry package if its latest revision is sealed; return why it is not locked, or None."""
+    global _lock_unconfigured_logged
+    seal = package_fetcher.get_seal(package_name)
+    if seal is None:
+        return None
+    if not config.quilt_api_key:
+        if not _lock_unconfigured_logged:
+            logger.info("Package locking is not configured (no quilt_api_key); sealed packages stay unlocked")
+            _lock_unconfigured_logged = True
+        return None
+    registry = Registry(config.quilt_catalog, config.quilt_api_key)
+    return lock_sealed_revision(registry, package_fetcher.bucket, package_name, seal[0], display_id)
+
+
 def refresh_canvas_for_package_event(
     package_name: str,
     top_hash: str | None,
@@ -120,9 +141,13 @@ def refresh_canvas_for_package_event(
             )
             return RefreshResult(RefreshOutcome.SKIPPED_NO_CANVAS)
 
+        lock_error = _lock_if_sealed(package_fetcher, config, package_name, metadata.get("display_id") or package_name)
+
         updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
-        result = CanvasManager(active_benchling, config, payload).update_canvas(updated_at=updated_at)
+        result = CanvasManager(active_benchling, config, payload, lock_error=lock_error).update_canvas(
+            updated_at=updated_at
+        )
 
         if result.get("success"):
             logger.info(
