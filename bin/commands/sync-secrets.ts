@@ -340,18 +340,31 @@ async function keepQuiltApiKey(
 }
 
 /**
+ * Whether a secret field holds a credential that must not be printed.
+ *
+ * @param key - Secret field name
+ * @returns True for client secrets, passwords, API keys and tokens
+ */
+function isSensitiveKey(key: string): boolean {
+    const lower = key.toLowerCase();
+    return ["secret", "password", "api_key", "apikey", "token"].some((term) => lower.includes(term));
+}
+
+/**
  * Redacts sensitive fields from a secret value JSON string for safe display.
  *
- * Never expose the plaintext client secret in console output (e.g. dry-run).
+ * Never expose the plaintext client secret or Quilt API key in console output (e.g. dry-run).
  *
  * @param secretValue - Secret value as JSON string (from buildSecretValue)
- * @returns JSON string with client_secret masked
+ * @returns JSON string with sensitive fields masked
  */
 function maskSecretValue(secretValue: string): string {
     try {
         const parsed = JSON.parse(secretValue) as Record<string, unknown>;
-        if (typeof parsed.client_secret === "string" && parsed.client_secret.length > 0) {
-            parsed.client_secret = "***REDACTED***";
+        for (const [key, value] of Object.entries(parsed)) {
+            if (isSensitiveKey(key) && typeof value === "string" && value.length > 0) {
+                parsed[key] = "***REDACTED***";
+            }
         }
         return JSON.stringify(parsed, null, 2);
     } catch {
@@ -438,10 +451,14 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
     const secretValue = buildSecretValue(config, clientSecretValue);
 
     if (dryRun) {
+        // Preview what an update would write, including the quilt_api_key it keeps.
+        const preview = (await secretExists(client, secretName))
+            ? await keepQuiltApiKey(client, secretName, secretValue)
+            : secretValue;
         console.log("\n=== DRY RUN MODE ===");
         console.log(`Mode: ${isIntegratedMode ? "Integrated" : "Standalone"}`);
         console.log(`Would sync secret: ${secretName}`);
-        console.log(`Secret value:\n${maskSecretValue(secretValue)}`);
+        console.log(`Secret value:\n${maskSecretValue(preview)}`);
         return results;
     }
 
@@ -705,7 +722,7 @@ async function main(): Promise<void> {
 
             console.log("=== Retrieved Secrets ===");
             Object.keys(secrets).forEach((key) => {
-                if (key.toLowerCase().includes("secret") || key.toLowerCase().includes("password")) {
+                if (isSensitiveKey(key)) {
                     console.log(`${key}: ********`);
                 } else {
                     console.log(`${key}: ${secrets[key]}`);

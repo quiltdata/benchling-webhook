@@ -14,7 +14,7 @@ from .canvas import CanvasManager
 from .config import Config
 from .package_files import PackageFileFetcher
 from .payload import Payload
-from .registry import Registry, lock_sealed_revision
+from .registry import LockState, Registry, lock_sealed_revision
 
 logger = structlog.get_logger(__name__)
 
@@ -80,8 +80,8 @@ _lock_unconfigured_logged = False
 
 def _lock_if_sealed(
     package_fetcher: PackageFileFetcher, config: Config, package_name: str, display_id: str
-) -> Optional[str]:
-    """Lock the entry package if its latest revision is sealed; return why it is not locked, or None."""
+) -> Optional[LockState]:
+    """Lock the entry package if its latest revision is sealed; return its lock state, or None if not attempted."""
     global _lock_unconfigured_logged
     seal = package_fetcher.get_seal(package_name)
     if seal is None:
@@ -128,6 +128,8 @@ def refresh_canvas_for_package_event(
                 return RefreshResult(RefreshOutcome.SKIPPED_STALE)
 
         metadata = package_fetcher.get_package_metadata(package_name)
+        # Lock before looking for a canvas: a sealed package without one must still be locked.
+        lock_state = _lock_if_sealed(package_fetcher, config, package_name, metadata.get("display_id") or package_name)
         canvas_id = metadata.get("canvas_id")
         entry_id = metadata.get("entry_id")
 
@@ -141,11 +143,9 @@ def refresh_canvas_for_package_event(
             )
             return RefreshResult(RefreshOutcome.SKIPPED_NO_CANVAS)
 
-        lock_error = _lock_if_sealed(package_fetcher, config, package_name, metadata.get("display_id") or package_name)
-
         updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
-        result = CanvasManager(active_benchling, config, payload, lock_error=lock_error).update_canvas(
+        result = CanvasManager(active_benchling, config, payload, lock_state=lock_state).update_canvas(
             updated_at=updated_at
         )
 

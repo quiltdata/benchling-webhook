@@ -209,7 +209,7 @@ describe("sync-secrets CLI", () => {
         expect(secretPayload.workflow).toBe("custom-workflow");
     });
 
-    test("dry-run never prints the plaintext client secret", async () => {
+    test("dry-run previews the kept quilt_api_key without printing credentials", async () => {
         const profileName = "default";
         const existingSecretArn =
             "arn:aws:secretsmanager:us-east-1:123456789012:secret:existing-secret-abc123";
@@ -257,9 +257,13 @@ describe("sync-secrets CLI", () => {
 
         mockStorage.writeProfile(profileName, profileConfig);
 
+        const apiKey = "qk_existing_admin_key";
         sendMock.mockImplementation(async (command) => {
             if (command instanceof DescribeSecretCommand) {
                 return { ARN: existingSecretArn };
+            }
+            if (command instanceof GetSecretValueCommand) {
+                return { SecretString: JSON.stringify({ client_secret: plaintextSecret, quilt_api_key: apiKey }) };
             }
             if (command instanceof UpdateSecretCommand || command instanceof CreateSecretCommand) {
                 throw new Error("Dry-run must not write to Secrets Manager");
@@ -278,7 +282,9 @@ describe("sync-secrets CLI", () => {
 
             const output = logSpy.mock.calls.map((call) => call.join(" ")).join("\n");
             expect(output).not.toContain(plaintextSecret);
-            expect(output).toContain("***REDACTED***");
+            expect(output).not.toContain(apiKey);
+            // The preview shows the kept quilt_api_key, masked
+            expect(output).toMatch(/"quilt_api_key": "\*\*\*REDACTED\*\*\*"/);
         } finally {
             logSpy.mockRestore();
         }

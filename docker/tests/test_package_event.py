@@ -4,6 +4,7 @@ import pytest
 import requests
 
 from src.package_event import RefreshOutcome, refresh_canvas_for_package_event
+from src.registry import LockState
 
 
 @pytest.fixture
@@ -123,17 +124,17 @@ def test_refresh_canvas_for_package_event_classifies_unexpected_error_as_transie
     assert result.error_type == "RuntimeError"
 
 
-def _refresh_with_seal(config, seal, lock_error=None):
+def _refresh_with_seal(config, seal, lock_state=None, metadata=None):
     """Run a package event for revision abc123; return (result, lock_sealed_revision mock, CanvasManager mock)."""
     with (
         patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
         patch("src.package_event.CanvasManager") as mock_canvas_manager,
-        patch("src.package_event.lock_sealed_revision", return_value=lock_error) as mock_lock,
+        patch("src.package_event.lock_sealed_revision", return_value=lock_state) as mock_lock,
     ):
         mock_fetcher = mock_fetcher_class.return_value
         mock_fetcher.bucket = "test-bucket"
         mock_fetcher.get_package_top_hash.return_value = "abc123"
-        mock_fetcher.get_package_metadata.return_value = {
+        mock_fetcher.get_package_metadata.return_value = metadata or {
             "canvas_id": "canvas_123",
             "entry_id": "etr_123456",
             "display_id": "EXP0001",
@@ -184,7 +185,21 @@ def test_package_event_passes_lock_failure_to_canvas_and_succeeds(mock_config):
     mock_config.quilt_api_key = "qk_test"
     error = "PackageLockPolicyTooLarge: unlock another package first"
 
-    result, _, mock_canvas_manager = _refresh_with_seal(mock_config, ("abc123", {}), lock_error=error)
+    state = LockState(error=error)
+
+    result, _, mock_canvas_manager = _refresh_with_seal(mock_config, ("abc123", {}), lock_state=state)
 
     assert result.outcome == RefreshOutcome.SUCCESS
-    assert mock_canvas_manager.call_args.kwargs["lock_error"] == error
+    assert mock_canvas_manager.call_args.kwargs["lock_state"] == state
+
+
+def test_package_event_locks_sealed_revision_without_canvas(mock_config):
+    mock_config.quilt_api_key = "qk_test"
+
+    result, mock_lock, mock_canvas_manager = _refresh_with_seal(
+        mock_config, ("abc123", {}), metadata={"entry_id": "etr_123456", "display_id": "EXP0001"}
+    )
+
+    assert result.outcome == RefreshOutcome.SKIPPED_NO_CANVAS
+    mock_lock.assert_called_once()
+    mock_canvas_manager.assert_not_called()
