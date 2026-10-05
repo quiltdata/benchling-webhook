@@ -22,7 +22,7 @@ from botocore.exceptions import ClientError
 from .auth import RoleManager
 from .config import get_config
 from .entry_references import link_metadata, summarize_references
-from .package_files import SEAL_FILE
+from .package_files import SEAL_FILE, is_not_found
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .payload import Payload
 from .retry_utils import LAMBDA_INVOKE_RETRY, REST_API_RETRY
@@ -873,7 +873,7 @@ For questions about the data, refer to the original Benchling entry.
             )
             return True
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404"}:
+            if is_not_found(exc):
                 return False
             raise
 
