@@ -51,6 +51,7 @@ def mock_config():
     config.athena_user_workgroup = "test-workgroup"
     config.aws_region = "us-east-1"
     config.quilt_write_role_arn = None
+    config.quilt_api_key = ""
     return config
 
 
@@ -227,3 +228,64 @@ def test_sealed_canvas_renders_frozen_list_without_search_or_update(mock_benchli
     assert "update-package-" not in rendered
     assert "browse-linked-" not in rendered
     assert "tree/latest" not in rendered
+
+
+LOCK_HASH = "9f8e7d6c" * 8
+
+
+def _sealed_markdown(benchling, config, payload, get_lock=None, lock_error=None):
+    fetcher = Mock(get_seal=Mock(return_value=(LOCK_HASH, {"accepted_at": "2026-10-04T10:00:00+00:00"})))
+    manager = CanvasManager(benchling, config, payload, Mock(), fetcher, lock_error=lock_error)
+    with patch("src.canvas.Registry") as registry:
+        registry.return_value.get_lock = get_lock or Mock(return_value=None)
+        return manager._make_markdown_content()
+
+
+def test_locked_canvas_shows_lock_date_and_links_locked_revision(mock_benchling, mock_config, mock_payload):
+    mock_config.quilt_api_key = "qk_test"
+    lock = {"hash": LOCK_HASH, "lockedAt": "2026-10-05T12:00:00+00:00"}
+
+    content = _sealed_markdown(mock_benchling, mock_config, mock_payload, get_lock=Mock(return_value=lock))
+
+    assert (
+        f"**🔒 Locked 2026-10-05** [`9f8e7d6`](https://test.quiltdata.com/b/lab-bucket/packages/benchling/{DISPLAY_ID}/tree/{LOCK_HASH})"
+        in content
+    )
+    assert "Sealed" not in content
+
+
+def test_resealed_canvas_does_not_show_earlier_lock_as_current(mock_benchling, mock_config, mock_payload):
+    mock_config.quilt_api_key = "qk_test"
+    earlier = "0123456" + "0" * 57
+    lock = {"hash": earlier, "lockedAt": "2026-10-01T12:00:00+00:00"}
+
+    content = _sealed_markdown(mock_benchling, mock_config, mock_payload, get_lock=Mock(return_value=lock))
+
+    assert "**Sealed 2026-10-04**\n\nNot locked: locked at an earlier revision [`0123456`](" in content
+    assert f"tree/{earlier})" in content
+    assert "Locked 2026-10-01" not in content
+
+
+def test_sealed_canvas_without_api_key_says_locking_is_not_configured(mock_benchling, mock_config, mock_payload):
+    content = _sealed_markdown(mock_benchling, mock_config, mock_payload)
+
+    assert "**Sealed 2026-10-04**\n\nNot locked: no Quilt API key is configured" in content
+
+
+def test_sealed_canvas_shows_lock_failure(mock_benchling, mock_config, mock_payload):
+    mock_config.quilt_api_key = "qk_test"
+    error = "PackageLockPolicyTooLarge: unlock another package first"
+
+    content = _sealed_markdown(mock_benchling, mock_config, mock_payload, lock_error=error)
+
+    assert f"**Sealed 2026-10-04**\n\nNot locked: {error}" in content
+
+
+def test_sealed_canvas_survives_lock_read_failure(mock_benchling, mock_config, mock_payload):
+    mock_config.quilt_api_key = "qk_test"
+
+    content = _sealed_markdown(
+        mock_benchling, mock_config, mock_payload, get_lock=Mock(side_effect=ConnectionError("unreachable"))
+    )
+
+    assert "**Sealed 2026-10-04**\n\nLock status unavailable: unreachable" in content
