@@ -304,7 +304,7 @@ class CanvasManager:
         """The lock on the sealed revision, or the seal and why that revision is not locked."""
         sealed = f"**{' '.join(filter(None, ['Sealed', sealed_at]))}**"
         if not self.config.quilt_api_key:
-            return f"{sealed}\n\nNot locked: no Quilt API key is configured"
+            return f"{sealed}\n\nLock not checked: no Quilt API key is configured"
         try:
             lock = Registry(self.config.quilt_catalog, self.config.quilt_api_key).get_lock(
                 self.config.s3_bucket_name, self.package_name
