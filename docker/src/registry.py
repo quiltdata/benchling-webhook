@@ -88,8 +88,8 @@ def lock_sealed_revision(registry: Registry, bucket: str, name: str, top_hash: s
         error = str(exc) or type(exc).__name__
     if error is None:
         logger.info("Locked sealed package", package_name=name, top_hash=top_hash)
-    elif error.startswith("LatestMoved:"):
-        logger.warning("Package moved past the sealed revision; not locking", package_name=name, error=error)
+    elif error.startswith(("LatestMoved:", "locked at an earlier revision")):
+        logger.warning("Sealed revision not locked", package_name=name, error=error)
     else:
         logger.error("Package lock failed; package stays sealed", package_name=name, error=error)
     return error

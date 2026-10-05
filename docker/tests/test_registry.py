@@ -34,8 +34,10 @@ def test_skips_when_already_locked_at_sealed_revision(registry):
 def test_reports_lock_left_at_earlier_revision(registry):
     registry.get_lock.return_value = {"hash": "0" * 64, "lockedAt": "2026-10-05T12:00:00+00:00"}
 
-    assert _lock(registry) == "locked at an earlier revision 0000000"
+    with patch("src.registry.logger") as logger:
+        assert _lock(registry) == "locked at an earlier revision 0000000"
     registry.lock.assert_not_called()
+    logger.error.assert_not_called()
 
 
 @pytest.mark.parametrize(

@@ -254,6 +254,16 @@ def test_locked_canvas_shows_lock_date_and_links_locked_revision(mock_benchling,
     assert "Sealed" not in content
 
 
+def test_locked_canvas_without_lock_date(mock_benchling, mock_config, mock_payload):
+    mock_config.quilt_api_key = "qk_test"
+
+    content = _sealed_markdown(
+        mock_benchling, mock_config, mock_payload, get_lock=Mock(return_value={"hash": LOCK_HASH, "lockedAt": None})
+    )
+
+    assert "**🔒 Locked** [`9f8e7d6`](" in content
+
+
 def test_resealed_canvas_does_not_show_earlier_lock_as_current(mock_benchling, mock_config, mock_payload):
     mock_config.quilt_api_key = "qk_test"
     earlier = "0123456" + "0" * 57
