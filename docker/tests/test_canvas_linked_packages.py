@@ -279,7 +279,7 @@ def test_resealed_canvas_does_not_show_earlier_lock_as_current(mock_benchling, m
 def test_sealed_canvas_without_api_key_says_locking_is_not_configured(mock_benchling, mock_config, mock_payload):
     content = _sealed_markdown(mock_benchling, mock_config, mock_payload)
 
-    assert "**Sealed 2026-10-04**\n\nNot locked: no Quilt API key is configured" in content
+    assert "**Sealed 2026-10-04**\n\nLock not checked: no Quilt API key is configured" in content
 
 
 def test_sealed_canvas_shows_lock_failure(mock_benchling, mock_config, mock_payload):
