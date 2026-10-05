@@ -13,6 +13,7 @@ def mock_config():
     config.s3_bucket_name = "test-bucket"
     config.quilt_catalog = "test.quiltdata.com"
     config.quilt_write_role_arn = ""
+    config.quilt_api_key = ""
     return config
 
 
@@ -120,3 +121,70 @@ def test_refresh_canvas_for_package_event_classifies_unexpected_error_as_transie
 
     assert result.outcome == RefreshOutcome.TRANSIENT_ERROR
     assert result.error_type == "RuntimeError"
+
+
+def _refresh_with_seal(config, seal, lock_error=None):
+    """Run a package event for revision abc123; return (result, lock_sealed_revision mock, CanvasManager mock)."""
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+        patch("src.package_event.lock_sealed_revision", return_value=lock_error) as mock_lock,
+    ):
+        mock_fetcher = mock_fetcher_class.return_value
+        mock_fetcher.bucket = "test-bucket"
+        mock_fetcher.get_package_top_hash.return_value = "abc123"
+        mock_fetcher.get_package_metadata.return_value = {
+            "canvas_id": "canvas_123",
+            "entry_id": "etr_123456",
+            "display_id": "EXP0001",
+        }
+        mock_fetcher.get_seal.return_value = seal
+        mock_canvas_manager.return_value.update_canvas.return_value = {"success": True}
+
+        result = refresh_canvas_for_package_event(
+            "benchling/EXP0001", "abc123", config=config, benchling_factory=lambda: Mock()
+        )
+    return result, mock_lock, mock_canvas_manager
+
+
+def test_package_event_locks_sealed_revision(mock_config):
+    mock_config.quilt_api_key = "qk_test"
+
+    result, mock_lock, _ = _refresh_with_seal(mock_config, ("abc123", {"linked_packages": []}))
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    mock_lock.assert_called_once()
+    assert mock_lock.call_args.args[1:] == ("test-bucket", "benchling/EXP0001", "abc123", "EXP0001")
+
+
+def test_package_event_does_not_lock_unsealed_revision(mock_config):
+    mock_config.quilt_api_key = "qk_test"
+
+    result, mock_lock, _ = _refresh_with_seal(mock_config, None)
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    mock_lock.assert_not_called()
+
+
+def test_package_event_without_api_key_seals_only_and_logs_once(mock_config):
+    with (
+        patch("src.package_event._lock_unconfigured_logged", False),
+        patch("src.package_event.logger") as mock_logger,
+    ):
+        for _ in range(2):
+            result, mock_lock, _ = _refresh_with_seal(mock_config, ("abc123", {}))
+            assert result.outcome == RefreshOutcome.SUCCESS
+            mock_lock.assert_not_called()
+
+    unconfigured = [c for c in mock_logger.info.call_args_list if "not configured" in c.args[0]]
+    assert len(unconfigured) == 1
+
+
+def test_package_event_passes_lock_failure_to_canvas_and_succeeds(mock_config):
+    mock_config.quilt_api_key = "qk_test"
+    error = "PackageLockPolicyTooLarge: unlock another package first"
+
+    result, _, mock_canvas_manager = _refresh_with_seal(mock_config, ("abc123", {}), lock_error=error)
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    assert mock_canvas_manager.call_args.kwargs["lock_error"] == error
