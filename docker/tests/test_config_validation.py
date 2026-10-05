@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.config import Config
 from src.secrets_manager import SecretsManagerError, fetch_benchling_secret, parse_bool
 
 
@@ -118,18 +117,6 @@ class TestSecretValidation:
         secret = fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
 
         assert secret.workflow == "custom-workflow"
-
-    def test_optional_quilt_api_key_is_accepted(self, mock_sm_client, valid_secret_data):
-        """Test that the optional Quilt API key is parsed when present."""
-        valid_secret_data["quilt_api_key"] = "qk_test"
-
-        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
-
-        secret = fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
-
-        assert secret.quilt_api_key == "qk_test"
-        assert "qk_test" not in repr(secret)
-        assert Config.__dataclass_fields__["quilt_api_key"].repr is False
 
     def test_tenant_is_normalized_from_hostname(self, mock_sm_client, valid_secret_data):
         """Test that tenant hostnames are normalized to the bare slug."""

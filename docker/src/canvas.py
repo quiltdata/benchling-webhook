@@ -21,16 +21,9 @@ from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packages import Package
 from .pagination import PageState, encode_bucket_name, encode_package_name, paginate_items
 from .payload import Payload
-from .registry import Registry
 from .version import __version__
 
 logger = structlog.get_logger(__name__)
-
-
-def _dated_label(label: str, timestamp: Optional[str]) -> str:
-    """Bold ``label``, followed by the date part of an ISO ``timestamp`` when there is one."""
-    date = (timestamp or "")[:10]
-    return f"**{label} {date}**" if date else f"**{label}**"
 
 
 class CanvasManager:
@@ -55,7 +48,6 @@ class CanvasManager:
         payload: Payload,
         package_query: Optional[PackageQuery] = None,
         package_file_fetcher: Optional[PackageFileFetcher] = None,
-        lock_error: Optional[str] = None,
     ):
         """Initialize CanvasManager with required dependencies.
 
@@ -65,12 +57,10 @@ class CanvasManager:
             payload: Webhook payload
             package_query: Optional PackageQuery instance (created if not provided)
             package_file_fetcher: Optional PackageFileFetcher instance (created if not provided)
-            lock_error: Why the sealed package could not be locked, to show on the canvas
         """
         self.benchling = benchling
         self.config = config
         self.payload = payload
-        self.lock_error = lock_error
         self._entry = None
         self._package = None
         self._errors: List[str] = []  # Track errors to display in notification section
@@ -297,7 +287,7 @@ class CanvasManager:
             display_id=self.entry.display_id,
             catalog_url=self.catalog_url,
             sync_url=self.sync_uri(),
-            status=self._seal_status(top_hash, seal.get("accepted_at")),
+            sealed_at=(seal.get("accepted_at") or "")[:10],
         )
         linked = [
             Package(self.config.quilt_catalog, pkg["bucket"], pkg["name"], top_hash=pkg["top_hash"])
@@ -305,28 +295,6 @@ class CanvasManager:
         ]
         content += fmt.format_linked_packages(linked)
         return content + fmt.format_error_notification(self._errors)
-
-    def _seal_status(self, top_hash: str, sealed_at: Optional[str]) -> str:
-        """The lock on the sealed revision, or the seal and why that revision is not locked."""
-        sealed = _dated_label("Sealed", sealed_at)
-        if not self.config.quilt_api_key:
-            return f"{sealed}\n\nLock not checked: no Quilt API key is configured"
-        try:
-            lock = Registry(self.config.quilt_catalog, self.config.quilt_api_key).get_lock(
-                self.config.s3_bucket_name, self.package_name
-            )
-        except Exception as exc:
-            logger.warning("Failed to read package lock", package_name=self.package_name, error=str(exc))
-            return f"{sealed}\n\nLock status unavailable: {exc}"
-        if not lock:
-            return f"{sealed}\n\nNot locked: {self.lock_error or 'accepting the review again retries the lock'}"
-        locked = Package(
-            self.config.quilt_catalog, self.config.s3_bucket_name, self.package_name, top_hash=lock["hash"]
-        )
-        link = f"[`{lock['hash'][:7]}`]({locked.catalog_url})"
-        if lock["hash"] != top_hash:
-            return f"{sealed}\n\nNot locked: locked at an earlier revision {link}"
-        return f"{_dated_label('🔒 Locked', lock.get('lockedAt'))} {link}"
 
     def _make_blocks(self, updated_at: str | None = None, is_updating: bool = False) -> list:
         """Create UI blocks for the Canvas.
