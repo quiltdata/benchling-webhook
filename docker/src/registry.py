@@ -1,5 +1,6 @@
 """Quilt registry GraphQL client for package locks."""
 
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Dict, Optional
 
@@ -24,6 +25,14 @@ mutation ($bucket: String!, $name: String!, $hash: String!, $reason: String) {
   }
 }
 """
+
+
+@dataclass(frozen=True)
+class LockState:
+    """A package's lock (``hash``, ``lockedAt``) and why it is not at the sealed revision, if it is not."""
+
+    lock: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
 
 
 @lru_cache(maxsize=None)
@@ -58,38 +67,38 @@ class Registry:
         package = self._query(LOCK_QUERY, {"bucket": bucket, "name": name})["package"]
         return (package or {}).get("lock")
 
-    def lock(self, bucket: str, name: str, top_hash: str, reason: str) -> Optional[str]:
-        """Lock the package at ``top_hash``; return None on success, else the registry's error."""
+    def lock(self, bucket: str, name: str, top_hash: str, reason: str) -> LockState:
+        """Lock the package at ``top_hash``; return the new lock, or the registry's error."""
         result = self._query(LOCK_MUTATION, {"bucket": bucket, "name": name, "hash": top_hash, "reason": reason})[
             "packageLock"
         ]
         if result["__typename"] == "PackageLock":
-            return None
+            return LockState(lock={"hash": result["hash"], "lockedAt": result.get("lockedAt")})
         error = (result.get("errors") or [result])[0]
-        return f"{error.get('name') or result['__typename']}: {error.get('message', '')}"
+        return LockState(error=f"{error.get('name') or result['__typename']}: {error.get('message', '')}")
 
 
-def lock_sealed_revision(registry: Registry, bucket: str, name: str, top_hash: str, display_id: str) -> Optional[str]:
+def lock_sealed_revision(registry: Registry, bucket: str, name: str, top_hash: str, display_id: str) -> LockState:
     """Lock a sealed entry package at its sealed revision.
 
-    Returns why the package is not locked at that revision, or None. Never raises:
-    the seal stands whether or not the lock lands.
+    Returns the package's lock afterwards, with why it is not at that revision when it is not.
+    Never raises: the seal stands whether or not the lock lands.
     """
     try:
         lock = registry.get_lock(bucket, name)
         if lock and lock["hash"] == top_hash:
-            return None
-        if lock:
+            state = LockState(lock=lock)
+        elif lock:
             # The webhook cannot unlock (admin-only), so a reseal leaves the earlier lock in place.
-            error = f"locked at an earlier revision {lock['hash'][:7]}"
+            state = LockState(lock=lock, error=f"locked at an earlier revision {lock['hash'][:7]}")
         else:
-            error = registry.lock(bucket, name, top_hash, f"Benchling review accepted: {display_id}")
+            state = registry.lock(bucket, name, top_hash, f"Benchling review accepted: {display_id}")
     except Exception as exc:
-        error = str(exc) or type(exc).__name__
-    if error is None:
+        state = LockState(error=str(exc) or type(exc).__name__)
+    if state.error is None:
         logger.info("Locked sealed package", package_name=name, top_hash=top_hash)
-    elif error.startswith(("LatestMoved:", "locked at an earlier revision")):
-        logger.warning("Sealed revision not locked", package_name=name, error=error)
+    elif state.error.startswith(("LatestMoved:", "locked at an earlier revision")):
+        logger.warning("Sealed revision not locked", package_name=name, error=state.error)
     else:
-        logger.error("Package lock failed; package stays sealed", package_name=name, error=error)
-    return error
+        logger.error("Package lock failed; package stays sealed", package_name=name, error=state.error)
+    return state

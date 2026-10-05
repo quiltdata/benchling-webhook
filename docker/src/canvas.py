@@ -21,7 +21,7 @@ from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packages import Package
 from .pagination import PageState, encode_bucket_name, encode_package_name, paginate_items
 from .payload import Payload
-from .registry import Registry
+from .registry import LockState, Registry
 from .version import __version__
 
 logger = structlog.get_logger(__name__)
@@ -49,7 +49,7 @@ class CanvasManager:
         payload: Payload,
         package_query: Optional[PackageQuery] = None,
         package_file_fetcher: Optional[PackageFileFetcher] = None,
-        lock_error: Optional[str] = None,
+        lock_state: Optional[LockState] = None,
     ):
         """Initialize CanvasManager with required dependencies.
 
@@ -59,12 +59,12 @@ class CanvasManager:
             payload: Webhook payload
             package_query: Optional PackageQuery instance (created if not provided)
             package_file_fetcher: Optional PackageFileFetcher instance (created if not provided)
-            lock_error: Why the sealed package could not be locked, to show on the canvas
+            lock_state: The sealed package's lock from a lock attempt just made; read from the registry if None
         """
         self.benchling = benchling
         self.config = config
         self.payload = payload
-        self.lock_error = lock_error
+        self.lock_state = lock_state
         self._entry = None
         self._package = None
         self._errors: List[str] = []  # Track errors to display in notification section
@@ -308,15 +308,20 @@ class CanvasManager:
         label = "**Quilt package lock:**"
         if not self.config.quilt_api_key:
             return f"{label} not checked; no Quilt API key is configured\n\n"
-        try:
-            lock = Registry(self.config.quilt_catalog, self.config.quilt_api_key).get_lock(
-                self.config.s3_bucket_name, self.package_name
-            )
-        except Exception as exc:
-            logger.warning("Failed to read package lock", package_name=self.package_name, error=str(exc))
-            return f"{label} status unavailable: {exc}\n\n"
+        lock_state = self.lock_state
+        if lock_state is None:
+            try:
+                lock_state = LockState(
+                    lock=Registry(self.config.quilt_catalog, self.config.quilt_api_key).get_lock(
+                        self.config.s3_bucket_name, self.package_name
+                    )
+                )
+            except Exception as exc:
+                logger.warning("Failed to read package lock", package_name=self.package_name, error=str(exc))
+                return f"{label} status unavailable: {exc}\n\n"
+        lock = lock_state.lock
         if not lock:
-            return f"{label} none; {self.lock_error or 'accepting the review again retries the lock'}\n\n"
+            return f"{label} none; {lock_state.error or 'accepting the review again retries the lock'}\n\n"
         locked = Package(
             self.config.quilt_catalog, self.config.s3_bucket_name, self.package_name, top_hash=lock["hash"]
         )
