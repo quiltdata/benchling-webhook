@@ -27,6 +27,12 @@ from .version import __version__
 logger = structlog.get_logger(__name__)
 
 
+def _dated_label(label: str, timestamp: Optional[str]) -> str:
+    """Bold ``label``, followed by the date part of an ISO ``timestamp`` when there is one."""
+    date = (timestamp or "")[:10]
+    return f"**{label} {date}**" if date else f"**{label}**"
+
+
 class CanvasManager:
     """Manages Canvas UI creation and updates for Benchling integration.
 
@@ -291,7 +297,7 @@ class CanvasManager:
             display_id=self.entry.display_id,
             catalog_url=self.catalog_url,
             sync_url=self.sync_uri(),
-            status=self._seal_status(top_hash, (seal.get("accepted_at") or "")[:10]),
+            status=self._seal_status(top_hash, seal.get("accepted_at")),
         )
         linked = [
             Package(self.config.quilt_catalog, pkg["bucket"], pkg["name"], top_hash=pkg["top_hash"])
@@ -300,9 +306,9 @@ class CanvasManager:
         content += fmt.format_linked_packages(linked)
         return content + fmt.format_error_notification(self._errors)
 
-    def _seal_status(self, top_hash: str, sealed_at: str) -> str:
+    def _seal_status(self, top_hash: str, sealed_at: Optional[str]) -> str:
         """The lock on the sealed revision, or the seal and why that revision is not locked."""
-        sealed = f"**{' '.join(filter(None, ['Sealed', sealed_at]))}**"
+        sealed = _dated_label("Sealed", sealed_at)
         if not self.config.quilt_api_key:
             return f"{sealed}\n\nLock not checked: no Quilt API key is configured"
         try:
@@ -320,7 +326,7 @@ class CanvasManager:
         link = f"[`{lock['hash'][:7]}`]({locked.catalog_url})"
         if lock["hash"] != top_hash:
             return f"{sealed}\n\nNot locked: locked at an earlier revision {link}"
-        return f"**{' '.join(filter(None, ['🔒 Locked', (lock.get('lockedAt') or '')[:10]]))}** {link}"
+        return f"{_dated_label('🔒 Locked', lock.get('lockedAt'))} {link}"
 
     def _make_blocks(self, updated_at: str | None = None, is_updating: bool = False) -> list:
         """Create UI blocks for the Canvas.

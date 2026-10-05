@@ -38,6 +38,11 @@ logger = structlog.get_logger(__name__)
 SEAL_FILE = "linked_packages.json"
 
 
+def is_not_found(exc: ClientError) -> bool:
+    """Whether an S3 error means the object does not exist."""
+    return exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404"}
+
+
 class PackageFile(Package):
     """Represents a file in a Quilt package.
 
@@ -201,7 +206,7 @@ class PackageFileFetcher:
         try:
             top_hash = self.get_package_top_hash(package_name)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404"}:
+            if is_not_found(exc):
                 return None
             raise
         _, entries = self._load_manifest_data(package_name, top_hash)
