@@ -885,14 +885,33 @@ For questions about the data, refer to the original Benchling entry.
             )
             self.logger.info("Review reopened; unsealed entry package", package_name=package_name)
 
+    def _staged_seal_event_id(self, seal_key: str) -> Optional[str]:
+        """The ``event_id`` of the seal staged at ``seal_key``, or None if there is none."""
+        try:
+            response = self.role_manager.get_s3_client().get_object(Bucket=self.config.s3_bucket_name, Key=seal_key)
+        except ClientError as exc:
+            if is_not_found(exc):
+                return None
+            raise
+        try:
+            return json.loads(response["Body"].read()).get("event_id")
+        except (ValueError, AttributeError):
+            return None
+
     def _write_seal(self, package_name: str, display_id: str, payload: Payload) -> None:
         """Stage ``linked_packages.json``: the entry's linked packages, pinned to their latest revisions.
+
+        A redelivered acceptance (same ``event_id``) keeps the seal it already
+        staged, so a retry never repins the accepted snapshot.
 
         If the search fails, the revision is pushed unsealed (dropping any earlier
         seal) rather than stall the entry's queue; the next acceptance can seal it.
         """
         s3_client = self.role_manager.get_s3_client()
         seal_key = f"{package_name}/{SEAL_FILE}"
+        if self._staged_seal_event_id(seal_key) == payload.event_id:
+            self.logger.info("Seal already staged for this acceptance", package_name=package_name)
+            return
         try:
             query = PackageQuery(
                 bucket=self.config.s3_bucket_name,

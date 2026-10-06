@@ -860,13 +860,25 @@ def _workflow_packager(review_status) -> Any:
     return packager
 
 
+def _s3_without_seal() -> Mock:
+    s3_client = Mock()
+    s3_client.get_object.side_effect = ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+    return s3_client
+
+
+def _s3_with_seal(event_id: str) -> Mock:
+    s3_client = Mock()
+    s3_client.get_object.return_value = {"Body": io.BytesIO(json.dumps({"event_id": event_id}).encode())}
+    return s3_client
+
+
 @patch("src.entry_packager.PackageQuery")
 def test_review_accepted_seals_linked_packages(mock_query_class):
     packager = _workflow_packager("ACCEPTED")
     linked = Package("test.quiltdata.com", "lab-bucket", "lab/data", top_hash="abc123")
     primary = Package("test.quiltdata.com", "test-bucket", "benchling/EXP26000008", top_hash="b07c91cf")
     mock_query_class.return_value.find_unique_packages.return_value = {"packages": [linked, primary]}
-    s3_client = Mock()
+    s3_client = _s3_without_seal()
 
     with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
         result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
@@ -898,7 +910,7 @@ def test_review_accepted_seals_linked_packages(mock_query_class):
 def test_review_accepted_pushes_unsealed_when_search_fails(mock_query_class):
     packager = _workflow_packager("ACCEPTED")
     mock_query_class.return_value.find_unique_packages.side_effect = RuntimeError("Athena down")
-    s3_client = Mock()
+    s3_client = _s3_without_seal()
 
     with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
         result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
@@ -909,6 +921,33 @@ def test_review_accepted_pushes_unsealed_when_search_fails(mock_query_class):
         Bucket="test-bucket", Key="benchling/EXP26000008/linked_packages.json"
     )
     packager._send_to_sqs.assert_called_once()
+
+
+@patch("src.entry_packager.PackageQuery")
+def test_redelivered_acceptance_keeps_its_staged_seal(mock_query_class):
+    packager = _workflow_packager("ACCEPTED")
+    s3_client = _s3_with_seal("evt_coYeepNKIpIi")
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
+
+    assert result["status"] == "SUCCESS"
+    mock_query_class.return_value.find_unique_packages.assert_not_called()
+    s3_client.put_object.assert_not_called()
+    s3_client.delete_object.assert_not_called()
+    packager._send_to_sqs.assert_called_once()
+
+
+@patch("src.entry_packager.PackageQuery")
+def test_new_acceptance_reseals_over_an_earlier_seal(mock_query_class):
+    packager = _workflow_packager("ACCEPTED")
+    mock_query_class.return_value.find_unique_packages.return_value = {"packages": []}
+    s3_client = _s3_with_seal("evt_earlier")
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
+
+    assert json.loads(s3_client.put_object.call_args.kwargs["Body"])["event_id"] == "evt_coYeepNKIpIi"
 
 
 @pytest.mark.parametrize(
