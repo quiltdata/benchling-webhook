@@ -877,6 +877,14 @@ For questions about the data, refer to the original Benchling entry.
                 return False
             raise
 
+    def _unseal(self, package_name: str) -> None:
+        """Remove the seal from the package's source prefix, if there is one."""
+        if self._is_sealed(package_name):
+            self.role_manager.get_s3_client().delete_object(
+                Bucket=self.config.s3_bucket_name, Key=f"{package_name}/{SEAL_FILE}"
+            )
+            self.logger.info("Review reopened; unsealed entry package", package_name=package_name)
+
     def _write_seal(self, package_name: str, display_id: str, payload: Payload) -> None:
         """Stage ``linked_packages.json``: the entry's linked packages, pinned to their latest revisions.
 
@@ -990,11 +998,16 @@ For questions about the data, refer to the original Benchling entry.
             )
 
             package_name = payload.package_name(self.config.s3_prefix, use_display_id=True)
-            accepted = (
-                payload.event_type == "v2.entry.updated.reviewRecord"
-                and (entry_data.get("reviewRecord") or {}).get("status") == "ACCEPTED"
-            )
-            if not accepted and self._is_sealed(package_name):
+            review_event = payload.event_type == "v2.entry.updated.reviewRecord"
+            review_status = (entry_data.get("reviewRecord") or {}).get("status")
+            accepted = review_event and review_status == "ACCEPTED"
+            # Any other review status (reopened, retracted, rejected) means Benchling has
+            # unlocked the entry, so the seal goes and the push proceeds. A snapshot still
+            # in progress is mid-acceptance and leaves the seal alone.
+            reopened = review_event and review_status not in ("ACCEPTED", "ACCEPTANCE_SNAPSHOT_IN_PROGRESS")
+            if reopened:
+                self._unseal(package_name)
+            elif not accepted and self._is_sealed(package_name):
                 self.logger.info(
                     "Entry package is sealed; skipping push", entry_id=entry_id, package_name=package_name
                 )

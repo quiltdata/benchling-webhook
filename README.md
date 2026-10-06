@@ -107,7 +107,7 @@ If the App Canvas is not already part of your standard notebook template, Benchl
 
 #### Accepted Reviews
 
-When an entry's review is accepted, the webhook seals the entry package: it records the linked packages' current revisions in `linked_packages.json`, stops updating the package, and the canvas links to those revisions instead of `latest`. Accepting the review again reseals it at the linked packages' new revisions.
+When an entry's review is accepted, the webhook seals the entry package: it records the linked packages' current revisions in `linked_packages.json`, stops updating the package, and the canvas, titled **🔒 Locked**, links to those revisions instead of `latest`. Re-opening the review unseals the package and updates resume; accepting it again reseals it at the linked packages' new revisions.
 
 ### Security Features
 
