@@ -885,6 +885,7 @@ def _workflow_packager(review_status) -> Any:
     config.package_key = "experiment_id"
     config.aws_region = "us-east-1"
     config.quilt_write_role_arn = ""
+    config.workflow = ""
     benchling = Mock()
     benchling.entries.get_entry_by_id.return_value.to_dict.return_value = {
         "id": "etr_cQjoaEdURo",
@@ -898,7 +899,6 @@ def _workflow_packager(review_status) -> Any:
     packager._send_to_sqs = Mock(return_value={"MessageId": "msg_1"})
     packager._redraw_canvas = Mock()
     packager._is_sealed = Mock(return_value=True)
-    packager._read_seal_bytes = Mock(return_value=None)
     return packager
 
 
@@ -909,8 +909,15 @@ def _s3_without_seal() -> Mock:
 
 
 def _s3_with_seal(event_id: str) -> Mock:
+    seal = json.dumps({"event_id": event_id}).encode()
+
+    def get_object(Bucket: str, Key: str, **_: Any) -> dict:
+        if Key.endswith("/linked_packages.json"):
+            return {"Body": io.BytesIO(seal)}
+        raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+
     s3_client = Mock()
-    s3_client.get_object.return_value = {"Body": io.BytesIO(json.dumps({"event_id": event_id}).encode())}
+    s3_client.get_object.side_effect = get_object
     return s3_client
 
 
@@ -1011,22 +1018,11 @@ def test_sealed_package_refuses_other_events_but_redraws(event_type, review_stat
     packager._redraw_canvas.assert_called_once()
 
 
-@pytest.mark.parametrize(
-    ("previous_seal", "restored"),
-    [
-        (None, None),
-        (b'{"event_id": "evt_earlier"}', b'{"event_id": "evt_earlier"}'),
-        (b'{"event_id": "evt_coYeepNKIpIi"}', None),  # this acceptance, redelivered
-    ],
-)
 @patch("src.entry_packager.check_workflow", return_value="Metadata failed validation")
 @patch("src.entry_packager.PackageQuery")
-def test_rejected_acceptance_restores_the_previous_seal(mock_query_class, _check, previous_seal, restored):
-    """A seal staged for a package the workflow rejects must not outlive the rejection."""
+def test_rejected_acceptance_leaves_the_standing_seal_alone(mock_query_class, _check):
+    """The pre-check runs before staging a seal, so a rejection never strands or drops one."""
     packager = _workflow_packager("ACCEPTED")
-    mock_query_class.return_value.find_unique_packages.return_value = {"packages": []}
-    packager._read_seal_bytes = Mock(return_value=previous_seal)
-    packager._staged_seal_event_id = Mock(return_value=None)
     s3_client = Mock()
     s3_client.get_object.return_value = {"Body": io.BytesIO(b"{}")}
 
@@ -1035,13 +1031,11 @@ def test_rejected_acceptance_restores_the_previous_seal(mock_query_class, _check
 
     assert result["status"] == "REJECTED"
     packager._send_to_sqs.assert_not_called()
-    seal_key = "benchling/EXP26000008/linked_packages.json"
-    if restored is None:
-        s3_client.delete_object.assert_called_once_with(Bucket="test-bucket", Key=seal_key)
-    else:
-        seal_puts = [c.kwargs["Body"] for c in s3_client.put_object.call_args_list if c.kwargs["Key"] == seal_key]
-        assert seal_puts[-1] == restored
-        s3_client.delete_object.assert_not_called()
+    mock_query_class.return_value.find_unique_packages.assert_not_called()
+    assert not _seal_puts(s3_client)
+    s3_client.delete_object.assert_not_called()
+    status = json.loads(s3_client.put_object.call_args.kwargs["Body"])
+    assert status["state"] == "rejected" and status["accepted"] is True
 
 
 @pytest.mark.parametrize("review_status", [None, "IN_PROGRESS", "NEEDS_REVIEW", "RETRACTED", "REJECTED"])

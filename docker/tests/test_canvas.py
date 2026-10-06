@@ -149,6 +149,21 @@ class TestCanvasManager:
         s3_client.head_object.return_value = {"LastModified": datetime(2026, 10, 6, 12, 5, tzinfo=timezone.utc)}
         assert "Quilt rejected" not in canvas_manager._make_markdown_content()
 
+    def test_rejected_acceptance_says_to_accept_again(self, mock_benchling, mock_config, mock_payload):
+        """An accepted entry is locked in Benchling, so the canvas can't offer Update Package."""
+        status = b'{"state": "rejected", "at": "2026-10-06T12:00:00+00:00", "accepted": true, "message": "Bad"}'
+        fetcher = Mock()
+        fetcher.get_seal.return_value = None
+        s3_client = fetcher.role_manager.get_s3_client.return_value
+        s3_client.get_object.side_effect = lambda **_: {"Body": io.BytesIO(status)}
+        s3_client.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadObject")
+        canvas_manager = CanvasManager(mock_benchling, mock_config, mock_payload, package_file_fetcher=fetcher)
+
+        markdown = canvas_manager._make_markdown_content()
+
+        assert "Quilt rejected this package" in markdown
+        assert "accept the review again" in markdown
+
     def test_sync_uri_different_bucket_names(self, mock_benchling, mock_config, mock_payload):
         """Test sync_uri with different bucket names containing special characters."""
         # Test with bucket name that has dashes

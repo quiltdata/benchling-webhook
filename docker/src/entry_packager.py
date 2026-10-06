@@ -988,7 +988,9 @@ For questions about the data, refer to the original Benchling entry.
             metadata,
         )
 
-    def _reject(self, s3_client: Any, package_name: str, payload: Payload, reason: str) -> Dict[str, Any]:
+    def _reject(
+        self, s3_client: Any, package_name: str, payload: Payload, reason: str, accepted: bool = False
+    ) -> Dict[str, Any]:
         """Record a workflow rejection and show it on the canvas instead of queueing a doomed package."""
         workflow = getattr(self.config, "workflow", "") or ""
         self.logger.error(
@@ -999,7 +1001,13 @@ For questions about the data, refer to the original Benchling entry.
             reason=reason,
         )
         write_status(
-            s3_client, self.config.s3_bucket_name, package_name, "rejected", workflow=workflow, message=reason
+            s3_client,
+            self.config.s3_bucket_name,
+            package_name,
+            "rejected",
+            workflow=workflow,
+            message=reason,
+            accepted=accepted,
         )
         canvas_id = payload.canvas_id or self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
         if canvas_id and self.benchling:
@@ -1016,33 +1024,6 @@ For questions about the data, refer to the original Benchling entry.
             "entryId": payload.entry_id,
             "message": reason,
         }
-
-    def _read_seal_bytes(self, package_name: str) -> Optional[bytes]:
-        """The currently staged seal, or None if the entry is unsealed."""
-        try:
-            response = self.role_manager.get_s3_client().get_object(
-                Bucket=self.config.s3_bucket_name, Key=f"{package_name}/{SEAL_FILE}"
-            )
-        except ClientError as exc:
-            if is_not_found(exc):
-                return None
-            raise
-        return response["Body"].read()
-
-    def _restore_seal(self, package_name: str, previous: Optional[bytes], payload: Payload) -> None:
-        """Put back the seal that stood before this acceptance; none, or this event's own, means unsealed."""
-        if previous is not None:
-            try:
-                if json.loads(previous).get("event_id") == payload.event_id:
-                    previous = None  # a redelivery of this acceptance staged it
-            except (ValueError, AttributeError):
-                pass
-        s3_client = self.role_manager.get_s3_client()
-        key = f"{package_name}/{SEAL_FILE}"
-        if previous is None:
-            s3_client.delete_object(Bucket=self.config.s3_bucket_name, Key=key)
-        else:
-            s3_client.put_object(Bucket=self.config.s3_bucket_name, Key=key, Body=previous)
 
     def execute_workflow(self, payload: Payload) -> Dict[str, Any]:
         """
@@ -1142,19 +1123,16 @@ For questions about the data, refer to the original Benchling entry.
                 files_count=len(process_result.get("uploaded_files", [])),
             )
 
-            previous_seal = self._read_seal_bytes(package_name) if accepted else None
-            if accepted:
-                self._write_seal(package_name, display_id, payload)
-
-            # Step 5: Check the bucket's workflow, then send to Quilt queue.
-            # The seal is staged first so the check sees the prefix the packager would build from.
+            # Step 5: Check the bucket's workflow before staging a seal, so a rejection leaves
+            # whatever seal already stands (if any) exactly as it was.
             s3_client = self.role_manager.get_s3_client()
             rejection = self._check_workflow(s3_client, package_name, payload)
             if rejection:
-                if accepted:
-                    # A staged seal with no revision behind it would refuse every later push.
-                    self._restore_seal(package_name, previous_seal, payload)
-                return self._reject(s3_client, package_name, payload, rejection)
+                return self._reject(s3_client, package_name, payload, rejection, accepted=bool(accepted))
+            if accepted:
+                self._write_seal(package_name, display_id, payload)
+
+            # Send to Quilt queue
             write_status(s3_client, self.config.s3_bucket_name, package_name, "requested")
             sqs_result = self._send_to_sqs(package_name, payload)
             self.logger.debug(
