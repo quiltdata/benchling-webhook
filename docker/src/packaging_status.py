@@ -56,10 +56,12 @@ def check_workflow(
     package_name: str,
     message: str,
     metadata: dict,
+    adds: tuple[str, ...] = (),
 ) -> Optional[str]:
     """Return why the packager would reject this package, or None if it would accept it or we can't tell.
 
     `workflow` follows the packager message: "" means the bucket default.
+    `adds` names files that will be under the prefix by the time the package is queued (e.g. a seal).
     """
     workflow_arg: Any = workflow or ...
     conf_pk = get_package_registry(f"s3://{bucket}").workflow_conf_pk
@@ -81,7 +83,7 @@ def check_workflow(
         validator.validate_message(message)
         validator.validate_name(package_name)
         validator.validate_metadata(metadata)
-        entries = None if validator.entries_validator is None else list_entries(s3_client, bucket, package_name)
+        entries = None if validator.entries_validator is None else list_entries(s3_client, bucket, package_name, adds)
         if validator.entries_validator is not None and entries is not None:
             try:
                 validator.entries_validator.validate(entries)
@@ -101,7 +103,7 @@ def check_workflow(
     return None
 
 
-def list_entries(s3_client: Any, bucket: str, package_name: str) -> Optional[list[dict]]:
+def list_entries(s3_client: Any, bucket: str, package_name: str, adds: tuple[str, ...] = ()) -> Optional[list[dict]]:
     """The entries pkgpush packages from `<package_name>/`, earlier runs' leftovers included; None if unlistable."""
     prefix = f"{package_name}/"
     entries: list[dict] = []
@@ -115,6 +117,9 @@ def list_entries(s3_client: Any, bucket: str, package_name: str) -> Optional[lis
                 if not obj["Key"].endswith("/")
             ]
             if not page.get("IsTruncated"):
+                listed = {e["logical_key"] for e in entries}
+                # Not written yet, so its size is unknown; schemas rarely constrain a seal's size.
+                entries += [{"logical_key": k, "size": 0, "meta": {}} for k in adds if k not in listed]
                 # quilt3 walks segment by segment: `a/b` before `a.txt`, unlike S3's key order.
                 return sorted(entries, key=lambda e: e["logical_key"].split("/"))
             kwargs["ContinuationToken"] = page["NextContinuationToken"]

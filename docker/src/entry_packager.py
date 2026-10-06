@@ -971,7 +971,9 @@ For questions about the data, refer to the original Benchling entry.
                     error=str(canvas_err),
                 )
 
-    def _check_workflow(self, s3_client: Any, package_name: str, payload: Payload) -> Optional[str]:
+    def _check_workflow(
+        self, s3_client: Any, package_name: str, payload: Payload, accepted: bool = False
+    ) -> Optional[str]:
         """Why the packager would reject this package, or None (see ``packaging_status.check_workflow``)."""
         try:
             entry_obj = s3_client.get_object(Bucket=self.config.s3_bucket_name, Key=f"{package_name}/entry.json")
@@ -986,6 +988,7 @@ For questions about the data, refer to the original Benchling entry.
             package_name,
             _format_commit_message(payload),
             metadata,
+            adds=(SEAL_FILE,) if accepted else (),
         )
 
     def _reject(
@@ -1126,7 +1129,7 @@ For questions about the data, refer to the original Benchling entry.
             # Step 5: Check the bucket's workflow before staging a seal, so a rejection leaves
             # whatever seal already stands (if any) exactly as it was.
             s3_client = self.role_manager.get_s3_client()
-            rejection = self._check_workflow(s3_client, package_name, payload)
+            rejection = self._check_workflow(s3_client, package_name, payload, accepted=bool(accepted))
             if rejection:
                 return self._reject(s3_client, package_name, payload, rejection, accepted=bool(accepted))
             if accepted:
