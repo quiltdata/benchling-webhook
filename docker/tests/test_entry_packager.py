@@ -1036,6 +1036,7 @@ def test_rejected_acceptance_leaves_the_standing_seal_alone(mock_query_class, _c
     s3_client.delete_object.assert_not_called()
     status = json.loads(s3_client.put_object.call_args.kwargs["Body"])
     assert status["state"] == "rejected" and status["accepted"] is True
+    assert _check.call_args.kwargs["adds"] == ("linked_packages.json",)
 
 
 @pytest.mark.parametrize("review_status", [None, "IN_PROGRESS", "NEEDS_REVIEW", "RETRACTED", "REJECTED"])

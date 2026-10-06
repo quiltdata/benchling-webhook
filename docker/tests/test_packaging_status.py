@@ -98,6 +98,18 @@ def test_entries_schema_is_enforced():
     assert check(s3) == ""
 
 
+def test_entries_schema_sees_a_seal_the_acceptance_will_add():
+    """An accepted review stages linked_packages.json after the check; the check must count it."""
+    entries_schema = {"type": "array", "contains": {"properties": {"logical_key": {"const": "linked_packages.json"}}}}
+    s3 = s3_with(
+        config({"w": {"name": "W", "entries_schema": "e"}}, default="w", schemas={"e": "s/e.json"}),
+        {"s/e.json": entries_schema},
+    )
+    s3.objects[(BUCKET, f"{NAME}/entry.json")] = b"{}"
+    assert "Package entries failed validation" in check(s3)
+    assert check_workflow(s3, BUCKET, "", NAME, "msg", META, adds=("linked_packages.json",)) is None
+
+
 def test_no_entries_schema_lists_nothing():
     s3 = s3_with(config({"w": {"name": "W"}}, default="w"))
     s3.list_objects_v2 = Mock()
