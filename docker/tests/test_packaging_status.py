@@ -110,6 +110,15 @@ def test_entries_schema_sees_a_seal_the_acceptance_will_add():
     assert check_workflow(s3, BUCKET, "", NAME, "msg", META, adds=("linked_packages.json",)) is None
 
 
+def test_list_entries_adds_placeholders_for_unwritten_files():
+    s3 = FakeS3({(BUCKET, f"{NAME}/entry.json"): b"{}"})
+    entries = list_entries(s3, BUCKET, NAME, adds=("linked_packages.json", "entry.json"))
+    assert entries == [
+        {"logical_key": "entry.json", "size": 2, "meta": {}},
+        {"logical_key": "linked_packages.json", "size": 0, "meta": {}},
+    ]
+
+
 def test_entries_rejection_with_unwritten_files_is_not_a_rejection():
     """An unwritten seal's size is a placeholder, so an entries failure then is "can't tell", not a reject."""
     entries_schema = {"type": "array", "items": {"properties": {"size": {"minimum": 1}}}}

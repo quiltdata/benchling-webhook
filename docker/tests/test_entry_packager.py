@@ -1019,8 +1019,26 @@ def test_sealed_package_refuses_other_events_but_redraws(event_type, review_stat
 
 
 @patch("src.entry_packager.check_workflow", return_value="Metadata failed validation")
+def test_rejection_on_an_accepted_entry_records_accepted_whatever_the_event(_check):
+    """A fields event on an accepted (locked) entry still can't offer Update Package."""
+    packager = _workflow_packager("ACCEPTED")
+    packager._is_sealed.return_value = False
+    event = json.loads(json.dumps(REVIEW_ACCEPTED_EVENT))
+    event["message"]["type"] = "v2.entry.updated.fields"
+    s3_client = Mock()
+    s3_client.get_object.return_value = {"Body": io.BytesIO(b"{}")}
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        result = packager.execute_workflow(Payload(event))
+
+    assert result["status"] == "REJECTED"
+    assert json.loads(s3_client.put_object.call_args.kwargs["Body"])["accepted"] is True
+    assert _check.call_args.kwargs["adds"] == ()  # no seal is staged for a fields event
+
+
+@patch("src.entry_packager.check_workflow", return_value="Metadata failed validation")
 @patch("src.entry_packager.PackageQuery")
-def test_rejected_acceptance_leaves_the_standing_seal_alone(mock_query_class, _check):
+def test_rejected_acceptance_stages_no_seal(mock_query_class, _check):
     """The pre-check runs before staging a seal, so a rejection never strands or drops one."""
     packager = _workflow_packager("ACCEPTED")
     s3_client = Mock()

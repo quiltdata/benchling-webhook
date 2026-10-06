@@ -1131,7 +1131,9 @@ For questions about the data, refer to the original Benchling entry.
             s3_client = self.role_manager.get_s3_client()
             rejection = self._check_workflow(s3_client, package_name, payload, accepted=bool(accepted))
             if rejection:
-                return self._reject(s3_client, package_name, payload, rejection, accepted=bool(accepted))
+                # From the entry, not the event: an accepted entry is locked in Benchling whatever fired.
+                locked = review_status == "ACCEPTED"
+                return self._reject(s3_client, package_name, payload, rejection, accepted=locked)
             if accepted:
                 self._write_seal(package_name, display_id, payload)
 
