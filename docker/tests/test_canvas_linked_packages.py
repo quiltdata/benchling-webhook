@@ -218,10 +218,14 @@ def test_sealed_canvas_renders_frozen_list_without_search_or_update(mock_benchli
     fetcher = Mock(get_seal=Mock(return_value=("b07c91cf", seal)))
     manager = CanvasManager(mock_benchling, mock_config, mock_payload, package_query, fetcher)
 
-    rendered = json.dumps(blocks_to_dict(manager._make_blocks()))
+    canvas_blocks = blocks_to_dict(manager._make_blocks())
+    rendered = json.dumps(canvas_blocks)
 
     package_query.find_unique_packages.assert_not_called()
-    assert "Sealed 2026-04-16" in rendered
+    buttons = canvas_blocks[0]["children"]
+    assert [b["text"] for b in buttons] == ["Browse Package", "Sealed 2026-04-16"]
+    assert buttons[1] == {"id": "sealed-etr_FFW6vEAy", "type": "BUTTON", "text": "Sealed 2026-04-16", "enabled": False}
+    assert "**Sealed" not in rendered
     assert f"packages/benchling/{DISPLAY_ID}/tree/b07c91cf" in rendered
     assert "packages/lab/data/tree/abc123" in rendered
     assert "update-package-" not in rendered
