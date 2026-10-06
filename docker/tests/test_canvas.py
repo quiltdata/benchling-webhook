@@ -49,8 +49,10 @@ class TestCanvasManager:
 
     @pytest.fixture
     def canvas_manager(self, mock_benchling, mock_config, mock_payload):
-        """Create a CanvasManager instance."""
-        return CanvasManager(mock_benchling, mock_config, mock_payload)
+        """Create a CanvasManager instance for an unsealed package."""
+        fetcher = Mock()
+        fetcher.get_seal.return_value = None
+        return CanvasManager(mock_benchling, mock_config, mock_payload, package_file_fetcher=fetcher)
 
     def test_raw_sync_uri(self, canvas_manager):
         """Test raw_sync_uri returns unencoded quilt+s3:// URI with hash fragment format and :latest by default."""
@@ -121,6 +123,7 @@ class TestCanvasManager:
             b' "workflow": "BZ_workflow", "message": "Metadata failed validation"}'
         )
         fetcher = Mock()
+        fetcher.get_seal.return_value = None
         s3_client = fetcher.role_manager.get_s3_client.return_value
         s3_client.get_object.side_effect = lambda **_: {"Body": io.BytesIO(status)}
         s3_client.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadObject")

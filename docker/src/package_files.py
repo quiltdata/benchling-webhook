@@ -23,6 +23,7 @@ from typing import Dict, List, Optional, Tuple, cast
 
 import jsonlines
 import structlog
+from botocore.exceptions import ClientError
 from quilt3.backends import get_package_registry
 from quilt3.packages import ManifestJSONDecoder
 from quilt3.util import PhysicalKey
@@ -31,6 +32,15 @@ from .auth.role_manager import RoleManager
 from .packages import Package
 
 logger = structlog.get_logger(__name__)
+
+# Written into an entry package when its Benchling review is accepted. Its
+# presence in the latest revision marks the package sealed.
+SEAL_FILE = "linked_packages.json"
+
+
+def is_not_found(exc: ClientError) -> bool:
+    """Whether an S3 error means the object does not exist."""
+    return exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404"}
 
 
 class PackageFile(Package):
@@ -140,11 +150,11 @@ class PackageFileFetcher:
         response = s3_client.get_object(**params)
         return response["Body"].read()
 
-    def _load_manifest_data(self, package_name: str) -> Tuple[Dict, List[Dict]]:
-        """Load manifest metadata and entries for the latest package version."""
+    def _load_manifest_data(self, package_name: str, top_hash: Optional[str] = None) -> Tuple[Dict, List[Dict]]:
+        """Load manifest metadata and entries for a package revision (default: latest)."""
         registry = self._get_registry()
 
-        top_hash = self._fetch_physical_key_bytes(registry.pointer_latest_pk(package_name)).decode("utf-8").strip()
+        top_hash = top_hash or self.get_package_top_hash(package_name)
         manifest_bytes = self._fetch_physical_key_bytes(registry.manifest_pk(package_name, top_hash))
 
         manifest_stream = io.StringIO(manifest_bytes.decode("utf-8"))
@@ -171,23 +181,37 @@ class PackageFileFetcher:
 
         return bool(physical_keys)
 
-    def _parse_entry_json(self, entries: List[Dict]) -> Optional[dict]:
-        """Load entry.json contents if present."""
-        entry_json = next((entry for entry in entries if entry.get("logical_key") == "entry.json"), None)
-        if not entry_json:
-            return None
-
-        physical_keys = entry_json.get("physical_keys") or []
+    def _read_json_entry(self, entries: List[Dict], logical_key: str) -> Optional[dict]:
+        """Load a JSON file from the manifest entries, or None if it is absent."""
+        entry = next((entry for entry in entries if entry.get("logical_key") == logical_key), None)
+        physical_keys = (entry or {}).get("physical_keys") or []
         if not physical_keys:
             return None
+        data = self._fetch_physical_key_bytes(PhysicalKey.from_url(physical_keys[0]))
+        return json.loads(data.decode("utf-8"))
 
+    def _parse_entry_json(self, entries: List[Dict]) -> Optional[dict]:
+        """Load entry.json contents if present."""
         try:
-            physical_key = PhysicalKey.from_url(physical_keys[0])
-            data = self._fetch_physical_key_bytes(physical_key)
-            return json.loads(data.decode("utf-8"))
+            return self._read_json_entry(entries, "entry.json")
         except Exception as exc:  # pragma: no cover - defensive logging
             self.logger.warning("Failed to load entry.json", error=str(exc))
             return None
+
+    def get_seal(self, package_name: str) -> Optional[Tuple[str, dict]]:
+        """Return the latest revision's top hash and seal, or None if it is unsealed or absent.
+
+        Any S3 error other than a missing package raises, so a sealed package is never treated as unsealed.
+        """
+        try:
+            top_hash = self.get_package_top_hash(package_name)
+        except ClientError as exc:
+            if is_not_found(exc):
+                return None
+            raise
+        _, entries = self._load_manifest_data(package_name, top_hash)
+        seal = self._read_json_entry(entries, SEAL_FILE)
+        return (top_hash, seal) if seal is not None else None
 
     def get_package_files(
         self,

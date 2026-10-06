@@ -6,7 +6,7 @@ package operations to specialized services.
 
 import threading
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 import structlog
 from benchling_api_client.v2.stable.models.app_canvas_update import AppCanvasUpdate
@@ -67,6 +67,7 @@ class CanvasManager:
         self._package = None
         self._errors: List[str] = []  # Track errors to display in notification section
         self._linked_packages: List[Package] = []  # Track linked packages for use in blocks
+        self._sealed = False  # Set once the package is found sealed
         self._package_file_fetcher_injected = package_file_fetcher is not None
 
         # Dependency injection with fallback to default instances
@@ -212,6 +213,10 @@ class CanvasManager:
         Returns:
             Formatted markdown string with package links
         """
+        seal = self._load_seal()
+        if seal:
+            return self._make_sealed_markdown(*seal)
+
         if self.config.s3_bucket_name:
             content = fmt.format_package_header(
                 package_name=self.package_name,
@@ -267,7 +272,7 @@ class CanvasManager:
 
         return content
 
-    def _packaging_status_markdown(self) -> str:
+    def _packaging_status_markdown(self, sealed: bool = False) -> str:
         """Say so when the latest packaging request was rejected or never produced a revision."""
         bucket = self.config.s3_bucket_name
         try:
@@ -288,10 +293,41 @@ class CanvasManager:
             return ""
         state = unresolved(status, latest_modified)
         if state == "rejected":
-            return fmt.format_package_rejected(status.get("workflow") or "", status.get("message") or "")
+            retry = "accept the review again" if sealed else "click **Update Package**"
+            return fmt.format_package_rejected(status.get("workflow") or "", status.get("message") or "", retry)
         if state == "stalled":
-            return fmt.format_package_stalled()
+            return fmt.format_package_stalled(
+                "accept the review again" if sealed else "click **Update Package** to retry"
+            )
         return ""
+
+    def _load_seal(self) -> Optional[Tuple[str, dict]]:
+        """Return the entry package's sealed top hash and seal, or None if it is unsealed.
+
+        A read failure raises, failing the canvas update, rather than render a sealed package as live.
+        """
+        if not self.config.s3_bucket_name:
+            return None
+        return self._package_file_fetcher.get_seal(self.package_name)
+
+    def _make_sealed_markdown(self, top_hash: str, seal: dict) -> str:
+        """Render the sealed revision and the linked packages frozen at acceptance."""
+        self._sealed = True
+        self.package.top_hash = top_hash
+        content = fmt.format_seal_heading(seal.get("accepted_at")) + fmt.format_package_header(
+            package_name=self.package_name,
+            display_id=self.entry.display_id,
+            catalog_url=self.catalog_url,
+            sync_url=self.sync_uri(),
+        )
+        linked = [
+            Package(self.config.quilt_catalog, pkg["bucket"], pkg["name"], top_hash=pkg["top_hash"])
+            for pkg in seal.get("linked_packages", [])
+        ]
+        content += fmt.format_linked_packages(linked)
+        # A rejected re-acceptance restores the earlier seal; say why the new one didn't take.
+        content += self._packaging_status_markdown(sealed=True)
+        return content + fmt.format_error_notification(self._errors)
 
     def _make_blocks(self, updated_at: str | None = None, is_updating: bool = False) -> list:
         """Create UI blocks for the Canvas.
@@ -323,15 +359,19 @@ class CanvasManager:
 
         markdown_block = blocks.create_markdown_block(markdown_content, "md1")
 
-        result = [
-            *blocks.create_main_navigation_buttons(
+        # A sealed entry has an accepted review, so Benchling locks it and disables
+        # every canvas button: show no buttons; the markdown links still work.
+        result = (
+            []
+            if self._sealed
+            else blocks.create_main_navigation_buttons(
                 self.entry_id,
                 update_enabled=not is_updating or not bool(self.config.s3_bucket_name),
                 browse_enabled=bool(self.config.s3_bucket_name),
                 bucketless=not bool(self.config.s3_bucket_name),
-            ),
-            markdown_block,
-        ]
+            )
+        )
+        result.append(markdown_block)
 
         # Add linked package browse buttons if any exist (skipped during initial update)
         if not is_updating and self._linked_packages:
