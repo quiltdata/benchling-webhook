@@ -616,6 +616,8 @@ class CanvasManager:
                     browsing_package_name,
                     can_create=bool(self.config.s3_bucket_name),
                 )
+                if (browsing_bucket_name, browsing_package_name) == (self.config.s3_bucket_name, self.package_name):
+                    markdown += self._packaging_status_markdown()
                 if self.config.s3_bucket_name:
                     actions = [
                         blocks.create_button_block(f"update-package-{self.entry_id}", "Update Package"),

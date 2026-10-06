@@ -74,8 +74,8 @@ def check_workflow(
         if workflow_arg is ...:
             return None
         return f"{workflow!r} workflow is specified, but no workflows config exist."
-    except yaml.YAMLError as e:
-        logger.warning("Workflow pre-check skipped: config is not YAML", bucket=bucket, error=str(e))
+    except Exception as e:  # noqa: BLE001 - not YAML, or a transient read error: let the packager decide
+        logger.warning("Workflow pre-check skipped: config unreadable", bucket=bucket, error=str(e))
         return None
 
     try:
@@ -116,7 +116,8 @@ def list_entries(s3_client: Any, bucket: str, package_name: str) -> Optional[lis
                 if not obj["Key"].endswith("/")
             ]
             if not page.get("IsTruncated"):
-                return entries
+                # quilt3 walks segment by segment: `a/b` before `a.txt`, unlike S3's key order.
+                return sorted(entries, key=lambda e: e["logical_key"].split("/"))
             kwargs["ContinuationToken"] = page["NextContinuationToken"]
     except Exception as e:  # noqa: BLE001 - unlistable: skip the entries schema rather than guess
         logger.warning("Workflow pre-check: prefix unlistable", bucket=bucket, error=str(e))
