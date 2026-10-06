@@ -9,7 +9,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- The package metadata (`entry.json`) now includes the entry's schema `fields` and `customFields`, keyed by snake_case versions of their display names ("Experiment Type" → `experiment_type`), with the original display name kept as `name`. A bucket workflow can now require or validate values the scientist enters in Benchling. Both keys are always present (`{}` when empty); `entry_data.json` still holds the raw entry (#409)
+- The package metadata (`entry.json`) now includes the entry's schema `fields` and `customFields`, keyed by snake_case versions of their display names ("Experiment Type" → `experiment_type`), with the original display name kept as `name`. A bucket workflow can now require or validate values the scientist enters in Benchling. Both keys are always present (`{}` when empty); `entry_data.json` still holds the raw entry. If two names give the same key, later ones get `_2`, `_3`, …; a name with no letters or digits is skipped; both are logged as warnings (#409)
+- README section on the package metadata, with a sample `entry.json` and a workflow schema that validates a field (#409)
 
 ### Fixed
 
