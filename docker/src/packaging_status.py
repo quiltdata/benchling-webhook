@@ -85,17 +85,21 @@ def check_workflow(
         validator.validate_metadata(metadata)
         entries = None if validator.entries_validator is None else list_entries(s3_client, bucket, package_name, adds)
         if validator.entries_validator is not None and entries is not None:
-            try:
-                validator.entries_validator.validate(entries)
-            except jsonschema.ValidationError as e:
-                if adds:
-                    # The not-yet-written files' sizes are guesses, so this may be a false reject: let the
-                    # packager decide; the stall backstop covers a real one.
-                    logger.warning("Workflow pre-check skipped: entries depend on unwritten files", error=e.message)
-                    return None
+            errors = list(validator.entries_validator.iter_errors(entries))
+            # Entries for not-yet-written files carry placeholder sizes, so an error about one of them,
+            # or about the array as a whole, may be false: let the packager decide (the stall backstop
+            # covers a real one). An error about an existing file is a real rejection.
+            unwritten = {i for i, e in enumerate(entries) if e["logical_key"] in adds}
+            real = [e for e in errors if e.absolute_path and e.absolute_path[0] not in unwritten]
+            if real or (errors and not adds):
                 raise WorkflowValidationError.from_schema_validation_error(
-                    "Package entries failed validation", e
-                ) from e
+                    "Package entries failed validation", (real or errors)[0]
+                )
+            if errors:
+                logger.warning(
+                    "Workflow pre-check skipped: entries depend on unwritten files", error=errors[0].message
+                )
+                return None
     except ConfigurationError as e:
         # A config or schema we can't load: let the packager decide; the stall backstop covers it.
         logger.warning("Workflow pre-check skipped", bucket=bucket, error=str(e))

@@ -120,6 +120,10 @@ def test_entries_rejection_with_unwritten_files_is_not_a_rejection():
     s3.objects[(BUCKET, f"{NAME}/entry.json")] = b"{}"
     assert check(s3) == ""
     assert check_workflow(s3, BUCKET, "", NAME, "msg", META, adds=("linked_packages.json",)) is None
+    # An existing file that breaks the schema is still a rejection on an acceptance.
+    s3.objects[(BUCKET, f"{NAME}/empty.csv")] = b""
+    reason = check_workflow(s3, BUCKET, "", NAME, "msg", META, adds=("linked_packages.json",)) or ""
+    assert "Package entries failed validation" in reason
 
 
 def test_no_entries_schema_lists_nothing():
