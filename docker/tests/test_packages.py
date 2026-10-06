@@ -237,3 +237,13 @@ class TestPackageURLIntegration:
         assert result == expected
         assert "EXP25000007" in result
         assert "?action=revisePackage" in result
+
+
+def test_top_hash_pins_catalog_and_sync_urls():
+    package = Package("nightly.quilttest.com", "test-bucket", "benchling/EXP26000008", top_hash="b07c91cf")
+    base = "https://nightly.quilttest.com/b/test-bucket/packages/benchling/EXP26000008"
+
+    assert package.catalog_url == f"{base}/tree/b07c91cf"
+    assert package.make_catalog_url("README.md") == f"{base}/tree/b07c91cf/README.md"
+    assert "%40b07c91cf" in package.make_sync_url() and "latest" not in package.make_sync_url()
+    assert package.upload_url == f"{base}?action=revisePackage"

@@ -46,8 +46,10 @@ class TestCanvasManager:
 
     @pytest.fixture
     def canvas_manager(self, mock_benchling, mock_config, mock_payload):
-        """Create a CanvasManager instance."""
-        return CanvasManager(mock_benchling, mock_config, mock_payload)
+        """Create a CanvasManager instance for an unsealed package."""
+        fetcher = Mock()
+        fetcher.get_seal.return_value = None
+        return CanvasManager(mock_benchling, mock_config, mock_payload, package_file_fetcher=fetcher)
 
     def test_raw_sync_uri(self, canvas_manager):
         """Test raw_sync_uri returns unencoded quilt+s3:// URI with hash fragment format and :latest by default."""
