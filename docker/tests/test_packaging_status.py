@@ -13,7 +13,6 @@ from src.packaging_status import check_workflow, list_entries, read_status, stat
 BUCKET = "bkt"
 NAME = "benchling/EXP1"
 META = {"display_id": "EXP1"}
-ENTRIES = [{"logical_key": "entry.json", "size": 10, "meta": {}}]
 SCHEMA = {"type": "object", "required": ["project"]}
 
 
@@ -63,9 +62,9 @@ def config(workflows, default=None, schemas=None):
     return c
 
 
-def check(s3, workflow="", meta=META, entries=ENTRIES, message="msg") -> str:
+def check(s3, workflow="", meta=META, message="msg") -> str:
     """The rejection reason, or "" when the pre-check would let the package through."""
-    return check_workflow(s3, BUCKET, workflow, NAME, message, meta, entries) or ""
+    return check_workflow(s3, BUCKET, workflow, NAME, message, meta) or ""
 
 
 def test_unset_workflow_validates_against_bucket_default():
@@ -92,7 +91,18 @@ def test_entries_schema_is_enforced():
         config({"w": {"name": "W", "entries_schema": "e"}}, default="w", schemas={"e": "s/e.json"}),
         {"s/e.json": entries_schema},
     )
+    s3.objects[(BUCKET, f"{NAME}/entry.json")] = b"{}"
     assert "Package entries failed validation" in check(s3)
+    # A file left under the prefix by an earlier run counts, as it does for the packager.
+    s3.objects[(BUCKET, f"{NAME}/README.md")] = b"hi"
+    assert check(s3) == ""
+
+
+def test_no_entries_schema_lists_nothing():
+    s3 = s3_with(config({"w": {"name": "W"}}, default="w"))
+    s3.list_objects_v2 = Mock()
+    assert check(s3) == ""
+    s3.list_objects_v2.assert_not_called()
 
 
 def test_valid_package_passes():

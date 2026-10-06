@@ -6,6 +6,7 @@ from unittest.mock import Mock
 from urllib.parse import quote
 
 import pytest
+from botocore.exceptions import ClientError
 
 from src.canvas import CanvasManager
 from src.config import Config
@@ -122,7 +123,7 @@ class TestCanvasManager:
         fetcher = Mock()
         s3_client = fetcher.role_manager.get_s3_client.return_value
         s3_client.get_object.side_effect = lambda **_: {"Body": io.BytesIO(status)}
-        s3_client.head_object.side_effect = Exception("no latest")
+        s3_client.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadObject")
         canvas_manager = CanvasManager(mock_benchling, mock_config, mock_payload, package_file_fetcher=fetcher)
 
         fetcher.get_package_files.side_effect = Exception("Package not found")
@@ -135,6 +136,10 @@ class TestCanvasManager:
         assert "`BZ_workflow`" in markdown
         assert "Metadata failed validation" in markdown
         assert s3_client.get_object.call_args.kwargs["Key"] == "benchling/test-entry.packaging_status.json"
+
+        # Can't tell whether a revision landed (throttled, denied): no banner.
+        s3_client.head_object.side_effect = ClientError({"Error": {"Code": "403"}}, "HeadObject")
+        assert "Quilt rejected" not in canvas_manager._make_markdown_content()
 
         # A revision pushed after the rejection (e.g. from the catalog) clears it.
         s3_client.head_object.side_effect = None
