@@ -21,7 +21,7 @@ from benchling_sdk.models import ExportItemRequest
 from .auth import RoleManager
 from .config import get_config
 from .entry_references import link_metadata, summarize_references
-from .packaging_status import check_workflow, list_entries, write_status
+from .packaging_status import check_workflow, write_status
 from .payload import Payload
 from .retry_utils import LAMBDA_INVOKE_RETRY, REST_API_RETRY
 
@@ -874,7 +874,6 @@ For questions about the data, refer to the original Benchling entry.
             package_name,
             _format_commit_message(payload),
             metadata,
-            list_entries(s3_client, self.config.s3_bucket_name, package_name),
         )
 
     def _reject(self, s3_client: Any, package_name: str, payload: Payload, reason: str) -> Dict[str, Any]:

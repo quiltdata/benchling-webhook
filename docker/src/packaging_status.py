@@ -56,12 +56,10 @@ def check_workflow(
     package_name: str,
     message: str,
     metadata: dict,
-    entries: Optional[list[dict]],
 ) -> Optional[str]:
     """Return why the packager would reject this package, or None if it would accept it or we can't tell.
 
     `workflow` follows the packager message: "" means the bucket default.
-    `entries` come from `list_entries`; None skips the entries schema.
     """
     workflow_arg: Any = workflow or ...
     conf_pk = get_package_registry(f"s3://{bucket}").workflow_conf_pk
@@ -83,6 +81,7 @@ def check_workflow(
         validator.validate_message(message)
         validator.validate_name(package_name)
         validator.validate_metadata(metadata)
+        entries = None if validator.entries_validator is None else list_entries(s3_client, bucket, package_name)
         if validator.entries_validator is not None and entries is not None:
             try:
                 validator.entries_validator.validate(entries)

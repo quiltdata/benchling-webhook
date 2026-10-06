@@ -12,6 +12,7 @@ import structlog
 from benchling_api_client.v2.stable.models.app_canvas_update import AppCanvasUpdate
 from benchling_sdk.benchling import Benchling
 from benchling_sdk.models import Entry
+from botocore.exceptions import ClientError
 
 from . import canvas_blocks as blocks
 from . import canvas_formatting as fmt
@@ -280,8 +281,11 @@ class CanvasManager:
         try:
             head = s3_client.head_object(Bucket=bucket, Key=f".quilt/named_packages/{self.package_name}/latest")
             latest_modified = head["LastModified"]
-        except Exception:  # noqa: BLE001 - no pointer means no revision yet
-            pass
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") not in {"404", "NoSuchKey", "NotFound"}:
+                return ""
+        except Exception:  # noqa: BLE001 - can't tell whether a revision landed: render as before
+            return ""
         state = unresolved(status, latest_modified)
         if state == "rejected":
             return fmt.format_package_rejected(status.get("workflow") or "", status.get("message") or "")
