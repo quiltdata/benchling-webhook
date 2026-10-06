@@ -154,7 +154,7 @@ class TestPackageQuery:
         query = PackageQuery(bucket="", catalog_url="catalog.example.com", database="test_db")
         query._list_package_view_buckets = Mock(return_value=["bucket-a", "bucket-b"])
         query._find_unique_packages_in_bucket = Mock(
-            side_effect=lambda bucket, _key, _value, _timeout=30, array_key=None: {
+            side_effect=lambda bucket, _key, _value, _timeout=30, array_key=None, pinned=False: {
                 "packages": [Package("catalog.example.com", bucket, f"benchling/pkg-{bucket[-1]}")],
                 "results": {
                     "rows": [{"pkg_name": f"benchling/pkg-{bucket[-1]}"}],
@@ -196,7 +196,7 @@ class TestPackageQuery:
         query = PackageQuery(bucket="", catalog_url="catalog.example.com", database="test_db")
         query._list_package_view_buckets = Mock(return_value=["bucket-a", "bucket-b"])
 
-        def search_bucket(bucket, _key, _value, _timeout=30, array_key=None):
+        def search_bucket(bucket, _key, _value, _timeout=30, array_key=None, pinned=False):
             if bucket == "bucket-a":
                 raise RuntimeError("Access denied")
             return {
@@ -343,7 +343,7 @@ class TestPackageQueryIceberg:
         result = query.find_unique_packages("experiment_id", "EXP-1")
 
         query._find_unique_packages_in_bucket.assert_called_once_with(
-            "my-bucket", "experiment_id", "EXP-1", array_key=None
+            "my-bucket", "experiment_id", "EXP-1", array_key=None, pinned=False
         )
         assert len(result["packages"]) == 1
 
@@ -836,8 +836,8 @@ class TestPackageQueryElnEntry:
 
         query._find_unique_packages_in_bucket.assert_has_calls(
             [
-                call("bucket-a", "experiment_id", "EXP-1", 10, array_key=ELN_ENTRY_KEY),
-                call("bucket-b", "experiment_id", "EXP-1", 10, array_key=ELN_ENTRY_KEY),
+                call("bucket-a", "experiment_id", "EXP-1", 10, array_key=ELN_ENTRY_KEY, pinned=False),
+                call("bucket-b", "experiment_id", "EXP-1", 10, array_key=ELN_ENTRY_KEY, pinned=False),
             ],
             any_order=True,
         )
@@ -883,3 +883,20 @@ class TestPackageQueryElnEntry:
         ]
         assert result["packages"][0].metadata == CRATE_META
         assert result["packages"][2].metadata == TAGGED_META
+
+
+@pytest.mark.parametrize("bucket,iceberg_database", [("lab-bucket", ""), ("", "iceberg_db")])
+@patch("src.package_query.RoleManager")
+def test_pinned_search_carries_top_hash(mock_role_manager_class, bucket, iceberg_database):
+    """Only a pinned search puts the selected top_hash on each Package."""
+    mock_role_manager_class.return_value._get_or_create_session.return_value = (Mock(), None)
+    query = PackageQuery(
+        bucket=bucket, catalog_url="catalog.example.com", database="test_db", iceberg_database=iceberg_database
+    )
+    query._list_iceberg_manifest_buckets = Mock(return_value=["lab-bucket"])
+    row = {"pkg_name": "lab/data", "user_meta": "{}", "top_hash": "abc123", "_src_bucket": "lab-bucket"}
+    query._execute_query = Mock(return_value=[row])
+
+    assert query.find_unique_packages("experiment_id", "EXP-1", pinned=True)["packages"][0].top_hash == "abc123"
+    assert "top_hash" in query._execute_query.call_args.args[0].split("FROM")[0]
+    assert query.find_unique_packages("experiment_id", "EXP-1")["packages"][0].top_hash is None

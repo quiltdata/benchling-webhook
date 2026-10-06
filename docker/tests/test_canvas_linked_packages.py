@@ -5,11 +5,14 @@ A package links to a Benchling entry when its metadata either sets the configure
 package built from an RO-Crate, lists that display ID under ``eln_entry``.
 """
 
+import io
 import json
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import pytest
 
+from src import canvas_formatting as fmt
 from src.canvas import CanvasManager
 from src.canvas_blocks import blocks_to_dict
 from src.config import Config
@@ -81,7 +84,7 @@ def _canvas(benchling, config, payload, package_query):
         config=config,
         payload=payload,
         package_query=package_query,
-        package_file_fetcher=Mock(),
+        package_file_fetcher=Mock(get_seal=Mock(return_value=None)),
     )
 
 
@@ -206,3 +209,58 @@ def test_crate_package_reaches_canvas_on_every_search_path(
     # Sorted by name. A hand-typed eln_entry string links its package, but it isn't a crate, so no roles follow it.
     assert hand_typed_line + tagged_line + crate_line + CRATE_ROLE_LINES in content
     assert "Failed to search for linked packages" not in content
+
+
+def test_sealed_canvas_renders_frozen_list_without_search_or_update(mock_benchling, mock_config, mock_payload):
+    seal = {
+        "event_id": "evt_coYeepNKIpIi",
+        "accepted_at": "2026-04-16T00:28:41.650775+00:00",
+        "linked_packages": [{"bucket": "lab-bucket", "name": "lab/data", "top_hash": "abc123"}],
+    }
+    package_query = Mock()
+    fetcher = Mock(get_seal=Mock(return_value=("b07c91cf", seal)))
+    manager = CanvasManager(mock_benchling, mock_config, mock_payload, package_query, fetcher)
+
+    canvas_blocks = blocks_to_dict(manager._make_blocks())
+    rendered = json.dumps(canvas_blocks)
+
+    package_query.find_unique_packages.assert_not_called()
+    assert canvas_blocks[0]["value"].startswith("# 🔒 Locked 2026-04-16 00:28 UTC\n\n## ")
+    assert "BUTTON" not in rendered
+    assert f"packages/benchling/{DISPLAY_ID}/tree/b07c91cf" in rendered
+    assert "packages/lab/data/tree/abc123" in rendered
+    assert "update-package-" not in rendered
+    assert "browse-linked-" not in rendered
+    assert "tree/latest" not in rendered
+
+
+@pytest.mark.parametrize(
+    "accepted_at, heading",
+    [
+        ("2026-10-06T06:23:38.498525+00:00", "# 🔒 Locked 2026-10-06 06:23 UTC\n\n"),
+        ("2026-10-05T23:23:38-07:00", "# 🔒 Locked 2026-10-06 06:23 UTC\n\n"),
+        (None, "# 🔒 Locked\n\n"),
+        ("not a date", "# 🔒 Locked\n\n"),
+    ],
+)
+def test_seal_heading(accepted_at, heading):
+    assert fmt.format_seal_heading(accepted_at) == heading
+
+
+def test_sealed_canvas_says_why_a_reacceptance_was_rejected(mock_benchling, mock_config, mock_payload):
+    seal = {"event_id": "evt_earlier", "accepted_at": None, "linked_packages": []}
+    fetcher = Mock(get_seal=Mock(return_value=("b07c91cf", seal)))
+    status = json.dumps(
+        {"state": "rejected", "at": "2026-10-06T12:00:00+00:00", "workflow": "BZ_workflow", "message": "Bad metadata"}
+    ).encode()
+    s3_client = fetcher.role_manager.get_s3_client.return_value
+    s3_client.get_object.side_effect = lambda **_: {"Body": io.BytesIO(status)}
+    # The sealed revision predates the rejected re-acceptance.
+    s3_client.head_object.return_value = {"LastModified": datetime(2026, 10, 1, tzinfo=timezone.utc)}
+    manager = CanvasManager(mock_benchling, mock_config, mock_payload, Mock(), fetcher)
+
+    rendered = json.dumps(blocks_to_dict(manager._make_blocks()))
+
+    assert "Quilt rejected this package" in rendered
+    assert "accept the review again" in rendered
+    assert "Update Package" not in rendered

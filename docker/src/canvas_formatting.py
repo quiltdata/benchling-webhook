@@ -5,7 +5,8 @@ code duplication across canvas views.
 """
 
 import re
-from typing import Any, Dict, List
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from .package_query import ELN_ENTRY_KEY
 from .packages import Package
@@ -71,6 +72,24 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
 
 * Package: [{package_name}]({catalog_url}) [[🔄 sync]]({sync_url})
 """
+
+
+def format_seal_heading(accepted_at: Optional[str]) -> str:
+    """Format the title of a sealed canvas, with the acceptance time in UTC when it parses.
+
+    "Locked" is Benchling's word for an entry under or past review.
+
+    Args:
+        accepted_at: ISO timestamp of the review acceptance, from the seal
+
+    Returns:
+        Formatted markdown string
+    """
+    try:
+        when = datetime.fromisoformat(accepted_at or "").astimezone(timezone.utc).strftime(" %Y-%m-%d %H:%M UTC")
+    except ValueError:
+        when = ""
+    return f"# 🔒 Locked{when}\n\n"
 
 
 def escape_markdown(text: str) -> str:
@@ -241,7 +260,7 @@ Click **Update Package** to create it.
     return md
 
 
-def format_package_rejected(workflow: str, message: str) -> str:
+def format_package_rejected(workflow: str, message: str, retry: str = "click **Update Package**") -> str:
     """The bucket's Quilt workflow rejected the latest packaging request."""
     shown = " ".join(workflow.split()).replace("`", "'")
     name = f"`{shown}`" if workflow else "the bucket's default workflow"
@@ -249,15 +268,15 @@ def format_package_rejected(workflow: str, message: str) -> str:
 > **⚠️ Quilt rejected this package.** It does not satisfy {name}:
 > {escape_markdown(" ".join(message.split()))}
 >
-> Fix the entry or the workflow, then click **Update Package**.
+> Fix the entry or the workflow, then {retry}.
 """
 
 
-def format_package_stalled() -> str:
+def format_package_stalled(retry: str = "click **Update Package** to retry") -> str:
     """A packaging request produced no revision in time."""
-    return """
+    return f"""
 > **⚠️ Package creation has not completed.** The latest update was requested over 10 minutes ago and no new
-> revision has appeared yet. If none appears, check the Quilt packager logs, then click **Update Package** to retry.
+> revision has appeared yet. If none appears, check the Quilt packager logs, then {retry}.
 """
 
 
