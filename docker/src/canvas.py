@@ -19,6 +19,7 @@ from .config import Config
 from .package_files import PackageFile, PackageFileFetcher
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packages import Package
+from .packaging_status import read_status, unresolved
 from .pagination import PageState, encode_bucket_name, encode_package_name, paginate_items
 from .payload import Payload
 from .version import __version__
@@ -217,6 +218,7 @@ class CanvasManager:
                 catalog_url=self.catalog_url,
                 sync_url=self.sync_uri(),
             )
+            content += self._packaging_status_markdown()
         else:
             content = (
                 f"## Benchling Entry\n\n"
@@ -263,6 +265,29 @@ class CanvasManager:
         content += fmt.format_error_notification(self._errors)
 
         return content
+
+    def _packaging_status_markdown(self) -> str:
+        """Say so when the latest packaging request was rejected or never produced a revision."""
+        bucket = self.config.s3_bucket_name
+        try:
+            s3_client = self._package_file_fetcher.role_manager.get_s3_client()
+        except Exception:  # noqa: BLE001 - no client renders as before
+            return ""
+        status = read_status(s3_client, bucket, self.package_name)
+        if not status:
+            return ""
+        latest_modified = None
+        try:
+            head = s3_client.head_object(Bucket=bucket, Key=f".quilt/named_packages/{self.package_name}/latest")
+            latest_modified = head["LastModified"]
+        except Exception:  # noqa: BLE001 - no pointer means no revision yet
+            pass
+        state = unresolved(status, latest_modified)
+        if state == "rejected":
+            return fmt.format_package_rejected(status.get("workflow") or "", status.get("message") or "")
+        if state == "stalled":
+            return fmt.format_package_stalled()
+        return ""
 
     def _make_blocks(self, updated_at: str | None = None, is_updating: bool = False) -> list:
         """Create UI blocks for the Canvas.

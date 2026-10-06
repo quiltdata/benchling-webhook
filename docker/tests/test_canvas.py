@@ -1,5 +1,7 @@
 """Tests for CanvasManager."""
 
+import io
+from datetime import datetime, timezone
 from unittest.mock import Mock
 from urllib.parse import quote
 
@@ -110,6 +112,30 @@ class TestCanvasManager:
         assert canvas_manager.catalog_url in markdown
         # Note: upload_url() was removed from markdown in commit 34026bc (v0.5.4)
         # The method still exists but is no longer included in canvas markdown
+
+    def test_markdown_content_shows_workflow_rejection(self, mock_benchling, mock_config, mock_payload):
+        """A rejected packaging request is shown on the main canvas with its reason."""
+        status = (
+            b'{"state": "rejected", "at": "2026-10-06T12:00:00.5+00:00",'
+            b' "workflow": "BZ_workflow", "message": "Metadata failed validation"}'
+        )
+        fetcher = Mock()
+        s3_client = fetcher.role_manager.get_s3_client.return_value
+        s3_client.get_object.side_effect = lambda **_: {"Body": io.BytesIO(status)}
+        s3_client.head_object.side_effect = Exception("no latest")
+        canvas_manager = CanvasManager(mock_benchling, mock_config, mock_payload, package_file_fetcher=fetcher)
+
+        markdown = canvas_manager._make_markdown_content()
+
+        assert "Quilt rejected this package" in markdown
+        assert "`BZ_workflow`" in markdown
+        assert "Metadata failed validation" in markdown
+        assert s3_client.get_object.call_args.kwargs["Key"] == "benchling/test-entry.packaging_status.json"
+
+        # A revision pushed after the rejection (e.g. from the catalog) clears it.
+        s3_client.head_object.side_effect = None
+        s3_client.head_object.return_value = {"LastModified": datetime(2026, 10, 6, 12, 5, tzinfo=timezone.utc)}
+        assert "Quilt rejected" not in canvas_manager._make_markdown_content()
 
     def test_sync_uri_different_bucket_names(self, mock_benchling, mock_config, mock_payload):
         """Test sync_uri with different bucket names containing special characters."""
