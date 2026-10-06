@@ -8,7 +8,6 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-import jsonschema
 import structlog
 import yaml
 from botocore.exceptions import ClientError
