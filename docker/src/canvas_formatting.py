@@ -77,6 +77,8 @@ def format_package_header(package_name: str, display_id: str, catalog_url: str, 
 def format_seal_heading(accepted_at: Optional[str]) -> str:
     """Format the title of a sealed canvas, with the acceptance time in UTC when it parses.
 
+    "Locked" is Benchling's word for an entry under or past review.
+
     Args:
         accepted_at: ISO timestamp of the review acceptance, from the seal
 
@@ -87,7 +89,7 @@ def format_seal_heading(accepted_at: Optional[str]) -> str:
         when = datetime.fromisoformat(accepted_at or "").astimezone(timezone.utc).strftime(" %Y-%m-%d %H:%M UTC")
     except ValueError:
         when = ""
-    return f"# 🔒 Sealed{when}\n\n"
+    return f"# 🔒 Locked{when}\n\n"
 
 
 def escape_markdown(text: str) -> str:
