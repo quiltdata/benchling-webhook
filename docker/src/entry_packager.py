@@ -21,6 +21,7 @@ from benchling_sdk.models import ExportItemRequest
 from .auth import RoleManager
 from .config import get_config
 from .entry_references import link_metadata, summarize_references
+from .packaging_status import check_workflow, list_entries, write_status
 from .payload import Payload
 from .retry_utils import LAMBDA_INVOKE_RETRY, REST_API_RETRY
 
@@ -858,6 +859,53 @@ For questions about the data, refer to the original Benchling entry.
             self.logger.error("Failed to send message to SQS", package_name=package_name, error=str(e))
             raise
 
+    def _check_workflow(self, s3_client: Any, package_name: str, payload: Payload) -> Optional[str]:
+        """Why the packager would reject this package, or None (see ``packaging_status.check_workflow``)."""
+        try:
+            entry_obj = s3_client.get_object(Bucket=self.config.s3_bucket_name, Key=f"{package_name}/entry.json")
+            metadata = json.loads(entry_obj["Body"].read())
+        except Exception as exc:  # noqa: BLE001 - without metadata, let the packager decide
+            self.logger.warning("Workflow pre-check skipped: entry.json unreadable", error=str(exc))
+            return None
+        return check_workflow(
+            s3_client,
+            self.config.s3_bucket_name,
+            getattr(self.config, "workflow", "") or "",
+            package_name,
+            _format_commit_message(payload),
+            metadata,
+            list_entries(s3_client, self.config.s3_bucket_name, package_name),
+        )
+
+    def _reject(self, s3_client: Any, package_name: str, payload: Payload, reason: str) -> Dict[str, Any]:
+        """Record a workflow rejection and show it on the canvas instead of queueing a doomed package."""
+        workflow = getattr(self.config, "workflow", "") or ""
+        self.logger.error(
+            "Package rejected by workflow pre-check; not queued",
+            entry_id=payload.entry_id,
+            package_name=package_name,
+            workflow=workflow or "(bucket default)",
+            reason=reason,
+        )
+        write_status(
+            s3_client, self.config.s3_bucket_name, package_name, "rejected", workflow=workflow, message=reason
+        )
+        canvas_id = payload.canvas_id or self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
+        if canvas_id and self.benchling:
+            try:
+                from .canvas import CanvasManager
+
+                cm_payload = Payload({"message": {"canvasId": canvas_id, "resourceId": payload.entry_id}})
+                CanvasManager(self.benchling, self.config, cm_payload).update_canvas()
+            except Exception as canvas_err:  # noqa: BLE001 - the status is recorded; the next render shows it
+                self.logger.warning("Canvas update after rejection failed", canvas_id=canvas_id, error=str(canvas_err))
+        return {
+            "status": "REJECTED",
+            "packageName": package_name,
+            "entryId": payload.entry_id,
+            "message": reason,
+        }
+
     def execute_workflow(self, payload: Payload) -> Dict[str, Any]:
         """
         Execute complete workflow for Benchling entry processing.
@@ -935,7 +983,12 @@ For questions about the data, refer to the original Benchling entry.
                 files_count=len(process_result.get("uploaded_files", [])),
             )
 
-            # Step 5: Send to Quilt queue
+            # Step 5: Check the bucket's workflow, then send to Quilt queue
+            s3_client = self.role_manager.get_s3_client()
+            rejection = self._check_workflow(s3_client, package_name, payload)
+            if rejection:
+                return self._reject(s3_client, package_name, payload, rejection)
+            write_status(s3_client, self.config.s3_bucket_name, package_name, "requested")
             sqs_result = self._send_to_sqs(package_name, payload)
             self.logger.debug(
                 "SQS message sent",
@@ -945,7 +998,6 @@ For questions about the data, refer to the original Benchling entry.
             # Step 6: Best-effort canvas update (don't fail workflow if this fails).
             # This provides an optimistic preview; the SQS consumer will send the
             # authoritative update once Quilt creates the package revision.
-            s3_client = self.role_manager.get_s3_client()
             canvas_id = payload.canvas_id or self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
             if canvas_id and self.benchling:
                 try:

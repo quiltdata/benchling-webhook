@@ -266,10 +266,12 @@ class TestEntryPackager:
     @pytest.fixture
     def orchestrator(self, mock_benchling, mock_config):
         """Create EntryPackager with mocked dependencies."""
-        return EntryPackager(
+        packager = EntryPackager(
             benchling=mock_benchling,
             config=mock_config,
         )
+        packager.role_manager.get_s3_client = Mock(return_value=Mock())
+        return packager
 
     def test_orchestrator_initialization(self, orchestrator):
         """Test EntryPackager initializes correctly."""
@@ -580,6 +582,35 @@ class TestEntryPackager:
             # Verify result structure
             assert result["status"] == "SUCCESS"
             assert result["packageName"] == "benchling/EXP0001"  # Now uses display_id
+
+    def test_execute_workflow_rejected_by_workflow_is_not_queued(self, orchestrator, mock_benchling):
+        """A package the bucket's workflow would reject is recorded, not sent to the packager."""
+        mock_entry = Mock()
+        mock_entry.to_dict.return_value = {"id": "etr_123", "display_id": "EXP0001", "fields": []}
+        mock_benchling.entries.get_entry_by_id.return_value = mock_entry
+        mock_benchling.exports.export.return_value = Mock(task_id="task_123")
+        mock_task = Mock(id="task_123")
+        mock_task.status.value = "SUCCEEDED"
+        mock_task.response.get = Mock(return_value="https://example.com/export.zip")
+        mock_benchling.tasks.get_by_id.return_value = mock_task
+        s3_client = orchestrator.role_manager.get_s3_client()
+        s3_client.get_object.return_value = {"Body": io.BytesIO(b'{"display_id": "EXP0001"}')}
+
+        with (
+            patch.object(orchestrator, "_process_export", return_value={"files_uploaded": []}),
+            patch.object(orchestrator.sqs_client, "send_message") as send,
+            patch("src.entry_packager.check_workflow", return_value="Metadata failed validation") as check,
+        ):
+            payload = Payload({"message": {"id": "evt_456", "resourceId": "etr_123"}})
+            result = orchestrator.execute_workflow(payload)
+
+        assert result["status"] == "REJECTED"
+        assert result["message"] == "Metadata failed validation"
+        send.assert_not_called()
+        assert check.call_args.args[5] == {"display_id": "EXP0001"}
+        status = json.loads(s3_client.put_object.call_args.kwargs["Body"])
+        assert s3_client.put_object.call_args.kwargs["Key"] == "benchling/EXP0001.packaging_status.json"
+        assert status["state"] == "rejected"
 
     def test_execute_workflow_failure_marks_failed(self, orchestrator, mock_benchling):
         """Test failed execution raises exception."""
