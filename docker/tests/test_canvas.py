@@ -114,7 +114,7 @@ class TestCanvasManager:
         # The method still exists but is no longer included in canvas markdown
 
     def test_markdown_content_shows_workflow_rejection(self, mock_benchling, mock_config, mock_payload):
-        """A rejected packaging request is shown on the main canvas with its reason."""
+        """A rejected packaging request is shown on the main and browse canvases with its reason."""
         status = (
             b'{"state": "rejected", "at": "2026-10-06T12:00:00.5+00:00",'
             b' "workflow": "BZ_workflow", "message": "Metadata failed validation"}'
@@ -124,6 +124,10 @@ class TestCanvasManager:
         s3_client.get_object.side_effect = lambda **_: {"Body": io.BytesIO(status)}
         s3_client.head_object.side_effect = Exception("no latest")
         canvas_manager = CanvasManager(mock_benchling, mock_config, mock_payload, package_file_fetcher=fetcher)
+
+        fetcher.get_package_files.side_effect = Exception("Package not found")
+        browse = canvas_manager.get_package_browser_blocks()
+        assert any("Quilt rejected this package" in str(getattr(b, "value", "")) for b in browse)
 
         markdown = canvas_manager._make_markdown_content()
 

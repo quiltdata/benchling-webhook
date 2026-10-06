@@ -1,6 +1,7 @@
 import io
 import json
 from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock
 
 import pytest
 import yaml
@@ -116,6 +117,8 @@ def test_no_config_passes_unless_a_workflow_is_named():
             config({"w": {"name": "W", "metadata_schema": "m"}}, default="w", schemas={"m": "s/m.json"}),
             denied={(BUCKET, "s/m.json")},
         ),
+        # A transient error reading the config.
+        Mock(get_object=Mock(side_effect=TimeoutError())),
     ],
 )
 def test_unknowable_is_not_a_rejection(s3):
@@ -140,6 +143,7 @@ def test_list_entries_includes_leftovers_across_pages():
         {
             (BUCKET, f"{NAME}/entry.json"): b"{}",
             (BUCKET, f"{NAME}/old/run.csv"): b"abc",
+            (BUCKET, f"{NAME}/old.txt"): b"a",
             (BUCKET, f"{NAME}/dir/"): b"",
             (BUCKET, status_key(NAME)): b"{}",
             (BUCKET, "benchling/EXP10/entry.json"): b"{}",
@@ -148,6 +152,7 @@ def test_list_entries_includes_leftovers_across_pages():
     assert list_entries(s3, BUCKET, NAME) == [
         {"logical_key": "entry.json", "size": 2, "meta": {}},
         {"logical_key": "old/run.csv", "size": 3, "meta": {}},
+        {"logical_key": "old.txt", "size": 1, "meta": {}},
     ]
     assert list_entries(object(), BUCKET, NAME) is None
 
