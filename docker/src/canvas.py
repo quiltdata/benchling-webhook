@@ -65,7 +65,7 @@ class CanvasManager:
         self._package = None
         self._errors: List[str] = []  # Track errors to display in notification section
         self._linked_packages: List[Package] = []  # Track linked packages for use in blocks
-        self._sealed_at: Optional[str] = None  # Acceptance date once the package is found sealed
+        self._sealed = False  # Set once the package is found sealed
         self._package_file_fetcher_injected = package_file_fetcher is not None
 
         # Dependency injection with fallback to default instances
@@ -280,9 +280,9 @@ class CanvasManager:
 
     def _make_sealed_markdown(self, top_hash: str, seal: dict) -> str:
         """Render the sealed revision and the linked packages frozen at acceptance."""
-        self._sealed_at = (seal.get("accepted_at") or "")[:10]
+        self._sealed = True
         self.package.top_hash = top_hash
-        content = fmt.format_package_header(
+        content = fmt.format_seal_heading(seal.get("accepted_at")) + fmt.format_package_header(
             package_name=self.package_name,
             display_id=self.entry.display_id,
             catalog_url=self.catalog_url,
@@ -325,16 +325,19 @@ class CanvasManager:
 
         markdown_block = blocks.create_markdown_block(markdown_content, "md1")
 
-        result = [
-            *blocks.create_main_navigation_buttons(
+        # A sealed entry has an accepted review, so Benchling locks it and disables
+        # every canvas button: show no buttons; the markdown links still work.
+        result = (
+            []
+            if self._sealed
+            else blocks.create_main_navigation_buttons(
                 self.entry_id,
                 update_enabled=not is_updating or not bool(self.config.s3_bucket_name),
                 browse_enabled=bool(self.config.s3_bucket_name),
                 bucketless=not bool(self.config.s3_bucket_name),
-                sealed_at=self._sealed_at,
-            ),
-            markdown_block,
-        ]
+            )
+        )
+        result.append(markdown_block)
 
         # Add linked package browse buttons if any exist (skipped during initial update)
         if not is_updating and self._linked_packages:

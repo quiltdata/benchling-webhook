@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from src import canvas_formatting as fmt
 from src.canvas import CanvasManager
 from src.canvas_blocks import blocks_to_dict
 from src.config import Config
@@ -222,12 +223,23 @@ def test_sealed_canvas_renders_frozen_list_without_search_or_update(mock_benchli
     rendered = json.dumps(canvas_blocks)
 
     package_query.find_unique_packages.assert_not_called()
-    buttons = canvas_blocks[0]["children"]
-    assert [b["text"] for b in buttons] == ["Browse Package", "Sealed 2026-04-16"]
-    assert buttons[1] == {"id": "sealed-etr_FFW6vEAy", "type": "BUTTON", "text": "Sealed 2026-04-16", "enabled": False}
-    assert "**Sealed" not in rendered
+    assert canvas_blocks[0]["value"].startswith("# 🔒 Sealed 2026-04-16 00:28 UTC\n\n## ")
+    assert "BUTTON" not in rendered
     assert f"packages/benchling/{DISPLAY_ID}/tree/b07c91cf" in rendered
     assert "packages/lab/data/tree/abc123" in rendered
     assert "update-package-" not in rendered
     assert "browse-linked-" not in rendered
     assert "tree/latest" not in rendered
+
+
+@pytest.mark.parametrize(
+    "accepted_at, heading",
+    [
+        ("2026-10-06T06:23:38.498525+00:00", "# 🔒 Sealed 2026-10-06 06:23 UTC\n\n"),
+        ("2026-10-05T23:23:38-07:00", "# 🔒 Sealed 2026-10-06 06:23 UTC\n\n"),
+        (None, "# 🔒 Sealed\n\n"),
+        ("not a date", "# 🔒 Sealed\n\n"),
+    ],
+)
+def test_seal_heading(accepted_at, heading):
+    assert fmt.format_seal_heading(accepted_at) == heading

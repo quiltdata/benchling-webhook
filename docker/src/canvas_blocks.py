@@ -95,7 +95,6 @@ def create_main_navigation_buttons(
     update_enabled: bool = True,
     browse_enabled: bool = True,
     bucketless: bool = False,
-    sealed_at: Optional[str] = None,
 ) -> List:
     """Create main view navigation buttons.
 
@@ -108,9 +107,6 @@ def create_main_navigation_buttons(
         browse_enabled: Whether the primary package browse button is enabled.
         bucketless: If True, render bucketless controls instead of primary-package
             controls. Bucketless mode has no default package to browse or update.
-        sealed_at: Acceptance date of a sealed package ("" if unknown), or None
-            if unsealed. A sealed package shows a disabled 'Sealed <date>' button
-            in place of 'Update Package': the webhook no longer pushes to it.
 
     Returns:
         List containing section with navigation buttons
@@ -130,23 +126,12 @@ def create_main_navigation_buttons(
                 text="Browse Package",
                 enabled=browse_enabled,
             ),
+            create_button(
+                button_id=f"update-package-{entry_id}",
+                text="Update Package",
+                enabled=update_enabled,
+            ),
         ]
-        if sealed_at is None:
-            buttons.append(
-                create_button(
-                    button_id=f"update-package-{entry_id}",
-                    text="Update Package",
-                    enabled=update_enabled,
-                )
-            )
-        else:
-            buttons.append(
-                create_button(
-                    button_id=f"sealed-{entry_id}",
-                    text=f"Sealed {sealed_at}".strip(),
-                    enabled=False,
-                )
-            )
 
     return [create_section("button-section-main", buttons)]
 
