@@ -243,7 +243,8 @@ Click **Update Package** to create it.
 
 def format_package_rejected(workflow: str, message: str) -> str:
     """The bucket's Quilt workflow rejected the latest packaging request."""
-    name = f"`{workflow}`" if workflow else "the bucket's default workflow"
+    shown = " ".join(workflow.split()).replace("`", "'")
+    name = f"`{shown}`" if workflow else "the bucket's default workflow"
     return f"""
 > **⚠️ Quilt rejected this package.** It does not satisfy {name}:
 > {escape_markdown(" ".join(message.split()))}

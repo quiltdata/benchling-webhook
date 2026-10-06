@@ -173,3 +173,4 @@ def test_rejected_markdown_names_workflow_and_reason():
     md = format_package_rejected("BZ_workflow", "Metadata failed validation:\n'project' is required")
     assert "`BZ_workflow`" in md and "'project' is required" in md and "Update Package" in md
     assert "default workflow" in format_package_rejected("", "x")
+    assert "`a'b c`" in format_package_rejected("a`b\nc", "x")
