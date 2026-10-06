@@ -84,19 +84,20 @@ def check_workflow(
         validator.validate_metadata(metadata)
         entries = None if validator.entries_validator is None else list_entries(s3_client, bucket, package_name, adds)
         if validator.entries_validator is not None and entries is not None:
-            errors = list(validator.entries_validator.iter_errors(entries))
             # Entries for not-yet-written files carry placeholder sizes, so an error about one of them,
             # or about the array as a whole, may be false: let the packager decide (the stall backstop
             # covers a real one). An error about an existing file is a real rejection.
             unwritten = {i for i, e in enumerate(entries) if e["logical_key"] in adds}
-            real = [e for e in errors if e.absolute_path and e.absolute_path[0] not in unwritten]
-            if real or (errors and not adds):
-                raise WorkflowValidationError.from_schema_validation_error(
-                    "Package entries failed validation", (real or errors)[0]
-                )
-            if errors:
+            doubtful = None
+            for error in validator.entries_validator.iter_errors(entries):
+                if not adds or (error.absolute_path and error.absolute_path[0] not in unwritten):
+                    raise WorkflowValidationError.from_schema_validation_error(
+                        "Package entries failed validation", error
+                    )
+                doubtful = doubtful or error
+            if doubtful:
                 logger.warning(
-                    "Workflow pre-check skipped: entries depend on unwritten files", error=errors[0].message
+                    "Workflow pre-check skipped: entries depend on unwritten files", error=doubtful.message
                 )
                 return None
     except ConfigurationError as e:
