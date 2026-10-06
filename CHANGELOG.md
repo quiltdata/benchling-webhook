@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.21.2] - Unreleased
+
+### Added
+
+- Optional `pkg_namespace` setting: `author_handle` names each notebook package under its entry creator's Benchling handle (`jdoe/EXP00000001`), so it sits beside that user's raw-data packages. The default, `prefix`, keeps `{pkg_prefix}/{display_id}`. If the creator has no handle, or the handle isn't a valid Quilt namespace, the name falls back to `pkg_prefix`. Existing packages are not moved (#407)
+
 ## [0.21.1] - Unreleased
 
 ### Added
