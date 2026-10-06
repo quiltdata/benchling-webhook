@@ -65,7 +65,7 @@ class CanvasManager:
         self._package = None
         self._errors: List[str] = []  # Track errors to display in notification section
         self._linked_packages: List[Package] = []  # Track linked packages for use in blocks
-        self._sealed = False
+        self._sealed_at: Optional[str] = None  # Acceptance date once the package is found sealed
         self._package_file_fetcher_injected = package_file_fetcher is not None
 
         # Dependency injection with fallback to default instances
@@ -280,14 +280,13 @@ class CanvasManager:
 
     def _make_sealed_markdown(self, top_hash: str, seal: dict) -> str:
         """Render the sealed revision and the linked packages frozen at acceptance."""
-        self._sealed = True
+        self._sealed_at = (seal.get("accepted_at") or "")[:10]
         self.package.top_hash = top_hash
         content = fmt.format_package_header(
             package_name=self.package_name,
             display_id=self.entry.display_id,
             catalog_url=self.catalog_url,
             sync_url=self.sync_uri(),
-            sealed_at=(seal.get("accepted_at") or "")[:10],
         )
         linked = [
             Package(self.config.quilt_catalog, pkg["bucket"], pkg["name"], top_hash=pkg["top_hash"])
@@ -332,7 +331,7 @@ class CanvasManager:
                 update_enabled=not is_updating or not bool(self.config.s3_bucket_name),
                 browse_enabled=bool(self.config.s3_bucket_name),
                 bucketless=not bool(self.config.s3_bucket_name),
-                sealed=self._sealed,
+                sealed_at=self._sealed_at,
             ),
             markdown_block,
         ]
