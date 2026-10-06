@@ -88,6 +88,11 @@ def check_workflow(
             try:
                 validator.entries_validator.validate(entries)
             except jsonschema.ValidationError as e:
+                if adds:
+                    # The not-yet-written files' sizes are guesses, so this may be a false reject: let the
+                    # packager decide; the stall backstop covers a real one.
+                    logger.warning("Workflow pre-check skipped: entries depend on unwritten files", error=e.message)
+                    return None
                 raise WorkflowValidationError.from_schema_validation_error(
                     "Package entries failed validation", e
                 ) from e
@@ -118,7 +123,7 @@ def list_entries(s3_client: Any, bucket: str, package_name: str, adds: tuple[str
             ]
             if not page.get("IsTruncated"):
                 listed = {e["logical_key"] for e in entries}
-                # Not written yet, so its size is unknown; schemas rarely constrain a seal's size.
+                # Not written yet, so the size is a placeholder (see check_workflow).
                 entries += [{"logical_key": k, "size": 0, "meta": {}} for k in adds if k not in listed]
                 # quilt3 walks segment by segment: `a/b` before `a.txt`, unlike S3's key order.
                 return sorted(entries, key=lambda e: e["logical_key"].split("/"))
