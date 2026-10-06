@@ -96,9 +96,7 @@ def check_workflow(
                     )
                 doubtful = doubtful or error
             if doubtful:
-                logger.warning(
-                    "Workflow pre-check skipped: entries depend on unwritten files", error=doubtful.message
-                )
+                logger.warning("Workflow pre-check skipped: entries depend on unwritten files", error=doubtful.message)
                 return None
     except ConfigurationError as e:
         # A config or schema we can't load: let the packager decide; the stall backstop covers it.
