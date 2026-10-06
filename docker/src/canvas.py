@@ -293,7 +293,8 @@ class CanvasManager:
             return ""
         state = unresolved(status, latest_modified)
         if state == "rejected":
-            retry = "accept the review again" if sealed else "click **Update Package**"
+            # An accepted entry is locked in Benchling, so its canvas buttons can't be clicked.
+            retry = "accept the review again" if sealed or status.get("accepted") else "click **Update Package**"
             return fmt.format_package_rejected(status.get("workflow") or "", status.get("message") or "", retry)
         if state == "stalled":
             return fmt.format_package_stalled(
