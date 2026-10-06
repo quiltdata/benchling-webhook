@@ -22,6 +22,45 @@ When scientists create notebook entries in Benchling, this webhook automatically
 - **Copies attachments** from that notebook into Amazon S3 as part of the package.
 - **Enables orgnizational data discovery** by making contents available in ElasticSearch, and metadata available in Amazon Athena.
 
+#### Package Metadata
+
+The package metadata is the package's `entry.json`. Besides the entry's IDs, name, creator, authors, and timestamps, it includes the entry's schema `fields` and `customFields`. Benchling keys these by display name, so the webhook re-keys them in snake_case: "Experiment Type" becomes `experiment_type` and "ELN-ID #" becomes `eln_id`. Each field keeps its display name as `name`; its other values are exactly what Benchling returns. Both keys are always present, as `{}` when the entry has none. The package's `entry_data.json` keeps the raw entry.
+
+```json
+{
+  "entry_id": "etr_abc123",
+  "display_id": "EXP26000025",
+  "name": "HPLC run 3",
+  "fields": {
+    "project": {"name": "Project", "value": "VIR-0001", "displayValue": "VIR-0001", "type": "text", "isMulti": false, "textValue": "VIR-0001"},
+    "experiment_type": {"name": "Experiment Type", "value": "Assay", "displayValue": "Assay", "type": "dropdown", "isMulti": false, "textValue": "Assay"}
+  },
+  "customFields": {
+    "instrument": {"name": "Instrument", "value": "HPLC-02"}
+  }
+}
+```
+
+If two display names give the same key, the first keeps it and later ones get `_2`, `_3`, and so on. A name with no letters or digits (such as "###") is skipped. Both cases are logged as warnings.
+
+A bucket's [Quilt workflow](https://docs.quilt.bio/advanced-features/workflows) can then validate these values. Keep `fields` and `customFields` optional in the schema, because packages made by webhook versions before 0.21.1 don't have them:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "fields": {
+      "type": "object",
+      "properties": {
+        "project": {"properties": {"value": {"type": "string", "pattern": "^VIR-"}}}
+      }
+    }
+  }
+}
+```
+
+Editing a field on an entry re-packages it (the `v2.entry.updated.fields` event), so the package metadata follows the entry.
+
 ### Package Linking
 
 ![experiment_id](imgs/benchling-link.png)

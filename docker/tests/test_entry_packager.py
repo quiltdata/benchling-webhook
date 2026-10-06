@@ -7,6 +7,7 @@ Following TDD methodology for Phase 2 implementation.
 import io
 import json
 import zipfile
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import Mock, patch
 
@@ -15,10 +16,13 @@ from botocore.exceptions import ClientError
 
 from src.entry_packager import (
     BenchlingAPIError,
+    DateTimeEncoder,
     EntryPackager,
     EntryValidationError,
     ExportItemRequest,
     format_user_info,
+    normalize_field_key,
+    normalize_fields,
     parse_authors,
     parse_creator,
     validate_entry_data,
@@ -188,6 +192,90 @@ class TestValidationHelpers:
         # Should only include author with name
         assert len(result) == 1
         assert result[0] == "John Doe <jdoe@user_123>"
+
+
+class TestFieldNormalization:
+    """Entry fields are re-keyed by snake_case display name for entry.json (#409)."""
+
+    @pytest.mark.parametrize(
+        "name, key",
+        [
+            ("Project", "project"),
+            ("Experiment Type", "experiment_type"),
+            ("ELN-ID #", "eln_id"),
+            ("  Run   Date (UTC) ", "run_date_utc"),
+            ("pH", "ph"),
+            ("Step 2", "step_2"),
+            ("###", ""),
+        ],
+    )
+    def test_normalize_field_key(self, name, key):
+        assert normalize_field_key(name) == key
+
+    def test_keeps_display_name_and_values(self):
+        fields = {
+            "Experiment Type": {
+                "value": "Assay",
+                "displayValue": "Assay",
+                "type": "dropdown",
+                "isMulti": False,
+                "textValue": "Assay",
+            }
+        }
+
+        result = normalize_fields(fields)
+
+        assert result == {
+            "experiment_type": {
+                "name": "Experiment Type",
+                "value": "Assay",
+                "displayValue": "Assay",
+                "type": "dropdown",
+                "isMulti": False,
+                "textValue": "Assay",
+            }
+        }
+        # The raw map is not mutated (entry_data.json stays raw).
+        assert "name" not in fields["Experiment Type"]
+
+    def test_collision_suffixes_later_fields(self):
+        with patch("src.entry_packager.logger") as mock_logger:
+            result = normalize_fields(
+                {"Project": {"value": "A"}, "project": {"value": "B"}, "PROJECT!": {"value": "C"}}
+            )
+
+        assert result == {
+            "project": {"name": "Project", "value": "A"},
+            "project_2": {"name": "project", "value": "B"},
+            "project_3": {"name": "PROJECT!", "value": "C"},
+        }
+        assert mock_logger.warning.call_count == 2
+        first = mock_logger.warning.call_args_list[0].kwargs
+        assert first["kept"] == "Project"
+        assert first["renamed"] == "project"
+
+    def test_suffix_skips_a_key_already_taken(self):
+        result = normalize_fields({"Project": {"value": "A"}, "Project 2": {"value": "B"}, "project": {"value": "C"}})
+
+        assert list(result) == ["project", "project_2", "project_3"]
+        assert result["project_3"]["name"] == "project"
+
+    def test_empty_key_is_skipped_with_warning(self):
+        with patch("src.entry_packager.logger") as mock_logger:
+            result = normalize_fields({"###": {"value": "x"}, "Project": {"value": "A"}})
+
+        assert result == {"project": {"name": "Project", "value": "A"}}
+        mock_logger.warning.assert_called_once()
+        assert mock_logger.warning.call_args.kwargs["field_name"] == "###"
+
+    def test_accepts_list_of_field_objects(self):
+        result = normalize_fields([{"name": "Experiment Type", "value": "Assay"}, "junk", {"value": "no name"}])
+
+        assert result == {"experiment_type": {"name": "Experiment Type", "value": "Assay"}}
+
+    @pytest.mark.parametrize("fields", [None, {}, [], "not-a-map"])
+    def test_missing_or_invalid_is_empty(self, fields):
+        assert normalize_fields(fields) == {}
 
 
 class TestPayload:
@@ -738,6 +826,92 @@ class TestEntryPackager:
         # slug parsed from webURL; name left None (mock client returns no real name).
         assert by_id["bfi_1"]["slug"] == "qb-2743-1"
         assert by_id["bfi_1"]["name"] is None
+
+    def test_create_metadata_files_includes_normalized_fields(self, orchestrator):
+        """entry.json carries the entry's fields and customFields under snake_case keys."""
+        modified = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
+        entry_data = {
+            "id": "etr_123",
+            "display_id": "EXP-001",
+            "name": "Test Entry",
+            "web_url": "https://demo.benchling.com/entry/etr_123",
+            "created_at": "2025-10-01T10:00:00Z",
+            "modified_at": "2025-10-02T10:00:00Z",
+            "fields": {
+                "Project": {
+                    "value": "VIR-0001",
+                    "displayValue": "VIR-0001",
+                    "type": "text",
+                    "isMulti": False,
+                    "textValue": "VIR-0001",
+                },
+                "Experiment Type": {
+                    "value": "Assay",
+                    "displayValue": "Assay",
+                    "type": "dropdown",
+                    "isMulti": False,
+                    "textValue": "Assay",
+                },
+                "Run Date": {"value": modified, "type": "datetime"},
+            },
+            "customFields": {"Instrument": {"value": "HPLC-02"}, "ELN-ID #": {"value": "42"}},
+        }
+
+        result = orchestrator._create_metadata_files(
+            package_name="benchling/EXP-001",
+            entry_id="etr_123",
+            timestamp="2025-10-02T10:00:00Z",
+            base_url="https://demo.benchling.com",
+            webhook_data={},
+            uploaded_files=[],
+            download_url="https://example.com/export.zip",
+            entry_data=entry_data,
+        )
+
+        entry_json = result["entry.json"]
+        assert entry_json["fields"]["project"] == {
+            "name": "Project",
+            "value": "VIR-0001",
+            "displayValue": "VIR-0001",
+            "type": "text",
+            "isMulti": False,
+            "textValue": "VIR-0001",
+        }
+        assert entry_json["fields"]["experiment_type"]["name"] == "Experiment Type"
+        assert entry_json["fields"]["experiment_type"]["value"] == "Assay"
+        assert entry_json["customFields"] == {
+            "instrument": {"name": "Instrument", "value": "HPLC-02"},
+            "eln_id": {"name": "ELN-ID #", "value": "42"},
+        }
+        # Serializes the way process_export uploads it (dates via DateTimeEncoder).
+        dumped = json.loads(json.dumps(entry_json, cls=DateTimeEncoder))
+        assert dumped["fields"]["run_date"]["value"] == modified.isoformat()
+        # entry_data.json keeps the raw, display-name-keyed maps.
+        assert set(result["entry_data.json"]["fields"]) == {"Project", "Experiment Type", "Run Date"}
+        assert "name" not in result["entry_data.json"]["customFields"]["Instrument"]
+
+    def test_create_metadata_files_writes_empty_fields_when_absent(self, orchestrator):
+        """entry.json always has fields and customFields, {} when the entry has none."""
+        result = orchestrator._create_metadata_files(
+            package_name="benchling/EXP-001",
+            entry_id="etr_123",
+            timestamp="2025-10-02T10:00:00Z",
+            base_url="https://demo.benchling.com",
+            webhook_data={},
+            uploaded_files=[],
+            download_url="https://example.com/export.zip",
+            entry_data={
+                "id": "etr_123",
+                "display_id": "EXP-001",
+                "name": "Test Entry",
+                "web_url": "https://demo.benchling.com/entry/etr_123",
+                "created_at": "2025-10-01T10:00:00Z",
+                "modified_at": "2025-10-02T10:00:00Z",
+            },
+        )
+
+        assert result["entry.json"]["fields"] == {}
+        assert result["entry.json"]["customFields"] == {}
 
     def test_create_metadata_files_includes_canvas_id_when_present(self, orchestrator):
         """Test entry.json stores canvas_id for canvas-initiated exports."""
