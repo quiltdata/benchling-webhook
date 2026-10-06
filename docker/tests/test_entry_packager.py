@@ -911,12 +911,14 @@ def test_review_accepted_pushes_unsealed_when_search_fails(mock_query_class):
     packager._send_to_sqs.assert_called_once()
 
 
-@pytest.mark.parametrize("review_status", [None, "RETRACTED"])
-def test_sealed_package_refuses_other_events_but_redraws(review_status):
+@pytest.mark.parametrize(
+    "event_type, review_status",
+    [("v2.entry.updated.fields", "ACCEPTED"), ("v2.entry.updated.reviewRecord", "ACCEPTANCE_SNAPSHOT_IN_PROGRESS")],
+)
+def test_sealed_package_refuses_other_events_but_redraws(event_type, review_status):
     packager = _workflow_packager(review_status)
     event = json.loads(json.dumps(REVIEW_ACCEPTED_EVENT))
-    if review_status is None:
-        event["message"]["type"] = "v2.entry.updated.fields"
+    event["message"]["type"] = event_type
 
     result = packager.execute_workflow(Payload(event))
 
@@ -924,6 +926,36 @@ def test_sealed_package_refuses_other_events_but_redraws(review_status):
     packager._initiate_export.assert_not_called()
     packager._send_to_sqs.assert_not_called()
     packager._redraw_canvas.assert_called_once()
+
+
+@pytest.mark.parametrize("review_status", [None, "IN_PROGRESS", "NEEDS_REVIEW", "RETRACTED", "REJECTED"])
+def test_reopened_review_unseals_and_pushes(review_status):
+    packager = _workflow_packager(review_status)
+    s3_client = Mock()
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
+
+    assert result["status"] == "SUCCESS"
+    s3_client.delete_object.assert_called_once_with(
+        Bucket="test-bucket", Key="benchling/EXP26000008/linked_packages.json"
+    )
+    s3_client.put_object.assert_not_called()
+    packager._initiate_export.assert_called_once()
+    packager._send_to_sqs.assert_called_once()
+
+
+def test_reopened_review_of_unsealed_package_deletes_nothing():
+    packager = _workflow_packager("IN_PROGRESS")
+    packager._is_sealed.return_value = False
+    s3_client = Mock()
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
+
+    assert result["status"] == "SUCCESS"
+    s3_client.delete_object.assert_not_called()
+    packager._send_to_sqs.assert_called_once()
 
 
 def test_is_sealed_reads_the_source_prefix():
