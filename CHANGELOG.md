@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.21.1] - Unreleased
+
+### Added
+
+- The package metadata (`entry.json`) now includes the entry's schema `fields` and `customFields`, keyed by snake_case versions of their display names ("Experiment Type" → `experiment_type`), with the original display name kept as `name`. A bucket workflow can now require or validate values the scientist enters in Benchling. Both keys are always present (`{}` when empty); `entry_data.json` still holds the raw entry (#409)
+
 ### Fixed
 
 - The App Canvas now says why the bucket's Quilt workflow rejected an entry package, or that packaging stalled, instead of "Package Not Created" forever (#408)
