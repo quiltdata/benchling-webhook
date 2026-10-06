@@ -17,6 +17,7 @@ from src.config import Config
 from src.package_query import ELN_ENTRY_KEY, PackageQuery
 from src.packages import Package
 from src.payload import Payload
+from src.registry import LockState
 
 DISPLAY_ID = "EXP25000017"
 
@@ -52,6 +53,7 @@ def mock_config():
     config.athena_user_workgroup = "test-workgroup"
     config.aws_region = "us-east-1"
     config.quilt_write_role_arn = None
+    config.quilt_api_key = ""
     return config
 
 
@@ -223,7 +225,9 @@ def test_sealed_canvas_renders_frozen_list_without_search_or_update(mock_benchli
     rendered = json.dumps(canvas_blocks)
 
     package_query.find_unique_packages.assert_not_called()
-    assert canvas_blocks[0]["value"].startswith("# 🔒 Locked 2026-04-16 00:28 UTC\n\n## ")
+    assert canvas_blocks[0]["value"].startswith(
+        "# 🔒 Locked 2026-04-16 00:28 UTC\n\n**Quilt package lock:** not checked; no Quilt API key is configured\n\n## "
+    )
     assert "BUTTON" not in rendered
     assert f"packages/benchling/{DISPLAY_ID}/tree/b07c91cf" in rendered
     assert "packages/lab/data/tree/abc123" in rendered
@@ -243,3 +247,89 @@ def test_sealed_canvas_renders_frozen_list_without_search_or_update(mock_benchli
 )
 def test_seal_heading(accepted_at, heading):
     assert fmt.format_seal_heading(accepted_at) == heading
+
+
+LOCK_HASH = "9f8e7d6c" * 8
+LOCK_LINE = "**Quilt package lock:**"
+
+
+def _sealed_markdown(benchling, config, payload, get_lock=None, lock_state=None):
+    fetcher = Mock(get_seal=Mock(return_value=(LOCK_HASH, {"accepted_at": "2026-10-04T10:00:00+00:00"})))
+    manager = CanvasManager(benchling, config, payload, Mock(), fetcher, lock_state=lock_state)
+    with patch("src.canvas.Registry") as registry:
+        registry.return_value.get_lock = get_lock or Mock(return_value=None)
+        content = manager._make_markdown_content()
+    if lock_state is not None:
+        registry.assert_not_called()
+    return content
+
+
+def test_locked_canvas_shows_lock_date_and_links_locked_revision(mock_benchling, mock_config, mock_payload):
+    mock_config.quilt_api_key = "qk_test"
+    lock = {"hash": LOCK_HASH, "lockedAt": "2026-10-05T12:00:00+00:00"}
+
+    content = _sealed_markdown(mock_benchling, mock_config, mock_payload, get_lock=Mock(return_value=lock))
+
+    assert content.startswith(
+        f"# 🔒 Locked 2026-10-04 10:00 UTC\n\n{LOCK_LINE} "
+        f"[`9f8e7d6`](https://test.quiltdata.com/b/lab-bucket/packages/benchling/{DISPLAY_ID}/tree/{LOCK_HASH})"
+        " since 2026-10-05\n\n## "
+    )
+
+
+def test_locked_canvas_without_lock_date(mock_benchling, mock_config, mock_payload):
+    mock_config.quilt_api_key = "qk_test"
+
+    content = _sealed_markdown(
+        mock_benchling, mock_config, mock_payload, get_lock=Mock(return_value={"hash": LOCK_HASH, "lockedAt": None})
+    )
+
+    assert f"{LOCK_LINE} [`9f8e7d6`](" in content
+    assert "since" not in content
+
+
+def test_resealed_canvas_does_not_show_earlier_lock_as_current(mock_benchling, mock_config, mock_payload):
+    mock_config.quilt_api_key = "qk_test"
+    earlier = "0123456" + "0" * 57
+    lock = {"hash": earlier, "lockedAt": "2026-10-01T12:00:00+00:00"}
+
+    content = _sealed_markdown(mock_benchling, mock_config, mock_payload, get_lock=Mock(return_value=lock))
+
+    assert f"{LOCK_LINE} none on this revision; an earlier revision [`0123456`](" in content
+    assert f"tree/{earlier})" in content
+    assert "since 2026-10-01" not in content
+
+
+def test_sealed_canvas_without_api_key_says_locking_is_not_configured(mock_benchling, mock_config, mock_payload):
+    content = _sealed_markdown(mock_benchling, mock_config, mock_payload)
+
+    assert f"{LOCK_LINE} not checked; no Quilt API key is configured" in content
+
+
+def test_sealed_canvas_shows_lock_failure(mock_benchling, mock_config, mock_payload):
+    mock_config.quilt_api_key = "qk_test"
+    error = "PackageLockPolicyTooLarge: unlock another package first"
+
+    content = _sealed_markdown(mock_benchling, mock_config, mock_payload, lock_state=LockState(error=error))
+
+    assert f"{LOCK_LINE} none; {error}" in content
+
+
+def test_sealed_canvas_uses_lock_from_lock_attempt(mock_benchling, mock_config, mock_payload):
+    mock_config.quilt_api_key = "qk_test"
+    state = LockState(lock={"hash": LOCK_HASH, "lockedAt": "2026-10-05T12:00:00+00:00"})
+
+    content = _sealed_markdown(mock_benchling, mock_config, mock_payload, lock_state=state)
+
+    assert f"{LOCK_LINE} [`9f8e7d6`](" in content
+    assert "since 2026-10-05" in content
+
+
+def test_sealed_canvas_survives_lock_read_failure(mock_benchling, mock_config, mock_payload):
+    mock_config.quilt_api_key = "qk_test"
+
+    content = _sealed_markdown(
+        mock_benchling, mock_config, mock_payload, get_lock=Mock(side_effect=ConnectionError("unreachable"))
+    )
+
+    assert f"{LOCK_LINE} status unavailable: unreachable" in content

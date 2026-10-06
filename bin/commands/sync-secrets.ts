@@ -309,18 +309,62 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
 }
 
 /**
+ * Carries the existing secret's `quilt_api_key` into the new value. The key is set
+ * in Secrets Manager directly and is not in the profile, so a sync must not drop it.
+ *
+ * @param client - Secrets Manager client
+ * @param secretName - Secret being updated
+ * @param secretValue - New secret value (from buildSecretValue)
+ * @returns The new secret value, with the existing `quilt_api_key` if there is one
+ */
+async function keepQuiltApiKey(
+    client: SecretsManagerClient,
+    secretName: string,
+    secretValue: string,
+): Promise<string> {
+    let existing: Record<string, unknown>;
+    try {
+        existing = JSON.parse(await getSecret(client, secretName));
+    } catch (error) {
+        // A secret with no value yet, or not JSON, holds no key to keep.
+        if (error instanceof ResourceNotFoundException || error instanceof SyntaxError) {
+            return secretValue;
+        }
+        throw error;
+    }
+    const key = existing?.quilt_api_key;
+    if (typeof key !== "string" || key.length === 0) {
+        return secretValue;
+    }
+    return JSON.stringify({ ...JSON.parse(secretValue), quilt_api_key: key }, null, 2);
+}
+
+/**
+ * Whether a secret field holds a credential that must not be printed.
+ *
+ * @param key - Secret field name
+ * @returns True for client secrets, passwords, API keys and tokens
+ */
+function isSensitiveKey(key: string): boolean {
+    const lower = key.toLowerCase();
+    return ["secret", "password", "api_key", "apikey", "token"].some((term) => lower.includes(term));
+}
+
+/**
  * Redacts sensitive fields from a secret value JSON string for safe display.
  *
- * Never expose the plaintext client secret in console output (e.g. dry-run).
+ * Never expose the plaintext client secret or Quilt API key in console output (e.g. dry-run).
  *
  * @param secretValue - Secret value as JSON string (from buildSecretValue)
- * @returns JSON string with client_secret masked
+ * @returns JSON string with sensitive fields masked
  */
 function maskSecretValue(secretValue: string): string {
     try {
         const parsed = JSON.parse(secretValue) as Record<string, unknown>;
-        if (typeof parsed.client_secret === "string" && parsed.client_secret.length > 0) {
-            parsed.client_secret = "***REDACTED***";
+        for (const [key, value] of Object.entries(parsed)) {
+            if (isSensitiveKey(key) && typeof value === "string" && value.length > 0) {
+                parsed[key] = "***REDACTED***";
+            }
         }
         return JSON.stringify(parsed, null, 2);
     } catch {
@@ -407,10 +451,14 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
     const secretValue = buildSecretValue(config, clientSecretValue);
 
     if (dryRun) {
+        // Preview what an update would write, including the quilt_api_key it keeps.
+        const preview = (await secretExists(client, secretName))
+            ? await keepQuiltApiKey(client, secretName, secretValue)
+            : secretValue;
         console.log("\n=== DRY RUN MODE ===");
         console.log(`Mode: ${isIntegratedMode ? "Integrated" : "Standalone"}`);
         console.log(`Would sync secret: ${secretName}`);
-        console.log(`Secret value:\n${maskSecretValue(secretValue)}`);
+        console.log(`Secret value:\n${maskSecretValue(preview)}`);
         return results;
     }
 
@@ -426,7 +474,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
             console.log(`Updating BenchlingSecret from Quilt stack: ${secretName}...`);
             secretArn = await updateSecret(client, {
                 name: secretName,
-                value: secretValue,
+                value: await keepQuiltApiKey(client, secretName, secretValue),
                 description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile}, integrated mode)`,
             });
             action = "updated";
@@ -436,7 +484,7 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
             console.log(`Updating existing secret: ${secretName}...`);
             secretArn = await updateSecret(client, {
                 name: secretName,
-                value: secretValue,
+                value: await keepQuiltApiKey(client, secretName, secretValue),
                 description: `Benchling Webhook configuration for ${config.benchling.tenant} (profile: ${profile}, standalone mode)`,
             });
             action = "updated";
@@ -674,7 +722,7 @@ async function main(): Promise<void> {
 
             console.log("=== Retrieved Secrets ===");
             Object.keys(secrets).forEach((key) => {
-                if (key.toLowerCase().includes("secret") || key.toLowerCase().includes("password")) {
+                if (isSensitiveKey(key)) {
                     console.log(`${key}: ********`);
                 } else {
                     console.log(`${key}: ${secrets[key]}`);

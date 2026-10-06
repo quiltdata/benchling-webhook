@@ -21,6 +21,7 @@ from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packages import Package
 from .pagination import PageState, encode_bucket_name, encode_package_name, paginate_items
 from .payload import Payload
+from .registry import LockState, Registry
 from .version import __version__
 
 logger = structlog.get_logger(__name__)
@@ -48,6 +49,7 @@ class CanvasManager:
         payload: Payload,
         package_query: Optional[PackageQuery] = None,
         package_file_fetcher: Optional[PackageFileFetcher] = None,
+        lock_state: Optional[LockState] = None,
     ):
         """Initialize CanvasManager with required dependencies.
 
@@ -57,10 +59,12 @@ class CanvasManager:
             payload: Webhook payload
             package_query: Optional PackageQuery instance (created if not provided)
             package_file_fetcher: Optional PackageFileFetcher instance (created if not provided)
+            lock_state: The sealed package's lock from a lock attempt just made; read from the registry if None
         """
         self.benchling = benchling
         self.config = config
         self.payload = payload
+        self.lock_state = lock_state
         self._entry = None
         self._package = None
         self._errors: List[str] = []  # Track errors to display in notification section
@@ -282,11 +286,15 @@ class CanvasManager:
         """Render the sealed revision and the linked packages frozen at acceptance."""
         self._sealed = True
         self.package.top_hash = top_hash
-        content = fmt.format_seal_heading(seal.get("accepted_at")) + fmt.format_package_header(
-            package_name=self.package_name,
-            display_id=self.entry.display_id,
-            catalog_url=self.catalog_url,
-            sync_url=self.sync_uri(),
+        content = (
+            fmt.format_seal_heading(seal.get("accepted_at"))
+            + self._quilt_lock_line(top_hash)
+            + fmt.format_package_header(
+                package_name=self.package_name,
+                display_id=self.entry.display_id,
+                catalog_url=self.catalog_url,
+                sync_url=self.sync_uri(),
+            )
         )
         linked = [
             Package(self.config.quilt_catalog, pkg["bucket"], pkg["name"], top_hash=pkg["top_hash"])
@@ -294,6 +302,34 @@ class CanvasManager:
         ]
         content += fmt.format_linked_packages(linked)
         return content + fmt.format_error_notification(self._errors)
+
+    def _quilt_lock_line(self, top_hash: str) -> str:
+        """One line under the title: the Quilt package lock on the sealed revision, or why there is none."""
+        label = "**Quilt package lock:**"
+        if not self.config.quilt_api_key:
+            return f"{label} not checked; no Quilt API key is configured\n\n"
+        lock_state = self.lock_state
+        if lock_state is None:
+            try:
+                lock_state = LockState(
+                    lock=Registry(self.config.quilt_catalog, self.config.quilt_api_key).get_lock(
+                        self.config.s3_bucket_name, self.package_name
+                    )
+                )
+            except Exception as exc:
+                logger.warning("Failed to read package lock", package_name=self.package_name, error=str(exc))
+                return f"{label} status unavailable: {exc}\n\n"
+        lock = lock_state.lock
+        if not lock:
+            return f"{label} none; {lock_state.error or 'accepting the review again retries the lock'}\n\n"
+        locked = Package(
+            self.config.quilt_catalog, self.config.s3_bucket_name, self.package_name, top_hash=lock["hash"]
+        )
+        link = f"[`{lock['hash'][:7]}`]({locked.catalog_url})"
+        if lock["hash"] != top_hash:
+            return f"{label} none on this revision; an earlier revision {link} is locked\n\n"
+        since = (lock.get("lockedAt") or "")[:10]
+        return f"{label} {link}" + (f" since {since}" if since else "") + "\n\n"
 
     def _make_blocks(self, updated_at: str | None = None, is_updating: bool = False) -> list:
         """Create UI blocks for the Canvas.
