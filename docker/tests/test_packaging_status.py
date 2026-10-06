@@ -110,6 +110,18 @@ def test_entries_schema_sees_a_seal_the_acceptance_will_add():
     assert check_workflow(s3, BUCKET, "", NAME, "msg", META, adds=("linked_packages.json",)) is None
 
 
+def test_entries_rejection_with_unwritten_files_is_not_a_rejection():
+    """An unwritten seal's size is a placeholder, so an entries failure then is "can't tell", not a reject."""
+    entries_schema = {"type": "array", "items": {"properties": {"size": {"minimum": 1}}}}
+    s3 = s3_with(
+        config({"w": {"name": "W", "entries_schema": "e"}}, default="w", schemas={"e": "s/e.json"}),
+        {"s/e.json": entries_schema},
+    )
+    s3.objects[(BUCKET, f"{NAME}/entry.json")] = b"{}"
+    assert check(s3) == ""
+    assert check_workflow(s3, BUCKET, "", NAME, "msg", META, adds=("linked_packages.json",)) is None
+
+
 def test_no_entries_schema_lists_nothing():
     s3 = s3_with(config({"w": {"name": "W"}}, default="w"))
     s3.list_objects_v2 = Mock()
