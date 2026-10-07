@@ -9,6 +9,10 @@ All notable changes to this project will be documented in this file.
 
 - The App Canvas now says why the bucket's Quilt workflow rejected an entry package, or that packaging stalled, instead of "Package Not Created" forever (#408)
 
+### Security
+
+- At `log_level: DEBUG`, botocore logged the Secrets Manager response, including the Benchling `client_secret`, to CloudWatch. The response is now parsed and logged with only the secret's first and last 4 characters (`6NUP…1234`), the way Benchling displays it; a response that mentions `client_secret` but can't be parsed is omitted from the log (#412)
+
 ## [0.21.0] - 2026-10-06
 
 ### Added

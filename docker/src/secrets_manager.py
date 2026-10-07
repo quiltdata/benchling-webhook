@@ -10,6 +10,8 @@ Usage:
     print(f"Tenant: {secret.tenant}")
 """
 
+import json
+import logging
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -17,6 +19,54 @@ import structlog
 from botocore.exceptions import ClientError
 
 logger = structlog.get_logger(__name__)
+
+
+def mask_secret(value: str) -> str:
+    """Show a secret the way Benchling does: its first and last 4 characters."""
+    if len(value) <= 8:
+        return "*" * len(value)
+    return f"{value[:4]}…{value[-4:]}"
+
+
+def _mask_secret_response(body: Any) -> Optional[str]:
+    """Return a Secrets Manager response body with client_secret masked, or None if it can't be parsed."""
+    if not isinstance(body, (bytes, bytearray, str)):
+        return None
+    try:
+        response = json.loads(body)
+        secret = json.loads(response["SecretString"])
+    except (ValueError, TypeError, KeyError):
+        return None
+    if not isinstance(secret, dict) or not isinstance(secret.get("client_secret"), str):
+        return None
+    secret["client_secret"] = mask_secret(secret["client_secret"])
+    response["SecretString"] = json.dumps(secret, ensure_ascii=False)
+    return json.dumps(response, ensure_ascii=False)
+
+
+class _MaskClientSecretFilter(logging.Filter):
+    """Mask client_secret in botocore's DEBUG response bodies.
+
+    The body is parsed rather than pattern-matched, so whitespace or escapes in the
+    secret's JSON can't hide it. A record that mentions client_secret but can't be
+    parsed is replaced outright.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if "client_secret" not in record.getMessage():
+            return True
+        args = record.args if isinstance(record.args, tuple) else ()
+        masked = [_mask_secret_response(arg) for arg in args]
+        if any(m is not None for m in masked):
+            record.args = tuple(m if m is not None else arg for m, arg in zip(masked, args))
+        else:
+            record.msg = "Response body omitted: it contains a client_secret"
+            record.args = ()
+        return True
+
+
+# At DEBUG, botocore logs every response body, including the Secrets Manager reply.
+logging.getLogger("botocore.parsers").addFilter(_MaskClientSecretFilter())
 
 
 class SecretsManagerError(Exception):
