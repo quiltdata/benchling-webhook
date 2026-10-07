@@ -446,3 +446,30 @@ class TestTenantNormalization:
 
         # Verify tenant was normalized
         assert result.tenant == "acme"
+
+
+class TestClientSecretLogMasking:
+    """botocore logs raw response bodies at DEBUG; the client secret must not reach the logs."""
+
+    def test_mask_secret_shows_first_and_last_four(self):
+        from src.secrets_manager import mask_secret
+
+        assert mask_secret("6NUPNtpWP7fXYZabcd1234") == "6NUP…1234"
+        assert mask_secret("short") == "*****"
+
+    def test_botocore_response_body_is_masked(self, caplog):
+        import logging
+
+        from src.secrets_manager import mask_secret  # importing the module installs the filter
+
+        secret_string = json.dumps({"tenant": "t", "client_id": "id", "client_secret": "6NUPNtpWP7fXYZabcd1234"})
+        body = json.dumps({"Name": "s", "SecretString": secret_string}).encode()
+
+        with caplog.at_level(logging.DEBUG, logger="botocore.parsers"):
+            # botocore.parsers.ResponseParser logs exactly this at DEBUG.
+            logging.getLogger("botocore.parsers").debug("Response body:\n%r", body)
+
+        logged = caplog.records[-1].getMessage()
+        assert "6NUPNtpWP7fXYZabcd1234" not in logged
+        assert mask_secret("6NUPNtpWP7fXYZabcd1234") in logged
+        assert "client_id" in logged

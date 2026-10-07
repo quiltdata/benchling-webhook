@@ -10,6 +10,8 @@ Usage:
     print(f"Tenant: {secret.tenant}")
 """
 
+import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -17,6 +19,32 @@ import structlog
 from botocore.exceptions import ClientError
 
 logger = structlog.get_logger(__name__)
+
+# A "client_secret": "..." pair, however many backslashes escape its quotes (botocore
+# logs the Secrets Manager response as a bytes repr, so they arrive double-escaped).
+_CLIENT_SECRET_RE = re.compile(r'(client_secret\\*"\s*:\s*\\*")([^"\\]*)')
+
+
+def mask_secret(value: str) -> str:
+    """Show a secret the way Benchling does: its first and last 4 characters."""
+    if len(value) <= 8:
+        return "*" * len(value)
+    return f"{value[:4]}…{value[-4:]}"
+
+
+class _MaskClientSecretFilter(logging.Filter):
+    """Mask client_secret values in log records (e.g. botocore's DEBUG response bodies)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        if "client_secret" in message:
+            record.msg = _CLIENT_SECRET_RE.sub(lambda m: m.group(1) + mask_secret(m.group(2)), message)
+            record.args = ()
+        return True
+
+
+# At DEBUG, botocore logs every response body, including the Secrets Manager reply.
+logging.getLogger("botocore.parsers").addFilter(_MaskClientSecretFilter())
 
 
 class SecretsManagerError(Exception):
