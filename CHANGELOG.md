@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.21.2] - Unreleased
+
+### Added
+
+- `pkg_prefix` can contain `{dotted.path}` placeholders filled from the Benchling entry (the data saved as `entry_data.json`). `pkg_prefix = "{creator.handle}"` names each notebook package under its creator's handle (`jdoe/EXP00000001`), so it sits beside that user's raw-data packages. Any character in a filled-in value that a Quilt package name can't contain becomes `-` (`ernest.prabhakar` → `ernest-prabhakar/EXP00000001`). The S3 export folder follows the same name. A prefix without placeholders (default `benchling`) works exactly as before, and there is no new setting (#407)
+- Package-revision events are filtered by `pkg_prefix` as a pattern, where each placeholder matches one path segment. A literal prefix filters exactly as before (#407)
+- If a placeholder has no value in the entry (for example, the creator has no handle), the entry is not packaged. Its App Canvas says "This entry can't be packaged" and names the missing value, still listing linked packages but with no Browse button. The webhook logs an error naming the placeholder and the entry, and drops the packaging request instead of retrying it. It never falls back to another prefix (#407)
+
+### Upgrade notes
+
+- Existing `{pkg_prefix}/` packages are not moved. After `pkg_prefix` changes, an entry's Canvas looks for its package under the new name, and that package is created the next time the entry is packaged. If the bucket's Quilt workflow sets a `handle_pattern`, it must accept the new namespaces (#407)
+
 ## [0.21.1] - Unreleased
 
 ### Added
