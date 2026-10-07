@@ -537,6 +537,7 @@ class TestEntryPackager:
                     orchestrator,
                     payload=payload,
                     download_url="https://example.com/export.zip",
+                    package_name="benchling/ELN-123",
                 )
 
     # Episode 6: SendToSQS tests
@@ -1015,6 +1016,7 @@ class TestEntryPackager:
                 orchestrator,
                 payload=payload,
                 download_url="https://example.com/export.zip",
+                package_name="benchling/EXP0001",
             )
 
         assert result["statusCode"] == 200
@@ -1046,6 +1048,7 @@ class TestEntryPackager:
 
         assert result["packageName"] == "jdoe/EXP0001"
         orchestrator._is_sealed.assert_called_once_with("jdoe/EXP0001")
+        assert orchestrator._process_export.call_args.args[2] == "jdoe/EXP0001"
         assert orchestrator._send_to_sqs.call_args.args[0] == "jdoe/EXP0001"
 
     def test_execute_workflow_fails_when_placeholder_has_no_value(self, orchestrator, mock_benchling, mock_config):
@@ -1074,8 +1077,8 @@ class TestEntryPackager:
 
         get_s3_client.assert_not_called()
 
-    def test_process_export_writes_under_filled_prefix(self, orchestrator, mock_benchling, mock_config):
-        """Test the S3 export folder follows the filled-in prefix."""
+    def test_process_export_keeps_the_workflow_package_name(self, orchestrator, mock_benchling, mock_config):
+        """Test uploads use the name execute_workflow resolved, even if the handle changed mid-export."""
         mock_config.s3_prefix = "{creator.handle}"
         mock_benchling.entries.get_entry_by_id.return_value.to_dict.return_value = {
             "id": "etr_123",
@@ -1084,7 +1087,8 @@ class TestEntryPackager:
             "web_url": "https://demo.benchling.com/entry/etr_123",
             "created_at": "2025-10-01T10:00:00Z",
             "modified_at": "2025-10-02T10:00:00Z",
-            "creator": {"handle": "jdoe", "name": "J Doe", "id": "ent_1"},
+            # Renamed since execute_workflow resolved jdoe/EXP0001.
+            "creator": {"handle": "jsmith", "name": "J Doe", "id": "ent_1"},
             "fields": [],
         }
         zip_buffer = io.BytesIO()
@@ -1101,7 +1105,10 @@ class TestEntryPackager:
             patch.object(orchestrator.role_manager, "get_s3_client", return_value=s3_client),
         ):
             result = orchestrator._process_export.__wrapped__(
-                orchestrator, payload=payload, download_url="https://example.com/export.zip"
+                orchestrator,
+                payload=payload,
+                download_url="https://example.com/export.zip",
+                package_name="jdoe/EXP0001",
             )
 
         assert result["package_name"] == "jdoe/EXP0001"

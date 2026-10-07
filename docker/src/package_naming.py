@@ -34,13 +34,27 @@ def prefix_placeholders(pkg_prefix: str) -> List[str]:
     return PLACEHOLDER_RE.findall(pkg_prefix)
 
 
-def _entry_dict(entry: Any) -> Dict[str, Any]:
-    """Return the entry as a dict, accepting either ``to_dict()`` output or an SDK ``Entry``."""
+# Fields on the SDK Entry that its to_dict() leaves out.
+_FIELDS_MISSING_FROM_TO_DICT = ("display_id", "web_url", "created_at", "modified_at")
+
+
+def entry_to_dict(entry: Any) -> Dict[str, Any]:
+    """Return an SDK ``Entry`` as the dict saved in ``entry_data.json``.
+
+    That is ``to_dict()`` plus the fields it omits. A dict is returned unchanged, so the
+    packager (which has the dict) and the Canvas (which has the SDK ``Entry``) resolve
+    placeholders from the same data.
+    """
     if isinstance(entry, dict):
         return entry
     to_dict = getattr(entry, "to_dict", None)
     data = to_dict() if callable(to_dict) else None
-    return data if isinstance(data, dict) else {}
+    entry_data: Dict[str, Any] = data if isinstance(data, dict) else {}
+    for field in _FIELDS_MISSING_FROM_TO_DICT:
+        value = getattr(entry, field, None)
+        if value is not None and field not in entry_data:
+            entry_data[field] = value
+    return entry_data
 
 
 def _lookup(data: Dict[str, Any], path: str) -> Any:
@@ -60,7 +74,7 @@ def resolve_prefix(pkg_prefix: str, entry: Any) -> str:
     """
     if not prefix_placeholders(pkg_prefix):
         return pkg_prefix
-    data = _entry_dict(entry)
+    data = entry_to_dict(entry)
 
     def fill(match: "re.Match[str]") -> str:
         value = _lookup(data, match.group(1))
