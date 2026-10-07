@@ -260,6 +260,26 @@ Click **Update Package** to create it.
     return md
 
 
+def format_package_rejected(workflow: str, message: str, retry: str = "click **Update Package**") -> str:
+    """The bucket's Quilt workflow rejected the latest packaging request."""
+    shown = " ".join(workflow.split()).replace("`", "'")
+    name = f"`{shown}`" if workflow else "the bucket's default workflow"
+    return f"""
+> **⚠️ Quilt rejected this package.** It does not satisfy {name}:
+> {escape_markdown(" ".join(message.split()))}
+>
+> Fix the entry or the workflow, then {retry}.
+"""
+
+
+def format_package_stalled(retry: str = "click **Update Package** to retry") -> str:
+    """A packaging request produced no revision in time."""
+    return f"""
+> **⚠️ Package creation has not completed.** The latest update was requested over 10 minutes ago and no new
+> revision has appeared yet. If none appears, check the Quilt packager logs, then {retry}.
+"""
+
+
 def format_error_loading_files(package_name: str, error: str) -> str:
     """Format error loading files message.
 

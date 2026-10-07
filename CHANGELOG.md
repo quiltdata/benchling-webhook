@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- The App Canvas now says why the bucket's Quilt workflow rejected an entry package, or that packaging stalled, instead of "Package Not Created" forever (#408)
+
 ## [0.21.0] - 2026-10-06
 
 ### Added

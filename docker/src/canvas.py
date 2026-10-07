@@ -12,6 +12,7 @@ import structlog
 from benchling_api_client.v2.stable.models.app_canvas_update import AppCanvasUpdate
 from benchling_sdk.benchling import Benchling
 from benchling_sdk.models import Entry
+from botocore.exceptions import ClientError
 
 from . import canvas_blocks as blocks
 from . import canvas_formatting as fmt
@@ -19,6 +20,7 @@ from .config import Config
 from .package_files import PackageFile, PackageFileFetcher
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packages import Package
+from .packaging_status import read_status, unresolved
 from .pagination import PageState, encode_bucket_name, encode_package_name, paginate_items
 from .payload import Payload
 from .version import __version__
@@ -222,6 +224,7 @@ class CanvasManager:
                 catalog_url=self.catalog_url,
                 sync_url=self.sync_uri(),
             )
+            content += self._packaging_status_markdown()
         else:
             content = (
                 f"## Benchling Entry\n\n"
@@ -269,6 +272,36 @@ class CanvasManager:
 
         return content
 
+    def _packaging_status_markdown(self, sealed: bool = False) -> str:
+        """Say so when the latest packaging request was rejected or never produced a revision."""
+        bucket = self.config.s3_bucket_name
+        try:
+            s3_client = self._package_file_fetcher.role_manager.get_s3_client()
+        except Exception:  # noqa: BLE001 - no client renders as before
+            return ""
+        status = read_status(s3_client, bucket, self.package_name)
+        if not status:
+            return ""
+        latest_modified = None
+        try:
+            head = s3_client.head_object(Bucket=bucket, Key=f".quilt/named_packages/{self.package_name}/latest")
+            latest_modified = head["LastModified"]
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") not in {"404", "NoSuchKey", "NotFound"}:
+                return ""
+        except Exception:  # noqa: BLE001 - can't tell whether a revision landed: render as before
+            return ""
+        state = unresolved(status, latest_modified)
+        if state == "rejected":
+            # An accepted entry is locked in Benchling, so its canvas buttons can't be clicked.
+            retry = "accept the review again" if sealed or status.get("accepted") else "click **Update Package**"
+            return fmt.format_package_rejected(status.get("workflow") or "", status.get("message") or "", retry)
+        if state == "stalled":
+            return fmt.format_package_stalled(
+                "accept the review again" if sealed else "click **Update Package** to retry"
+            )
+        return ""
+
     def _load_seal(self) -> Optional[Tuple[str, dict]]:
         """Return the entry package's sealed top hash and seal, or None if it is unsealed.
 
@@ -293,6 +326,8 @@ class CanvasManager:
             for pkg in seal.get("linked_packages", [])
         ]
         content += fmt.format_linked_packages(linked)
+        # A rejected re-acceptance restores the earlier seal; say why the new one didn't take.
+        content += self._packaging_status_markdown(sealed=True)
         return content + fmt.format_error_notification(self._errors)
 
     def _make_blocks(self, updated_at: str | None = None, is_updating: bool = False) -> list:
@@ -626,6 +661,8 @@ class CanvasManager:
                     browsing_package_name,
                     can_create=bool(self.config.s3_bucket_name),
                 )
+                if (browsing_bucket_name, browsing_package_name) == (self.config.s3_bucket_name, self.package_name):
+                    markdown += self._packaging_status_markdown()
                 if self.config.s3_bucket_name:
                     actions = [
                         blocks.create_button_block(f"update-package-{self.entry_id}", "Update Package"),
