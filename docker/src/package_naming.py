@@ -6,6 +6,11 @@ saved as ``entry_data.json`` (the SDK's ``to_dict()``). For example, ``{creator.
 names each package under its creator's handle (``jdoe/EXP00000001``), and a prefix
 without placeholders (default ``benchling``) is used as is.
 
+Quilt package names only allow letters, digits, ``_`` and ``-`` in each segment (quilt3's
+``PACKAGE_NAME_FORMAT``), so every other character in a placeholder's value becomes ``-``:
+handle ``ernest.prabhakar`` gives ``ernest-prabhakar/EXP00000001``. Literal text in
+``pkg_prefix`` is used as is.
+
 The name is computed on every call and never stored. A placeholder with no value in
 the entry raises ``MissingPlaceholderError``; there is no fallback prefix.
 """
@@ -14,6 +19,8 @@ import re
 from typing import Any, Dict, List, Pattern
 
 PLACEHOLDER_RE = re.compile(r"\{([^{}]+)\}")
+# Characters a Quilt package name segment can't contain (see quilt3.util.PACKAGE_NAME_FORMAT).
+INVALID_NAME_CHAR_RE = re.compile(r"[^\w-]")
 
 
 class MissingPlaceholderError(ValueError):
@@ -69,6 +76,8 @@ def _lookup(data: Dict[str, Any], path: str) -> Any:
 def resolve_prefix(pkg_prefix: str, entry: Any) -> str:
     """Fill each ``{dotted.path}`` in ``pkg_prefix`` from the entry.
 
+    Characters a Quilt package name can't contain become ``-`` in each filled-in value.
+
     Raises:
         MissingPlaceholderError: If a placeholder's value is missing, empty, or not a string.
     """
@@ -80,7 +89,7 @@ def resolve_prefix(pkg_prefix: str, entry: Any) -> str:
         value = _lookup(data, match.group(1))
         if not isinstance(value, str) or not value:
             raise MissingPlaceholderError(match.group(1), pkg_prefix, data.get("id"))
-        return value
+        return INVALID_NAME_CHAR_RE.sub("-", value)
 
     return PLACEHOLDER_RE.sub(fill, pkg_prefix)
 

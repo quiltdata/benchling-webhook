@@ -34,9 +34,11 @@ To put each scientist's notebook packages in the same namespace as their raw-dat
 |---|---|
 | `benchling` (default) | `benchling/EXP00000001` |
 | `{creator.handle}` | `jdoe/EXP00000001` |
+| `{creator.handle}`, creator `ernest.prabhakar` | `ernest-prabhakar/EXP00000001` |
 
 - The S3 export folder follows the same name (`jdoe/EXP00000001/`).
 - The name is computed each time, so a package moves only if its creator changes their Benchling handle.
+- Quilt package names only allow letters, digits, `_` and `-`, so any other character in a filled-in value (such as the `.` in `ernest.prabhakar`) becomes `-`. Literal text in the prefix is used as is.
 - If a placeholder has no value in the entry, that entry is not packaged. Its Canvas says "This entry can't be packaged" and names the missing value, and the webhook logs an error naming the placeholder and the entry. There is no fallback prefix.
 - Existing packages are not moved when the prefix changes. An entry's Canvas looks for its package under the new name, which is created the next time the entry is packaged.
 - If the bucket's Quilt workflow sets a `handle_pattern`, it must accept the new namespaces.
