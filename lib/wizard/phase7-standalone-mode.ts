@@ -158,7 +158,7 @@ export async function runStandaloneMode(input: StandaloneModeInput): Promise<Sta
         if (shouldDeploy) {
             console.log(chalk.blue("\nDeploying webhook stack...\n"));
             try {
-                const { deployCommand } = await import("../../bin/commands/deploy");
+                const { deployCommand } = await import("../../bin/commands/deploy.js");
                 await deployCommand({
                     profile,
                     yes: true,

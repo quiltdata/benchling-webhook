@@ -166,7 +166,7 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
         if (shouldEnable) {
             console.log("\nEnabling BenchlingIntegration parameter...");
 
-            const { updateStackParameter } = await import("../utils/stack-parameter-update");
+            const { updateStackParameter } = await import("../utils/stack-parameter-update.js");
             const updateResult = await updateStackParameter({
                 stackArn: stackQuery.stackArn,
                 region: config.deployment.region,
@@ -199,7 +199,7 @@ export async function runIntegratedMode(input: IntegratedModeInput): Promise<Int
 
                     try {
                         // Import and run status command
-                        const { statusCommand } = await import("../../bin/commands/status");
+                        const { statusCommand } = await import("../../bin/commands/status.js");
                         await statusCommand({
                             profile,
                             awsProfile,

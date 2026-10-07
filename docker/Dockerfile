@@ -24,7 +24,7 @@
 # BASE STAGE: Shared base image for both builder and runtime stages
 # ============================================================================
 ARG TARGETARCH
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023.11.20260413.0@sha256:fe4122f41784670c960b28c8a32036d8ca268bb56a002ce1e191271b6ddf3293 AS base
+FROM public.ecr.aws/amazonlinux/amazonlinux:2027.0.20260928.1@sha256:3ad14f0ff21381755f96e7c44d4f3bbe12bd8369214d1f9b17e78842441f98dd AS base
 ARG TARGETARCH
 
 # ============================================================================
@@ -41,17 +41,18 @@ FROM base AS builder
 # If not provided, version.py will fall back to pyproject.toml
 ARG VERSION
 
-# Install Python 3.11 and build dependencies
-# - python3.11: Python interpreter
-# - python3.11-devel: Headers needed for compiling native extensions
-# - python3.11-pip: Package installer for Python
+# Install Python 3.14 and build dependencies
+# Amazon Linux 2027 ships Python 3.14 as the unversioned python3 packages
+# - python3: Python interpreter
+# - python3-devel: Headers needed for compiling native extensions
+# - python3-pip: Package installer for Python
 # - gcc: C compiler for native extensions (e.g., cryptography, lxml)
 # - make: Build automation tool
 # - tar, gzip: Required by uv installer script
 RUN dnf install -y \
-    python3.11 \
-    python3.11-devel \
-    python3.11-pip \
+    python3 \
+    python3-devel \
+    python3-pip \
     gcc \
     make \
     tar \
@@ -76,7 +77,7 @@ COPY pyproject.toml uv.lock ./
 # - --frozen: Use lockfile without updating (reproducible builds)
 # - --no-dev: Exclude development dependencies (pytest, black, etc.)
 # Creates .venv directory with all production dependencies
-RUN $HOME/.local/bin/uv sync --frozen --no-dev --python python3.11
+RUN $HOME/.local/bin/uv sync --frozen --no-dev --python python3.14
 
 # Copy application source code
 # Placed after dependency installation for optimal layer caching
@@ -96,10 +97,10 @@ FROM base
 ARG TARGETARCH
 
 # Install minimal runtime dependencies
-# - python3.11: Python runtime (no -devel headers)
+# - python3: Python 3.14 runtime (no -devel headers)
 # - shadow-utils: Provides useradd/groupadd for creating non-root user
 RUN dnf install -y \
-    python3.11 \
+    python3 \
     shadow-utils \
     && dnf clean all
 
