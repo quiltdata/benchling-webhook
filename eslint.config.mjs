@@ -37,6 +37,9 @@ export default [
                 "varsIgnorePattern": "^_",
                 "caughtErrorsIgnorePattern": "^_",
             }],
+            // Temporary compatibility relaxations for recent ESLint rule churn
+            "preserve-caught-error": "off",
+            "@typescript-eslint/no-useless-assignment": "off",
         },
     },
 ];
