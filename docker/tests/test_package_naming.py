@@ -5,6 +5,7 @@ import pytest
 from src.package_naming import (
     MissingPlaceholderError,
     entry_package_name,
+    entry_to_dict,
     prefix_pattern,
     prefix_placeholders,
     resolve_prefix,
@@ -79,3 +80,10 @@ def test_prefix_placeholders():
 )
 def test_prefix_pattern(pkg_prefix, name, matches):
     assert bool(prefix_pattern(pkg_prefix).match(name)) is matches
+
+
+def test_sdk_entry_resolves_fields_its_to_dict_omits():
+    """The Canvas passes the SDK Entry; it must resolve the same fields the packager's dict has."""
+    entry = SimpleNamespace(to_dict=lambda: {"id": "etr_1"}, web_url="https://x.benchling.com/etr_1")
+    assert resolve_prefix("{web_url}", entry) == "https://x.benchling.com/etr_1"
+    assert resolve_prefix("{web_url}", entry_to_dict(entry)) == "https://x.benchling.com/etr_1"
