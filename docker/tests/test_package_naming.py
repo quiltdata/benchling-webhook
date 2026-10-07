@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from quilt3.util import validate_package_name
 
 from src.package_naming import (
     MissingPlaceholderError,
@@ -84,6 +85,27 @@ def test_prefix_pattern(pkg_prefix, name, matches):
 
 def test_sdk_entry_resolves_fields_its_to_dict_omits():
     """The Canvas passes the SDK Entry; it must resolve the same fields the packager's dict has."""
-    entry = SimpleNamespace(to_dict=lambda: {"id": "etr_1"}, web_url="https://x.benchling.com/etr_1")
-    assert resolve_prefix("{web_url}", entry) == "https://x.benchling.com/etr_1"
-    assert resolve_prefix("{web_url}", entry_to_dict(entry)) == "https://x.benchling.com/etr_1"
+    entry = SimpleNamespace(to_dict=lambda: {"id": "etr_1"}, display_id="EXP0001")
+    assert resolve_prefix("{display_id}", entry) == "EXP0001"
+    assert resolve_prefix("{display_id}", entry_to_dict(entry)) == "EXP0001"
+
+
+@pytest.mark.parametrize(
+    "handle, namespace",
+    [
+        ("ernest.prabhakar", "ernest-prabhakar"),
+        ("j.r.doe", "j-r-doe"),
+        ("jdoe@lab", "jdoe-lab"),
+        ("jdoe/lab", "jdoe-lab"),
+        ("j doe", "j-doe"),
+        ("j_doe-2", "j_doe-2"),
+    ],
+)
+def test_invalid_characters_in_values_become_dashes(handle, namespace):
+    name = entry_package_name("{creator.handle}", "EXP0001", {"creator": {"handle": handle}})
+    assert name == f"{namespace}/EXP0001"
+    validate_package_name(name)  # quilt3's own check, which the packager applies
+
+
+def test_literal_prefix_text_is_not_rewritten():
+    assert resolve_prefix("lab.{creator.handle}", {"creator": {"handle": "j.doe"}}) == "lab.j-doe"
