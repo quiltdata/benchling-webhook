@@ -63,7 +63,6 @@ def mock_payload():
     payload.entry_id = "etr_FFW6vEAy"
     payload.canvas_id = "cnvs_test456"
     payload.display_id = DISPLAY_ID
-    payload.package_name.return_value = f"benchling/{DISPLAY_ID}"
     payload.set_display_id = Mock()
     return payload
 
