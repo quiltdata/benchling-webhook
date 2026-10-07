@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from src.package_naming import MissingPlaceholderError
 from src.packaging_consumer import PackagingConsumer
 
 
@@ -63,6 +64,23 @@ async def test_consumer_retains_message_on_workflow_error():
     await consumer.process_message(_message(body))
 
     delete_mock.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_consumer_deletes_message_when_placeholder_has_no_value():
+    """A missing pkg_prefix placeholder value won't fill in on retry; don't block the group."""
+    entry_packager = Mock()
+    entry_packager.benchling = Mock()
+    entry_packager.execute_workflow = Mock(
+        side_effect=MissingPlaceholderError("creator.handle", "{creator.handle}", "etr_abc")
+    )
+
+    consumer, delete_mock = _packaging_consumer(entry_packager)
+
+    body = {"message": {"type": "v2.entry.created", "resourceId": "etr_abc"}}
+    await consumer.process_message(_message(body))
+
+    delete_mock.assert_awaited_once_with("rh-etr_abc")
 
 
 @pytest.mark.anyio

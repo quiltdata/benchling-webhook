@@ -46,7 +46,6 @@ class TestCanvasFooterBlocks:
         mock_payload.entry_id = "etr_test123"
         mock_payload.canvas_id = "cnvs_test123"
         mock_payload.display_id = "EXP25000088"
-        mock_payload.package_name.return_value = "benchling/EXP25000088"
 
         # Mock entry
         mock_entry = Mock()
@@ -91,7 +90,6 @@ class TestCanvasFooterBlocks:
         mock_payload.entry_id = "etr_test123"
         mock_payload.canvas_id = "cnvs_test123"
         mock_payload.display_id = "EXP25000088"
-        mock_payload.package_name.return_value = "benchling/EXP25000088"
 
         # Mock entry
         mock_entry = Mock()

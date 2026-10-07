@@ -22,6 +22,27 @@ When scientists create notebook entries in Benchling, this webhook automatically
 - **Copies attachments** from that notebook into Amazon S3 as part of the package.
 - **Enables orgnizational data discovery** by making contents available in ElasticSearch, and metadata available in Amazon Athena.
 
+#### Package Naming
+
+Each notebook package is named `{pkg_prefix}/{display_id}`, e.g. `benchling/EXP00000001`.
+Set the prefix with the setup wizard's **Package S3 prefix** prompt (`packages.prefix` in the profile config).
+
+The prefix can contain `{dotted.path}` placeholders, filled from the Benchling entry as saved in `entry_data.json`.
+To put each scientist's notebook packages in the same namespace as their raw-data packages, use the entry creator's handle:
+
+| `pkg_prefix` | Package name |
+|---|---|
+| `benchling` (default) | `benchling/EXP00000001` |
+| `{creator.handle}` | `jdoe/EXP00000001` |
+| `{creator.handle}`, creator `ernest.prabhakar` | `ernest-prabhakar/EXP00000001` |
+
+- The S3 export folder follows the same name (`jdoe/EXP00000001/`).
+- The name is computed each time, so a package moves only if its creator changes their Benchling handle.
+- Quilt package names only allow letters, digits, `_` and `-`, so any other character in a filled-in value (such as the `.` in `ernest.prabhakar`) becomes `-`. Literal text in the prefix is used as is.
+- If a placeholder has no value in the entry, that entry is not packaged. Its Canvas says "This entry can't be packaged" and names the missing value, and the webhook logs an error naming the placeholder and the entry. There is no fallback prefix.
+- Existing packages are not moved when the prefix changes. An entry's Canvas looks for its package under the new name, which is created the next time the entry is packaged.
+- If the bucket's Quilt workflow sets a `handle_pattern`, it must accept the new namespaces.
+
 #### Package Metadata
 
 The package metadata is the package's `entry.json`. Besides the entry's IDs, name, creator, authors, and timestamps, it includes the entry's schema `fields` and `customFields`. Benchling keys these by display name, so the webhook re-keys them in snake_case: "Experiment Type" becomes `experiment_type` and "ELN-ID #" becomes `eln_id`. Each field keeps its display name as `name`; its other values are exactly what Benchling returns. Both keys are always present, as `{}` when the entry has none. The package's `entry_data.json` keeps the raw entry.
@@ -222,7 +243,7 @@ The wizard will guide you through:
 1. **Catalog discovery** - Detect your Quilt catalog configuration
 2. **Stack validation** - Extract settings from your CloudFormation stack
 3. **Credential collection** - Enter Benchling app credentials
-4. **Package settings** - Configure bucket, metadata key, and optional Quilt workflow
+4. **Package settings** - Configure bucket, package prefix (see [Package Naming](#package-naming)), metadata key, and optional Quilt workflow
 5. **Deployment mode selection**:
    - **Integrated**: Uses your Quilt stack's built-in webhook, if any
    - **Standalone**: Deploys a separate webhook stack for testing

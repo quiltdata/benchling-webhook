@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError
 
 from src.canvas import CanvasManager
 from src.config import Config
+from src.package_naming import MissingPlaceholderError
 from src.payload import Payload
 
 
@@ -39,7 +40,7 @@ class TestCanvasManager:
         payload = Mock(spec=Payload)
         payload.entry_id = "etr_test123"
         payload.canvas_id = "canvas_test456"
-        payload.package_name.return_value = "benchling/test-entry"
+        payload.display_id = "test-entry"
         return payload
 
     @pytest.fixture
@@ -100,11 +101,30 @@ class TestCanvasManager:
         expected = "https://test.quiltdata.com/b/test-bucket/packages/benchling/test-entry"
         assert canvas_manager.catalog_url == expected
 
-    def test_package_name(self, canvas_manager, mock_payload, mock_config):
-        """Test package_name calls payload.package_name with correct prefix."""
-        package_name = canvas_manager.package_name
-        mock_payload.package_name.assert_called_once_with(mock_config.s3_prefix, use_display_id=True)
-        assert package_name == "benchling/test-entry"
+    def test_package_name(self, canvas_manager):
+        """Test package_name is {pkg_prefix}/{display_id} by default."""
+        assert canvas_manager.package_name == "benchling/test-entry"
+
+    def test_package_name_fills_placeholder_from_entry(self, mock_benchling, mock_config, mock_payload):
+        """Test a pkg_prefix placeholder is filled from the SDK entry."""
+        mock_config.s3_prefix = "{creator.handle}"
+        mock_benchling.entries.get_entry_by_id.return_value.to_dict.return_value = {
+            "id": "etr_test123",
+            "creator": {"handle": "jdoe", "name": "J Doe", "id": "ent_1"},
+        }
+        canvas_manager = CanvasManager(mock_benchling, mock_config, mock_payload)
+
+        assert canvas_manager.package_name == "jdoe/test-entry"
+        mock_benchling.entries.get_entry_by_id.assert_called_once_with("etr_test123")
+
+    def test_package_name_fails_when_placeholder_missing(self, mock_benchling, mock_config, mock_payload):
+        """Test a placeholder with no value in the entry raises instead of falling back."""
+        mock_config.s3_prefix = "{creator.handle}"
+        mock_benchling.entries.get_entry_by_id.return_value.to_dict.return_value = {"id": "etr_test123"}
+        canvas_manager = CanvasManager(mock_benchling, mock_config, mock_payload)
+
+        with pytest.raises(MissingPlaceholderError):
+            _ = canvas_manager.package_name
 
     def test_markdown_content_includes_sync_uri(self, canvas_manager):
         """Test that markdown content includes the sync_uri link."""
@@ -177,7 +197,7 @@ class TestCanvasManager:
     def test_sync_uri_different_package_names(self, mock_benchling, mock_config, mock_payload):
         """Test sync_uri with different package names."""
         # Test with package name that has slashes
-        mock_payload.package_name.return_value = "benchling/project/experiment-001"
+        mock_payload.display_id = "project/experiment-001"
         canvas_manager = CanvasManager(mock_benchling, mock_config, mock_payload)
 
         result = canvas_manager.sync_uri()
@@ -217,7 +237,8 @@ class TestCanvasManager:
         # Setup to match the example
         mock_config.s3_bucket_name = "quilt-example-bucket"
         mock_config.quilt_catalog = "nightly.quilttest.com"
-        mock_payload.package_name.return_value = "benchdock/etr_EK1AQMQiQn"
+        mock_config.s3_prefix = "benchdock"
+        mock_payload.display_id = "etr_EK1AQMQiQn"
         canvas_manager = CanvasManager(mock_benchling, mock_config, mock_payload)
 
         version_hash = "787d43acc36392140f56c4fb1e33310c6e0445d3ba332430c61a6674321defc1"
