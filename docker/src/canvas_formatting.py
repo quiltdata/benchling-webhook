@@ -272,6 +272,21 @@ def format_package_rejected(workflow: str, message: str, retry: str = "click **U
 """
 
 
+def format_package_unnamed(display_id: str, pkg_prefix: str, placeholder: str) -> str:
+    """The entry has no value for a pkg_prefix placeholder, so its package can't be named."""
+    prefix = " ".join(pkg_prefix.split()).replace("`", "'")
+    path = " ".join(placeholder.split()).replace("`", "'")
+    return f"""## Benchling Entry
+
+**Entry**: {escape_markdown(display_id)}
+
+> **⚠️ This entry can't be packaged.** Package names start with `{prefix}`, but this entry has no value for
+> `{path}`.
+>
+> Ask your Quilt administrator to check the webhook's package prefix.
+"""
+
+
 def format_package_stalled(retry: str = "click **Update Package** to retry") -> str:
     """A packaging request produced no revision in time."""
     return f"""

@@ -1057,10 +1057,22 @@ class TestEntryPackager:
         }
         orchestrator._initiate_export = Mock()
 
+        orchestrator._redraw_canvas = Mock()
+        payload = Payload({"message": {"resourceId": "etr_123", "canvasId": "cnvs_1"}})
+
         with pytest.raises(MissingPlaceholderError):
-            orchestrator.execute_workflow(Payload({"message": {"resourceId": "etr_123"}}))
+            orchestrator.execute_workflow(payload)
 
         orchestrator._initiate_export.assert_not_called()
+        # Replaces the "Updating..." canvas with one that explains the failure.
+        orchestrator._redraw_canvas.assert_called_once_with(payload, None)
+
+    def test_redraw_canvas_without_package_name_uses_payload_canvas_only(self, orchestrator):
+        """Without a package name there is no entry.json to read a canvas_id from."""
+        with patch.object(orchestrator.role_manager, "get_s3_client") as get_s3_client:
+            orchestrator._redraw_canvas(Payload({"message": {"resourceId": "etr_123"}}), None)
+
+        get_s3_client.assert_not_called()
 
     def test_process_export_writes_under_filled_prefix(self, orchestrator, mock_benchling, mock_config):
         """Test the S3 export folder follows the filled-in prefix."""

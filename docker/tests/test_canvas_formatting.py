@@ -247,3 +247,13 @@ class TestEscapeMarkdown:
 
     def test_escapes_every_inline_markdown_character(self):
         assert escape_markdown(r"\`*_[]<>") == r"\\\`\*\_\[\]\<\>"
+
+
+def test_format_package_unnamed_quotes_prefix_and_placeholder():
+    from src.canvas_formatting import format_package_unnamed
+
+    md = format_package_unnamed("EXP0001", "lab-`{creator.handle}`", "creator.handle")
+
+    assert "**Entry**: EXP0001" in md
+    assert "`lab-'{creator.handle}'`" in md
+    assert "`creator.handle`" in md

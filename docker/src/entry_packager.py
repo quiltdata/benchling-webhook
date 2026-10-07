@@ -24,7 +24,7 @@ from .auth import RoleManager
 from .config import get_config
 from .entry_references import link_metadata, summarize_references
 from .package_files import SEAL_FILE, is_not_found
-from .package_naming import entry_package_name
+from .package_naming import MissingPlaceholderError, entry_package_name
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packaging_status import check_workflow, write_status
 from .payload import Payload
@@ -1012,10 +1012,14 @@ For questions about the data, refer to the original Benchling entry.
         )
         self.logger.info("Sealed entry package", package_name=package_name, linked=len(seal["linked_packages"]))
 
-    def _redraw_canvas(self, payload: Payload, package_name: str) -> None:
-        """Best-effort canvas update; failures are logged, never raised."""
-        s3_client = self.role_manager.get_s3_client()
-        canvas_id = payload.canvas_id or self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
+    def _redraw_canvas(self, payload: Payload, package_name: Optional[str]) -> None:
+        """Best-effort canvas update; failures are logged, never raised.
+
+        Without a package name, only the payload's canvas_id is used.
+        """
+        canvas_id = payload.canvas_id
+        if not canvas_id and package_name:
+            canvas_id = self._load_existing_canvas_id_from_entry_json(self.role_manager.get_s3_client(), package_name)
         if canvas_id and self.benchling:
             try:
                 from .canvas import CanvasManager
@@ -1135,7 +1139,12 @@ For questions about the data, refer to the original Benchling entry.
                 entry_name=entry_data.get("name"),
             )
 
-            package_name = entry_package_name(self.config.s3_prefix, display_id, entry_data)
+            try:
+                package_name = entry_package_name(self.config.s3_prefix, display_id, entry_data)
+            except MissingPlaceholderError:
+                # Replace any "Updating..." canvas with one that says why nothing was packaged.
+                self._redraw_canvas(payload, None)
+                raise
             review_event = payload.event_type == "v2.entry.updated.reviewRecord"
             review_status = (entry_data.get("reviewRecord") or {}).get("status")
             accepted = review_event and review_status == "ACCEPTED"
