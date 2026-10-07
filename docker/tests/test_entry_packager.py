@@ -27,6 +27,7 @@ from src.entry_packager import (
     parse_creator,
     validate_entry_data,
 )
+from src.package_naming import MissingPlaceholderError
 from src.packages import Package
 from src.payload import Payload
 
@@ -536,6 +537,7 @@ class TestEntryPackager:
                     orchestrator,
                     payload=payload,
                     download_url="https://example.com/export.zip",
+                    package_name="benchling/ELN-123",
                 )
 
     # Episode 6: SendToSQS tests
@@ -1014,6 +1016,7 @@ class TestEntryPackager:
                 orchestrator,
                 payload=payload,
                 download_url="https://example.com/export.zip",
+                package_name="benchling/EXP0001",
             )
 
         assert result["statusCode"] == 200
@@ -1025,6 +1028,92 @@ class TestEntryPackager:
 
         assert written_entry_json is not None
         assert written_entry_json["canvas_id"] == "canvas_preserved"
+
+    def test_execute_workflow_fills_prefix_placeholder(self, orchestrator, mock_benchling, mock_config):
+        """Test a pkg_prefix placeholder names the package from the fetched entry."""
+        mock_config.s3_prefix = "{creator.handle}"
+        mock_benchling.entries.get_entry_by_id.return_value.to_dict.return_value = {
+            "id": "etr_123",
+            "display_id": "EXP0001",
+            "creator": {"handle": "jdoe", "name": "J Doe", "id": "ent_1"},
+        }
+        orchestrator._initiate_export = Mock(return_value={"id": "task_1"})
+        orchestrator._poll_export_status = Mock(return_value={"downloadURL": "https://example.com/export.zip"})
+        orchestrator._process_export = Mock(return_value={})
+        orchestrator._send_to_sqs = Mock(return_value={"MessageId": "msg_1"})
+        orchestrator._redraw_canvas = Mock()
+        orchestrator._is_sealed = Mock(return_value=False)
+
+        result = orchestrator.execute_workflow(Payload({"message": {"resourceId": "etr_123"}}))
+
+        assert result["packageName"] == "jdoe/EXP0001"
+        orchestrator._is_sealed.assert_called_once_with("jdoe/EXP0001")
+        assert orchestrator._process_export.call_args.args[2] == "jdoe/EXP0001"
+        assert orchestrator._send_to_sqs.call_args.args[0] == "jdoe/EXP0001"
+
+    def test_execute_workflow_fails_when_placeholder_has_no_value(self, orchestrator, mock_benchling, mock_config):
+        """Test a missing placeholder value fails packaging before anything is exported."""
+        mock_config.s3_prefix = "{creator.handle}"
+        mock_benchling.entries.get_entry_by_id.return_value.to_dict.return_value = {
+            "id": "etr_123",
+            "display_id": "EXP0001",
+        }
+        orchestrator._initiate_export = Mock()
+
+        orchestrator._redraw_canvas = Mock()
+        payload = Payload({"message": {"resourceId": "etr_123", "canvasId": "cnvs_1"}})
+
+        with pytest.raises(MissingPlaceholderError):
+            orchestrator.execute_workflow(payload)
+
+        orchestrator._initiate_export.assert_not_called()
+        # Replaces the "Updating..." canvas with one that explains the failure.
+        orchestrator._redraw_canvas.assert_called_once_with(payload, None)
+
+    def test_redraw_canvas_without_package_name_uses_payload_canvas_only(self, orchestrator):
+        """Without a package name there is no entry.json to read a canvas_id from."""
+        with patch.object(orchestrator.role_manager, "get_s3_client") as get_s3_client:
+            orchestrator._redraw_canvas(Payload({"message": {"resourceId": "etr_123"}}), None)
+
+        get_s3_client.assert_not_called()
+
+    def test_process_export_keeps_the_workflow_package_name(self, orchestrator, mock_benchling, mock_config):
+        """Test uploads use the name execute_workflow resolved, even if the handle changed mid-export."""
+        mock_config.s3_prefix = "{creator.handle}"
+        mock_benchling.entries.get_entry_by_id.return_value.to_dict.return_value = {
+            "id": "etr_123",
+            "display_id": "EXP0001",
+            "name": "Test Entry",
+            "web_url": "https://demo.benchling.com/entry/etr_123",
+            "created_at": "2025-10-01T10:00:00Z",
+            "modified_at": "2025-10-02T10:00:00Z",
+            # Renamed since execute_workflow resolved jdoe/EXP0001.
+            "creator": {"handle": "jsmith", "name": "J Doe", "id": "ent_1"},
+            "fields": [],
+        }
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as archive:
+            archive.writestr("export.csv", "hello")
+        mock_response = Mock()
+        mock_response.iter_content.return_value = [zip_buffer.getvalue()]
+        s3_client = Mock()
+        s3_client.get_object.side_effect = ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+
+        payload = Payload({"message": {"resourceId": "etr_123", "canvasId": "cnvs_1"}})
+        with (
+            patch("src.entry_packager.requests.get", return_value=mock_response),
+            patch.object(orchestrator.role_manager, "get_s3_client", return_value=s3_client),
+        ):
+            result = orchestrator._process_export.__wrapped__(
+                orchestrator,
+                payload=payload,
+                download_url="https://example.com/export.zip",
+                package_name="jdoe/EXP0001",
+            )
+
+        assert result["package_name"] == "jdoe/EXP0001"
+        keys = {call.kwargs["Key"] for call in s3_client.put_object.call_args_list}
+        assert {"jdoe/EXP0001/export.csv", "jdoe/EXP0001/entry.json"} <= keys
 
 
 # Shape of the review-accepted webhook delivered for an entry in April 2026.

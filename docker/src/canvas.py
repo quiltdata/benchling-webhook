@@ -18,6 +18,7 @@ from . import canvas_blocks as blocks
 from . import canvas_formatting as fmt
 from .config import Config
 from .package_files import PackageFile, PackageFileFetcher
+from .package_naming import MissingPlaceholderError, entry_package_name
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packages import Package
 from .packaging_status import read_status, unresolved
@@ -114,10 +115,12 @@ class CanvasManager:
             # Ensure display_id is set on payload for package naming
             if not self.payload.display_id:
                 self.payload.set_display_id(self.entry.display_id)
+            display_id = self.payload.display_id or self.entry.display_id
+            # pkg_prefix placeholders are filled from the entry, so it is fetched first.
             self._package = Package(
                 catalog_base_url=self.config.quilt_catalog,
                 bucket=self.config.s3_bucket_name,
-                package_name=self.payload.package_name(self.config.s3_prefix, use_display_id=True),
+                package_name=entry_package_name(self.config.s3_prefix, display_id, self.entry),
             )
         return self._package
 
@@ -125,6 +128,27 @@ class CanvasManager:
     def package_name(self) -> str:
         """Generate package name for the entry."""
         return self.package.package_name
+
+    @property
+    def unnamed_error(self) -> Optional[MissingPlaceholderError]:
+        """Why the entry's package can't be named (a pkg_prefix placeholder has no value), or None."""
+        if not self.config.s3_bucket_name:
+            return None
+        try:
+            _ = self.package
+        except MissingPlaceholderError as e:
+            return e
+        return None
+
+    @property
+    def own_package_name(self) -> Optional[str]:
+        """The entry's package name, or None in bucketless mode or when it can't be named."""
+        if not self.config.s3_bucket_name or self.unnamed_error:
+            return None
+        return self.package_name
+
+    def _make_unnamed_markdown(self, error: MissingPlaceholderError) -> str:
+        return fmt.format_package_unnamed(self.entry.display_id, error.pkg_prefix, error.placeholder)
 
     @property
     def catalog_url(self) -> str:
@@ -217,7 +241,10 @@ class CanvasManager:
         if seal:
             return self._make_sealed_markdown(*seal)
 
-        if self.config.s3_bucket_name:
+        unnamed = self.unnamed_error
+        if unnamed:
+            content = self._make_unnamed_markdown(unnamed)
+        elif self.config.s3_bucket_name:
             content = fmt.format_package_header(
                 package_name=self.package_name,
                 display_id=self.entry.display_id,
@@ -243,8 +270,8 @@ class CanvasManager:
             linked_packages = search_result["packages"]
 
             # Filter out the primary package
-            if self.config.s3_bucket_name:
-                linked_packages = [pkg for pkg in linked_packages if pkg.package_name != self.package_name]
+            if self.own_package_name:
+                linked_packages = [pkg for pkg in linked_packages if pkg.package_name != self.own_package_name]
 
             # Store linked packages as instance variable
             self._linked_packages = linked_packages
@@ -307,9 +334,9 @@ class CanvasManager:
 
         A read failure raises, failing the canvas update, rather than render a sealed package as live.
         """
-        if not self.config.s3_bucket_name:
+        if not self.own_package_name:
             return None
-        return self._package_file_fetcher.get_seal(self.package_name)
+        return self._package_file_fetcher.get_seal(self.own_package_name)
 
     def _make_sealed_markdown(self, top_hash: str, seal: dict) -> str:
         """Render the sealed revision and the linked packages frozen at acceptance."""
@@ -342,7 +369,10 @@ class CanvasManager:
         if is_updating:
             # Render only the primary package header — skip the Athena query for
             # linked packages so the initial update returns quickly.
-            if self.config.s3_bucket_name:
+            unnamed = self.unnamed_error
+            if unnamed:
+                markdown_content = self._make_unnamed_markdown(unnamed)
+            elif self.config.s3_bucket_name:
                 markdown_content = fmt.format_package_header(
                     package_name=self.package_name,
                     display_id=self.entry.display_id,
@@ -368,7 +398,7 @@ class CanvasManager:
             else blocks.create_main_navigation_buttons(
                 self.entry_id,
                 update_enabled=not is_updating or not bool(self.config.s3_bucket_name),
-                browse_enabled=bool(self.config.s3_bucket_name),
+                browse_enabled=bool(self.own_package_name),
                 bucketless=not bool(self.config.s3_bucket_name),
             )
         )
@@ -413,7 +443,7 @@ class CanvasManager:
             logger.info(
                 "Updating Canvas",
                 canvas_id=self.canvas_id,
-                package_name=self.package_name if self.config.s3_bucket_name else None,
+                package_name=self.own_package_name,
                 blocks_count=len(blocks),
             )
 
@@ -558,7 +588,7 @@ class CanvasManager:
             return blocks.create_main_navigation_buttons(
                 self.entry_id,
                 update_enabled=True,
-                browse_enabled=bool(self.config.s3_bucket_name),
+                browse_enabled=bool(self.own_package_name),
                 bucketless=not bool(self.config.s3_bucket_name),
             )
         if context == "browser":
@@ -661,7 +691,10 @@ class CanvasManager:
                     browsing_package_name,
                     can_create=bool(self.config.s3_bucket_name),
                 )
-                if (browsing_bucket_name, browsing_package_name) == (self.config.s3_bucket_name, self.package_name):
+                if (browsing_bucket_name, browsing_package_name) == (
+                    self.config.s3_bucket_name,
+                    self.own_package_name,
+                ):
                     markdown += self._packaging_status_markdown()
                 if self.config.s3_bucket_name:
                     actions = [

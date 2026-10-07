@@ -23,6 +23,7 @@ from src.canvas import CanvasManager
 from src.canvas_blocks import blocks_to_dict
 from src.canvas_formatting import format_canvas_footer
 from src.config import Config
+from src.packages import Package
 from src.payload import Payload
 
 
@@ -46,7 +47,6 @@ def mock_payload():
     payload.entry_id = "etr_test123"
     payload.canvas_id = "cnvs_test456"
     payload.display_id = "EXP25000088"
-    payload.package_name.return_value = "benchling/EXP25000088"
     payload.set_display_id = Mock()
     return payload
 
@@ -249,3 +249,47 @@ class TestUpdatingCanvasBlocks:
 
         kwargs = bucketless_canvas_manager.update_canvas.call_args.kwargs
         assert kwargs["updated_at"].endswith(" UTC")
+
+
+@pytest.fixture
+def unnamed_canvas_manager(mock_benchling, mock_config, mock_payload):
+    """A canvas whose pkg_prefix placeholder has no value in the entry."""
+    mock_config.s3_prefix = "{creator.handle}"
+    mock_benchling.entries.get_entry_by_id.return_value.to_dict.return_value = {"id": "etr_test123"}
+    linked = Package("test.quiltdata.com", "lab-bucket", "lab/data")
+    package_query = Mock()
+    package_query.find_unique_packages.return_value = {"packages": [linked]}
+    return CanvasManager(
+        benchling=mock_benchling,
+        config=mock_config,
+        payload=mock_payload,
+        package_query=package_query,
+        package_file_fetcher=Mock(),
+    )
+
+
+def _browse_enabled(nav_section) -> bool:
+    return any(child.text == "Browse Package" and child.enabled for child in nav_section.children)
+
+
+@pytest.mark.parametrize("is_updating", [False, True])
+def test_unnamed_package_explains_missing_placeholder(unnamed_canvas_manager, is_updating):
+    """With no value for a pkg_prefix placeholder, the canvas says why instead of failing."""
+    result = unnamed_canvas_manager._make_blocks(updated_at="2026-04-15 12:00 UTC", is_updating=is_updating)
+
+    markdown = next(b.value for b in result if isinstance(b, MarkdownUiBlockUpdate) and b.id == "md1")
+    assert "This entry can't be packaged" in markdown
+    assert "`{creator.handle}`" in markdown
+    assert "`creator.handle`" in markdown
+    assert "EXP25000088" in markdown
+    assert not _browse_enabled(result[0])
+    unnamed_canvas_manager._package_file_fetcher.get_seal.assert_not_called()
+
+
+def test_unnamed_package_still_lists_linked_packages(unnamed_canvas_manager):
+    result = unnamed_canvas_manager._make_blocks(updated_at="2026-04-15 12:00 UTC")
+
+    markdown = next(b.value for b in result if isinstance(b, MarkdownUiBlockUpdate) and b.id == "md1")
+    assert "lab/data" in markdown
+    nav_section = result[0]
+    assert any(child.text == "Update Package" and child.enabled for child in nav_section.children)
