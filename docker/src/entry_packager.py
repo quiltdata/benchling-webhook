@@ -24,6 +24,7 @@ from .auth import RoleManager
 from .config import get_config
 from .entry_references import link_metadata, summarize_references
 from .package_files import SEAL_FILE, is_not_found
+from .package_naming import entry_package_name
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packaging_status import check_workflow, write_status
 from .payload import Payload
@@ -540,7 +541,7 @@ class EntryPackager:
 
         # Set display_id on payload for package naming
         payload.set_display_id(display_id)
-        package_name = payload.package_name(self.config.s3_prefix, use_display_id=True)
+        package_name = entry_package_name(self.config.s3_prefix, display_id, entry_data)
 
         self.logger.info(
             "Processing export inline", entry_id=entry_id, display_id=display_id, package_name=package_name
@@ -1134,7 +1135,7 @@ For questions about the data, refer to the original Benchling entry.
                 entry_name=entry_data.get("name"),
             )
 
-            package_name = payload.package_name(self.config.s3_prefix, use_display_id=True)
+            package_name = entry_package_name(self.config.s3_prefix, display_id, entry_data)
             review_event = payload.event_type == "v2.entry.updated.reviewRecord"
             review_status = (entry_data.get("reviewRecord") or {}).get("status")
             accepted = review_event and review_status == "ACCEPTED"

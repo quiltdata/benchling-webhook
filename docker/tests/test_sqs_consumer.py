@@ -148,6 +148,43 @@ async def test_consumer_deletes_filtered_messages(mock_config):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "pkg_prefix, handle, refreshed",
+    [
+        ("benchling", "benchling/EXP0001", True),
+        ("benchling", "jdoe/EXP0001", False),
+        ("{creator.handle}", "jdoe/EXP0001", True),
+        ("{creator.handle}", "EXP0001", False),
+    ],
+)
+async def test_consumer_filters_package_names_by_prefix_pattern(mock_config, pkg_prefix, handle, refreshed):
+    mock_config.pkg_prefix = pkg_prefix
+    consumer = SqsConsumer(
+        queue_url="https://sqs.us-west-2.amazonaws.com/123456789012/test",
+        config=mock_config,
+        benchling_factory=Mock(),
+        sqs_client=Mock(),
+    )
+    delete_message = AsyncMock()
+    consumer.delete_message = delete_message
+
+    with patch(
+        "src.sqs_consumer.refresh_canvas_for_package_event",
+        return_value=RefreshResult(RefreshOutcome.SUCCESS),
+    ) as refresh:
+        await consumer.process_message(
+            {
+                "MessageId": "msg-1",
+                "ReceiptHandle": "receipt-1",
+                "Body": f'{{"detail":{{"bucket":"test-bucket","handle":"{handle}","topHash":"abc123"}}}}',
+            }
+        )
+
+    assert refresh.called is refreshed
+    delete_message.assert_awaited_once_with("receipt-1")
+
+
+@pytest.mark.anyio
 async def test_main_applies_secrets_before_polling():
     """Regression: main() must apply secrets so s3_bucket_name is set before filtering."""
     mock_config = Mock()

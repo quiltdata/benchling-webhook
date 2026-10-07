@@ -18,6 +18,7 @@ from . import canvas_blocks as blocks
 from . import canvas_formatting as fmt
 from .config import Config
 from .package_files import PackageFile, PackageFileFetcher
+from .package_naming import entry_package_name
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packages import Package
 from .packaging_status import read_status, unresolved
@@ -114,10 +115,12 @@ class CanvasManager:
             # Ensure display_id is set on payload for package naming
             if not self.payload.display_id:
                 self.payload.set_display_id(self.entry.display_id)
+            display_id = self.payload.display_id or self.entry.display_id
+            # pkg_prefix placeholders are filled from the entry, so it is fetched first.
             self._package = Package(
                 catalog_base_url=self.config.quilt_catalog,
                 bucket=self.config.s3_bucket_name,
-                package_name=self.payload.package_name(self.config.s3_prefix, use_display_id=True),
+                package_name=entry_package_name(self.config.s3_prefix, display_id, self.entry),
             )
         return self._package
 

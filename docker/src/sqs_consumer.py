@@ -14,6 +14,7 @@ from botocore.config import Config as BotocoreConfig
 
 from .config import Config, get_config
 from .package_event import RefreshOutcome, refresh_canvas_for_package_event
+from .package_naming import prefix_pattern
 from .secrets_manager import SecretsManagerError
 
 logger = structlog.get_logger(__name__)
@@ -207,7 +208,7 @@ class SqsConsumer(BaseSqsConsumer):
                     expected_bucket=self.config.s3_bucket_name,
                     package_handle=package_handle,
                 )
-            elif not parsed.package_name.startswith(expected_prefix):
+            elif not prefix_pattern(self.config.pkg_prefix).match(parsed.package_name):
                 outcome = "skipped_filtered"
                 should_delete = True
                 logger.info(
