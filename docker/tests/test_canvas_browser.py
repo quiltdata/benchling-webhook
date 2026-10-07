@@ -37,7 +37,7 @@ class TestCanvasBrowser:
         payload = Mock(spec=Payload)
         payload.entry_id = "etr_test123"
         payload.canvas_id = "canvas_test456"
-        payload.package_name.return_value = "benchling/test-entry"
+        payload.display_id = "test-entry"
         return payload
 
     @pytest.fixture

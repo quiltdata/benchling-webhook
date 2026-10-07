@@ -213,18 +213,3 @@ class Payload:
         """Set the display_id for package naming."""
         self._display_id = display_id
         logger.info("Display ID set for package naming", display_id=display_id)
-
-    def package_name(self, s3_prefix: str, use_display_id: bool = False) -> str:
-        """
-        Generate package name for the entry.
-
-        Args:
-            s3_prefix: S3 prefix for package (e.g., "benchling")
-            use_display_id: If True and display_id is set, use display_id instead of entry_id
-
-        Returns:
-            Package name in format: {s3_prefix}/{display_id} or {s3_prefix}/{entry_id}
-        """
-        if use_display_id and self._display_id:
-            return f"{s3_prefix}/{self._display_id}"
-        return f"{s3_prefix}/{self.entry_id}"

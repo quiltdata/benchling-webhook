@@ -19,6 +19,7 @@ from typing import Any
 import structlog
 
 from .entry_packager import EntryPackager
+from .package_naming import MissingPlaceholderError
 from .payload import Payload
 from .sqs_consumer import (
     BaseSqsConsumer,
@@ -86,6 +87,19 @@ class PackagingConsumer(BaseSqsConsumer):
             should_delete = True
         except asyncio.CancelledError:
             raise
+        except MissingPlaceholderError as exc:
+            outcome = "missing_placeholder"
+            # Permanent: retrying the same entry can't fill the placeholder, and a
+            # failing message would block its MessageGroup. Delete it; the next
+            # webhook for this entry tries again.
+            should_delete = True
+            logger.error(
+                "Entry not packaged: pkg_prefix placeholder has no value in the entry",
+                sqs_message_id=sqs_message_id,
+                entry_id=entry_id,
+                pkg_prefix=exc.pkg_prefix,
+                placeholder=exc.placeholder,
+            )
         except Exception as exc:
             outcome = "workflow_error"
             # Leave the message on the queue. Visibility timeout (40 min) plus
