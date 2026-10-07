@@ -7,6 +7,7 @@ and queues them for Quilt package creation via SQS.
 
 import io
 import json
+import re
 import time
 import zipfile
 from datetime import datetime, timezone
@@ -179,6 +180,61 @@ def parse_authors(entry_data: Dict[str, Any]) -> list[str]:
                     authors_list.append(author_str)
 
     return authors_list
+
+
+def normalize_field_key(name: str) -> str:
+    """Turn a Benchling field display name into a stable snake_case key.
+
+    Lowercases, collapses each run of characters other than ``a-z0-9`` into one
+    ``_``, and strips leading/trailing ``_``: "Experiment Type" -> ``experiment_type``,
+    "ELN-ID #" -> ``eln_id``. Returns ``""`` when nothing alphanumeric remains.
+    """
+    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+
+
+def normalize_fields(fields: Any, kind: str = "fields") -> Dict[str, Dict[str, Any]]:
+    """Re-key a Benchling ``fields``/``customFields`` map for the package metadata.
+
+    Benchling keys both maps by free-form display name; workflow schemas need
+    stable keys. Each key is normalized with :func:`normalize_field_key`, and the
+    original display name is kept as ``name`` in the field object. Values are
+    otherwise unchanged. On a collision the first field keeps the plain key and
+    later ones get ``_2``, ``_3``, ...; names that normalize to empty are skipped.
+    Both cases log a warning. A list of field objects (each with ``name``) is
+    accepted as well, matching ``entry_references._iter_fields``.
+    """
+    if isinstance(fields, dict):
+        items = list(fields.items())
+    elif isinstance(fields, list):
+        items = [(f.get("name"), f) for f in fields if isinstance(f, dict)]
+    else:
+        return {}
+
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for name, field in items:
+        if not isinstance(field, dict):
+            continue
+        display_name = str(name) if name is not None else ""
+        base = normalize_field_key(display_name)
+        if not base:
+            logger.warning("Skipping entry field with an empty normalized key", kind=kind, field_name=display_name)
+            continue
+        key = base
+        suffix = 2
+        while key in normalized:
+            key = f"{base}_{suffix}"
+            suffix += 1
+        if key != base:
+            logger.warning(
+                "Entry field names collide after normalization",
+                kind=kind,
+                key=base,
+                kept=normalized[base]["name"],
+                renamed=display_name,
+                renamed_key=key,
+            )
+        normalized[key] = {**field, "name": display_name}
+    return normalized
 
 
 class EntryPackager:
@@ -647,6 +703,10 @@ class EntryPackager:
             "benchling_base_url": base_url,
             "webhook_data": webhook_data,
             "files": files_dict,
+            # The entry's own metadata, re-keyed so a bucket workflow can validate it.
+            # entry_data.json keeps the raw, display-name-keyed maps.
+            "fields": normalize_fields(entry_data.get("fields"), "fields"),
+            "customFields": normalize_fields(entry_data.get("customFields"), "customFields"),
         }
         if canvas_id is not None:
             entry_json["canvas_id"] = canvas_id
@@ -724,7 +784,7 @@ This package contains data exported from Benchling entry `{display_id}`.
 
         readme_content += """
 ## Metadata Files
-- `entry.json`: Key entry metadata (display_id, name, creator, authors, timestamps)
+- `entry.json`: Key entry metadata (display_id, name, creator, authors, timestamps, schema fields and custom fields)
 - `entry_data.json`: Complete entry data from Benchling API
 - `links.json`: Raw Benchling objects this entry links to (entities, inventory, tables); the searchable, name-enriched summary is the `links` field of `entry.json`
 - `input.json`: Export processing metadata
