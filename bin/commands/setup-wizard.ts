@@ -421,7 +421,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         });
 
         // Show status with webhook URL
-        const { statusCommand } = await import("./status");
+        const { statusCommand } = await import("./status.js");
         await statusCommand({
             profile,
             awsProfile,
@@ -439,7 +439,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         if (integratedStack) {
             xdg.clearDeployment(profile);
 
-            const { statusCommand } = await import("./status");
+            const { statusCommand } = await import("./status.js");
             await statusCommand({
                 profile,
                 awsProfile,
@@ -616,7 +616,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
         });
 
         // Show status with webhook URL
-        const { statusCommand } = await import("./status");
+        const { statusCommand } = await import("./status.js");
         await statusCommand({
             profile,
             awsProfile,

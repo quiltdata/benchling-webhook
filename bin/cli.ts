@@ -123,7 +123,7 @@ For more information: https://github.com/quiltdata/benchling-webhook#deployment
     )
     .action(async (options) => {
         try {
-            const { destroyCommand } = await import("./commands/destroy");
+            const { destroyCommand } = await import("./commands/destroy.js");
             await destroyCommand(options);
         } catch (error) {
             console.error(chalk.red((error as Error).message));
@@ -302,7 +302,7 @@ program
     .option("--verbose", "Show detailed validation information")
     .action(async (options) => {
         try {
-            const { XDGConfig } = await import("../lib/xdg-config");
+            const { XDGConfig } = await import("../lib/xdg-config.js");
             const xdg = new XDGConfig();
             const profile = options.profile || "default";
 
@@ -352,7 +352,7 @@ program
 
             // If catalog not provided directly, try to load from profile
             if (!catalogUrl && options.profile) {
-                const { XDGConfig } = await import("../lib/xdg-config");
+                const { XDGConfig } = await import("../lib/xdg-config.js");
                 const xdg = new XDGConfig();
 
                 if (xdg.profileExists(options.profile)) {
