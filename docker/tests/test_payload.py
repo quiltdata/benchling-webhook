@@ -76,6 +76,12 @@ class TestPayload:
         assert payload.canvas_id == "canvas_456"
         assert payload.event_type == "v2.canvas.userInteracted"
 
+    def test_generated_event_id_is_stable(self):
+        """Without a message id, the generated event_id is the same on every read."""
+        payload = Payload({"message": {"type": "v2.entry.updated.fields", "resourceId": "etr_1"}})
+
+        assert payload.event_id == payload.event_id
+
     def test_entry_id_fallback_to_message_entry_id(self):
         """Test entry_id falls back to message.entryId if resourceId missing."""
         payload_dict = {
