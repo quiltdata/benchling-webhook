@@ -39,7 +39,7 @@ export default [
             }],
             // Temporary compatibility relaxations for recent ESLint rule churn
             "preserve-caught-error": "off",
-            "@typescript-eslint/no-useless-assignment": "off",
+            "no-useless-assignment": "off",
         },
     },
 ];
