@@ -15,7 +15,9 @@ module.exports = {
     'node_modules/(?!(.*)\\.ts$)'
   ],
   moduleNameMapper: {
-    '^chalk$': '<rootDir>/test/__mocks__/chalk.ts'
+    '^chalk$': '<rootDir>/test/__mocks__/chalk.ts',
+    // Relative dynamic imports carry a .js extension for node20 module resolution
+    '^(\\.{1,2}/.*)\\.js$': '$1'
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   cacheDirectory: '<rootDir>/.jest-cache',
