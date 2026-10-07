@@ -24,7 +24,7 @@ from .auth import RoleManager
 from .config import get_config
 from .entry_references import link_metadata, summarize_references
 from .package_files import SEAL_FILE, is_not_found
-from .package_naming import MissingPlaceholderError, entry_package_name
+from .package_naming import MissingPlaceholderError, entry_package_name, entry_to_dict
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packaging_status import check_workflow, write_status
 from .payload import Payload
@@ -297,25 +297,9 @@ class EntryPackager:
         self.logger.info("Fetching entry data", entry_id=entry_id)
 
         try:
-            # Get entry object via SDK
+            # Get entry object via SDK; to_dict() plus the fields it omits
             entry = self.benchling.entries.get_entry_by_id(entry_id)
-
-            # Start with to_dict() as base
-            entry_data = entry.to_dict()
-
-            # Extract missing fields from entry object attributes
-            # These fields exist on the SDK object but aren't in to_dict()
-            missing_fields = {
-                "display_id": getattr(entry, "display_id", None),
-                "web_url": getattr(entry, "web_url", None),
-                "created_at": getattr(entry, "created_at", None),
-                "modified_at": getattr(entry, "modified_at", None),
-            }
-
-            # Merge missing fields into entry_data
-            for field, value in missing_fields.items():
-                if value is not None and field not in entry_data:
-                    entry_data[field] = value
+            entry_data = entry_to_dict(entry)
 
             self.logger.info(
                 "Entry data fetched successfully",
@@ -519,6 +503,7 @@ class EntryPackager:
         self,
         payload: Payload,
         download_url: str,
+        package_name: str,
     ) -> Dict[str, Any]:
         """
         Process export files inline (download ZIP, extract, upload to S3).
@@ -526,6 +511,9 @@ class EntryPackager:
         Args:
             payload: Parsed webhook payload
             download_url: Export download URL from task status
+            package_name: Package name resolved once by ``execute_workflow``. It is not
+                recomputed from this second entry fetch, so a handle renamed mid-export
+                can't split the uploads from the package that is queued.
 
         Returns:
             Processing result with uploaded files
@@ -539,9 +527,7 @@ class EntryPackager:
         entry_data = self._fetch_entry_data(entry_id)
         display_id = entry_data.get("display_id", entry_id)
 
-        # Set display_id on payload for package naming
         payload.set_display_id(display_id)
-        package_name = entry_package_name(self.config.s3_prefix, display_id, entry_data)
 
         self.logger.info(
             "Processing export inline", entry_id=entry_id, display_id=display_id, package_name=package_name
@@ -1188,6 +1174,7 @@ For questions about the data, refer to the original Benchling entry.
             process_result = self._process_export(
                 payload,
                 download_url,
+                package_name,
             )
             self.logger.debug(
                 "Export processed",
