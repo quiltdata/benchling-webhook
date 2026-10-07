@@ -457,19 +457,44 @@ class TestClientSecretLogMasking:
         assert mask_secret("6NUPNtpWP7fXYZabcd1234") == "6NUP…1234"
         assert mask_secret("short") == "*****"
 
-    def test_botocore_response_body_is_masked(self, caplog):
+    @staticmethod
+    def _log_body(caplog, body):
         import logging
-
-        from src.secrets_manager import mask_secret  # importing the module installs the filter
-
-        secret_string = json.dumps({"tenant": "t", "client_id": "id", "client_secret": "6NUPNtpWP7fXYZabcd1234"})
-        body = json.dumps({"Name": "s", "SecretString": secret_string}).encode()
 
         with caplog.at_level(logging.DEBUG, logger="botocore.parsers"):
             # botocore.parsers.ResponseParser logs exactly this at DEBUG.
             logging.getLogger("botocore.parsers").debug("Response body:\n%r", body)
+        return caplog.records[-1].getMessage()
 
-        logged = caplog.records[-1].getMessage()
-        assert "6NUPNtpWP7fXYZabcd1234" not in logged
-        assert mask_secret("6NUPNtpWP7fXYZabcd1234") in logged
+    @pytest.mark.parametrize(
+        "secret_string",
+        [
+            json.dumps({"tenant": "t", "client_id": "id", "client_secret": "6NUPNtpWP7fXYZabcd1234"}),
+            # Valid JSON a regex over the escaped bytes would miss: newline after the colon.
+            '{"tenant": "t", "client_id": "id", "client_secret":\n"6NUPNtpWP7fXYZabcd1234"}',
+            json.dumps({"client_id": "id", "client_secret": '6NUP"Ntp\\WP7fXYZabcd1234'}),
+        ],
+    )
+    def test_botocore_response_body_is_masked(self, caplog, secret_string):
+        from src.secrets_manager import mask_secret  # importing the module installs the filter
+
+        secret = json.loads(secret_string)["client_secret"]
+        body = json.dumps({"Name": "s", "SecretString": secret_string}).encode()
+
+        logged = self._log_body(caplog, body)
+
+        for fragment in (secret, secret[4:-4], json.dumps(secret)[1:-1]):
+            assert fragment not in logged
+        assert mask_secret(secret) in logged
         assert "client_id" in logged
+
+    def test_unparseable_body_with_client_secret_is_omitted(self, caplog):
+        logged = self._log_body(caplog, b'not json "client_secret": "6NUPNtpWP7fXYZabcd1234"')
+
+        assert "6NUPNtpWP7fXYZabcd1234" not in logged
+        assert "omitted" in logged
+
+    def test_other_bodies_are_untouched(self, caplog):
+        logged = self._log_body(caplog, b'{"Name": "s"}')
+
+        assert '{"Name": "s"}' in logged
