@@ -269,10 +269,12 @@ class TestEntryPackager:
     @pytest.fixture
     def orchestrator(self, mock_benchling, mock_config):
         """Create EntryPackager with mocked dependencies."""
-        return EntryPackager(
+        packager = EntryPackager(
             benchling=mock_benchling,
             config=mock_config,
         )
+        packager.role_manager.get_s3_client = Mock(return_value=Mock())
+        return packager
 
     def test_orchestrator_initialization(self, orchestrator):
         """Test EntryPackager initializes correctly."""
@@ -585,6 +587,36 @@ class TestEntryPackager:
             assert result["status"] == "SUCCESS"
             assert result["packageName"] == "benchling/EXP0001"  # Now uses display_id
 
+    def test_execute_workflow_rejected_by_workflow_is_not_queued(self, orchestrator, mock_benchling):
+        """A package the bucket's workflow would reject is recorded, not sent to the packager."""
+        mock_entry = Mock()
+        mock_entry.to_dict.return_value = {"id": "etr_123", "display_id": "EXP0001", "fields": []}
+        mock_benchling.entries.get_entry_by_id.return_value = mock_entry
+        mock_benchling.exports.export.return_value = Mock(task_id="task_123")
+        mock_task = Mock(id="task_123")
+        mock_task.status.value = "SUCCEEDED"
+        mock_task.response.get = Mock(return_value="https://example.com/export.zip")
+        mock_benchling.tasks.get_by_id.return_value = mock_task
+        s3_client = orchestrator.role_manager.get_s3_client()
+        s3_client.get_object.return_value = {"Body": io.BytesIO(b'{"display_id": "EXP0001"}')}
+        orchestrator._is_sealed = Mock(return_value=False)
+
+        with (
+            patch.object(orchestrator, "_process_export", return_value={"files_uploaded": []}),
+            patch.object(orchestrator.sqs_client, "send_message") as send,
+            patch("src.entry_packager.check_workflow", return_value="Metadata failed validation") as check,
+        ):
+            payload = Payload({"message": {"id": "evt_456", "resourceId": "etr_123"}})
+            result = orchestrator.execute_workflow(payload)
+
+        assert result["status"] == "REJECTED"
+        assert result["message"] == "Metadata failed validation"
+        send.assert_not_called()
+        assert check.call_args.args[5] == {"display_id": "EXP0001"}
+        status = json.loads(s3_client.put_object.call_args.kwargs["Body"])
+        assert s3_client.put_object.call_args.kwargs["Key"] == "benchling/EXP0001.packaging_status.json"
+        assert status["state"] == "rejected"
+
     def test_execute_workflow_failure_marks_failed(self, orchestrator, mock_benchling):
         """Test failed execution raises exception."""
         # Mock entry fetch to fail
@@ -836,6 +868,15 @@ REVIEW_ACCEPTED_EVENT = {
 }
 
 
+def _seal_puts(s3_client: Any) -> list:
+    """Bodies written to the seal; the packaging status is written with put_object too."""
+    return [
+        c.kwargs["Body"]
+        for c in s3_client.put_object.call_args_list
+        if c.kwargs["Key"].endswith("/linked_packages.json")
+    ]
+
+
 def _workflow_packager(review_status) -> Any:
     config = Mock()
     config.s3_bucket_name = "test-bucket"
@@ -844,6 +885,7 @@ def _workflow_packager(review_status) -> Any:
     config.package_key = "experiment_id"
     config.aws_region = "us-east-1"
     config.quilt_write_role_arn = ""
+    config.workflow = ""
     benchling = Mock()
     benchling.entries.get_entry_by_id.return_value.to_dict.return_value = {
         "id": "etr_cQjoaEdURo",
@@ -867,8 +909,15 @@ def _s3_without_seal() -> Mock:
 
 
 def _s3_with_seal(event_id: str) -> Mock:
+    seal = json.dumps({"event_id": event_id}).encode()
+
+    def get_object(Bucket: str, Key: str, **_: Any) -> dict:
+        if Key.endswith("/linked_packages.json"):
+            return {"Body": io.BytesIO(seal)}
+        raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+
     s3_client = Mock()
-    s3_client.get_object.return_value = {"Body": io.BytesIO(json.dumps({"event_id": event_id}).encode())}
+    s3_client.get_object.side_effect = get_object
     return s3_client
 
 
@@ -888,7 +937,9 @@ def test_review_accepted_seals_linked_packages(mock_query_class):
     mock_query_class.return_value.find_unique_packages.assert_called_once_with(
         key="experiment_id", value="EXP26000008", array_key="eln_entry", pinned=True
     )
-    put = s3_client.put_object.call_args.kwargs
+    put = next(
+        c.kwargs for c in s3_client.put_object.call_args_list if c.kwargs["Key"].endswith("/linked_packages.json")
+    )
     assert put["Key"] == "benchling/EXP26000008/linked_packages.json"
     assert json.loads(put["Body"]) == {
         "event_id": "evt_coYeepNKIpIi",
@@ -916,7 +967,7 @@ def test_review_accepted_pushes_unsealed_when_search_fails(mock_query_class):
         result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
 
     assert result["status"] == "SUCCESS"
-    s3_client.put_object.assert_not_called()
+    assert not [c for c in s3_client.put_object.call_args_list if c.kwargs["Key"].endswith("/linked_packages.json")]
     s3_client.delete_object.assert_called_once_with(
         Bucket="test-bucket", Key="benchling/EXP26000008/linked_packages.json"
     )
@@ -933,7 +984,7 @@ def test_redelivered_acceptance_keeps_its_staged_seal(mock_query_class):
 
     assert result["status"] == "SUCCESS"
     mock_query_class.return_value.find_unique_packages.assert_not_called()
-    s3_client.put_object.assert_not_called()
+    assert not _seal_puts(s3_client)
     s3_client.delete_object.assert_not_called()
     packager._send_to_sqs.assert_called_once()
 
@@ -947,7 +998,7 @@ def test_new_acceptance_reseals_over_an_earlier_seal(mock_query_class):
     with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
         packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
 
-    assert json.loads(s3_client.put_object.call_args.kwargs["Body"])["event_id"] == "evt_coYeepNKIpIi"
+    assert json.loads(_seal_puts(s3_client)[-1])["event_id"] == "evt_coYeepNKIpIi"
 
 
 @pytest.mark.parametrize(
@@ -967,6 +1018,45 @@ def test_sealed_package_refuses_other_events_but_redraws(event_type, review_stat
     packager._redraw_canvas.assert_called_once()
 
 
+@patch("src.entry_packager.check_workflow", return_value="Metadata failed validation")
+def test_rejection_on_an_accepted_entry_records_accepted_whatever_the_event(_check):
+    """A fields event on an accepted (locked) entry still can't offer Update Package."""
+    packager = _workflow_packager("ACCEPTED")
+    packager._is_sealed.return_value = False
+    event = json.loads(json.dumps(REVIEW_ACCEPTED_EVENT))
+    event["message"]["type"] = "v2.entry.updated.fields"
+    s3_client = Mock()
+    s3_client.get_object.return_value = {"Body": io.BytesIO(b"{}")}
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        result = packager.execute_workflow(Payload(event))
+
+    assert result["status"] == "REJECTED"
+    assert json.loads(s3_client.put_object.call_args.kwargs["Body"])["accepted"] is True
+    assert _check.call_args.kwargs["adds"] == ()  # no seal is staged for a fields event
+
+
+@patch("src.entry_packager.check_workflow", return_value="Metadata failed validation")
+@patch("src.entry_packager.PackageQuery")
+def test_rejected_acceptance_stages_no_seal(mock_query_class, _check):
+    """The pre-check runs before staging a seal, so a rejection never strands or drops one."""
+    packager = _workflow_packager("ACCEPTED")
+    s3_client = Mock()
+    s3_client.get_object.return_value = {"Body": io.BytesIO(b"{}")}
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
+
+    assert result["status"] == "REJECTED"
+    packager._send_to_sqs.assert_not_called()
+    mock_query_class.return_value.find_unique_packages.assert_not_called()
+    assert not _seal_puts(s3_client)
+    s3_client.delete_object.assert_not_called()
+    status = json.loads(s3_client.put_object.call_args.kwargs["Body"])
+    assert status["state"] == "rejected" and status["accepted"] is True
+    assert _check.call_args.kwargs["adds"] == ("linked_packages.json",)
+
+
 @pytest.mark.parametrize("review_status", [None, "IN_PROGRESS", "NEEDS_REVIEW", "RETRACTED", "REJECTED"])
 def test_reopened_review_unseals_and_pushes(review_status):
     packager = _workflow_packager(review_status)
@@ -979,7 +1069,7 @@ def test_reopened_review_unseals_and_pushes(review_status):
     s3_client.delete_object.assert_called_once_with(
         Bucket="test-bucket", Key="benchling/EXP26000008/linked_packages.json"
     )
-    s3_client.put_object.assert_not_called()
+    assert not _seal_puts(s3_client)
     packager._initiate_export.assert_called_once()
     packager._send_to_sqs.assert_called_once()
 

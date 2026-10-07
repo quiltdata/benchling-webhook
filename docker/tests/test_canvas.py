@@ -1,9 +1,12 @@
 """Tests for CanvasManager."""
 
+import io
+from datetime import datetime, timezone
 from unittest.mock import Mock
 from urllib.parse import quote
 
 import pytest
+from botocore.exceptions import ClientError
 
 from src.canvas import CanvasManager
 from src.config import Config
@@ -112,6 +115,54 @@ class TestCanvasManager:
         assert canvas_manager.catalog_url in markdown
         # Note: upload_url() was removed from markdown in commit 34026bc (v0.5.4)
         # The method still exists but is no longer included in canvas markdown
+
+    def test_markdown_content_shows_workflow_rejection(self, mock_benchling, mock_config, mock_payload):
+        """A rejected packaging request is shown on the main and browse canvases with its reason."""
+        status = (
+            b'{"state": "rejected", "at": "2026-10-06T12:00:00.5+00:00",'
+            b' "workflow": "BZ_workflow", "message": "Metadata failed validation"}'
+        )
+        fetcher = Mock()
+        fetcher.get_seal.return_value = None
+        s3_client = fetcher.role_manager.get_s3_client.return_value
+        s3_client.get_object.side_effect = lambda **_: {"Body": io.BytesIO(status)}
+        s3_client.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadObject")
+        canvas_manager = CanvasManager(mock_benchling, mock_config, mock_payload, package_file_fetcher=fetcher)
+
+        fetcher.get_package_files.side_effect = Exception("Package not found")
+        browse = canvas_manager.get_package_browser_blocks()
+        assert any("Quilt rejected this package" in str(getattr(b, "value", "")) for b in browse)
+
+        markdown = canvas_manager._make_markdown_content()
+
+        assert "Quilt rejected this package" in markdown
+        assert "`BZ_workflow`" in markdown
+        assert "Metadata failed validation" in markdown
+        assert s3_client.get_object.call_args.kwargs["Key"] == "benchling/test-entry.packaging_status.json"
+
+        # Can't tell whether a revision landed (throttled, denied): no banner.
+        s3_client.head_object.side_effect = ClientError({"Error": {"Code": "403"}}, "HeadObject")
+        assert "Quilt rejected" not in canvas_manager._make_markdown_content()
+
+        # A revision pushed after the rejection (e.g. from the catalog) clears it.
+        s3_client.head_object.side_effect = None
+        s3_client.head_object.return_value = {"LastModified": datetime(2026, 10, 6, 12, 5, tzinfo=timezone.utc)}
+        assert "Quilt rejected" not in canvas_manager._make_markdown_content()
+
+    def test_rejected_acceptance_says_to_accept_again(self, mock_benchling, mock_config, mock_payload):
+        """An accepted entry is locked in Benchling, so the canvas can't offer Update Package."""
+        status = b'{"state": "rejected", "at": "2026-10-06T12:00:00+00:00", "accepted": true, "message": "Bad"}'
+        fetcher = Mock()
+        fetcher.get_seal.return_value = None
+        s3_client = fetcher.role_manager.get_s3_client.return_value
+        s3_client.get_object.side_effect = lambda **_: {"Body": io.BytesIO(status)}
+        s3_client.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadObject")
+        canvas_manager = CanvasManager(mock_benchling, mock_config, mock_payload, package_file_fetcher=fetcher)
+
+        markdown = canvas_manager._make_markdown_content()
+
+        assert "Quilt rejected this package" in markdown
+        assert "accept the review again" in markdown
 
     def test_sync_uri_different_bucket_names(self, mock_benchling, mock_config, mock_payload):
         """Test sync_uri with different bucket names containing special characters."""

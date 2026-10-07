@@ -5,7 +5,9 @@ A package links to a Benchling entry when its metadata either sets the configure
 package built from an RO-Crate, lists that display ID under ``eln_entry``.
 """
 
+import io
 import json
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -243,3 +245,22 @@ def test_sealed_canvas_renders_frozen_list_without_search_or_update(mock_benchli
 )
 def test_seal_heading(accepted_at, heading):
     assert fmt.format_seal_heading(accepted_at) == heading
+
+
+def test_sealed_canvas_says_why_a_reacceptance_was_rejected(mock_benchling, mock_config, mock_payload):
+    seal = {"event_id": "evt_earlier", "accepted_at": None, "linked_packages": []}
+    fetcher = Mock(get_seal=Mock(return_value=("b07c91cf", seal)))
+    status = json.dumps(
+        {"state": "rejected", "at": "2026-10-06T12:00:00+00:00", "workflow": "BZ_workflow", "message": "Bad metadata"}
+    ).encode()
+    s3_client = fetcher.role_manager.get_s3_client.return_value
+    s3_client.get_object.side_effect = lambda **_: {"Body": io.BytesIO(status)}
+    # The sealed revision predates the rejected re-acceptance.
+    s3_client.head_object.return_value = {"LastModified": datetime(2026, 10, 1, tzinfo=timezone.utc)}
+    manager = CanvasManager(mock_benchling, mock_config, mock_payload, Mock(), fetcher)
+
+    rendered = json.dumps(blocks_to_dict(manager._make_blocks()))
+
+    assert "Quilt rejected this package" in rendered
+    assert "accept the review again" in rendered
+    assert "Update Package" not in rendered

@@ -24,6 +24,7 @@ from .config import get_config
 from .entry_references import link_metadata, summarize_references
 from .package_files import SEAL_FILE, is_not_found
 from .package_query import ELN_ENTRY_KEY, PackageQuery
+from .packaging_status import check_workflow, write_status
 from .payload import Payload
 from .retry_utils import LAMBDA_INVOKE_RETRY, REST_API_RETRY
 
@@ -970,6 +971,63 @@ For questions about the data, refer to the original Benchling entry.
                     error=str(canvas_err),
                 )
 
+    def _check_workflow(
+        self, s3_client: Any, package_name: str, payload: Payload, accepted: bool = False
+    ) -> Optional[str]:
+        """Why the packager would reject this package, or None (see ``packaging_status.check_workflow``)."""
+        try:
+            entry_obj = s3_client.get_object(Bucket=self.config.s3_bucket_name, Key=f"{package_name}/entry.json")
+            metadata = json.loads(entry_obj["Body"].read())
+        except Exception as exc:  # noqa: BLE001 - without metadata, let the packager decide
+            self.logger.warning("Workflow pre-check skipped: entry.json unreadable", error=str(exc))
+            return None
+        return check_workflow(
+            s3_client,
+            self.config.s3_bucket_name,
+            getattr(self.config, "workflow", "") or "",
+            package_name,
+            _format_commit_message(payload),
+            metadata,
+            adds=(SEAL_FILE,) if accepted else (),
+        )
+
+    def _reject(
+        self, s3_client: Any, package_name: str, payload: Payload, reason: str, accepted: bool = False
+    ) -> Dict[str, Any]:
+        """Record a workflow rejection and show it on the canvas instead of queueing a doomed package."""
+        workflow = getattr(self.config, "workflow", "") or ""
+        self.logger.error(
+            "Package rejected by workflow pre-check; not queued",
+            entry_id=payload.entry_id,
+            package_name=package_name,
+            workflow=workflow or "(bucket default)",
+            reason=reason,
+        )
+        write_status(
+            s3_client,
+            self.config.s3_bucket_name,
+            package_name,
+            "rejected",
+            workflow=workflow,
+            message=reason,
+            accepted=accepted,
+        )
+        canvas_id = payload.canvas_id or self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
+        if canvas_id and self.benchling:
+            try:
+                from .canvas import CanvasManager
+
+                cm_payload = Payload({"message": {"canvasId": canvas_id, "resourceId": payload.entry_id}})
+                CanvasManager(self.benchling, self.config, cm_payload).update_canvas()
+            except Exception as canvas_err:  # noqa: BLE001 - the status is recorded; the next render shows it
+                self.logger.warning("Canvas update after rejection failed", canvas_id=canvas_id, error=str(canvas_err))
+        return {
+            "status": "REJECTED",
+            "packageName": package_name,
+            "entryId": payload.entry_id,
+            "message": reason,
+        }
+
     def execute_workflow(self, payload: Payload) -> Dict[str, Any]:
         """
         Execute complete workflow for Benchling entry processing.
@@ -1068,10 +1126,19 @@ For questions about the data, refer to the original Benchling entry.
                 files_count=len(process_result.get("uploaded_files", [])),
             )
 
+            # Step 5: Check the bucket's workflow before staging a seal, so a rejection leaves
+            # whatever seal already stands (if any) exactly as it was.
+            s3_client = self.role_manager.get_s3_client()
+            rejection = self._check_workflow(s3_client, package_name, payload, accepted=bool(accepted))
+            if rejection:
+                # From the entry, not the event: an accepted entry is locked in Benchling whatever fired.
+                locked = review_status == "ACCEPTED"
+                return self._reject(s3_client, package_name, payload, rejection, accepted=locked)
             if accepted:
                 self._write_seal(package_name, display_id, payload)
 
-            # Step 5: Send to Quilt queue
+            # Send to Quilt queue
+            write_status(s3_client, self.config.s3_bucket_name, package_name, "requested")
             sqs_result = self._send_to_sqs(package_name, payload)
             self.logger.debug(
                 "SQS message sent",
