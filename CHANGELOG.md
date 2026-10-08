@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - Only a review status that unlocks the entry in Benchling (`IN_PROGRESS`, `REJECTED`, `RETRACTED`) unseals its package. A missing status, `NEEDS_REVIEW`, or any status Benchling adds later now keeps the seal instead of removing it (#404 follow-up)
 - A late or redelivered acceptance event older than the staged seal is dropped instead of repinning the linked packages over a newer acceptance (#404 follow-up)
 - If the linked-package search fails during an acceptance, the webhook now fails closed: it keeps any existing seal (or stages a pending one so ordinary events keep refusing to push), pushes nothing, and lets the queue retry the acceptance. Previously it pushed the revision unsealed (#404 follow-up)
+- An entry that is accepted in Benchling but has no seal (its acceptance never staged one, or it was accepted before sealing existed) is sealed by its next event instead of being pushed unsealed (#404 follow-up)
 - A webhook message without an `id` gets one generated `event_id`, not a new one on every read; the 🔒 Locked heading reads an offset-less acceptance time as UTC and no longer fails on a non-string value (#404 follow-up)
 
 ## [0.21.2] - Unreleased

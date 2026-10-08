@@ -1179,14 +1179,19 @@ For questions about the data, refer to the original Benchling entry.
                 raise
             review_event = payload.event_type == "v2.entry.updated.reviewRecord"
             review_status = (entry_data.get("reviewRecord") or {}).get("status")
-            accepted = review_event and review_status == "ACCEPTED"
             # Only a status that unlocks the entry in Benchling (reopened, retracted,
             # rejected) removes the seal. Any other status, including none, keeps it.
             reopened = review_event and review_status in UNLOCKED_REVIEW_STATUSES
+            review_accepted = review_event and review_status == "ACCEPTED"
+            sealed = not reopened and not review_accepted and self._is_sealed(package_name)
+            # An accepted entry is locked in Benchling, so it is never pushed unsealed: any
+            # event on an accepted entry with no seal (one whose acceptance never staged
+            # its seal, or one accepted before sealing existed) takes the acceptance path.
+            accepted = review_status == "ACCEPTED" and not sealed
             staged_seal = self._staged_seal(package_name) if accepted else None
             if reopened:
                 self._unseal(package_name)
-            elif self._is_stale_acceptance(staged_seal, payload) or (not accepted and self._is_sealed(package_name)):
+            elif sealed or self._is_stale_acceptance(staged_seal, payload):
                 self.logger.info(
                     "Entry package is sealed; skipping push", entry_id=entry_id, package_name=package_name
                 )
