@@ -86,9 +86,13 @@ def format_seal_heading(accepted_at: Optional[str]) -> str:
         Formatted markdown string
     """
     try:
-        when = datetime.fromisoformat(accepted_at or "").astimezone(timezone.utc).strftime(" %Y-%m-%d %H:%M UTC")
-    except ValueError:
+        parsed = datetime.fromisoformat(accepted_at or "")
+    except (TypeError, ValueError):
         when = ""
+    else:
+        # A timestamp without an offset is UTC, not the container's local time.
+        parsed = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        when = parsed.astimezone(timezone.utc).strftime(" %Y-%m-%d %H:%M UTC")
     return f"# 🔒 Locked{when}\n\n"
 
 

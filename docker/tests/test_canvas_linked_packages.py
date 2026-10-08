@@ -240,6 +240,8 @@ def test_sealed_canvas_renders_frozen_list_without_search_or_update(mock_benchli
         ("2026-10-05T23:23:38-07:00", "# 🔒 Locked 2026-10-06 06:23 UTC\n\n"),
         (None, "# 🔒 Locked\n\n"),
         ("not a date", "# 🔒 Locked\n\n"),
+        ("2026-10-06T06:23:38", "# 🔒 Locked 2026-10-06 06:23 UTC\n\n"),  # no offset means UTC
+        (1759731818, "# 🔒 Locked\n\n"),  # a malformed seal never fails the render
     ],
 )
 def test_seal_heading(accepted_at, heading):
