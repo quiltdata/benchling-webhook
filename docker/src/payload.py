@@ -39,6 +39,7 @@ class Payload:
         self._benchling = benchling
         self._cached_entry_id: Optional[str] = None
         self._display_id: Optional[str] = display_id
+        self._event_id: Optional[str] = None
 
         logger.info(
             "Payload initialized",
@@ -171,8 +172,11 @@ class Payload:
 
     @property
     def event_id(self) -> str:
-        """Extract or generate event_id."""
-        return self._message.get("id", str(uuid.uuid4()))
+        """Extract event_id, or generate one the first time it is read; it is then stable."""
+        event_id = self._event_id
+        if event_id is None:
+            event_id = self._event_id = self._message.get("id") or str(uuid.uuid4())
+        return event_id
 
     @property
     def canvas_id(self) -> Optional[str]:

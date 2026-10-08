@@ -49,6 +49,20 @@ LINK_TYPE_TO_SERVICE: Dict[str, str] = {
     "entry": "entries",
 }
 
+# Review statuses under which Benchling has unlocked the entry for editing, so a
+# review event in one of them unseals the package. Any other status -- a missing
+# one, NEEDS_REVIEW, or one Benchling adds later -- leaves the seal in place.
+UNLOCKED_REVIEW_STATUSES = frozenset({"IN_PROGRESS", "REJECTED", "RETRACTED"})
+
+
+def _parse_time(value: Any) -> Optional[datetime]:
+    """Parse an ISO timestamp as an aware datetime (naive means UTC), or None if it doesn't parse."""
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
 
 class DateTimeEncoder(json.JSONEncoder):
     """Custom JSON encoder that converts datetime objects to ISO format strings."""
@@ -933,31 +947,54 @@ For questions about the data, refer to the original Benchling entry.
             )
             self.logger.info("Review reopened; unsealed entry package", package_name=package_name)
 
-    def _staged_seal_event_id(self, seal_key: str) -> Optional[str]:
-        """The ``event_id`` of the seal staged at ``seal_key``, or None if there is none."""
+    def _staged_seal(self, package_name: str) -> Optional[Dict[str, Any]]:
+        """The seal staged in the package's source prefix, or None if there is none.
+
+        An unparseable seal reads as ``{}``: it still counts as a seal, but matches no event.
+        """
         try:
-            response = self.role_manager.get_s3_client().get_object(Bucket=self.config.s3_bucket_name, Key=seal_key)
+            response = self.role_manager.get_s3_client().get_object(
+                Bucket=self.config.s3_bucket_name, Key=f"{package_name}/{SEAL_FILE}"
+            )
         except ClientError as exc:
             if is_not_found(exc):
                 return None
             raise
         try:
-            return json.loads(response["Body"].read()).get("event_id")
+            seal = json.loads(response["Body"].read())
         except (ValueError, AttributeError):
-            return None
+            return {}
+        return seal if isinstance(seal, dict) else {}
 
-    def _write_seal(self, package_name: str, display_id: str, payload: Payload) -> None:
+    @staticmethod
+    def _is_stale_acceptance(staged: Optional[Dict[str, Any]], payload: Payload) -> bool:
+        """Whether a staged seal comes from a later acceptance than this event.
+
+        The accepted status is read from the live entry, so a late or redelivered
+        older acceptance event would otherwise repin over the newer seal.
+        """
+        if not staged or staged.get("event_id") == payload.event_id:
+            return False
+        sealed_at = _parse_time(staged.get("accepted_at"))
+        event_at = _parse_time(payload.webhook_data.get("createdAt"))
+        return sealed_at is not None and event_at is not None and event_at < sealed_at
+
+    def _write_seal(
+        self, package_name: str, display_id: str, payload: Payload, staged: Optional[Dict[str, Any]]
+    ) -> None:
         """Stage ``linked_packages.json``: the entry's linked packages, pinned to their latest revisions.
 
         A redelivered acceptance (same ``event_id``) keeps the seal it already
         staged, so a retry never repins the accepted snapshot.
 
-        If the search fails, the revision is pushed unsealed (dropping any earlier
-        seal) rather than stall the entry's queue; the next acceptance can seal it.
+        If the search fails, the acceptance fails closed: any staged seal stays as
+        it is (or a pending one is staged, so ordinary events keep refusing to push)
+        and the error propagates so the queue retries the acceptance.
         """
         s3_client = self.role_manager.get_s3_client()
         seal_key = f"{package_name}/{SEAL_FILE}"
-        if self._staged_seal_event_id(seal_key) == payload.event_id:
+        accepted_at = payload.webhook_data.get("createdAt") or datetime.now(timezone.utc).isoformat()
+        if staged and staged.get("event_id") == payload.event_id and not staged.get("pending"):
             self.logger.info("Seal already staged for this acceptance", package_name=package_name)
             return
         try:
@@ -972,13 +1009,22 @@ For questions about the data, refer to the original Benchling entry.
             )["packages"]
         except Exception as exc:
             self.logger.error(
-                "Linked package search failed; pushing unsealed", package_name=package_name, error=str(exc)
+                "Linked package search failed; acceptance will retry", package_name=package_name, error=str(exc)
             )
-            s3_client.delete_object(Bucket=self.config.s3_bucket_name, Key=seal_key)
-            return
+            if staged is None:
+                pending = {
+                    "event_id": payload.event_id,
+                    "accepted_at": accepted_at,
+                    "pending": True,
+                    "linked_packages": [],
+                }
+                s3_client.put_object(
+                    Bucket=self.config.s3_bucket_name, Key=seal_key, Body=json.dumps(pending, indent=2).encode("utf-8")
+                )
+            raise
         seal = {
             "event_id": payload.event_id,
-            "accepted_at": payload.webhook_data.get("createdAt") or datetime.now(timezone.utc).isoformat(),
+            "accepted_at": accepted_at,
             "linked_packages": [
                 {
                     "bucket": pkg.bucket,
@@ -1133,14 +1179,19 @@ For questions about the data, refer to the original Benchling entry.
                 raise
             review_event = payload.event_type == "v2.entry.updated.reviewRecord"
             review_status = (entry_data.get("reviewRecord") or {}).get("status")
-            accepted = review_event and review_status == "ACCEPTED"
-            # Any other review status (reopened, retracted, rejected) means Benchling has
-            # unlocked the entry, so the seal goes and the push proceeds. A snapshot still
-            # in progress is mid-acceptance and leaves the seal alone.
-            reopened = review_event and review_status not in ("ACCEPTED", "ACCEPTANCE_SNAPSHOT_IN_PROGRESS")
+            # Only a status that unlocks the entry in Benchling (reopened, retracted,
+            # rejected) removes the seal. Any other status, including none, keeps it.
+            reopened = review_event and review_status in UNLOCKED_REVIEW_STATUSES
+            review_accepted = review_event and review_status == "ACCEPTED"
+            sealed = not reopened and not review_accepted and self._is_sealed(package_name)
+            # An accepted entry is locked in Benchling, so it is never pushed unsealed: any
+            # event on an accepted entry with no seal (one whose acceptance never staged
+            # its seal, or one accepted before sealing existed) takes the acceptance path.
+            accepted = review_status == "ACCEPTED" and not sealed
+            staged_seal = self._staged_seal(package_name) if accepted else None
             if reopened:
                 self._unseal(package_name)
-            elif not accepted and self._is_sealed(package_name):
+            elif sealed or self._is_stale_acceptance(staged_seal, payload):
                 self.logger.info(
                     "Entry package is sealed; skipping push", entry_id=entry_id, package_name=package_name
                 )
@@ -1192,7 +1243,7 @@ For questions about the data, refer to the original Benchling entry.
                 locked = review_status == "ACCEPTED"
                 return self._reject(s3_client, package_name, payload, rejection, accepted=locked)
             if accepted:
-                self._write_seal(package_name, display_id, payload)
+                self._write_seal(package_name, display_id, payload, staged_seal)
 
             # Send to Quilt queue
             write_status(s3_client, self.config.s3_bucket_name, package_name, "requested")

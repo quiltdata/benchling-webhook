@@ -1171,8 +1171,8 @@ def _s3_without_seal() -> Mock:
     return s3_client
 
 
-def _s3_with_seal(event_id: str) -> Mock:
-    seal = json.dumps({"event_id": event_id}).encode()
+def _s3_with_seal(event_id: str, **fields: Any) -> Mock:
+    seal = json.dumps({"event_id": event_id, **fields}).encode()
 
     def get_object(Bucket: str, Key: str, **_: Any) -> dict:
         if Key.endswith("/linked_packages.json"):
@@ -1221,20 +1221,71 @@ def test_review_accepted_seals_linked_packages(mock_query_class):
 
 
 @patch("src.entry_packager.PackageQuery")
-def test_review_accepted_pushes_unsealed_when_search_fails(mock_query_class):
+def test_failed_search_on_first_acceptance_stages_a_pending_seal_and_retries(mock_query_class):
+    """Fail closed: nothing is pushed, and the pending seal makes ordinary events refuse meanwhile."""
     packager = _workflow_packager("ACCEPTED")
     mock_query_class.return_value.find_unique_packages.side_effect = RuntimeError("Athena down")
     s3_client = _s3_without_seal()
 
     with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        with pytest.raises(RuntimeError, match="Athena down"):
+            packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
+
+    assert json.loads(_seal_puts(s3_client)[-1]) == {
+        "event_id": "evt_coYeepNKIpIi",
+        "accepted_at": "2026-04-16T00:28:41.650775+00:00",
+        "pending": True,
+        "linked_packages": [],
+    }
+    s3_client.delete_object.assert_not_called()
+    packager._send_to_sqs.assert_not_called()
+
+
+@patch("src.entry_packager.PackageQuery")
+def test_failed_search_on_a_reseal_keeps_the_existing_seal_and_retries(mock_query_class):
+    packager = _workflow_packager("ACCEPTED")
+    mock_query_class.return_value.find_unique_packages.side_effect = RuntimeError("Athena down")
+    s3_client = _s3_with_seal("evt_earlier", accepted_at="2026-04-01T00:00:00+00:00")
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        with pytest.raises(RuntimeError, match="Athena down"):
+            packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
+
+    assert not _seal_puts(s3_client)
+    s3_client.delete_object.assert_not_called()
+    packager._send_to_sqs.assert_not_called()
+
+
+@patch("src.entry_packager.PackageQuery")
+def test_retried_acceptance_replaces_its_pending_seal(mock_query_class):
+    packager = _workflow_packager("ACCEPTED")
+    mock_query_class.return_value.find_unique_packages.return_value = {"packages": []}
+    s3_client = _s3_with_seal("evt_coYeepNKIpIi", pending=True)
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
         result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
 
     assert result["status"] == "SUCCESS"
-    assert not [c for c in s3_client.put_object.call_args_list if c.kwargs["Key"].endswith("/linked_packages.json")]
-    s3_client.delete_object.assert_called_once_with(
-        Bucket="test-bucket", Key="benchling/EXP26000008/linked_packages.json"
-    )
+    mock_query_class.return_value.find_unique_packages.assert_called_once()
+    assert "pending" not in json.loads(_seal_puts(s3_client)[-1])
     packager._send_to_sqs.assert_called_once()
+
+
+@patch("src.entry_packager.PackageQuery")
+def test_older_acceptance_event_never_repins_a_newer_seal(mock_query_class):
+    """A late or redelivered acceptance from before the staged seal is dropped."""
+    packager = _workflow_packager("ACCEPTED")
+    s3_client = _s3_with_seal("evt_later", accepted_at="2026-05-01T00:00:00+00:00")
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
+
+    assert result["status"] == "SEALED"
+    mock_query_class.return_value.find_unique_packages.assert_not_called()
+    assert not _seal_puts(s3_client)
+    packager._initiate_export.assert_not_called()
+    packager._send_to_sqs.assert_not_called()
+    packager._redraw_canvas.assert_called_once()
 
 
 @patch("src.entry_packager.PackageQuery")
@@ -1256,7 +1307,7 @@ def test_redelivered_acceptance_keeps_its_staged_seal(mock_query_class):
 def test_new_acceptance_reseals_over_an_earlier_seal(mock_query_class):
     packager = _workflow_packager("ACCEPTED")
     mock_query_class.return_value.find_unique_packages.return_value = {"packages": []}
-    s3_client = _s3_with_seal("evt_earlier")
+    s3_client = _s3_with_seal("evt_earlier", accepted_at="2026-04-01T00:00:00+00:00")
 
     with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
         packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
@@ -1266,7 +1317,16 @@ def test_new_acceptance_reseals_over_an_earlier_seal(mock_query_class):
 
 @pytest.mark.parametrize(
     "event_type, review_status",
-    [("v2.entry.updated.fields", "ACCEPTED"), ("v2.entry.updated.reviewRecord", "ACCEPTANCE_SNAPSHOT_IN_PROGRESS")],
+    [
+        ("v2.entry.updated.fields", "ACCEPTED"),
+        # Review statuses that don't unlock the entry, or that we can't read, keep the seal.
+        ("v2.entry.updated.reviewRecord", "ACCEPTANCE_SNAPSHOT_IN_PROGRESS"),
+        ("v2.entry.updated.reviewRecord", "REVIEW_SNAPSHOT_IN_PROGRESS"),
+        ("v2.entry.updated.reviewRecord", "NEEDS_REVIEW"),
+        ("v2.entry.updated.reviewRecord", "ACTION_REQUIRED"),
+        ("v2.entry.updated.reviewRecord", None),
+        ("v2.entry.updated.reviewRecord", "SOME_FUTURE_STATUS"),
+    ],
 )
 def test_sealed_package_refuses_other_events_but_redraws(event_type, review_status):
     packager = _workflow_packager(review_status)
@@ -1289,14 +1349,50 @@ def test_rejection_on_an_accepted_entry_records_accepted_whatever_the_event(_che
     event = json.loads(json.dumps(REVIEW_ACCEPTED_EVENT))
     event["message"]["type"] = "v2.entry.updated.fields"
     s3_client = Mock()
-    s3_client.get_object.return_value = {"Body": io.BytesIO(b"{}")}
+    s3_client.get_object.side_effect = lambda **_: {"Body": io.BytesIO(b"{}")}
 
     with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
         result = packager.execute_workflow(Payload(event))
 
     assert result["status"] == "REJECTED"
     assert json.loads(s3_client.put_object.call_args.kwargs["Body"])["accepted"] is True
-    assert _check.call_args.kwargs["adds"] == ()  # no seal is staged for a fields event
+    assert _check.call_args.kwargs["adds"] == ("linked_packages.json",)  # it would have been sealed
+
+
+@patch("src.entry_packager.PackageQuery")
+def test_other_event_on_an_accepted_unsealed_entry_seals_it(mock_query_class):
+    """An acceptance that never staged its seal (or predates sealing) is sealed by the next event."""
+    packager = _workflow_packager("ACCEPTED")
+    packager._is_sealed.return_value = False
+    mock_query_class.return_value.find_unique_packages.return_value = {"packages": []}
+    event = json.loads(json.dumps(REVIEW_ACCEPTED_EVENT))
+    event["message"].update(type="v2.entry.updated.fields", id="evt_fields")
+    s3_client = _s3_without_seal()
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        result = packager.execute_workflow(Payload(event))
+
+    assert result["status"] == "SUCCESS"
+    assert json.loads(_seal_puts(s3_client)[-1])["event_id"] == "evt_fields"
+    packager._send_to_sqs.assert_called_once()
+
+
+@patch("src.entry_packager.PackageQuery")
+def test_other_event_on_an_accepted_unsealed_entry_never_pushes_unsealed(mock_query_class):
+    """Even if the seal can't be written at all, an accepted entry fails rather than push unsealed."""
+    packager = _workflow_packager("ACCEPTED")
+    packager._is_sealed.return_value = False
+    mock_query_class.return_value.find_unique_packages.side_effect = RuntimeError("Athena down")
+    event = json.loads(json.dumps(REVIEW_ACCEPTED_EVENT))
+    event["message"]["type"] = "v2.entry.updated.fields"
+    s3_client = _s3_without_seal()
+    s3_client.put_object.side_effect = ClientError({"Error": {"Code": "SlowDown"}}, "PutObject")
+
+    with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
+        with pytest.raises(ClientError):
+            packager.execute_workflow(Payload(event))
+
+    packager._send_to_sqs.assert_not_called()
 
 
 @patch("src.entry_packager.check_workflow", return_value="Metadata failed validation")
@@ -1305,7 +1401,7 @@ def test_rejected_acceptance_stages_no_seal(mock_query_class, _check):
     """The pre-check runs before staging a seal, so a rejection never strands or drops one."""
     packager = _workflow_packager("ACCEPTED")
     s3_client = Mock()
-    s3_client.get_object.return_value = {"Body": io.BytesIO(b"{}")}
+    s3_client.get_object.side_effect = lambda **_: {"Body": io.BytesIO(b"{}")}
 
     with patch.object(packager.role_manager, "get_s3_client", return_value=s3_client):
         result = packager.execute_workflow(Payload(REVIEW_ACCEPTED_EVENT))
@@ -1320,7 +1416,7 @@ def test_rejected_acceptance_stages_no_seal(mock_query_class, _check):
     assert _check.call_args.kwargs["adds"] == ("linked_packages.json",)
 
 
-@pytest.mark.parametrize("review_status", [None, "IN_PROGRESS", "NEEDS_REVIEW", "RETRACTED", "REJECTED"])
+@pytest.mark.parametrize("review_status", ["IN_PROGRESS", "RETRACTED", "REJECTED"])
 def test_reopened_review_unseals_and_pushes(review_status):
     packager = _workflow_packager(review_status)
     s3_client = Mock()
