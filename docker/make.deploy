@@ -20,12 +20,14 @@ endif
 # Export appropriate image name based on target
 export DOCKER_IMAGE_NAME ?= $(DOCKER_IMAGE_BASE)
 
-# AWS region for ECR
+# AWS region and centralized account for release ECR operations
 AWS_REGION ?= us-east-1
+ECR_REGISTRY_ID ?= 712023778557
+ECR_REGISTRY ?= $(ECR_REGISTRY_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
 
-.PHONY: deploy-help docker-build-local push-local push-ci \
-        docker-tools docker-ecr-login docker-validate deploy-clean \
-        docker-ecr-create
+.PHONY: deploy-help docker-build-local push-local push-ci push-ci-immutable \
+        ensure-ci-immutable promote-ci docker-tools docker-ecr-login docker-validate \
+        deploy-clean docker-ecr-create
 
 # ==============================================================================
 # Help
@@ -41,8 +43,10 @@ deploy-help:
 	@echo "                          (Auto-creates both arch-specific and generic ECR repos)"
 	@echo "  push-ci               - Build and push with generic image name"
 	@echo "                          → quiltdata/benchling:v1.0.0, :latest"
-	@echo "                          Use in CI/CD pipeline on benchling-docker branch"
-	@echo "                          (Requires ECR repos to exist - run push-local first)"
+	@echo "  ensure-ci-immutable   - CI release build; reuse v1.0.0 or push it once"
+	@echo "  push-ci-immutable     - Compatibility alias for ensure-ci-immutable"
+	@echo "  promote-ci            - Promote a newer immutable release to :latest"
+	@echo "                          Use guarded promotion for release workflows"
 	@echo "  docker-build-local    - Build Docker image locally without pushing"
 	@echo ""
 	@echo "  Add DRY_RUN=1 to any push command for dry run mode:"
@@ -173,6 +177,26 @@ push-ci: docker-tools
 	else \
 		DOCKER_IMAGE_NAME=$(DOCKER_IMAGE_BASE) uv run python scripts/docker.py push $(if $(VERSION),--version $(VERSION)) --no-arch-suffix; \
 	fi
+
+# Release workflow path: reuse an existing immutable version tag or build and verify it once.
+ensure-ci-immutable:
+	@echo "🐳 Ensuring immutable CI release image $(DOCKER_IMAGE_BASE):$(VERSION)..."
+	@command -v uv >/dev/null 2>&1 || { echo "❌ uv not found - install uv package manager"; exit 1; }
+	@command -v aws >/dev/null 2>&1 || { echo "❌ aws not found - install AWS CLI"; exit 1; }
+	@DOCKER_IMAGE_NAME=$(DOCKER_IMAGE_BASE) uv run python scripts/docker.py ensure \
+		--version $(VERSION) --repository $(DOCKER_IMAGE_BASE) --region $(AWS_REGION) \
+		--registry-id $(ECR_REGISTRY_ID)
+
+# Backward-compatible release target; retries now reuse the immutable tag.
+push-ci-immutable: ensure-ci-immutable
+
+# Move latest with an ECR manifest retag only when VERSION is newer.
+promote-ci:
+	@command -v uv >/dev/null 2>&1 || { echo "❌ uv not found - install uv package manager"; exit 1; }
+	@command -v aws >/dev/null 2>&1 || { echo "❌ aws not found - install AWS CLI"; exit 1; }
+	@DOCKER_IMAGE_NAME=$(DOCKER_IMAGE_BASE) uv run python scripts/docker.py promote \
+		--version $(VERSION) --repository $(DOCKER_IMAGE_BASE) --region $(AWS_REGION) \
+		--registry-id $(ECR_REGISTRY_ID)
 
 # ==============================================================================
 # Docker Validation
