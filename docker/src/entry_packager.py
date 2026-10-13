@@ -253,12 +253,16 @@ def normalize_fields(fields: Any, kind: str = "fields") -> Dict[str, Dict[str, A
 
 
 def field_values(fields: Any, kind: str = "fields") -> Dict[str, Any]:
-    """Map each field's snake_case key (from :func:`normalize_fields`) straight to its ``value``.
+    """Map each field's snake_case key (from :func:`normalize_fields`) to its ``displayValue``.
 
-    Everything else Benchling returns for a field (``displayValue``, ``type``, ...)
-    stays in ``entry_data.json``.
+    ``displayValue`` is what the scientist sees (a dropdown option's or linked
+    entity's name, not its ID). Fields without one, such as ``customFields``, use
+    ``value``. Everything else Benchling returns stays in ``entry_data.json``.
     """
-    return {key: field.get("value") for key, field in normalize_fields(fields, kind).items()}
+    return {
+        key: field["displayValue"] if "displayValue" in field else field.get("value")
+        for key, field in normalize_fields(fields, kind).items()
+    }
 
 
 class EntryPackager:

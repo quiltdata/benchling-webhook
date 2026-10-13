@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.21.4] - 2026-10-13
+
+### Changed
+
+- `fields` in the package metadata (`entry.json`) now holds each field's `displayValue` instead of its `value`, so a dropdown or entity-link field shows the option's or entity's name (`"Assay"`), not its Benchling ID (`sfso_…`). `customFields`, which have no `displayValue`, still hold their `value`. The raw `value` stays in `entry_data.json` (#418)
+
 ## [0.21.3] - 2026-10-13
 
 ### Changed
