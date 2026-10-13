@@ -45,7 +45,7 @@ To put each scientist's notebook packages in the same namespace as their raw-dat
 
 #### Package Metadata
 
-The package metadata is the package's `entry.json`. Besides the entry's IDs, name, creator, authors, and timestamps, it includes the entry's schema `fields` and `customFields`. Benchling keys these by display name, so the webhook re-keys them in snake_case: "Experiment Type" becomes `experiment_type` and "ELN-ID #" becomes `eln_id`. Each field keeps its display name as `name`; its other values are exactly what Benchling returns. Both keys are always present, as `{}` when the entry has none. The package's `entry_data.json` keeps the raw entry.
+The package metadata is the package's `entry.json`. Besides the entry's IDs, name, creator, authors, and timestamps, it includes the entry's schema `fields` and `customFields`. Benchling keys these by display name, so the webhook re-keys them in snake_case: "Experiment Type" becomes `experiment_type` and "ELN-ID #" becomes `eln_id`. Each key maps to the field's `value` as Benchling returns it. Both keys are always present, as `{}` when the entry has none. The package's `entry_data.json` keeps the raw entry, with each field's display name, `displayValue`, `type`, and so on.
 
 ```json
 {
@@ -53,11 +53,11 @@ The package metadata is the package's `entry.json`. Besides the entry's IDs, nam
   "display_id": "EXP26000025",
   "name": "HPLC run 3",
   "fields": {
-    "project": {"name": "Project", "value": "VIR-0001", "displayValue": "VIR-0001", "type": "text", "isMulti": false, "textValue": "VIR-0001"},
-    "experiment_type": {"name": "Experiment Type", "value": "Assay", "displayValue": "Assay", "type": "dropdown", "isMulti": false, "textValue": "Assay"}
+    "project": "VIR-0001",
+    "experiment_type": "Assay"
   },
   "customFields": {
-    "instrument": {"name": "Instrument", "value": "HPLC-02"}
+    "instrument": "HPLC-02"
   }
 }
 ```
@@ -73,7 +73,7 @@ A bucket's [Quilt workflow](https://docs.quilt.bio/advanced-features/workflows) 
     "fields": {
       "type": "object",
       "properties": {
-        "project": {"properties": {"value": {"type": "string", "pattern": "^VIR-"}}}
+        "project": {"type": "string", "pattern": "^VIR-"}
       }
     }
   }

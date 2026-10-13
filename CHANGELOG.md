@@ -5,40 +5,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed
+## [0.21.3] - 2026-10-13
 
-- Only a review status that unlocks the entry in Benchling (`IN_PROGRESS`, `REJECTED`, `RETRACTED`) unseals its package. A missing status, `NEEDS_REVIEW`, or any status Benchling adds later now keeps the seal instead of removing it (#404 follow-up)
-- A late or redelivered acceptance event older than the staged seal is dropped instead of repinning the linked packages over a newer acceptance (#404 follow-up)
-- If the linked-package search fails during an acceptance, the webhook now fails closed: it keeps any existing seal (or stages a pending one so ordinary events keep refusing to push), pushes nothing, and lets the queue retry the acceptance. Previously it pushed the revision unsealed (#404 follow-up)
-- An entry that is accepted in Benchling but has no seal (its acceptance never staged one, or it was accepted before sealing existed) is sealed by its next event instead of being pushed unsealed (#404 follow-up)
-- A webhook message without an `id` gets one generated `event_id`, not a new one on every read; the 🔒 Locked heading reads an offset-less acceptance time as UTC and no longer fails on a non-string value (#404 follow-up)
+### Changed
 
-## [0.21.2] - Unreleased
+- `fields` and `customFields` in the package metadata (`entry.json`) now map each snake_case key straight to the field's `value` (`"experiment_type": "Assay"`) instead of the whole Benchling field object. The display name, `displayValue`, `type`, and the rest are still in `entry_data.json`. A workflow schema that validated `fields.<key>.value` must now validate `fields.<key>` (#417)
+
+## [0.21.2] - 2026-10-13
 
 ### Added
 
 - `pkg_prefix` can contain `{dotted.path}` placeholders filled from the Benchling entry (the data saved as `entry_data.json`). `pkg_prefix = "{creator.handle}"` names each notebook package under its creator's handle (`jdoe/EXP00000001`), so it sits beside that user's raw-data packages. Any character in a filled-in value that a Quilt package name can't contain becomes `-` (`ernest.prabhakar` → `ernest-prabhakar/EXP00000001`). The S3 export folder follows the same name. A prefix without placeholders (default `benchling`) works exactly as before, and there is no new setting (#407)
 - Package-revision events are filtered by `pkg_prefix` as a pattern, where each placeholder matches one path segment. A literal prefix filters exactly as before (#407)
 - If a placeholder has no value in the entry (for example, the creator has no handle), the entry is not packaged. Its App Canvas says "This entry can't be packaged" and names the missing value, still listing linked packages but with no Browse button. The webhook logs an error naming the placeholder and the entry, and drops the packaging request instead of retrying it. It never falls back to another prefix (#407)
-
-### Upgrade notes
-
-- Existing `{pkg_prefix}/` packages are not moved. After `pkg_prefix` changes, an entry's Canvas looks for its package under the new name, and that package is created the next time the entry is packaged. If the bucket's Quilt workflow sets a `handle_pattern`, it must accept the new namespaces (#407)
-
-## [0.21.1] - Unreleased
-
-### Added
-
 - The package metadata (`entry.json`) now includes the entry's schema `fields` and `customFields`, keyed by snake_case versions of their display names ("Experiment Type" → `experiment_type`), with the original display name kept as `name`. A bucket workflow can now require or validate values the scientist enters in Benchling. Both keys are always present (`{}` when empty); `entry_data.json` still holds the raw entry. If two names give the same key, later ones get `_2`, `_3`, …; a name with no letters or digits is skipped; both are logged as warnings (#409)
 - README section on the package metadata, with a sample `entry.json` and a workflow schema that validates a field (#409)
 
 ### Fixed
 
 - The App Canvas now says why the bucket's Quilt workflow rejected an entry package, or that packaging stalled, instead of "Package Not Created" forever (#408)
+- Only a review status that unlocks the entry in Benchling (`IN_PROGRESS`, `REJECTED`, `RETRACTED`) unseals its package. A missing status, `NEEDS_REVIEW`, or any status Benchling adds later now keeps the seal instead of removing it (#404 follow-up)
+- A late or redelivered acceptance event older than the staged seal is dropped instead of repinning the linked packages over a newer acceptance (#404 follow-up)
+- If the linked-package search fails during an acceptance, the webhook now fails closed: it keeps any existing seal (or stages a pending one so ordinary events keep refusing to push), pushes nothing, and lets the queue retry the acceptance. Previously it pushed the revision unsealed (#404 follow-up)
+- An entry that is accepted in Benchling but has no seal (its acceptance never staged one, or it was accepted before sealing existed) is sealed by its next event instead of being pushed unsealed (#404 follow-up)
+- A webhook message without an `id` gets one generated `event_id`, not a new one on every read; the 🔒 Locked heading reads an offset-less acceptance time as UTC and no longer fails on a non-string value (#404 follow-up)
 
 ### Security
 
 - At `log_level: DEBUG`, botocore logged the Secrets Manager response, including the Benchling `client_secret`, to CloudWatch. The response is now parsed and logged with only the secret's first and last 4 characters (`6NUP…1234`), the way Benchling displays it; a response that mentions `client_secret` but can't be parsed is omitted from the log (#412)
+
+### Upgrade notes
+
+- Existing `{pkg_prefix}/` packages are not moved. After `pkg_prefix` changes, an entry's Canvas looks for its package under the new name, and that package is created the next time the entry is packaged. If the bucket's Quilt workflow sets a `handle_pattern`, it must accept the new namespaces (#407)
 
 ## [0.21.0] - 2026-10-06
 

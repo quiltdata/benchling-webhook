@@ -252,6 +252,15 @@ def normalize_fields(fields: Any, kind: str = "fields") -> Dict[str, Dict[str, A
     return normalized
 
 
+def field_values(fields: Any, kind: str = "fields") -> Dict[str, Any]:
+    """Map each field's snake_case key (from :func:`normalize_fields`) straight to its ``value``.
+
+    Everything else Benchling returns for a field (``displayValue``, ``type``, ...)
+    stays in ``entry_data.json``.
+    """
+    return {key: field.get("value") for key, field in normalize_fields(fields, kind).items()}
+
+
 class EntryPackager:
     """
     Package Benchling entries for Quilt.
@@ -704,10 +713,10 @@ class EntryPackager:
             "benchling_base_url": base_url,
             "webhook_data": webhook_data,
             "files": files_dict,
-            # The entry's own metadata, re-keyed so a bucket workflow can validate it.
-            # entry_data.json keeps the raw, display-name-keyed maps.
-            "fields": normalize_fields(entry_data.get("fields"), "fields"),
-            "customFields": normalize_fields(entry_data.get("customFields"), "customFields"),
+            # The entry's own metadata as {snake_case_key: value}, so a bucket workflow
+            # can validate it. entry_data.json keeps the raw, display-name-keyed maps.
+            "fields": field_values(entry_data.get("fields"), "fields"),
+            "customFields": field_values(entry_data.get("customFields"), "customFields"),
         }
         if canvas_id is not None:
             entry_json["canvas_id"] = canvas_id
@@ -785,7 +794,7 @@ This package contains data exported from Benchling entry `{display_id}`.
 
         readme_content += """
 ## Metadata Files
-- `entry.json`: Key entry metadata (display_id, name, creator, authors, timestamps, schema fields and custom fields)
+- `entry.json`: Key entry metadata (display_id, name, creator, authors, timestamps, schema field and custom field values)
 - `entry_data.json`: Complete entry data from Benchling API
 - `links.json`: Raw Benchling objects this entry links to (entities, inventory, tables); the searchable, name-enriched summary is the `links` field of `entry.json`
 - `input.json`: Export processing metadata
