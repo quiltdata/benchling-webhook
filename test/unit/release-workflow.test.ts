@@ -69,6 +69,8 @@ describe("release workflow safety predicates", () => {
 
     it("routes tag selection and verification through project-owned commands", () => {
         expect(autoTagSection).toContain("run: npm run version:tag:auto");
+        expect(autoTagSection).toContain("GIT_COMMITTER_NAME: github-actions[bot]");
+        expect(autoTagSection).toContain("41898282+github-actions[bot]@users.noreply.github.com");
         expect(autoTagSection).not.toMatch(/git tag|git push|jq -r|\[\[.*VERSION/);
         expect(publishSection).toContain("run: npm run release:context");
     });
