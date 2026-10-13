@@ -74,11 +74,65 @@ jobs:
       - name: Build package
         run: npm run build
 
+  autotag:
+    name: Auto-tag version bump
+    runs-on: ubuntu-latest
+    needs: test
+    # Only on pushes to main. Creates v<version> when package.json's version
+    # changed in this push and that tag does not exist yet. A tag pushed with
+    # GITHUB_TOKEN does not trigger another workflow run, so the docker and
+    # release jobs below run in THIS run instead (no double publish).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      tag: ${{ steps.check.outputs.TAG }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check for version bump and create tag
+        id: check
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          VERSION=$(jq -r .version package.json)
+          TAG="v$VERSION"
+          if [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            BEFORE=$(git rev-parse HEAD~1)
+          fi
+          PREV=$(git show "$BEFORE:package.json" 2>/dev/null | jq -r .version || echo "")
+          echo "Previous version: ${PREV:-<none>}  Current version: $VERSION"
+          if [[ "$PREV" == "$VERSION" ]]; then
+            echo "Version unchanged; nothing to release."
+            exit 0
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version $VERSION is not a plain x.y.z release; skipping auto-tag."
+            exit 0
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists (manual release?); skipping."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG" "$GITHUB_SHA"
+          if ! git push origin "refs/tags/$TAG"; then
+            echo "Could not push $TAG (created concurrently?); skipping."
+            exit 0
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Created and pushed $TAG"
+
   docker:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
-    needs: test
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: [test, autotag]
+    if: >-
+      always() && needs.test.result == 'success' &&
+      (startsWith(github.ref, 'refs/tags/') || needs.autotag.outputs.tag != '')
 
     outputs:
       image_uri: ${{ steps.image.outputs.IMAGE_URI }}
@@ -130,9 +184,16 @@ jobs:
 
       - name: Extract version from tag
         id: version
+        env:
+          AUTO_TAG: ${{ needs.autotag.outputs.tag }}
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          TAG=${GITHUB_REF#refs/tags/}
+          # Tag push: use the pushed ref. Main push: use the tag autotag created.
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG=${GITHUB_REF#refs/tags/}
+          else
+            TAG="$AUTO_TAG"
+          fi
+          VERSION=${TAG#v}
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
 
@@ -164,7 +225,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: docker
-    if: startsWith(github.ref, 'refs/tags/')
+    if: always() && needs.docker.result == 'success'
 
     steps:
       - name: Checkout repository
@@ -196,6 +257,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           name: Release ${{ needs.docker.outputs.tag }}
+          tag_name: ${{ needs.docker.outputs.tag }}
           body_path: /tmp/release_notes.md
           draft: false
           prerelease: ${{ needs.docker.outputs.is_prerelease == 'true' }}
