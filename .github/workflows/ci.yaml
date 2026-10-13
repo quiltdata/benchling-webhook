@@ -1,6 +1,7 @@
+---
 name: CI
 
-on:
+"on":
   push:
     branches:
       - main
@@ -78,154 +79,13 @@ jobs:
     name: Auto-tag version bump
     runs-on: ubuntu-latest
     needs: test
-    # Only on pushes to main. Creates v<version> when package.json's version
-    # changed in this push and that tag does not exist yet. A tag pushed with
-    # GITHUB_TOKEN does not trigger another workflow run, so the docker and
-    # release jobs below run in THIS run instead (no double publish).
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     outputs:
-      tag: ${{ steps.check.outputs.TAG }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Check for version bump and create tag
-        id: check
-        env:
-          BEFORE: ${{ github.event.before }}
-        run: |
-          VERSION=$(jq -r .version package.json)
-          TAG="v$VERSION"
-          if [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            BEFORE=$(git rev-parse HEAD~1)
-          fi
-          PREV=$(git show "$BEFORE:package.json" 2>/dev/null | jq -r .version || echo "")
-          echo "Previous version: ${PREV:-<none>}  Current version: $VERSION"
-          if [[ "$PREV" == "$VERSION" ]]; then
-            echo "Version unchanged; nothing to release."
-            exit 0
-          fi
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Version $VERSION is not a plain x.y.z release; skipping auto-tag."
-            exit 0
-          fi
-          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
-            echo "Tag $TAG already exists (manual release?); skipping."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Release $TAG" "$GITHUB_SHA"
-          if ! git push origin "refs/tags/$TAG"; then
-            echo "Could not push $TAG (created concurrently?); skipping."
-            exit 0
-          fi
-          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Created and pushed $TAG"
-
-  docker:
-    name: Build and Push Docker Image
-    runs-on: ubuntu-latest
-    needs: [test, autotag]
-    if: >-
-      always() && needs.test.result == 'success' &&
-      (startsWith(github.ref, 'refs/tags/') || needs.autotag.outputs.tag != '')
-
-    outputs:
-      image_uri: ${{ steps.image.outputs.IMAGE_URI }}
-      version: ${{ steps.version.outputs.VERSION }}
-      tag: ${{ steps.version.outputs.TAG }}
-      is_prerelease: ${{ steps.version.outputs.IS_PRERELEASE }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.14'
-
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Install Python dependencies
-        working-directory: docker
-        run: uv sync --all-extras
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-        with:
-          platforms: linux/amd64
-
-      - name: Ensure ECR repository exists
-        run: |
-          REPO_NAME="quiltdata/benchling"
-          if ! aws ecr describe-repositories --repository-names "$REPO_NAME" --region us-east-1 >/dev/null 2>&1; then
-            echo "Creating ECR repository: $REPO_NAME"
-            aws ecr create-repository --repository-name "$REPO_NAME" --region us-east-1
-          else
-            echo "ECR repository already exists: $REPO_NAME"
-          fi
-
-      - name: Extract version from tag
-        id: version
-        env:
-          AUTO_TAG: ${{ needs.autotag.outputs.tag }}
-        run: |
-          # Tag push: use the pushed ref. Main push: use the tag autotag created.
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            TAG=${GITHUB_REF#refs/tags/}
-          else
-            TAG="$AUTO_TAG"
-          fi
-          VERSION=${TAG#v}
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "TAG=$TAG" >> $GITHUB_OUTPUT
-
-          # Check if this is a prerelease (contains timestamp, -dev, -alpha, -beta, -rc)
-          if [[ "$VERSION" =~ -[0-9]{8}T[0-9]{6}Z$ ]] || [[ "$VERSION" =~ -(dev|alpha|beta|rc) ]]; then
-            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
-            echo "This is a prerelease: $TAG"
-          else
-            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
-            echo "This is a production release: $TAG"
-          fi
-
-      - name: Build and push Docker image
-        working-directory: docker
-        run: make push-ci VERSION=${{ steps.version.outputs.VERSION }}
-        env:
-          DOCKER_DEFAULT_PLATFORM: linux/amd64
-          AWS_REGION: us-east-1
-
-      - name: Get Docker image URI
-        id: image
-        run: |
-          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:${{ steps.version.outputs.VERSION }}"
-          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_OUTPUT
-          echo "Docker Image: $IMAGE_URI"
-
-  release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    needs: docker
-    if: always() && needs.docker.result == 'success'
+      outcome: ${{ steps.release.outputs.outcome }}
+      release_required: ${{ steps.release.outputs.release_required }}
+      verified: ${{ steps.release.outputs.verified }}
+      tag: ${{ steps.release.outputs.tag }}
+      target_sha: ${{ steps.release.outputs.target_sha }}
 
     steps:
       - name: Checkout repository
@@ -237,73 +97,202 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: '24'
-          # No registry-url needed for OIDC publishing
-          # npm publish --provenance uses OIDC directly without tokens
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install Node.js dependencies
         run: npm ci
 
-      - name: Generate release notes
-        id: release_notes
+      - name: Install Python dependencies
+        working-directory: docker
+        run: uv sync --all-extras --frozen
+
+      - name: Select, verify, and create automatic release tag
+        id: release
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+        run: npm run version:tag:auto
+
+  publish:
+    name: Publish verified release transaction
+    runs-on: ubuntu-latest
+    needs: [test, autotag]
+    if: >-
+      !cancelled() &&
+      needs.test.result == 'success' &&
+      (
+        needs.autotag.result == 'success' ||
+        needs.autotag.result == 'skipped'
+      ) &&
+      (
+        startsWith(github.ref, 'refs/tags/') ||
+        (
+          needs.autotag.outputs.release_required == 'true' &&
+          needs.autotag.outputs.verified == 'true' &&
+          needs.autotag.outputs.tag != ''
+        )
+      )
+    concurrency:
+      group: production-release-publication
+      cancel-in-progress: false
+    env:
+      ECR_REGISTRY: 712023778557.dkr.ecr.us-east-1.amazonaws.com
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Install uv
         run: |
-          VERSION="${{ needs.docker.outputs.version }}"
-          IMAGE_URI="${{ needs.docker.outputs.image_uri }}"
-          IS_PRERELEASE="${{ needs.docker.outputs.is_prerelease }}"
-          PACKAGE_NAME=$(jq -r '.name' package.json)
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-          npm run deploy:notes -- "$VERSION" "$IMAGE_URI" "$IS_PRERELEASE" "$PACKAGE_NAME" > /tmp/release_notes.md
+      - name: Install Node.js dependencies
+        run: npm ci
 
-      - name: Create GitHub Release
+      - name: Install Python dependencies
+        working-directory: docker
+        run: uv sync --all-extras --frozen
+
+      - name: Validate release tag and commit
+        id: context
+        env:
+          RELEASE_TAG: >-
+            ${{
+              startsWith(github.ref, 'refs/tags/') &&
+              github.ref_name ||
+              needs.autotag.outputs.tag
+            }}
+        run: npm run release:context
+
+      - name: Configure AWS credentials
+        if: ${{ !cancelled() && success() }}
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Set up Docker Buildx
+        if: ${{ !cancelled() && success() }}
+        uses: docker/setup-buildx-action@v4
+        with:
+          platforms: linux/amd64
+
+      - name: Ensure centralized ECR repository exists
+        if: ${{ !cancelled() && success() }}
+        run: |
+          if ! aws ecr describe-repositories \
+            --repository-names quiltdata/benchling \
+            --region us-east-1 >/dev/null 2>&1; then
+            aws ecr create-repository \
+              --repository-name quiltdata/benchling \
+              --region us-east-1
+          fi
+
+      - name: Build and push immutable Docker image
+        if: ${{ !cancelled() && success() }}
+        working-directory: docker
+        run: >-
+          make push-ci-immutable
+          VERSION=${{ steps.context.outputs.version }}
+        env:
+          DOCKER_DEFAULT_PLATFORM: linux/amd64
+          AWS_REGION: us-east-1
+
+      - name: Promote Docker latest monotonically
+        if: ${{ !cancelled() && success() }}
+        working-directory: docker
+        run: >-
+          make promote-ci
+          VERSION=${{ steps.context.outputs.version }}
+        env:
+          AWS_REGION: us-east-1
+
+      - name: Generate release notes
+        if: ${{ !cancelled() && success() }}
+        env:
+          VERSION: ${{ steps.context.outputs.version }}
+          IS_PRERELEASE: ${{ steps.context.outputs.is_prerelease }}
+        run: |
+          IMAGE_URI="$ECR_REGISTRY/quiltdata/benchling:$VERSION"
+          npm run deploy:notes -- \
+            "$VERSION" \
+            "$IMAGE_URI" \
+            "$IS_PRERELEASE" \
+            "@quiltdata/benchling-webhook" \
+            > /tmp/release_notes.md
+
+      - name: Create or update GitHub Release
+        if: ${{ !cancelled() && success() }}
         uses: softprops/action-gh-release@v3
         with:
-          name: Release ${{ needs.docker.outputs.tag }}
-          tag_name: ${{ needs.docker.outputs.tag }}
+          name: Release ${{ steps.context.outputs.tag }}
+          tag_name: ${{ steps.context.outputs.tag }}
           body_path: /tmp/release_notes.md
           draft: false
-          prerelease: ${{ needs.docker.outputs.is_prerelease == 'true' }}
+          prerelease: ${{ steps.context.outputs.is_prerelease == 'true' }}
           generate_release_notes: true
           files: |
             docker/app-manifest.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update package.json version for pre-releases
-        if: needs.docker.outputs.is_prerelease == 'true'
+      - name: Set package version for prerelease artifact
+        if: >-
+          ${{ !cancelled() && success() &&
+          steps.context.outputs.is_prerelease == 'true' }}
+        env:
+          RELEASE_VERSION: ${{ steps.context.outputs.version }}
         run: |
-          VERSION="${{ needs.docker.outputs.version }}"
-          echo "Temporarily updating package.json version to $VERSION for pre-release publish"
-          jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
-          mv package.json.tmp package.json
-          echo "Updated version: $(jq -r .version package.json)"
+          node -e '
+            const fs = require("fs");
+            const pkg = require("./package.json");
+            pkg.version = process.env.RELEASE_VERSION;
+            fs.writeFileSync(
+              "package.json",
+              JSON.stringify(pkg, null, 2) + "\n",
+            );
+          '
 
-      - name: Publish to NPM
+      - name: Publish immutable npm version and promote channel monotonically
+        if: ${{ !cancelled() && success() }}
+        env:
+          RELEASE_VERSION: ${{ steps.context.outputs.version }}
+        run: npm run release:publish
+
+      - name: Summarize release
+        if: ${{ !cancelled() && success() }}
+        env:
+          TAG: ${{ steps.context.outputs.tag }}
+          VERSION: ${{ steps.context.outputs.version }}
+          IS_PRERELEASE: ${{ steps.context.outputs.is_prerelease }}
         run: |
-          echo "=== NPM Configuration Debug ==="
-          echo "Registry: $(npm config get registry)"
-          echo "Package version: $(jq -r .version package.json)"
-          echo "Checking authentication..."
-          npm whoami || echo "npm whoami failed"
-          cat $NPM_CONFIG_USERCONFIG || echo "No .npmrc found"
-          echo "==============================="
-
-          if [ "${{ needs.docker.outputs.is_prerelease }}" == "true" ]; then
-            echo "Publishing pre-release to npm with 'dev' tag"
-            npm publish --provenance --access public --tag dev
-          else
-            echo "Publishing production release to npm with 'latest' tag"
-            npm publish --provenance --access public --tag latest
-          fi
-
-      - name: Summary
-        run: |
-          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ needs.docker.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Type:** ${{ needs.docker.outputs.is_prerelease == 'true' && 'Pre-release' || 'Production Release' }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Docker Image:**" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "${{ needs.docker.outputs.image_uri }}" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**NPM Package:** https://www.npmjs.com/package/@quiltdata/benchling-webhook" >> $GITHUB_STEP_SUMMARY
+          IMAGE_URI="$ECR_REGISTRY/quiltdata/benchling:$VERSION"
+          NPM_URL="https://www.npmjs.com/package/@quiltdata/benchling-webhook"
+          echo "## Release Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Version:** $TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Prerelease:** $IS_PRERELEASE" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Docker:** $IMAGE_URI" >> "$GITHUB_STEP_SUMMARY"
+          echo "**NPM:** $NPM_URL" >> "$GITHUB_STEP_SUMMARY"

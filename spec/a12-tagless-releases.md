@@ -83,72 +83,82 @@ The release path must fail visibly on unknown state: inability to read history, 
 3. Split immutable ECR publication from guarded `latest` promotion in `docker/scripts/docker.py` and `docker/make.deploy`, then add the retry-safe npm publisher and wire both guards into the locked publication job.
 4. Add focused unit tests for tag decisions, push-race verification, cancellation/result predicates where statically testable, semantic ordering, ECR promotion, npm stale/version-exists handling, and fail-closed errors; then run the repository quality gates without creating tags or publishing artifacts.
 
+## Repair Evidence
+
+- **Baseline:** local `tagless-releases` and `origin/tagless-releases` both resolved to `383f4fe52302bb9537ea33d6692a660214d93231` before repair. `AGENTS.md` matched `origin/auto-release-docs`; `semantic-review/` and `spec/tagless-releases/` were absent; the baseline diff and its four defects were reviewed; `git diff --check` passed.
+- **Repair 1:** `scripts/version.ts` now owns automatic decisions, exact local/remote tag dereferencing, annotated-tag creation, full production gating, and fail-closed push-race verification. `package.json` exposes `version:tag:auto` and `release:context`. Focused tests include no-change, malformed/fallback history, exact/mismatched tags, generic push failure, verified race, and an annotated tag fetched from an ephemeral local bare remote.
+- **Repair 2:** `.github/workflows/ci.yaml` uses `!cancelled()` plus explicit `needs.test.result` and `needs.autotag.result` checks. Static workflow tests cover direct tags, automatic tags, unchanged main pushes, failed tests, skipped/failed autotag jobs, and cancellation.
+- **Repair 3:** one non-canceling concurrency group contains immutable Docker publication, guarded ECR promotion, idempotent GitHub Release update, and retry-safe npm publication. The group intentionally also covers timestamped dev releases because those releases can contend for ECR `latest`. The existing `push-ci` target remains for unrelated workflows; the release workflow uses the new `push-ci-immutable` target and a separate central-account promotion. ECR and npm tests cover monotonic ordering, stale releases, failures, and partial retries.
+- **Repair 4:** CI contains no shell semantic-version parser, `git tag`, `git push`, or race interpretation. Automatic and direct-tag paths invoke project TypeScript commands. Existing `version:tag` and `version:tag:dev` script mappings retain clean-tree and full-`npm test` gates and timestamp behavior.
+- **Validation:** focused TypeScript release suites passed (45 tests); `docker/tests/test_docker_release.py` passed (12 tests); `yamllint .github/workflows/ci.yaml`, `npm run build:typecheck`, `npm run lint`, `git diff --check`, and full `npm test` passed. `npm run test:integration` passed (44 passed, 1 skipped). `actionlint` was not installed. `npm run test:local` was attempted but could not start because the local `dev` profile lacks `BenchlingSecret`; no production-container code changed, so `test:local:prod` was not applicable.
+- **Safety:** validation used no project version tag, registry publication, release creation, version bump, or `.env` modification. The only test tag was pushed to a temporary local bare repository under the system temporary directory. Independent review and pushing the repair commit are intentionally deferred to later workflow steps.
+
 ## Tasks and Checklist
 
 A checkbox is marked complete only when its named evidence exists. If implementation fails, leave the affected item unchecked and record the failure; this checklist is complete only after all repairs and quality gates succeed.
 
 ### (i) Baseline documentation, commit, and push
 
-- [ ] Confirm `git -C /Users/ernest/GitHub/benchling-webhook status --short --branch` shows branch `tagless-releases` and preserves the user's `.github/workflows/ci.yaml` and `AGENTS.md` changes.
-- [ ] Confirm `git -C /Users/ernest/GitHub/benchling-webhook diff --exit-code origin/auto-release-docs -- AGENTS.md` succeeds, proving `AGENTS.md` matches the requested branch copy.
-- [ ] Confirm the accidental root `semantic-review/` directory is absent and no replacement `semantic-review` directory exists.
-- [ ] Review the baseline CI diff against `main` and record the four defects from this specification before repair.
-- [ ] Run `git -C /Users/ernest/GitHub/benchling-webhook diff --check`; require no whitespace errors.
-- [ ] Commit only the baseline CI change, imported `AGENTS.md`, and `spec/a12-tagless-releases.md` with a conventional documentation/change message; do not include cache, generated, environment, or secret files.
-- [ ] Push branch `tagless-releases` to origin and record the successful push output before beginning Repair 1. Do not create or push a version tag.
+- [x] Confirm `git -C /Users/ernest/GitHub/benchling-webhook status --short --branch` shows branch `tagless-releases` and preserves the user's `.github/workflows/ci.yaml` and `AGENTS.md` changes.
+- [x] Confirm `git -C /Users/ernest/GitHub/benchling-webhook diff --exit-code origin/auto-release-docs -- AGENTS.md` succeeds, proving `AGENTS.md` matches the requested branch copy.
+- [x] Confirm the accidental root `semantic-review/` directory is absent and no replacement `semantic-review` directory exists.
+- [x] Review the baseline CI diff against `main` and record the four defects from this specification before repair.
+- [x] Run `git -C /Users/ernest/GitHub/benchling-webhook diff --check`; require no whitespace errors.
+- [x] Commit only the baseline CI change, imported `AGENTS.md`, and `spec/a12-tagless-releases.md` with a conventional documentation/change message; do not include cache, generated, environment, or secret files.
+- [x] Push branch `tagless-releases` to origin and record the successful push output before beginning Repair 1. Do not create or push a version tag.
 
 ### (ii) Repair 1 — fail-closed tag push
 
-- [ ] Refactor `scripts/version.ts` so production tag construction, annotated tag creation, local/remote existence checks, and commit dereferencing are shared by manual and automatic paths.
-- [ ] Add the automatic release command to `package.json`; keep `version:tag` and `version:tag:dev` behavior intact and keep the full `npm test` gate inside the automatic release contract.
-- [ ] Replace YAML-only version detection/tagging in `.github/workflows/ci.yaml` with the project command and explicit outputs for no change, verified existing tag, created tag, verified race, and failure.
-- [ ] Verify a no-version-change fixture exits successfully with `release_required=false` and no tag operation.
-- [ ] Verify a production version bump fixture selects only `v<package-version>` and requires it to target the fixture's intended commit.
-- [ ] Verify a generic simulated push failure exits nonzero and cannot produce a publishable tag output.
-- [ ] Verify the only accepted push race is a newly observed remote tag that dereferences to the intended commit; a different commit, missing peeled target, or lookup failure exits nonzero.
-- [ ] Verify pre-existing manual production tags are accepted/skipped only when they dereference to the intended commit.
-- [ ] Run the focused TypeScript release tests with `npm run test:unit -- --runTestsByPath test/unit/version-release.test.ts`; require all cases to pass without contacting or modifying origin.
+- [x] Refactor `scripts/version.ts` so production tag construction, annotated tag creation, local/remote existence checks, and commit dereferencing are shared by manual and automatic paths.
+- [x] Add the automatic release command to `package.json`; keep `version:tag` and `version:tag:dev` behavior intact and keep the full `npm test` gate inside the automatic release contract.
+- [x] Replace YAML-only version detection/tagging in `.github/workflows/ci.yaml` with the project command and explicit outputs for no change, verified existing tag, created tag, verified race, and failure.
+- [x] Verify a no-version-change fixture exits successfully with `release_required=false` and no tag operation.
+- [x] Verify a production version bump fixture selects only `v<package-version>` and requires it to target the fixture's intended commit.
+- [x] Verify a generic simulated push failure exits nonzero and cannot produce a publishable tag output.
+- [x] Verify the only accepted push race is a newly observed remote tag that dereferences to the intended commit; a different commit, missing peeled target, or lookup failure exits nonzero.
+- [x] Verify pre-existing manual production tags are accepted/skipped only when they dereference to the intended commit.
+- [x] Run the focused TypeScript release tests with `npm run test:unit -- --runTestsByPath test/unit/version-release.test.ts`; require all cases to pass without contacting or modifying origin.
 
 ### (iii) Repair 2 — cancellation-aware publish
 
-- [ ] Remove unnecessary `always()` usage from publication conditions in `.github/workflows/ci.yaml`.
-- [ ] Require `!cancelled()`, successful tests, a verified tag, and explicit expected `autotag` results before publication can start.
-- [ ] Require each later irreversible phase to have a successful predecessor and a non-canceled workflow.
-- [ ] Add static workflow tests or a repository-owned workflow validation script covering direct tag, automatic tag, unchanged main push, failed test, skipped autotag, failed autotag, and canceled run eligibility.
-- [ ] Run the focused workflow tests and require canceled/failed scenarios to be ineligible while both valid trigger paths remain eligible.
+- [x] Remove unnecessary `always()` usage from publication conditions in `.github/workflows/ci.yaml`.
+- [x] Require `!cancelled()`, successful tests, a verified tag, and explicit expected `autotag` results before publication can start.
+- [x] Require each later irreversible phase to have a successful predecessor and a non-canceled workflow.
+- [x] Add static workflow tests or a repository-owned workflow validation script covering direct tag, automatic tag, unchanged main push, failed test, skipped autotag, failed autotag, and canceled run eligibility.
+- [x] Run the focused workflow tests and require canceled/failed scenarios to be ineligible while both valid trigger paths remain eligible.
 
 ### (iv) Repair 3 — concurrency and monotonic latest guard
 
-- [ ] Place the complete irreversible publication transaction under one production concurrency group with `cancel-in-progress: false`; ensure an active publisher cannot be canceled by a newer release.
-- [ ] Ensure automatic main releases and manual production-tag releases share the lock, while pull requests and ordinary non-release work do not contend for it.
-- [ ] Change the Docker build path to publish the immutable version tag before any `latest` update.
-- [ ] Add the ECR promotion command to `docker/scripts/docker.py` and `docker/make.deploy`, using the centralized `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling` repository and server-side manifest retagging.
-- [ ] Unit-test ECR promotion for missing latest, newer candidate, equal candidate, stale candidate, timestamp prerelease ordering, stable-over-same-base-prerelease ordering, ambiguous current tags, AWS lookup failure, and put failure.
-- [ ] Add the project-owned npm publisher with exact semantic comparison, already-published-version recovery, unique temporary tag publication, guarded `latest` promotion, and temporary-tag cleanup.
-- [ ] Unit-test npm publication for missing version, existing version after partial failure, newer/equal/stale candidate, malformed registry response, lookup failure, publish failure, promotion failure, and cleanup failure.
-- [ ] Verify a simulated newer-first/older-second sequence leaves both immutable versions available and leaves ECR/npm `latest` on the newer version.
-- [ ] Verify retries after each simulated partial-publication boundary complete missing artifacts without moving either shared pointer backward.
-- [ ] Run `cd docker && uv run pytest tests/test_docker_release.py -v` and the focused npm publisher test command; require all guard and failure cases to pass with mocked registries.
+- [x] Place the complete irreversible publication transaction under one production concurrency group with `cancel-in-progress: false`; ensure an active publisher cannot be canceled by a newer release.
+- [x] Ensure automatic main releases and manual production-tag releases share the lock, while pull requests and ordinary non-release work do not contend for it.
+- [x] Change the Docker build path to publish the immutable version tag before any `latest` update.
+- [x] Add the ECR promotion command to `docker/scripts/docker.py` and `docker/make.deploy`, using the centralized `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling` repository and server-side manifest retagging.
+- [x] Unit-test ECR promotion for missing latest, newer candidate, equal candidate, stale candidate, timestamp prerelease ordering, stable-over-same-base-prerelease ordering, ambiguous current tags, AWS lookup failure, and put failure.
+- [x] Add the project-owned npm publisher with exact semantic comparison, already-published-version recovery, unique temporary tag publication, guarded `latest` promotion, and temporary-tag cleanup.
+- [x] Unit-test npm publication for missing version, existing version after partial failure, newer/equal/stale candidate, malformed registry response, lookup failure, publish failure, promotion failure, and cleanup failure.
+- [x] Verify a simulated newer-first/older-second sequence leaves both immutable versions available and leaves ECR/npm `latest` on the newer version.
+- [x] Verify retries after each simulated partial-publication boundary complete missing artifacts without moving either shared pointer backward.
+- [x] Run `cd docker && uv run pytest tests/test_docker_release.py -v` and the focused npm publisher test command; require all guard and failure cases to pass with mocked registries.
 
 ### (v) Repair 4 — route automatic tagging through project-owned scripts
 
-- [ ] Confirm `.github/workflows/ci.yaml` contains no duplicated shell implementation of semantic-version parsing, tag creation, or push-race interpretation.
-- [ ] Confirm the automatic path invokes the package script and that the package script enforces clean-tree verification, full `npm test`, and shared `scripts/version.ts` tag semantics.
-- [ ] Confirm direct production tags are validated by the same project-owned release-context helper before publication.
-- [ ] Confirm `npm run version:tag` still maps to `version:verify`, full `npm test`, and production tagging, and `npm run version:tag:dev` still maps to the timestamped prerelease implementation.
-- [ ] Run automatic-tag tests for malformed version, missing before commit, unavailable history fallback, tag mismatch, and verified success; require deterministic explicit outcomes.
+- [x] Confirm `.github/workflows/ci.yaml` contains no duplicated shell implementation of semantic-version parsing, tag creation, or push-race interpretation.
+- [x] Confirm the automatic path invokes the package script and that the package script enforces clean-tree verification, full `npm test`, and shared `scripts/version.ts` tag semantics.
+- [x] Confirm direct production tags are validated by the same project-owned release-context helper before publication.
+- [x] Confirm `npm run version:tag` still maps to `version:verify`, full `npm test`, and production tagging, and `npm run version:tag:dev` still maps to the timestamped prerelease implementation.
+- [x] Run automatic-tag tests for malformed version, missing before commit, unavailable history fallback, tag mismatch, and verified success; require deterministic explicit outcomes.
 
 ### (vi) Validation
 
-- [ ] Run `git -C /Users/ernest/GitHub/benchling-webhook diff --check`; require no errors.
-- [ ] Run the available YAML/Actions-aware validator against `.github/workflows/ci.yaml` (prefer repository tooling; otherwise `yamllint .github/workflows/ci.yaml` plus an installed `actionlint`) and record any unavailable validator explicitly.
-- [ ] Run `npm run build:typecheck`; require zero TypeScript diagnostics.
-- [ ] Run all focused TypeScript and Python release tests; require all pass.
-- [ ] Run `npm test` before each implementation commit; require lint, typecheck, TypeScript tests, and Python tests to pass.
+- [x] Run `git -C /Users/ernest/GitHub/benchling-webhook diff --check`; require no errors.
+- [x] Run the available YAML/Actions-aware validator against `.github/workflows/ci.yaml` (prefer repository tooling; otherwise `yamllint .github/workflows/ci.yaml` plus an installed `actionlint`) and record any unavailable validator explicitly.
+- [x] Run `npm run build:typecheck`; require zero TypeScript diagnostics.
+- [x] Run all focused TypeScript and Python release tests; require all pass.
+- [x] Run `npm test` before each implementation commit; require lint, typecheck, TypeScript tests, and Python tests to pass.
 - [ ] Because Docker publication tooling changed, run `npm run test:local`; if the change affects the production-container path, also run `npm run test:local:prod`. Require successful smoke tests or record an environmental blocker without marking complete.
-- [ ] Run `npm run test:integration` before merge readiness; require all integration tests to pass.
-- [ ] Confirm validation created no git tags, made no registry publication, did not trigger a production release, did not change versions, and did not modify any `.env` file.
-- [ ] Inspect `git -C /Users/ernest/GitHub/benchling-webhook status --short` and exclude generated, cache, environment, credential, and secret files from commits.
+- [x] Run `npm run test:integration` before merge readiness; require all integration tests to pass.
+- [x] Confirm validation created no git tags, made no registry publication, did not trigger a production release, did not change versions, and did not modify any `.env` file.
+- [x] Inspect `git -C /Users/ernest/GitHub/benchling-webhook status --short` and exclude generated, cache, environment, credential, and secret files from commits.
 
 ### (vii) Independent review
 
@@ -160,15 +170,15 @@ A checkbox is marked complete only when its named evidence exists. If implementa
 
 ### (viii) Checklist reconciliation
 
-- [ ] Reconcile every checkbox against command output, test output, commit history, or reviewer evidence; do not mark inferred work complete.
-- [ ] Update implementation notes in this file only when the final code differs materially from the desired implementation, and explain why the safety guarantees remain satisfied.
-- [ ] Confirm all four repairs are represented in the final diff and no unrelated behavior or tests were added.
-- [ ] Confirm the centralized ECR URI remains `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest` where the runtime image applies and `pkg_prefix` remains runtime-only.
+- [x] Reconcile every checkbox against command output, test output, commit history, or reviewer evidence; do not mark inferred work complete.
+- [x] Update implementation notes in this file only when the final code differs materially from the desired implementation, and explain why the safety guarantees remain satisfied.
+- [x] Confirm all four repairs are represented in the final diff and no unrelated behavior or tests were added.
+- [x] Confirm the centralized ECR URI remains `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling:latest` where the runtime image applies and `pkg_prefix` remains runtime-only.
 
 ### (ix) Final commit and push
 
-- [ ] Run final `npm test` and `npm run test:integration`; require both to pass immediately before finalization.
-- [ ] Commit the repaired implementation, focused tests, and reconciled A12 checklist using specific file staging; do not amend a failed-hook commit and do not commit `.agents/` review artifacts.
+- [x] Run final `npm test` and `npm run test:integration`; require both to pass immediately before finalization.
+- [x] Commit the repaired implementation, focused tests, and reconciled A12 checklist using specific file staging; do not amend a failed-hook commit and do not commit `.agents/` review artifacts.
 - [ ] Push `tagless-releases` to origin without force and record the resulting remote commit SHA.
 - [ ] Confirm `git -C /Users/ernest/GitHub/benchling-webhook status --short --branch` is clean and tracking the pushed branch.
-- [ ] Confirm no production or dev version tag was created or pushed during repair and no production publication was used as validation.
+- [x] Confirm no production or dev version tag was created or pushed during repair and no production publication was used as validation.

@@ -14,7 +14,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Optional, Protocol
 
 # Configuration
 # DOCKER_IMAGE_NAME must be set (typically exported from Makefile)
@@ -25,6 +25,7 @@ if not _docker_image_name:
 DOCKER_IMAGE_NAME: str = _docker_image_name
 
 DEFAULT_REGION = "us-east-1"
+CENTRAL_ECR_REGISTRY_ID = "712023778557"
 LATEST_TAG = "latest"
 
 
@@ -39,6 +40,229 @@ class ImageReference:
     @property
     def uri(self) -> str:
         return f"{self.registry}/{self.image}:{self.tag}"
+
+
+@dataclass(frozen=True)
+class ReleaseVersion:
+    """A stable or timestamped release version."""
+
+    major: int
+    minor: int
+    patch: int
+    timestamp: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class EcrImage:
+    """ECR digest and all tags associated with it."""
+
+    digest: str
+    tags: tuple[str, ...]
+
+
+class EcrRegistry(Protocol):
+    """Operations required for a server-side latest-tag promotion."""
+
+    def describe_image(self, tag: str) -> Optional[EcrImage]: ...
+
+    def get_manifest(self, tag: str) -> tuple[str, Optional[str]]: ...
+
+    def put_manifest(self, tag: str, manifest: str, media_type: Optional[str]) -> None: ...
+
+
+class AwsCliEcrRegistry:
+    """Fail-closed AWS CLI implementation of ECR promotion operations."""
+
+    def __init__(
+        self,
+        repository: str,
+        region: str = DEFAULT_REGION,
+        registry_id: str = CENTRAL_ECR_REGISTRY_ID,
+    ):
+        self.repository = repository
+        self.region = region
+        self.registry_id = registry_id
+
+    def _run(self, args: list[str]) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [
+                "aws",
+                "ecr",
+                *args,
+                "--registry-id",
+                self.registry_id,
+                "--region",
+                self.region,
+                "--output",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+
+    @staticmethod
+    def _json(result: subprocess.CompletedProcess, operation: str) -> dict[str, Any]:
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or f"exit status {result.returncode}"
+            raise RuntimeError(f"ECR {operation} failed: {detail}")
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"ECR {operation} returned malformed JSON: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"ECR {operation} returned a non-object response")
+        return payload
+
+    def describe_image(self, tag: str) -> Optional[EcrImage]:
+        result = self._run(
+            [
+                "describe-images",
+                "--repository-name",
+                self.repository,
+                "--image-ids",
+                f"imageTag={tag}",
+            ]
+        )
+        if result.returncode != 0 and "ImageNotFoundException" in result.stderr:
+            return None
+        payload = self._json(result, f"describe-images for {tag}")
+        details = payload.get("imageDetails")
+        if not isinstance(details, list) or len(details) != 1 or not isinstance(details[0], dict):
+            raise RuntimeError(f"ECR describe-images for {tag} returned ambiguous image details")
+        digest = details[0].get("imageDigest")
+        tags = details[0].get("imageTags", [])
+        if (
+            not isinstance(digest, str)
+            or not isinstance(tags, list)
+            or not all(isinstance(item, str) for item in tags)
+        ):
+            raise RuntimeError(f"ECR describe-images for {tag} returned malformed image details")
+        return EcrImage(digest=digest, tags=tuple(tags))
+
+    def get_manifest(self, tag: str) -> tuple[str, Optional[str]]:
+        result = self._run(
+            [
+                "batch-get-image",
+                "--repository-name",
+                self.repository,
+                "--image-ids",
+                f"imageTag={tag}",
+                "--accepted-media-types",
+                "application/vnd.docker.distribution.manifest.v2+json",
+                "application/vnd.oci.image.manifest.v1+json",
+                "application/vnd.oci.image.index.v1+json",
+            ]
+        )
+        payload = self._json(result, f"batch-get-image for {tag}")
+        failures = payload.get("failures", [])
+        images = payload.get("images")
+        if failures or not isinstance(images, list) or len(images) != 1 or not isinstance(images[0], dict):
+            raise RuntimeError(f"ECR batch-get-image for {tag} did not return exactly one manifest")
+        manifest = images[0].get("imageManifest")
+        media_type = images[0].get("imageManifestMediaType")
+        if not isinstance(manifest, str) or (media_type is not None and not isinstance(media_type, str)):
+            raise RuntimeError(f"ECR batch-get-image for {tag} returned malformed manifest data")
+        return manifest, media_type
+
+    def put_manifest(self, tag: str, manifest: str, media_type: Optional[str]) -> None:
+        args = [
+            "put-image",
+            "--repository-name",
+            self.repository,
+            "--image-tag",
+            tag,
+            "--image-manifest",
+            manifest,
+        ]
+        if media_type:
+            args.extend(["--image-manifest-media-type", media_type])
+        self._json(self._run(args), f"put-image for {tag}")
+
+
+def _valid_timestamp(timestamp: str) -> bool:
+    """Validate the UTC timestamp format emitted by scripts/version.ts."""
+    from datetime import datetime
+
+    try:
+        datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ")
+        return True
+    except ValueError:
+        return False
+
+
+def parse_release_version(version: str) -> ReleaseVersion:
+    """Parse a stable x.y.z or x.y.z-YYYYMMDDTHHMMSSZ version."""
+    import re
+
+    match = re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(\d{8}T\d{6}Z))?", version)
+    if not match or (match.group(4) and not _valid_timestamp(match.group(4))):
+        raise ValueError(f"Unsupported release version: {version}")
+    return ReleaseVersion(
+        major=int(match.group(1)),
+        minor=int(match.group(2)),
+        patch=int(match.group(3)),
+        timestamp=match.group(4),
+    )
+
+
+def compare_release_versions(left: str, right: str) -> int:
+    """Compare stable and timestamped releases monotonically."""
+    first = parse_release_version(left)
+    second = parse_release_version(right)
+    first_core = (first.major, first.minor, first.patch)
+    second_core = (second.major, second.minor, second.patch)
+    if first_core != second_core:
+        return 1 if first_core > second_core else -1
+    if (first.timestamp is None) != (second.timestamp is None):
+        return 1 if first.timestamp is None else -1
+    if first.timestamp == second.timestamp:
+        return 0
+    return 1 if (first.timestamp or "") > (second.timestamp or "") else -1
+
+
+def _current_release_tag(image: EcrImage) -> str:
+    release_tags: list[str] = []
+    for tag in image.tags:
+        if tag == LATEST_TAG:
+            continue
+        try:
+            parse_release_version(tag)
+            release_tags.append(tag)
+        except ValueError:
+            continue
+    if not release_tags:
+        raise RuntimeError(f"ECR latest digest {image.digest} has no associated release tag")
+    if len(release_tags) != 1:
+        raise RuntimeError(
+            f"ECR latest digest {image.digest} has ambiguous release tags: {', '.join(sorted(release_tags))}"
+        )
+    return release_tags[0]
+
+
+def promote_ecr_latest(registry: EcrRegistry, candidate: str) -> str:
+    """Promote candidate to latest only when it is newer than the current release."""
+    parse_release_version(candidate)
+    candidate_image = registry.describe_image(candidate)
+    if candidate_image is None:
+        raise RuntimeError(f"ECR candidate image {candidate} does not exist")
+
+    latest_image = registry.describe_image(LATEST_TAG)
+    if latest_image is None:
+        decision = "initialized"
+    else:
+        current = _current_release_tag(latest_image)
+        comparison = compare_release_versions(candidate, current)
+        if comparison == 0:
+            return "current"
+        if comparison < 0:
+            return "stale"
+        decision = "promoted"
+
+    manifest, media_type = registry.get_manifest(candidate)
+    registry.put_manifest(LATEST_TAG, manifest, media_type)
+    return decision
 
 
 class DockerManager:
@@ -727,6 +951,17 @@ ENVIRONMENT VARIABLES:
     push_parser.add_argument("--no-latest", action="store_true", help="Don't tag as latest")
     push_parser.add_argument("--no-arch-suffix", action="store_true", help="Don't add architecture suffix to tags")
 
+    # Promote command (server-side ECR manifest retag; no image pull/push)
+    promote_parser = subparsers.add_parser("promote", help="Promote a newer immutable ECR image to latest")
+    promote_parser.add_argument("--version", required=True, help="Stable or timestamped release version")
+    promote_parser.add_argument("--repository", default=DOCKER_IMAGE_NAME, help="ECR repository name")
+    promote_parser.add_argument("--region", default=DEFAULT_REGION, help="AWS region")
+    promote_parser.add_argument(
+        "--registry-id",
+        default=CENTRAL_ECR_REGISTRY_ID,
+        help="ECR registry account ID",
+    )
+
     # Info command
     info_parser = subparsers.add_parser("info", help="Get Docker image URI for a version")
     info_parser.add_argument("--version", required=True, help="Version tag for the image")
@@ -818,6 +1053,22 @@ def cmd_info(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_promote(args: argparse.Namespace) -> int:
+    """Promote an immutable ECR image to latest when monotonic."""
+    try:
+        registry = AwsCliEcrRegistry(
+            repository=args.repository,
+            region=args.region,
+            registry_id=args.registry_id,
+        )
+        decision = promote_ecr_latest(registry, args.version)
+        print(f"ECR latest promotion: {decision} ({args.version})")
+        return 0
+    except (RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     """Validate Docker images in registry."""
     # Allow VERSION env var to override
@@ -845,6 +1096,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         return cmd_build(args)
     elif args.command == "push":
         return cmd_push(args)
+    elif args.command == "promote":
+        return cmd_promote(args)
     elif args.command == "info":
         return cmd_info(args)
     elif args.command == "validate":
