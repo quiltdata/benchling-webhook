@@ -23,7 +23,6 @@ export DOCKER_IMAGE_NAME ?= $(DOCKER_IMAGE_BASE)
 # AWS region and centralized account for release ECR operations
 AWS_REGION ?= us-east-1
 ECR_REGISTRY_ID ?= 712023778557
-ECR_REGISTRY ?= $(ECR_REGISTRY_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
 
 .PHONY: deploy-help docker-build-local push-local push-ci push-ci-immutable \
         ensure-ci-immutable promote-ci docker-tools docker-ecr-login docker-validate \
