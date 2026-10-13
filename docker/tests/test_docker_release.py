@@ -2,6 +2,8 @@
 
 import hashlib
 import os
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -90,6 +92,21 @@ def test_release_commands_default_to_the_central_ecr_registry(command: str):
 
     assert args.repository == "quiltdata/benchling"
     assert args.registry_id == CENTRAL_ECR_REGISTRY_ID == "712023778557"
+
+
+def test_make_does_not_export_an_ecr_registry_override():
+    """The docker Makefile exports every variable; an ECR_REGISTRY default would
+    override STS detection in `push-ci` and send prod builds to the dev account."""
+    env = {key: value for key, value in os.environ.items() if key != "ECR_REGISTRY"}
+    database = subprocess.run(
+        ["make", "-C", str(Path(__file__).resolve().parents[1]), "-pn", "deploy-help"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=True,
+    ).stdout
+
+    assert not [line for line in database.splitlines() if line.split(" ", 1)[0] == "ECR_REGISTRY"]
 
 
 def test_existing_immutable_image_is_reused_without_publishing():
