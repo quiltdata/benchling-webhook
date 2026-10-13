@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 
-/** Retry-safe npm publication with monotonic shared dist-tags. */
+/**
+ * Retry-safe npm publication with monotonic shared dist-tags.
+ *
+ * npm trusted publishing (OIDC) authorizes only `npm publish`; `npm dist-tag`
+ * needs a registry token. Promotion therefore happens atomically inside
+ * `npm publish --tag <channel>`, and stale candidates are parked under a
+ * per-version tag so a shared channel never moves backward.
+ */
 
 import * as fs from "fs";
 import * as path from "path";
@@ -10,9 +17,7 @@ import { compareReleaseVersions, parseReleaseVersion } from "./version";
 export interface NpmRegistry {
     versions(packageName: string): string[];
     distTags(packageName: string): Record<string, string>;
-    publish(temporaryTag: string): void;
-    setDistTag(packageName: string, version: string, tag: string): void;
-    removeDistTag(packageName: string, tag: string): void;
+    publish(tag: string): void;
 }
 
 export interface PublishResult {
@@ -94,24 +99,8 @@ export class CliNpmRegistry implements NpmRegistry {
         return parsed as Record<string, string>;
     }
 
-    public publish(temporaryTag: string): void {
-        const args = ["publish", "--provenance", "--access", "public", "--tag", temporaryTag];
-        const result = this.runner(args, true);
-        if (result.status !== 0) {
-            throw npmError(args, result);
-        }
-    }
-
-    public setDistTag(packageName: string, version: string, tag: string): void {
-        const args = ["dist-tag", "add", `${packageName}@${version}`, tag];
-        const result = this.runner(args, true);
-        if (result.status !== 0) {
-            throw npmError(args, result);
-        }
-    }
-
-    public removeDistTag(packageName: string, tag: string): void {
-        const args = ["dist-tag", "rm", packageName, tag];
+    public publish(tag: string): void {
+        const args = ["publish", "--provenance", "--access", "public", "--tag", tag];
         const result = this.runner(args, true);
         if (result.status !== 0) {
             throw npmError(args, result);
@@ -119,7 +108,7 @@ export class CliNpmRegistry implements NpmRegistry {
     }
 }
 
-export function temporaryDistTag(version: string): string {
+export function parkingDistTag(version: string): string {
     return `release-${version.replace(/[^0-9A-Za-z-]/g, "-")}`;
 }
 
@@ -134,12 +123,6 @@ function promotionDecision(candidate: string, current: string | undefined): Publ
     return comparison === 0 ? "current" : "stale";
 }
 
-function combineFailures(primary: unknown, cleanup: unknown): Error {
-    const primaryMessage = primary instanceof Error ? primary.message : String(primary);
-    const cleanupMessage = cleanup instanceof Error ? cleanup.message : String(cleanup);
-    return new Error(`${primaryMessage}; temporary dist-tag cleanup also failed: ${cleanupMessage}`);
-}
-
 export function publishRelease(
     registry: NpmRegistry,
     packageName: string,
@@ -152,55 +135,24 @@ export function publishRelease(
     }
 
     const channel = release.prerelease ? "dev" : "latest";
-    const temporaryTag = temporaryDistTag(version);
-    const existingVersions = registry.versions(packageName);
-    const immutableCreated = !existingVersions.includes(version);
-    let publishedWithTemporaryTag = false;
-    let knownTemporaryTag = false;
-    let primaryFailure: unknown;
-    let promotion: PublishResult["promotion"] = "current";
-
-    try {
-        if (immutableCreated) {
-            registry.publish(temporaryTag);
-            publishedWithTemporaryTag = true;
-        }
-
-        const tags = registry.distTags(packageName);
-        knownTemporaryTag = tags[temporaryTag] === version;
-        const current = tags[channel];
-        if (current) {
-            const currentRelease = parseReleaseVersion(current);
-            if (!release.prerelease && currentRelease.prerelease) {
-                throw new Error(`npm latest must point to a plain semantic version, found ${current}`);
-            }
-        }
-
-        promotion = promotionDecision(version, current);
-        if (promotion === "initialized" || promotion === "promoted") {
-            registry.setDistTag(packageName, version, channel);
-        }
-    } catch (error) {
-        primaryFailure = error;
-    }
-
-    let cleanupFailure: unknown;
-    if (publishedWithTemporaryTag || knownTemporaryTag) {
-        try {
-            registry.removeDistTag(packageName, temporaryTag);
-        } catch (error) {
-            cleanupFailure = error;
+    const immutableCreated = !registry.versions(packageName).includes(version);
+    const current = registry.distTags(packageName)[channel];
+    if (current) {
+        const currentRelease = parseReleaseVersion(current);
+        if (!release.prerelease && currentRelease.prerelease) {
+            throw new Error(`npm latest must point to a plain semantic version, found ${current}`);
         }
     }
 
-    if (primaryFailure && cleanupFailure) {
-        throw combineFailures(primaryFailure, cleanupFailure);
-    }
-    if (primaryFailure) {
-        throw primaryFailure;
-    }
-    if (cleanupFailure) {
-        throw cleanupFailure;
+    const promotion = promotionDecision(version, current);
+    const advancesChannel = promotion === "initialized" || promotion === "promoted";
+    if (immutableCreated) {
+        registry.publish(advancesChannel ? channel : parkingDistTag(version));
+    } else if (advancesChannel) {
+        throw new Error(
+            `${packageName}@${version} is already published but npm ${channel} is ${current ?? "unset"}; ` +
+            `trusted publishing cannot move dist-tags, so run: npm dist-tag add ${packageName}@${version} ${channel}`,
+        );
     }
 
     return {
