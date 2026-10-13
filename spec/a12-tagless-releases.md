@@ -80,7 +80,7 @@ The release path must fail visibly on unknown state: inability to read history, 
 
 1. Move version-change detection, tag derivation, tag-target verification, full release gating, and race handling into exported/testable helpers in `scripts/version.ts`; expose the automatic command through `package.json` and reduce `autotag` YAML to setup plus command invocation.
 2. Reshape `.github/workflows/ci.yaml` so verified direct tags and verified automatic tags feed one cancellation-aware publication transaction protected by non-canceling production concurrency.
-3. Split immutable ECR publication from guarded `latest` promotion in `docker/scripts/docker.py` and `docker/make.deploy`, then add the retry-safe npm publisher and wire both guards into the locked publication job.
+3. Add an immutable ECR ensure/reuse operation before guarded `latest` promotion in `docker/scripts/docker.py` and `docker/make.deploy`, then add the retry-safe npm publisher and wire both guards into the locked publication job.
 4. Add focused unit tests for tag decisions, push-race verification, cancellation/result predicates where statically testable, semantic ordering, ECR promotion, npm stale/version-exists handling, and fail-closed errors; then run the repository quality gates without creating tags or publishing artifacts.
 
 ## Repair Evidence
@@ -88,9 +88,9 @@ The release path must fail visibly on unknown state: inability to read history, 
 - **Baseline:** local `tagless-releases` and `origin/tagless-releases` both resolved to `383f4fe52302bb9537ea33d6692a660214d93231` before repair. `AGENTS.md` matched `origin/auto-release-docs`; `semantic-review/` and `spec/tagless-releases/` were absent; the baseline diff and its four defects were reviewed; `git diff --check` passed.
 - **Repair 1:** `scripts/version.ts` now owns automatic decisions, exact local/remote tag dereferencing, annotated-tag creation, full production gating, and fail-closed push-race verification. `package.json` exposes `version:tag:auto` and `release:context`. Focused tests include no-change, malformed/fallback history, exact/mismatched tags, generic push failure, verified race, and an annotated tag fetched from an ephemeral local bare remote.
 - **Repair 2:** `.github/workflows/ci.yaml` uses `!cancelled()` plus explicit `needs.test.result` and `needs.autotag.result` checks. Static workflow tests cover direct tags, automatic tags, unchanged main pushes, failed tests, skipped/failed autotag jobs, and cancellation.
-- **Repair 3:** one non-canceling concurrency group contains immutable Docker publication, guarded ECR promotion, idempotent GitHub Release update, and retry-safe npm publication. The group intentionally also covers timestamped dev releases because those releases can contend for ECR `latest`. The existing `push-ci` target remains for unrelated workflows; the release workflow uses the new `push-ci-immutable` target and a separate central-account promotion. ECR and npm tests cover monotonic ordering, stale releases, failures, and partial retries.
+- **Repair 3:** one non-canceling concurrency group contains immutable Docker publication, guarded ECR promotion, idempotent GitHub Release update, and retry-safe npm publication. The group intentionally also covers timestamped dev releases because those releases can contend for ECR `latest`. The existing `push-ci` target remains for unrelated workflows; the release workflow uses `ensure-ci-immutable` to query and validate the version digest, reuse it on retries, or build it once when absent before a separate central-account promotion. ECR tests now model a later-phase failure after promotion and prove the retry preserves the original immutable digest while continuing the transaction; npm tests cover monotonic ordering, failures, and partial retries.
 - **Repair 4:** CI contains no shell semantic-version parser, `git tag`, `git push`, or race interpretation. Automatic and direct-tag paths invoke project TypeScript commands. Existing `version:tag` and `version:tag:dev` script mappings retain clean-tree and full-`npm test` gates and timestamp behavior.
-- **Validation:** focused TypeScript release suites passed (45 tests); `docker/tests/test_docker_release.py` passed (12 tests); `yamllint .github/workflows/ci.yaml`, `npm run build:typecheck`, `npm run lint`, `git diff --check`, and full `npm test` passed. `npm run test:integration` passed (44 passed, 1 skipped). `actionlint` was not installed. `npm run test:local` was attempted but could not start because the local `dev` profile lacks `BenchlingSecret`; no production-container code changed, so `test:local:prod` was not applicable.
+- **Validation:** focused TypeScript release suites passed (45 tests); `docker/tests/test_docker_release.py` passed (19 tests); `yamllint .github/workflows/ci.yaml`, `npm run build:typecheck`, `npm run lint`, `git diff --check`, and full `npm test` passed. `npm run test:integration` passed (44 passed, 1 skipped). `actionlint` was not installed. `npm run test:local` was attempted but could not start because the local `dev` profile lacks `BenchlingSecret`; no production-container code changed, so `test:local:prod` was not applicable.
 - **Safety:** validation used no project version tag, registry publication, release creation, version bump, or `.env` modification. The only test tag was pushed to a temporary local bare repository under the system temporary directory. Independent review and pushing the repair commit are intentionally deferred to later workflow steps.
 
 ## Tasks and Checklist
@@ -131,13 +131,13 @@ A checkbox is marked complete only when its named evidence exists. If implementa
 
 - [x] Place the complete irreversible publication transaction under one production concurrency group with `cancel-in-progress: false`; ensure an active publisher cannot be canceled by a newer release.
 - [x] Ensure automatic main releases and manual production-tag releases share the lock, while pull requests and ordinary non-release work do not contend for it.
-- [x] Change the Docker build path to publish the immutable version tag before any `latest` update.
-- [x] Add the ECR promotion command to `docker/scripts/docker.py` and `docker/make.deploy`, using the centralized `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling` repository and server-side manifest retagging.
-- [x] Unit-test ECR promotion for missing latest, newer candidate, equal candidate, stale candidate, timestamp prerelease ordering, stable-over-same-base-prerelease ordering, ambiguous current tags, AWS lookup failure, and put failure.
+- [x] Change the Docker release path to query and verify the immutable version tag first, reuse its digest on retries, and build it only when absent before any `latest` update.
+- [x] Add the ECR ensure/reuse and promotion commands to `docker/scripts/docker.py` and `docker/make.deploy`, using the centralized `712023778557.dkr.ecr.us-east-1.amazonaws.com/quiltdata/benchling` repository and server-side manifest retagging.
+- [x] Unit-test ECR ensure/reuse and promotion for existing and missing candidates, invalid or missing post-build state, missing latest, newer/equal/stale candidates, timestamp prerelease ordering, stable-over-same-base-prerelease ordering, ambiguous current tags, AWS lookup failure, and put failure.
 - [x] Add the project-owned npm publisher with exact semantic comparison, already-published-version recovery, unique temporary tag publication, guarded `latest` promotion, and temporary-tag cleanup.
 - [x] Unit-test npm publication for missing version, existing version after partial failure, newer/equal/stale candidate, malformed registry response, lookup failure, publish failure, promotion failure, and cleanup failure.
 - [x] Verify a simulated newer-first/older-second sequence leaves both immutable versions available and leaves ECR/npm `latest` on the newer version.
-- [x] Verify retries after each simulated partial-publication boundary complete missing artifacts without moving either shared pointer backward.
+- [x] Verify a transaction retry after ECR promotion and a later-phase failure reuses the original immutable digest, resumes later work, and does not move either shared pointer backward.
 - [x] Run `cd docker && uv run pytest tests/test_docker_release.py -v` and the focused npm publisher test command; require all guard and failure cases to pass with mocked registries.
 
 ### (v) Repair 4 — route automatic tagging through project-owned scripts
@@ -165,7 +165,7 @@ A checkbox is marked complete only when its named evidence exists. If implementa
 - [ ] Have an independent reviewer compare the complete branch diff with this A12 specification and all four original findings.
 - [ ] Require the reviewer to inspect fail-closed exits, commit/tag verification, cancellation predicates, lock scope, stale ordering, partial-failure recovery, and manual/dev compatibility rather than relying only on passing tests.
 - [ ] Store each review verdict at `.agents/tasks/tagless-releases/verdict.json` with `{"verdict":"APPROVED"}` or `{"verdict":"CHANGES_REQUESTED"}`; do not place review artifacts under `spec/` or repository root.
-- [ ] Resolve every `CHANGES_REQUESTED` finding and rerun the affected focused tests plus `npm test` before requesting another review.
+- [x] Resolve every `CHANGES_REQUESTED` finding and rerun the affected focused tests plus `npm test` before requesting another review.
 - [ ] Mark this section complete only after the independent verdict is `APPROVED`.
 
 ### (viii) Checklist reconciliation

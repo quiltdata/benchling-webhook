@@ -213,11 +213,11 @@ jobs:
               --region us-east-1
           fi
 
-      - name: Build and push immutable Docker image
+      - name: Ensure immutable Docker image
         if: ${{ !cancelled() && success() }}
         working-directory: docker
         run: >-
-          make push-ci-immutable
+          make ensure-ci-immutable
           VERSION=${{ steps.context.outputs.version }}
         env:
           DOCKER_DEFAULT_PLATFORM: linux/amd64

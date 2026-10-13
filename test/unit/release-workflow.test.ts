@@ -60,7 +60,8 @@ describe("release workflow safety predicates", () => {
     it("holds every irreversible phase in one non-canceling concurrency group", () => {
         expect(publishSection).toContain("group: production-release-publication");
         expect(publishSection).toContain("cancel-in-progress: false");
-        expect(publishSection).toContain("make push-ci-immutable");
+        expect(publishSection).toContain("make ensure-ci-immutable");
+        expect(publishSection).not.toContain("make push-ci-immutable");
         expect(publishSection).toContain("make promote-ci");
         expect(publishSection).toContain("uses: softprops/action-gh-release@v3");
         expect(publishSection).toContain("run: npm run release:publish");

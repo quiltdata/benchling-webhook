@@ -14,7 +14,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Optional, Protocol
+from typing import Any, Callable, Iterable, Optional, Protocol
 
 # Configuration
 # DOCKER_IMAGE_NAME must be set (typically exported from Makefile)
@@ -241,12 +241,46 @@ def _current_release_tag(image: EcrImage) -> str:
     return release_tags[0]
 
 
+def _verified_candidate_image(candidate: str, image: EcrImage) -> EcrImage:
+    """Validate that an ECR tag resolves to one concrete content digest."""
+    import re
+
+    if candidate not in image.tags:
+        raise RuntimeError(f"ECR candidate image {candidate} is missing its requested tag")
+    if not re.fullmatch(r"sha256:[0-9a-fA-F]{64}", image.digest):
+        raise RuntimeError(f"ECR candidate image {candidate} has an invalid digest: {image.digest}")
+    return image
+
+
+def ensure_ecr_image(
+    registry: EcrRegistry,
+    candidate: str,
+    publish: Callable[[], bool],
+) -> tuple[str, str]:
+    """Reuse an immutable release image, or publish and verify it once."""
+    parse_release_version(candidate)
+    existing = registry.describe_image(candidate)
+    if existing is not None:
+        image = _verified_candidate_image(candidate, existing)
+        return "existing", image.digest
+
+    if not publish():
+        raise RuntimeError(f"Failed to publish ECR candidate image {candidate}")
+
+    created = registry.describe_image(candidate)
+    if created is None:
+        raise RuntimeError(f"Published ECR candidate image {candidate} cannot be found")
+    image = _verified_candidate_image(candidate, created)
+    return "created", image.digest
+
+
 def promote_ecr_latest(registry: EcrRegistry, candidate: str) -> str:
     """Promote candidate to latest only when it is newer than the current release."""
     parse_release_version(candidate)
     candidate_image = registry.describe_image(candidate)
     if candidate_image is None:
         raise RuntimeError(f"ECR candidate image {candidate} does not exist")
+    _verified_candidate_image(candidate, candidate_image)
 
     latest_image = registry.describe_image(LATEST_TAG)
     if latest_image is None:
@@ -951,6 +985,18 @@ ENVIRONMENT VARIABLES:
     push_parser.add_argument("--no-latest", action="store_true", help="Don't tag as latest")
     push_parser.add_argument("--no-arch-suffix", action="store_true", help="Don't add architecture suffix to tags")
 
+    # Ensure command (reuse an existing immutable tag or build it once)
+    ensure_parser = subparsers.add_parser("ensure", help="Ensure an immutable ECR release image exists")
+    ensure_parser.add_argument("--version", required=True, help="Stable or timestamped release version")
+    ensure_parser.add_argument("--repository", default=DOCKER_IMAGE_NAME, help="ECR repository name")
+    ensure_parser.add_argument("--region", default=DEFAULT_REGION, help="AWS region")
+    ensure_parser.add_argument("--platform", help="Target platform (e.g., linux/amd64, linux/arm64)")
+    ensure_parser.add_argument(
+        "--registry-id",
+        default=CENTRAL_ECR_REGISTRY_ID,
+        help="ECR registry account ID",
+    )
+
     # Promote command (server-side ECR manifest retag; no image pull/push)
     promote_parser = subparsers.add_parser("promote", help="Promote a newer immutable ECR image to latest")
     promote_parser.add_argument("--version", required=True, help="Stable or timestamped release version")
@@ -1053,6 +1099,38 @@ def cmd_info(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_ensure(args: argparse.Namespace) -> int:
+    """Reuse an existing immutable ECR image or build and verify it once."""
+    try:
+        if args.repository != DOCKER_IMAGE_NAME:
+            raise ValueError(f"ECR repository {args.repository} does not match DOCKER_IMAGE_NAME {DOCKER_IMAGE_NAME}")
+        registry = AwsCliEcrRegistry(
+            repository=args.repository,
+            region=args.region,
+            registry_id=args.registry_id,
+        )
+        registry_url = f"{args.registry_id}.dkr.ecr.{args.region}.amazonaws.com"
+        manager = DockerManager(
+            registry=registry_url,
+            region=args.region,
+            platform=args.platform,
+        )
+
+        def publish() -> bool:
+            return manager._ecr_login() and manager.build_and_push(
+                args.version,
+                include_latest=False,
+                arch_specific=False,
+            )
+
+        outcome, digest = ensure_ecr_image(registry, args.version, publish)
+        print(f"ECR immutable image: {outcome} ({args.version}@{digest})")
+        return 0
+    except (RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+
 def cmd_promote(args: argparse.Namespace) -> int:
     """Promote an immutable ECR image to latest when monotonic."""
     try:
@@ -1096,6 +1174,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         return cmd_build(args)
     elif args.command == "push":
         return cmd_push(args)
+    elif args.command == "ensure":
+        return cmd_ensure(args)
     elif args.command == "promote":
         return cmd_promote(args)
     elif args.command == "info":
