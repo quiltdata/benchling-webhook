@@ -4,6 +4,8 @@ import * as path from "path";
 import { execFileSync } from "child_process";
 import {
     annotatedTagMessage,
+    AUTOMATIC_RELEASE_TAGGER_EMAIL,
+    AUTOMATIC_RELEASE_TAGGER_NAME,
     compareReleaseVersions,
     devTag,
     GitReleaseRepository,
@@ -17,17 +19,24 @@ const TARGET = "a".repeat(40);
 const BEFORE = "b".repeat(40);
 const OTHER = "c".repeat(40);
 
-type PushMode = "success" | "failure" | "race" | "mismatch" | "lookup-error";
+type PushMode = "success" | "success-lookup-error" | "failure" | "race" | "mismatch" | "lookup-error";
 
 class FakeRepository implements ReleaseRepository {
     public readonly localTags = new Map<string, string>();
+    public readonly localMessages = new Map<string, string>();
     public readonly remoteTags = new Map<string, string>();
+    public readonly remoteAnnotations = new Map<string, {
+        message: string;
+        taggerName: string;
+        taggerEmail: string;
+    }>();
     public readonly files = new Map<string, string>();
     public readonly created: string[] = [];
     public pushMode: PushMode = "success";
     public clean = true;
     public parentAvailable = true;
     public pushAttempted = false;
+    public postPushLookupFailed = false;
 
     public constructor(previousVersion = "1.2.2") {
         this.files.set(`${BEFORE}:package.json`, JSON.stringify({ version: previousVersion }));
@@ -65,23 +74,40 @@ class FakeRepository implements ReleaseRepository {
         return this.localTags.get(tag) ?? null;
     }
 
-    public remoteTagTarget(tag: string): string | null {
+    public remoteTag(tag: string) {
         if (this.pushAttempted && this.pushMode === "lookup-error") {
             throw new Error("remote lookup failed");
         }
-        return this.remoteTags.get(tag) ?? null;
+        if (this.pushAttempted && this.pushMode === "success-lookup-error" && !this.postPushLookupFailed) {
+            this.postPushLookupFailed = true;
+            throw new Error("post-push remote lookup failed");
+        }
+        const targetSha = this.remoteTags.get(tag);
+        if (!targetSha) {
+            return null;
+        }
+        return {
+            targetSha,
+            annotation: this.remoteAnnotations.get(tag) ?? null,
+        };
     }
 
     public createAnnotatedTag(tag: string, message: string, targetSha: string): void {
         expect(message).toBe(annotatedTagMessage(tag));
         this.created.push(tag);
         this.localTags.set(tag, targetSha);
+        this.localMessages.set(tag, message);
     }
 
     public pushTag(tag: string): boolean {
         this.pushAttempted = true;
-        if (this.pushMode === "success") {
+        if (this.pushMode === "success" || this.pushMode === "success-lookup-error") {
             this.remoteTags.set(tag, TARGET);
+            this.remoteAnnotations.set(tag, {
+                message: this.localMessages.get(tag) ?? "",
+                taggerName: AUTOMATIC_RELEASE_TAGGER_NAME,
+                taggerEmail: AUTOMATIC_RELEASE_TAGGER_EMAIL,
+            });
             return true;
         }
         if (this.pushMode === "race") {
@@ -152,6 +178,25 @@ describe("automatic release tagging", () => {
         expect(repository.remoteTags.has("v1.2.3")).toBe(false);
     });
 
+    it("recovers an automatic tag after post-push verification failed", () => {
+        const repository = new FakeRepository();
+        repository.pushMode = "success-lookup-error";
+
+        expect(() => runAuto(repository)).toThrow("post-push remote lookup failed");
+        expect(repository.remoteTags.get("v1.2.3")).toBe(TARGET);
+
+        const { result, gate } = runAuto(repository);
+
+        expect(gate).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({
+            outcome: "verified-recovered-tag",
+            releaseRequired: true,
+            verified: true,
+            tag: "v1.2.3",
+            targetSha: TARGET,
+        });
+    });
+
     it("accepts only a freshly verified exact push race", () => {
         const repository = new FakeRepository();
         repository.pushMode = "race";
@@ -178,7 +223,7 @@ describe("automatic release tagging", () => {
 
     it("rejects a remote lookup failure before tagging", () => {
         const repository = new FakeRepository();
-        repository.remoteTagTarget = () => {
+        repository.remoteTag = () => {
             throw new Error("origin unavailable");
         };
 
@@ -189,6 +234,11 @@ describe("automatic release tagging", () => {
     it("accepts an existing manual tag only at the intended commit", () => {
         const repository = new FakeRepository();
         repository.remoteTags.set("v1.2.3", TARGET);
+        repository.remoteAnnotations.set("v1.2.3", {
+            message: annotatedTagMessage("v1.2.3"),
+            taggerName: "Release Maintainer",
+            taggerEmail: "release@example.invalid",
+        });
 
         const { result, gate } = runAuto(repository);
 
@@ -294,8 +344,8 @@ describe("shared release context and gate", () => {
             fs.mkdirSync(checkout);
             git(root, "init", "--bare", remote);
             git(checkout, "init");
-            git(checkout, "config", "user.name", "Release Test");
-            git(checkout, "config", "user.email", "release@example.invalid");
+            git(checkout, "config", "user.name", AUTOMATIC_RELEASE_TAGGER_NAME);
+            git(checkout, "config", "user.email", AUTOMATIC_RELEASE_TAGGER_EMAIL);
             git(checkout, "config", "commit.gpgsign", "false");
             git(checkout, "config", "tag.gpgsign", "false");
             fs.writeFileSync(path.join(checkout, "package.json"), JSON.stringify({ version: "1.2.3" }));
@@ -306,7 +356,16 @@ describe("shared release context and gate", () => {
             git(checkout, "tag", "-a", "v1.2.3", "-m", "Release v1.2.3");
             git(checkout, "push", "origin", "refs/tags/v1.2.3:refs/tags/v1.2.3");
 
-            expect(new GitReleaseRepository(checkout).remoteTagTarget("v1.2.3")).toBe(target);
+            const repository = new GitReleaseRepository(checkout);
+            expect(repository.remoteTag("v1.2.3")).toEqual({
+                targetSha: target,
+                annotation: {
+                    message: "Release v1.2.3",
+                    taggerName: AUTOMATIC_RELEASE_TAGGER_NAME,
+                    taggerEmail: AUTOMATIC_RELEASE_TAGGER_EMAIL,
+                },
+            });
+            expect(repository.remoteTagTarget("v1.2.3")).toBe(target);
         } finally {
             fs.rmSync(root, { recursive: true, force: true });
         }

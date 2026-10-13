@@ -51,6 +51,7 @@ export type AutoTagOutcome =
     | "no-version-change"
     | "non-production-version"
     | "verified-existing-tag"
+    | "verified-recovered-tag"
     | "created"
     | "verified-race";
 
@@ -71,12 +72,23 @@ export interface ReleaseContext {
     isPrerelease: boolean;
 }
 
+export interface TagAnnotation {
+    message: string;
+    taggerName: string;
+    taggerEmail: string;
+}
+
+export interface RemoteReleaseTag {
+    targetSha: string;
+    annotation: TagAnnotation | null;
+}
+
 export interface ReleaseRepository {
     resolveCommit(ref: string): string;
     commitExists(ref: string): boolean;
     readFileAtCommit(commit: string, file: string): string;
     localTagTarget(tag: string): string | null;
-    remoteTagTarget(tag: string): string | null;
+    remoteTag(tag: string): RemoteReleaseTag | null;
     createAnnotatedTag(tag: string, message: string, targetSha: string): void;
     pushTag(tag: string): boolean;
     isClean(): boolean;
@@ -94,6 +106,8 @@ const projectRoot = path.join(__dirname, "..");
 const packagePath = path.join(projectRoot, "package.json");
 const pyprojectPath = path.join(projectRoot, "docker", "pyproject.toml");
 const appManifestPath = path.join(projectRoot, "docker", "app-manifest.yaml");
+export const AUTOMATIC_RELEASE_TAGGER_NAME = "github-actions[bot]";
+export const AUTOMATIC_RELEASE_TAGGER_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com";
 const CORE_VERSION_PATTERN = "(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)";
 const PLAIN_VERSION_PATTERN = new RegExp(`^${CORE_VERSION_PATTERN}$`);
 const TIMESTAMP_VERSION_PATTERN = new RegExp(`^${CORE_VERSION_PATTERN}-(\\d{8}T\\d{6}Z)$`);
@@ -301,7 +315,46 @@ export class GitReleaseRepository implements ReleaseRepository {
         return this.resolveCommit(ref);
     }
 
-    public remoteTagTarget(tag: string): string | null {
+    private fetchedTagAnnotation(tag: string): TagAnnotation | null {
+        const typeArgs = ["cat-file", "-t", "FETCH_HEAD"];
+        const typeResult = this.git(typeArgs);
+        if (typeResult.status !== 0) {
+            throw commandFailure("git", typeArgs, typeResult);
+        }
+        const objectType = typeResult.stdout.trim();
+        if (objectType === "commit") {
+            return null;
+        }
+        if (objectType !== "tag") {
+            throw new Error(`Remote tag ${tag} points to unsupported object type ${objectType}`);
+        }
+
+        const contentArgs = ["cat-file", "tag", "FETCH_HEAD"];
+        const contentResult = this.git(contentArgs);
+        if (contentResult.status !== 0) {
+            throw commandFailure("git", contentArgs, contentResult);
+        }
+        const separator = contentResult.stdout.indexOf("\n\n");
+        if (separator < 0) {
+            throw new Error(`Remote annotated tag ${tag} has malformed content`);
+        }
+        const headers = contentResult.stdout.slice(0, separator).split("\n");
+        if (!headers.includes(`tag ${tag}`)) {
+            throw new Error(`Remote annotated tag ${tag} has a mismatched internal tag name`);
+        }
+        const taggerHeader = headers.find((line) => line.startsWith("tagger "));
+        const tagger = taggerHeader?.match(/^tagger (.*) <([^<>]+)> \d+ [+-]\d{4}$/);
+        if (!tagger) {
+            throw new Error(`Remote annotated tag ${tag} has a malformed tagger identity`);
+        }
+        return {
+            message: contentResult.stdout.slice(separator + 2).replace(/\n+$/, ""),
+            taggerName: tagger[1],
+            taggerEmail: tagger[2],
+        };
+    }
+
+    public remoteTag(tag: string): RemoteReleaseTag | null {
         const ref = `refs/tags/${tag}`;
         const lookupArgs = ["ls-remote", "--exit-code", "--refs", "origin", ref];
         const lookup = this.git(lookupArgs);
@@ -321,7 +374,14 @@ export class GitReleaseRepository implements ReleaseRepository {
         if (fetch.status !== 0) {
             throw commandFailure("git", fetchArgs, fetch);
         }
-        return this.resolveCommit("FETCH_HEAD");
+        return {
+            targetSha: this.resolveCommit("FETCH_HEAD"),
+            annotation: this.fetchedTagAnnotation(tag),
+        };
+    }
+
+    public remoteTagTarget(tag: string): string | null {
+        return this.remoteTag(tag)?.targetSha ?? null;
     }
 
     public createAnnotatedTag(tag: string, message: string, targetSha: string): void {
@@ -386,23 +446,39 @@ function verifiedResult(outcome: AutoTagOutcome, releaseRequired: boolean, tag: 
     };
 }
 
+export function isAutomaticReleaseTag(tag: string, remote: RemoteReleaseTag): boolean {
+    const annotation = remote.annotation;
+    return annotation !== null
+        && annotation.message === annotatedTagMessage(tag)
+        && annotation.taggerName === AUTOMATIC_RELEASE_TAGGER_NAME
+        && annotation.taggerEmail === AUTOMATIC_RELEASE_TAGGER_EMAIL;
+}
+
 function inspectExistingTag(
     repository: ReleaseRepository,
     tag: string,
     targetSha: string,
-): { local: string | null; remote: string | null } {
+): { local: string | null; remote: RemoteReleaseTag | null } {
     const local = repository.localTagTarget(tag);
     if (local) {
         assertExpectedTarget(local, targetSha, `Local tag ${tag}`);
     }
-    const remote = repository.remoteTagTarget(tag);
+    const remote = repository.remoteTag(tag);
     if (remote) {
-        assertExpectedTarget(remote, targetSha, `Remote tag ${tag}`);
+        assertExpectedTarget(remote.targetSha, targetSha, `Remote tag ${tag}`);
     }
     if (local && !remote) {
         throw new Error(`Local tag ${tag} exists but the exact remote tag is absent`);
     }
     return { local, remote };
+}
+
+function runVerifiedProductionGate(options: AutomaticReleaseOptions, targetSha: string): void {
+    options.runProductionGate();
+    if (!options.repository.isClean()) {
+        throw new Error("Production gate left uncommitted changes in the working tree");
+    }
+    assertExpectedTarget(options.repository.resolveCommit("HEAD"), targetSha, "HEAD after production gate");
 }
 
 export function runAutomaticRelease(options: AutomaticReleaseOptions): AutoTagResult {
@@ -443,14 +519,19 @@ export function runAutomaticRelease(options: AutomaticReleaseOptions): AutoTagRe
     const tag = productionTag(options.currentVersion);
     const initial = inspectExistingTag(options.repository, tag, targetSha);
     if (initial.remote) {
-        return verifiedResult("verified-existing-tag", false, tag, targetSha);
+        if (!isAutomaticReleaseTag(tag, initial.remote)) {
+            return verifiedResult("verified-existing-tag", false, tag, targetSha);
+        }
+
+        runVerifiedProductionGate(options, targetSha);
+        const recovered = inspectExistingTag(options.repository, tag, targetSha);
+        if (!recovered.remote || !isAutomaticReleaseTag(tag, recovered.remote)) {
+            throw new Error(`Automatic release tag ${tag} changed during recovery verification`);
+        }
+        return verifiedResult("verified-recovered-tag", true, tag, targetSha);
     }
 
-    options.runProductionGate();
-    if (!options.repository.isClean()) {
-        throw new Error("Production gate left uncommitted changes in the working tree");
-    }
-    assertExpectedTarget(options.repository.resolveCommit("HEAD"), targetSha, "HEAD after production gate");
+    runVerifiedProductionGate(options, targetSha);
 
     const afterGate = inspectExistingTag(options.repository, tag, targetSha);
     if (afterGate.remote) {
@@ -468,11 +549,11 @@ export function runAutomaticRelease(options: AutomaticReleaseOptions): AutoTagRe
     assertExpectedTarget(localTarget, targetSha, `Created tag ${tag}`);
 
     const pushed = options.repository.pushTag(tag);
-    const remoteTarget = options.repository.remoteTagTarget(tag);
-    if (!remoteTarget) {
+    const remote = options.repository.remoteTag(tag);
+    if (!remote) {
         throw new Error(`Tag push ${pushed ? "reported success" : "failed"}, but remote tag ${tag} is absent`);
     }
-    assertExpectedTarget(remoteTarget, targetSha, `Remote tag ${tag} after push`);
+    assertExpectedTarget(remote.targetSha, targetSha, `Remote tag ${tag} after push`);
 
     return verifiedResult(pushed ? "created" : "verified-race", true, tag, targetSha);
 }
@@ -500,11 +581,11 @@ export function validateReleaseContext(
         throw new Error(`Release tag ${tag} is not present locally`);
     }
     assertExpectedTarget(local, targetSha, `Local release tag ${tag}`);
-    const remote = repository.remoteTagTarget(tag);
+    const remote = repository.remoteTag(tag);
     if (!remote) {
         throw new Error(`Release tag ${tag} is not present on origin`);
     }
-    assertExpectedTarget(remote, targetSha, `Remote release tag ${tag}`);
+    assertExpectedTarget(remote.targetSha, targetSha, `Remote release tag ${tag}`);
 
     return {
         ...parsed,
@@ -618,7 +699,7 @@ function createManualTag(repository: ReleaseRepository, version: string, isDev: 
     if (repository.localTagTarget(tag)) {
         throw new Error(`Tag ${tag} already exists locally`);
     }
-    if (repository.remoteTagTarget(tag)) {
+    if (repository.remoteTag(tag)) {
         throw new Error(`Tag ${tag} already exists on origin`);
     }
 
@@ -630,11 +711,11 @@ function createManualTag(repository: ReleaseRepository, version: string, isDev: 
     }
 
     const pushed = repository.pushTag(tag);
-    const remote = repository.remoteTagTarget(tag);
+    const remote = repository.remoteTag(tag);
     if (!remote) {
         throw new Error(`Failed to push tag ${tag}; the exact remote tag is absent`);
     }
-    assertExpectedTarget(remote, normalizeSha(targetSha, "HEAD"), `Remote tag ${tag}`);
+    assertExpectedTarget(remote.targetSha, normalizeSha(targetSha, "HEAD"), `Remote tag ${tag}`);
     console.log(`✅ ${pushed ? "Pushed" : "Verified concurrent push of"} tag ${tag}`);
     return tag;
 }
