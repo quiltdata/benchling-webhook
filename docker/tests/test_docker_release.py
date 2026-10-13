@@ -2,7 +2,7 @@
 
 import hashlib
 import os
-import subprocess
+import re
 from pathlib import Path
 
 import pytest
@@ -94,19 +94,21 @@ def test_release_commands_default_to_the_central_ecr_registry(command: str):
     assert args.registry_id == CENTRAL_ECR_REGISTRY_ID == "712023778557"
 
 
-def test_make_does_not_export_an_ecr_registry_override():
+def test_make_does_not_define_an_ecr_registry_default():
     """The docker Makefile exports every variable; an ECR_REGISTRY default would
     override STS detection in `push-ci` and send prod builds to the dev account."""
-    env = {key: value for key, value in os.environ.items() if key != "ECR_REGISTRY"}
-    database = subprocess.run(
-        ["make", "-C", str(Path(__file__).resolve().parents[1]), "-pn", "deploy-help"],
-        capture_output=True,
-        text=True,
-        env=env,
-        check=True,
-    ).stdout
+    docker_dir = Path(__file__).resolve().parents[1]
+    assignment = re.compile(r"^\s*(?:export\s+|override\s+)*ECR_REGISTRY\s*(?:[:?+!]|::)?=")
+    makefiles = [docker_dir / "Makefile", *docker_dir.glob("make.*")]
 
-    assert not [line for line in database.splitlines() if line.split(" ", 1)[0] == "ECR_REGISTRY"]
+    offenders = [
+        f"{path.name}:{number}"
+        for path in makefiles
+        for number, line in enumerate(path.read_text().splitlines(), start=1)
+        if assignment.match(line)
+    ]
+
+    assert offenders == []
 
 
 def test_existing_immutable_image_is_reused_without_publishing():
