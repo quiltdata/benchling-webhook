@@ -20,6 +20,7 @@ from src.entry_packager import (
     EntryPackager,
     EntryValidationError,
     ExportItemRequest,
+    field_values,
     format_user_info,
     normalize_field_key,
     normalize_fields,
@@ -277,6 +278,25 @@ class TestFieldNormalization:
     @pytest.mark.parametrize("fields", [None, {}, [], "not-a-map"])
     def test_missing_or_invalid_is_empty(self, fields):
         assert normalize_fields(fields) == {}
+
+    def test_field_values_keeps_only_value(self):
+        fields = {
+            "Experiment Type": {
+                "value": "Assay",
+                "displayValue": "Assay",
+                "type": "dropdown",
+                "isMulti": False,
+                "textValue": "Assay",
+            },
+            "Samples": {"value": ["bfi_1", "bfi_2"], "type": "entity_link", "isMulti": True},
+            "Notes": {"type": "text"},
+        }
+
+        assert field_values(fields) == {
+            "experiment_type": "Assay",
+            "samples": ["bfi_1", "bfi_2"],
+            "notes": None,
+        }
 
 
 class TestPayload:
@@ -830,7 +850,7 @@ class TestEntryPackager:
         assert by_id["bfi_1"]["name"] is None
 
     def test_create_metadata_files_includes_normalized_fields(self, orchestrator):
-        """entry.json carries the entry's fields and customFields under snake_case keys."""
+        """entry.json maps the entry's fields and customFields to their values under snake_case keys."""
         modified = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
         entry_data = {
             "id": "etr_123",
@@ -871,23 +891,11 @@ class TestEntryPackager:
         )
 
         entry_json = result["entry.json"]
-        assert entry_json["fields"]["project"] == {
-            "name": "Project",
-            "value": "VIR-0001",
-            "displayValue": "VIR-0001",
-            "type": "text",
-            "isMulti": False,
-            "textValue": "VIR-0001",
-        }
-        assert entry_json["fields"]["experiment_type"]["name"] == "Experiment Type"
-        assert entry_json["fields"]["experiment_type"]["value"] == "Assay"
-        assert entry_json["customFields"] == {
-            "instrument": {"name": "Instrument", "value": "HPLC-02"},
-            "eln_id": {"name": "ELN-ID #", "value": "42"},
-        }
+        assert entry_json["fields"] == {"project": "VIR-0001", "experiment_type": "Assay", "run_date": modified}
+        assert entry_json["customFields"] == {"instrument": "HPLC-02", "eln_id": "42"}
         # Serializes the way process_export uploads it (dates via DateTimeEncoder).
         dumped = json.loads(json.dumps(entry_json, cls=DateTimeEncoder))
-        assert dumped["fields"]["run_date"]["value"] == modified.isoformat()
+        assert dumped["fields"]["run_date"] == modified.isoformat()
         # entry_data.json keeps the raw, display-name-keyed maps.
         assert set(result["entry_data.json"]["fields"]) == {"Project", "Experiment Type", "Run Date"}
         assert "name" not in result["entry_data.json"]["customFields"]["Instrument"]
