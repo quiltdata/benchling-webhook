@@ -9,7 +9,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- `fields` and `customFields` in the package metadata (`entry.json`) now map each snake_case key straight to the field's `value` (`"experiment_type": "Assay"`) instead of the whole Benchling field object. The display name, `displayValue`, `type`, and the rest are still in `entry_data.json`. A workflow schema that validated `fields.<key>.value` must now validate `fields.<key>` (#409 follow-up)
+- `fields` and `customFields` in the package metadata (`entry.json`) now map each snake_case key straight to the field's `value` (`"experiment_type": "Assay"`) instead of the whole Benchling field object. The display name, `displayValue`, `type`, and the rest are still in `entry_data.json`. A workflow schema that validated `fields.<key>.value` must now validate `fields.<key>` (#417)
 
 ## [0.21.2] - 2026-10-13
 
