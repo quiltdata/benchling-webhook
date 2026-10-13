@@ -279,23 +279,30 @@ class TestFieldNormalization:
     def test_missing_or_invalid_is_empty(self, fields):
         assert normalize_fields(fields) == {}
 
-    def test_field_values_keeps_only_value(self):
+    def test_field_values_uses_display_value(self):
         fields = {
             "Experiment Type": {
-                "value": "Assay",
+                "value": "sfso_assay",
                 "displayValue": "Assay",
                 "type": "dropdown",
                 "isMulti": False,
                 "textValue": "Assay",
             },
-            "Samples": {"value": ["bfi_1", "bfi_2"], "type": "entity_link", "isMulti": True},
-            "Notes": {"type": "text"},
+            "Samples": {
+                "value": ["bfi_1", "bfi_2"],
+                "displayValue": "Sample 1, Sample 2",
+                "type": "entity_link",
+                "isMulti": True,
+            },
+            "Notes": {"value": None, "displayValue": None, "type": "text"},
+            "Instrument": {"value": "HPLC-02"},
         }
 
         assert field_values(fields) == {
             "experiment_type": "Assay",
-            "samples": ["bfi_1", "bfi_2"],
+            "samples": "Sample 1, Sample 2",
             "notes": None,
+            "instrument": "HPLC-02",
         }
 
 
@@ -850,7 +857,7 @@ class TestEntryPackager:
         assert by_id["bfi_1"]["name"] is None
 
     def test_create_metadata_files_includes_normalized_fields(self, orchestrator):
-        """entry.json maps the entry's fields and customFields to their values under snake_case keys."""
+        """entry.json maps the entry's fields and customFields to their display values under snake_case keys."""
         modified = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
         entry_data = {
             "id": "etr_123",
@@ -868,7 +875,7 @@ class TestEntryPackager:
                     "textValue": "VIR-0001",
                 },
                 "Experiment Type": {
-                    "value": "Assay",
+                    "value": "sfso_assay",
                     "displayValue": "Assay",
                     "type": "dropdown",
                     "isMulti": False,
