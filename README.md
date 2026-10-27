@@ -46,8 +46,8 @@ To put each scientist's notebook packages in the same namespace as their raw-dat
 #### Turning Automatic Packaging Off
 
 By default every supported entry event (`v2.entry.created`, `v2.entry.updated.fields`, `v2.entry.updated.reviewRecord`) and every new Canvas queues a packaging run.
-To package entries only when a scientist asks for it, set `auto_packaging` to `"false"` in the webhook secret.
-In a profile config that is `packages.autoPackaging: false`, synced to the secret by `npx @quiltdata/benchling-webhook sync-secrets`; you can also edit the secret in AWS Secrets Manager directly.
+To package entries only when a scientist asks for it, answer **No** to the setup wizard's "Package entries automatically on every entry event?" prompt.
+That stores `packages.autoPackaging: false` in the profile config and syncs it to the webhook secret as `auto_packaging: "false"`; you can also edit either one directly (`npx @quiltdata/benchling-webhook sync-secrets` pushes a profile change to the secret).
 
 With automatic packaging off:
 
@@ -259,7 +259,7 @@ The wizard will guide you through:
 1. **Catalog discovery** - Detect your Quilt catalog configuration
 2. **Stack validation** - Extract settings from your CloudFormation stack
 3. **Credential collection** - Enter Benchling app credentials
-4. **Package settings** - Configure bucket, package prefix (see [Package Naming](#package-naming)), metadata key, and optional Quilt workflow
+4. **Package settings** - Configure bucket, package prefix (see [Package Naming](#package-naming)), metadata key, optional Quilt workflow, and whether entries are packaged automatically (see [Turning Automatic Packaging Off](#turning-automatic-packaging-off))
 5. **Deployment mode selection**:
    - **Integrated**: Uses your Quilt stack's built-in webhook, if any
    - **Standalone**: Deploys a separate webhook stack for testing

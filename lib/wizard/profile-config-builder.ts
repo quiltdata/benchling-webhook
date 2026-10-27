@@ -77,6 +77,7 @@ export function buildProfileConfigFromParameters(input: ConfigFromParametersInpu
             prefix: parameters.packages.prefix,
             metadataKey: parameters.packages.metadataKey,
             ...(parameters.packages.workflow ? { workflow: parameters.packages.workflow } : {}),
+            ...(parameters.packages.autoPackaging === false ? { autoPackaging: false } : {}),
         },
         deployment: {
             region: parameters.deployment.region,

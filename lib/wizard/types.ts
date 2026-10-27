@@ -117,6 +117,7 @@ export interface ParameterCollectionInput {
     pkgPrefix?: string;
     pkgKey?: string;
     workflow?: string;
+    autoPackaging?: boolean;
     logLevel?: string;
     webhookAllowList?: string;
 }
@@ -136,6 +137,7 @@ export interface ParameterCollectionResult {
         prefix: string;
         metadataKey: string;
         workflow?: string;
+        autoPackaging?: boolean;
     };
     deployment: {
         region: string;
