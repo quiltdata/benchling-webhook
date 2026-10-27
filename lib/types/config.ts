@@ -355,6 +355,16 @@ export interface PackageConfig {
      * @example "alpha"
      */
     workflow?: string;
+
+    /**
+     * Package entries automatically on entry and Canvas events.
+     *
+     * When false, an entry is packaged only when a user clicks Update Package
+     * on its Canvas. Synced to the secret as `auto_packaging`.
+     *
+     * @default true
+     */
+    autoPackaging?: boolean;
 }
 
 /**
@@ -782,6 +792,7 @@ export const ProfileConfigSchema = {
                 prefix: { type: "string", minLength: 1 },
                 metadataKey: { type: "string", minLength: 1 },
                 workflow: { type: "string", minLength: 1 },
+                autoPackaging: { type: "boolean" },
             },
         },
         deployment: {

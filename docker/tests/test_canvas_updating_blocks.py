@@ -18,6 +18,7 @@ from unittest.mock import Mock
 import pytest
 from benchling_api_client.v2.stable.models.markdown_ui_block_update import MarkdownUiBlockUpdate
 from benchling_api_client.v2.stable.models.section_ui_block_update import SectionUiBlockUpdate
+from botocore.exceptions import ClientError
 
 from src.canvas import CanvasManager
 from src.canvas_blocks import blocks_to_dict
@@ -240,6 +241,52 @@ class TestUpdatingCanvasBlocks:
         assert "No default package bucket is configured" in final[1].value
         assert "No linked packages found in accessible buckets" in final[1].value
         assert "Updating..." not in final[-1].value
+
+    def test_manual_mode_handle_sets_updated_at(self, canvas_manager, mock_config):
+        """With automatic packaging off nothing is queued, so the final render stamps the footer itself."""
+        mock_config.auto_packaging = False
+        canvas_manager.update_canvas = Mock(return_value={"success": True})
+
+        canvas_manager._handle()
+
+        updated_at = canvas_manager.update_canvas.call_args.kwargs["updated_at"]
+        assert updated_at and updated_at.endswith(" UTC")
+
+    def test_auto_mode_handle_leaves_updated_at_to_the_revision_event(self, canvas_manager, mock_config):
+        mock_config.auto_packaging = True
+        canvas_manager.update_canvas = Mock(return_value={"success": True})
+
+        canvas_manager._handle()
+
+        assert canvas_manager.update_canvas.call_args.kwargs["updated_at"] is None
+
+    def test_missing_package_renders_package_not_created(self, mock_benchling, mock_config, mock_payload):
+        """A bucketed Canvas for an entry with no package says so instead of linking to nothing."""
+        package_query = Mock()
+        package_query.find_unique_packages.return_value = {"packages": []}
+        fetcher = Mock(get_seal=Mock(return_value=None))
+        fetcher.get_package_top_hash.side_effect = ClientError({"Error": {"Code": "404"}}, "GetObject")
+        fetcher.role_manager.get_s3_client.side_effect = Exception("no client")
+        manager = CanvasManager(
+            benchling=mock_benchling,
+            config=mock_config,
+            payload=mock_payload,
+            package_query=package_query,
+            package_file_fetcher=fetcher,
+        )
+
+        markdown = manager._make_markdown_content()
+
+        assert "Package Not Created" in markdown
+        assert "Click **Update Package** to create it." in markdown
+        assert "benchling/EXP25000088" in markdown
+        assert "/redir/" not in markdown
+
+    def test_existing_package_renders_header(self, canvas_manager):
+        markdown = canvas_manager._make_markdown_content()
+
+        assert "Package Not Created" not in markdown
+        assert "benchling/EXP25000088" in markdown
 
     def test_bucketless_async_handle_sets_updated_at(self, bucketless_canvas_manager):
         """Bucketless final render should mark the Canvas as updated, not pending."""

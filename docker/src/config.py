@@ -51,6 +51,7 @@ class Config:
     enable_webhook_verification: bool = True
     pkg_prefix: str = ""
     workflow: str = ""
+    auto_packaging: bool = True
     quilt_write_role_arn: str = ""
     quilt_iceberg_database: str = ""
 
@@ -114,6 +115,7 @@ class Config:
         self.s3_prefix = "benchling"
         self.package_key = "experiment_id"
         self.pkg_prefix = "benchling"
+        self.auto_packaging = True
 
         # Application configuration
         self.app_env = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "production"))
@@ -147,6 +149,7 @@ class Config:
                 '  "pkg_key": "experiment_id",\n'
                 '  "user_bucket": "s3-bucket-name (optional)",\n'
                 '  "log_level": "INFO",\n'
+                '  "auto_packaging": "true",\n'
                 '  "enable_webhook_verification": "true"\n'
                 "}\n"
             )
@@ -312,6 +315,7 @@ class Config:
             self.pkg_prefix = self.s3_prefix
             self.package_key = secret_data.pkg_key or "experiment_id"
             self.workflow = secret_data.workflow or ""
+            self.auto_packaging = secret_data.auto_packaging
 
             # Security configuration from secret, unless env var explicitly disables it
             env_override = os.getenv("ENABLE_WEBHOOK_VERIFICATION", "").lower()

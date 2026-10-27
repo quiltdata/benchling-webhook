@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError
 from . import canvas_blocks as blocks
 from . import canvas_formatting as fmt
 from .config import Config
-from .package_files import PackageFile, PackageFileFetcher
+from .package_files import PackageFile, PackageFileFetcher, is_not_found
 from .package_naming import MissingPlaceholderError, entry_package_name
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packages import Package
@@ -245,12 +245,15 @@ class CanvasManager:
         if unnamed:
             content = self._make_unnamed_markdown(unnamed)
         elif self.config.s3_bucket_name:
-            content = fmt.format_package_header(
-                package_name=self.package_name,
-                display_id=self.entry.display_id,
-                catalog_url=self.catalog_url,
-                sync_url=self.sync_uri(),
-            )
+            if self._package_exists():
+                content = fmt.format_package_header(
+                    package_name=self.package_name,
+                    display_id=self.entry.display_id,
+                    catalog_url=self.catalog_url,
+                    sync_url=self.sync_uri(),
+                )
+            else:
+                content = fmt.format_package_not_found(self.package_name)
             content += self._packaging_status_markdown()
         else:
             content = (
@@ -328,6 +331,26 @@ class CanvasManager:
                 "accept the review again" if sealed else "click **Update Package** to retry"
             )
         return ""
+
+    def _package_exists(self) -> bool:
+        """Whether the entry's package has a latest revision.
+
+        Only a definite not-found says no. Any other error is logged and the
+        package is rendered as existing, as it was before this check.
+        """
+        try:
+            self._package_file_fetcher.get_package_top_hash(self.package_name)
+        except ClientError as exc:
+            if is_not_found(exc):
+                return False
+            logger.warning(
+                "Could not check whether the package exists", package_name=self.package_name, error=str(exc)
+            )
+        except Exception as exc:  # noqa: BLE001 - render as before
+            logger.warning(
+                "Could not check whether the package exists", package_name=self.package_name, error=str(exc)
+            )
+        return True
 
     def _load_seal(self) -> Optional[Tuple[str, dict]]:
         """Return the entry package's sealed top hash and seal, or None if it is unsealed.
@@ -837,8 +860,11 @@ class CanvasManager:
         """Handle Canvas webhook payload."""
         try:
             logger.info("Updating canvas", canvas_id=self.canvas_id, entry_id=self.entry_id)
+            # With no packaging request queued (bucketless, or automatic packaging
+            # off) no package-revision event will follow to stamp the footer, so
+            # this render is the final one.
             updated_at = None
-            if not self.config.s3_bucket_name:
+            if not self.config.s3_bucket_name or not self.config.auto_packaging:
                 updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
             self.update_canvas(updated_at=updated_at)
 

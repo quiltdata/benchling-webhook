@@ -300,6 +300,7 @@ function buildSecretValue(config: ProfileConfig, clientSecret: string): string {
         pkg_prefix: config.packages.prefix,
         pkg_key: config.packages.metadataKey,
         ...(config.packages.workflow ? { workflow: config.packages.workflow } : {}),
+        auto_packaging: config.packages.autoPackaging === false ? "false" : "true",
         log_level: config.logging?.level || "INFO",
         webhook_allow_list: config.security?.webhookAllowList || "",
         enable_webhook_verification: config.security?.enableVerification !== false ? "true" : "false",

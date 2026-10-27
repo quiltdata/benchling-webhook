@@ -77,6 +77,7 @@ export function buildProfileConfigFromParameters(input: ConfigFromParametersInpu
             prefix: parameters.packages.prefix,
             metadataKey: parameters.packages.metadataKey,
             ...(parameters.packages.workflow ? { workflow: parameters.packages.workflow } : {}),
+            ...(parameters.packages.autoPackaging === false ? { autoPackaging: false } : {}),
         },
         deployment: {
             region: parameters.deployment.region,
@@ -147,6 +148,9 @@ export function buildProfileConfigFromExisting(input: ConfigFromExistingInput): 
         metadataKey: packages.metadataKey,
         ...(existingConfig?.packages?.workflow ?? secretDetails?.workflow
             ? { workflow: existingConfig?.packages?.workflow ?? secretDetails?.workflow }
+            : {}),
+        ...((existingConfig?.packages?.autoPackaging ?? secretDetails?.autoPackaging) === false
+            ? { autoPackaging: false }
             : {}),
     };
 

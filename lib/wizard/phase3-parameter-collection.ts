@@ -316,27 +316,33 @@ export async function runParameterCollection(
     let prefix: string;
     let metadataKey: string;
     let workflow: string | undefined;
+    let autoPackaging: boolean;
+    const describeAutoPackaging = (on: boolean): string => (on ? "on" : "off (Update Package only)");
 
     if (input.userBucket && input.pkgPrefix && input.pkgKey) {
         bucket = input.userBucket;
         prefix = input.pkgPrefix;
         metadataKey = input.pkgKey;
         workflow = input.workflow?.trim() || undefined;
+        autoPackaging = input.autoPackaging ?? existingConfig?.packages?.autoPackaging ?? true;
         console.log(`  Bucket: ${bucket} (from CLI)`);
         console.log(`  Prefix: ${prefix} (from CLI)`);
         console.log(`  Metadata Key: ${metadataKey} (from CLI)`);
         console.log(`  Workflow: ${workflow || "(default)"} (from ${input.workflow !== undefined ? "CLI" : "default"})`);
+        console.log(`  Automatic packaging: ${describeAutoPackaging(autoPackaging)} (from ${input.autoPackaging !== undefined ? "CLI" : existingConfig?.packages?.autoPackaging !== undefined ? "existing config" : "default"})`);
     } else if (yes) {
         // In non-interactive mode, use CLI args or existing config. Empty means bucketless mode.
         bucket = input.userBucket || existingConfig?.packages?.bucket || undefined;
         prefix = input.pkgPrefix || existingConfig?.packages?.prefix || "benchling";
         metadataKey = input.pkgKey || existingConfig?.packages?.metadataKey || "experiment_id";
         workflow = input.workflow?.trim() || existingConfig?.packages?.workflow || undefined;
+        autoPackaging = input.autoPackaging ?? existingConfig?.packages?.autoPackaging ?? true;
 
         console.log(`  Bucket: ${bucket || "(bucketless mode)"} (from ${input.userBucket ? "CLI" : existingConfig?.packages?.bucket ? "existing config" : "default"})`);
         console.log(`  Prefix: ${prefix} (from ${input.pkgPrefix ? "CLI" : existingConfig?.packages?.prefix ? "existing config" : "default"})`);
         console.log(`  Metadata Key: ${metadataKey} (from ${input.pkgKey ? "CLI" : existingConfig?.packages?.metadataKey ? "existing config" : "default"})`);
         console.log(`  Workflow: ${workflow || "(default)"} (from ${input.workflow !== undefined ? "CLI" : existingConfig?.packages?.workflow ? "existing config" : "default"})`);
+        console.log(`  Automatic packaging: ${describeAutoPackaging(autoPackaging)} (from ${input.autoPackaging !== undefined ? "CLI" : existingConfig?.packages?.autoPackaging !== undefined ? "existing config" : "default"})`);
     } else {
         // Always show prompts with defaults from existing config
         const packageAnswers = await inquirer.prompt([
@@ -366,6 +372,12 @@ export async function runParameterCollection(
                 message: "Workflow name (optional, empty for default):",
                 default: existingConfig?.packages?.workflow || "",
             },
+            {
+                type: "confirm",
+                name: "autoPackaging",
+                message: "Package entries automatically on every entry event? (No: only when Update Package is clicked)",
+                default: existingConfig?.packages?.autoPackaging !== false,
+            },
         ]);
         // "-" is an explicit sentinel to clear a previously-configured bucket
         // (bucketless mode). inquirer returns the default on empty input, so a
@@ -375,6 +387,7 @@ export async function runParameterCollection(
         prefix = packageAnswers.prefix;
         metadataKey = packageAnswers.metadataKey;
         workflow = packageAnswers.workflow.trim() || undefined;
+        autoPackaging = packageAnswers.autoPackaging !== false;
     }
 
     // =========================================================================
@@ -450,6 +463,7 @@ export async function runParameterCollection(
             prefix,
             metadataKey,
             workflow,
+            ...(autoPackaging ? {} : { autoPackaging: false }),
         },
         deployment: {
             region,
