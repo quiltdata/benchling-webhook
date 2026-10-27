@@ -77,6 +77,7 @@ export interface SetupWizardOptions {
     pkgPrefix?: string;
     pkgKey?: string;
     workflow?: string;
+    autoPackaging?: boolean;
     logLevel?: string;
     webhookAllowList?: string;
 }
@@ -310,6 +311,7 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
             pkgPrefix: options.pkgPrefix,
             pkgKey: options.pkgKey,
             workflow: options.workflow,
+            autoPackaging: options.autoPackaging,
             logLevel: options.logLevel,
             webhookAllowList: options.webhookAllowList,
         });

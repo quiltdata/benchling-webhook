@@ -202,6 +202,80 @@ describe("sync-secrets CLI", () => {
         expect(updateCalls).toHaveLength(1);
         const secretPayload = JSON.parse(updateCalls[0].SecretString as string);
         expect(secretPayload.workflow).toBe("custom-workflow");
+        expect(secretPayload.auto_packaging).toBe("true");
+    });
+
+    test("syncs auto_packaging false when the profile turns automatic packaging off", async () => {
+        const profileName = "default";
+        const existingSecretArn =
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:existing-secret-abc123";
+        const timestamp = new Date().toISOString();
+
+        const profileConfig: ProfileConfig = {
+            benchling: {
+                tenant: "test-tenant",
+                clientId: "client-xyz",
+                clientSecret: "super-secret-value",
+                secretArn: existingSecretArn,
+                appDefinitionId: "app_123",
+            },
+            quilt: {
+                stackArn: "arn:aws:cloudformation:us-east-1:123456789012:stack/test-stack/abc123",
+                catalog: "quilt.example.com",
+                database: "quilt_db",
+                queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/queue/test",
+                region: "us-east-1",
+            },
+            packages: {
+                bucket: "packages-bucket",
+                prefix: "benchling",
+                metadataKey: "experiment_id",
+                autoPackaging: false,
+            },
+            deployment: {
+                region: "us-east-1",
+                imageTag: "latest",
+            },
+            logging: {
+                level: "INFO",
+            },
+            security: {
+                enableVerification: true,
+                webhookAllowList: "",
+            },
+            _metadata: {
+                version: "0.7.0-test",
+                createdAt: timestamp,
+                updatedAt: timestamp,
+                source: "cli",
+            },
+        };
+
+        mockStorage.writeProfile(profileName, profileConfig);
+
+        const updateCalls: UpdateSecretCommandInput[] = [];
+
+        sendMock.mockImplementation(async (command) => {
+            if (command instanceof DescribeSecretCommand) {
+                return { ARN: existingSecretArn };
+            }
+            if (command instanceof UpdateSecretCommand) {
+                updateCalls.push(command.input);
+                return { ARN: existingSecretArn };
+            }
+            throw new Error(`Unexpected command: ${command.constructor.name}`);
+        });
+
+        await syncSecretsToAWS({
+            profile: profileName,
+            region: "us-east-1",
+            force: true,
+            configStorage: mockStorage,
+        });
+
+        expect(updateCalls).toHaveLength(1);
+        const secretPayload = JSON.parse(updateCalls[0].SecretString as string);
+        expect(secretPayload.auto_packaging).toBe("false");
     });
 
     test("dry-run never prints the plaintext client secret", async () => {

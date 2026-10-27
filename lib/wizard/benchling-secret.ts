@@ -21,8 +21,8 @@ function parseBoolean(value: unknown): boolean | undefined {
     }
     if (typeof value === "string") {
         const normalized = value.trim().toLowerCase();
-        if (normalized === "true") return true;
-        if (normalized === "false") return false;
+        if (normalized === "true" || normalized === "1") return true;
+        if (normalized === "false" || normalized === "0") return false;
     }
     return undefined;
 }
@@ -73,6 +73,7 @@ export async function fetchBenchlingSecretDetails(
             pkgPrefix: normalizeString(payload.pkg_prefix ?? payload.pkgPrefix),
             pkgKey: normalizeString(payload.pkg_key ?? payload.pkgKey),
             workflow: normalizeString(payload.workflow),
+            autoPackaging: parseBoolean(payload.auto_packaging ?? payload.autoPackaging),
             logLevel: normalizeString(payload.log_level ?? payload.logLevel),
             webhookAllowList: normalizeString(payload.webhook_allow_list ?? payload.webhookAllowList),
             enableVerification: parseBoolean(payload.enable_webhook_verification ?? payload.enableWebhookVerification),

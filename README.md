@@ -43,6 +43,22 @@ To put each scientist's notebook packages in the same namespace as their raw-dat
 - Existing packages are not moved when the prefix changes. An entry's Canvas looks for its package under the new name, which is created the next time the entry is packaged.
 - If the bucket's Quilt workflow sets a `handle_pattern`, it must accept the new namespaces.
 
+#### Turning Automatic Packaging Off
+
+By default every supported entry event (`v2.entry.created`, `v2.entry.updated.fields`, `v2.entry.updated.reviewRecord`) and every new Canvas queues a packaging run.
+To package entries only when a scientist asks for it, answer **No** to the setup wizard's "Package entries automatically on every entry event?" prompt.
+That stores `packages.autoPackaging: false` in the profile config and syncs it to the webhook secret as `auto_packaging: "false"`; you can also edit either one directly (`npx @quiltdata/benchling-webhook sync-secrets` pushes a profile change to the secret).
+
+With automatic packaging off:
+
+- `v2.entry.created` and `v2.entry.updated.fields` events are acknowledged and skipped; nothing is queued.
+- `v2.entry.updated.reviewRecord` events still run, because accepting a review seals the package and reopening the review unseals it (see [Accepted Reviews](#accepted-reviews)). Accepting a review therefore still packages the entry.
+- A new Canvas shows the entry's current package if one exists, otherwise "Package Not Created", together with the linked packages, and its footer shows when it was drawn. It never waits on "Updating...".
+- **Update Package** on the Canvas still queues a packaging run, so it is the only other way an entry is packaged.
+
+The secret is re-read within about a minute, so the switch takes effect without a redeploy.
+Packages already created stay where they are. Turning it back on packages an entry the next time Benchling sends an event for it.
+
 #### Package Metadata
 
 The package metadata is the package's `entry.json`. Besides the entry's IDs, name, creator, authors, and timestamps, it includes the entry's schema `fields` and `customFields`. Benchling keys these by display name, so the webhook re-keys them in snake_case: "Experiment Type" becomes `experiment_type` and "ELN-ID #" becomes `eln_id`. Each key maps to the field's `displayValue`, the text the scientist sees in Benchling: a dropdown option's or linked entity's name, not its ID. Custom fields have no `displayValue`, so they map to their `value`. Both keys are always present, as `{}` when the entry has none. The package's `entry_data.json` keeps the raw entry, with each field's display name, `value`, `type`, and so on.
@@ -243,7 +259,7 @@ The wizard will guide you through:
 1. **Catalog discovery** - Detect your Quilt catalog configuration
 2. **Stack validation** - Extract settings from your CloudFormation stack
 3. **Credential collection** - Enter Benchling app credentials
-4. **Package settings** - Configure bucket, package prefix (see [Package Naming](#package-naming)), metadata key, and optional Quilt workflow
+4. **Package settings** - Configure bucket, package prefix (see [Package Naming](#package-naming)), metadata key, optional Quilt workflow, and whether entries are packaged automatically (see [Turning Automatic Packaging Off](#turning-automatic-packaging-off))
 5. **Deployment mode selection**:
    - **Integrated**: Uses your Quilt stack's built-in webhook, if any
    - **Standalone**: Deploys a separate webhook stack for testing

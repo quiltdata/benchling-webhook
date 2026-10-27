@@ -183,6 +183,10 @@ class BenchlingSecret(BaseModel):
     enable_webhook_verification: str = Field(
         "true", description="Enable Lambda authorizer for webhook signature verification (API Gateway)"
     )
+    workflow: Optional[str] = Field(None, description="Quilt workflow name for package creation (optional)")
+    auto_packaging: str = Field(
+        "true", description="Package entries automatically on entry and Canvas events; 'false' for Update Package only"
+    )
     queue_url: Optional[str] = Field(None, description="SQS queue URL (optional)")
 
     class Config:
@@ -197,12 +201,12 @@ class BenchlingSecret(BaseModel):
             raise ValueError(f"Invalid log level: {v}. Must be one of {valid_levels}")
         return v.upper()
 
-    @field_validator("enable_webhook_verification")
+    @field_validator("enable_webhook_verification", "auto_packaging")
     @classmethod
-    def validate_webhook_verification(cls, v: str) -> str:
-        """Validate webhook verification flag"""
+    def validate_bool_flag(cls, v: str) -> str:
+        """Validate a 'true'/'false' flag"""
         if v.lower() not in ["true", "false"]:
-            raise ValueError(f"Invalid webhook verification flag: {v}. Must be 'true' or 'false'")
+            raise ValueError(f"Invalid flag value: {v}. Must be 'true' or 'false'")
         return v.lower()
 
 

@@ -710,12 +710,13 @@ def create_app() -> FastAPI:
                 error=str(exc),
             )
 
-    def _send_bucketless_final_canvas_best_effort(payload: Payload) -> None:
-        """Start the final bucketless Canvas render after the quick acknowledgment.
+    def _send_final_canvas_best_effort(payload: Payload) -> None:
+        """Start the final Canvas render after the quick acknowledgment.
 
-        Bucketless mode has no packaging workflow to produce a later package
-        revision event, so the Canvas handler must render the final linked-package
-        view itself. Run it asynchronously to keep the webhook response fast.
+        Used when no packaging request is queued (bucketless mode, or automatic
+        packaging turned off), so no later package-revision event will redraw
+        the Canvas: render the current package and linked-package view now.
+        Run it asynchronously to keep the webhook response fast.
         """
         if not payload.canvas_id or benchling is None or config is None:
             return
@@ -740,6 +741,22 @@ def create_app() -> FastAPI:
                 "entry_id": payload.entry_id,
                 "status": "SKIPPED",
                 "mode": "bucketless",
+                "message": message,
+            },
+            status_code=202,
+        )
+
+    def _manual_packaging_response(payload: Payload, message: str) -> JSONResponse:
+        logger.info(
+            "Automatic packaging is off; skipped package creation",
+            entry_id=payload.entry_id,
+            event_type=payload.event_type,
+        )
+        return JSONResponse(
+            {
+                "entry_id": payload.entry_id,
+                "status": "SKIPPED",
+                "mode": "manual",
                 "message": message,
             },
             status_code=202,
@@ -774,10 +791,16 @@ def create_app() -> FastAPI:
                 )
                 _send_updating_canvas_best_effort(payload)
                 if not config.s3_bucket_name:
-                    _send_bucketless_final_canvas_best_effort(payload)
+                    _send_final_canvas_best_effort(payload)
                     return _bucketless_response(
                         payload,
                         "Bucketless mode does not create a default package for canvas events.",
+                    )
+                if not config.auto_packaging:
+                    _send_final_canvas_best_effort(payload)
+                    return _manual_packaging_response(
+                        payload,
+                        "Automatic packaging is off; the Canvas shows the current package.",
                     )
                 publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
 
@@ -803,6 +826,13 @@ def create_app() -> FastAPI:
                 return _bucketless_response(
                     payload,
                     "Bucketless mode does not create a default package for entry events.",
+                )
+            # A review event seals the package on acceptance and unseals it when the
+            # review is reopened, so it must run even when automatic packaging is off.
+            if not config.auto_packaging and payload.event_type != "v2.entry.updated.reviewRecord":
+                return _manual_packaging_response(
+                    payload,
+                    "Automatic packaging is off; click Update Package on the entry's Canvas to package it.",
                 )
 
             publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
@@ -948,10 +978,16 @@ def create_app() -> FastAPI:
 
             _send_updating_canvas_best_effort(payload)
             if not config.s3_bucket_name:
-                _send_bucketless_final_canvas_best_effort(payload)
+                _send_final_canvas_best_effort(payload)
                 return _bucketless_response(
                     payload,
                     "Bucketless mode does not create a default package for canvas initialization.",
+                )
+            if not config.auto_packaging:
+                _send_final_canvas_best_effort(payload)
+                return _manual_packaging_response(
+                    payload,
+                    "Automatic packaging is off; the Canvas shows the current package.",
                 )
             sqs_message_id = publish_packaging_request(entry_packager.sqs_client, packaging_queue_url, payload)
 
@@ -1193,13 +1229,14 @@ def create_app() -> FastAPI:
         webhook was reconfigured and restarted with a bucket after this canvas
         was drawn), transition to the bucketed flow — enqueue a packaging
         request to create the default package and render the standard canvas.
-        Otherwise, re-run the bucketless linked-package lookup.
+        Otherwise, or when automatic packaging is off, re-render the Canvas
+        from the current package and linked-package lookup without enqueuing.
         """
         logger.info("Refresh canvas requested", entry_id=payload.entry_id, button_id=button_id)
 
         _send_updating_canvas_best_effort(payload)
 
-        if config.s3_bucket_name:
+        if config.s3_bucket_name and config.auto_packaging:
             # A bucket was configured after this (bucketless) canvas was drawn:
             # initiate default package creation instead of re-rendering bucketless.
             assert entry_packager is not None
@@ -1221,7 +1258,7 @@ def create_app() -> FastAPI:
                 status_code=202,
             )
 
-        _send_bucketless_final_canvas_best_effort(payload)
+        _send_final_canvas_best_effort(payload)
         return JSONResponse({"status": "ACCEPTED", "message": "Refreshing canvas..."}, status_code=202)
 
     def handle_view_metadata(payload, button_id, benchling, config):
