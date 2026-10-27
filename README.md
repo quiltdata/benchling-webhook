@@ -43,6 +43,22 @@ To put each scientist's notebook packages in the same namespace as their raw-dat
 - Existing packages are not moved when the prefix changes. An entry's Canvas looks for its package under the new name, which is created the next time the entry is packaged.
 - If the bucket's Quilt workflow sets a `handle_pattern`, it must accept the new namespaces.
 
+#### Turning Automatic Packaging Off
+
+By default every supported entry event (`v2.entry.created`, `v2.entry.updated.fields`, `v2.entry.updated.reviewRecord`) and every new Canvas queues a packaging run.
+To package entries only when a scientist asks for it, set `auto_packaging` to `"false"` in the webhook secret.
+In a profile config that is `packages.autoPackaging: false`, synced to the secret by `npx @quiltdata/benchling-webhook sync-secrets`; you can also edit the secret in AWS Secrets Manager directly.
+
+With automatic packaging off:
+
+- Entry events are acknowledged and skipped; nothing is queued.
+- A new Canvas shows the entry's current package if one exists, otherwise "Package Not Created", together with the linked packages. It never shows "Updating..." indefinitely.
+- **Update Package** on the Canvas still queues a packaging run, so it becomes the only way an entry is packaged.
+- **Refresh Canvas** redraws from the current package without queuing anything.
+
+The secret is re-read within about a minute, so the switch takes effect without a redeploy.
+Packages already created stay where they are. Turning it back on packages an entry the next time Benchling sends an event for it.
+
 #### Package Metadata
 
 The package metadata is the package's `entry.json`. Besides the entry's IDs, name, creator, authors, and timestamps, it includes the entry's schema `fields` and `customFields`. Benchling keys these by display name, so the webhook re-keys them in snake_case: "Experiment Type" becomes `experiment_type` and "ELN-ID #" becomes `eln_id`. Each key maps to the field's `displayValue`, the text the scientist sees in Benchling: a dropdown option's or linked entity's name, not its ID. Custom fields have no `displayValue`, so they map to their `value`. Both keys are always present, as `{}` when the entry has none. The package's `entry_data.json` keeps the raw entry, with each field's display name, `value`, `type`, and so on.

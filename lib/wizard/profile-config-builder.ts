@@ -148,6 +148,9 @@ export function buildProfileConfigFromExisting(input: ConfigFromExistingInput): 
         ...(existingConfig?.packages?.workflow ?? secretDetails?.workflow
             ? { workflow: existingConfig?.packages?.workflow ?? secretDetails?.workflow }
             : {}),
+        ...((existingConfig?.packages?.autoPackaging ?? secretDetails?.autoPackaging) === false
+            ? { autoPackaging: false }
+            : {}),
     };
 
     const config: ProfileConfig = {

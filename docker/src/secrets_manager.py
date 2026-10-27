@@ -111,6 +111,9 @@ class BenchlingSecretData:
         pkg_prefix: Quilt package name prefix
         pkg_key: Metadata key for linking Benchling entries to Quilt packages
         workflow: Optional Quilt workflow name for package creation
+        auto_packaging: Package entries automatically on entry and Canvas events
+                        (boolean, default true). When false, an entry is packaged
+                        only when Update Package is clicked on its Canvas.
         user_bucket: Optional S3 bucket name for Benchling exports. When absent,
                      the webhook runs in bucketless mode.
         log_level: Application logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -132,6 +135,7 @@ class BenchlingSecretData:
     enable_webhook_verification: bool
     user_bucket: Optional[str] = None
     workflow: str = ""
+    auto_packaging: bool = True
 
     # Optional: SQS queue URL (v0.8.0+ gets from environment variable instead)
     queue_url: str = ""
@@ -302,6 +306,16 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
                     "Expected: non-empty string",
                 )
 
+        # Optional: auto_packaging (default true)
+        try:
+            auto_packaging = parse_bool(data.get("auto_packaging", True))
+        except ValueError as e:
+            raise SecretsManagerError(
+                "Invalid value for parameter 'auto_packaging'",
+                str(e),
+                "Expected: true, false, 'true', 'false', '1', or '0'",
+            )
+
         # Optional: queue_url (v0.8.0+ gets from environment variable instead)
         queue_url = data.get("queue_url", "")
 
@@ -314,6 +328,7 @@ def fetch_benchling_secret(client, region: str, secret_identifier: str) -> Bench
             pkg_key=data["pkg_key"],
             user_bucket=data.get("user_bucket") or None,
             workflow=data.get("workflow", ""),
+            auto_packaging=auto_packaging,
             log_level=data["log_level"],
             enable_webhook_verification=enable_webhook_verification,
             queue_url=queue_url,

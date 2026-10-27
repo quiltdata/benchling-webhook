@@ -98,6 +98,7 @@ class TestSecretValidation:
         assert secret.log_level == "INFO"
         assert secret.enable_webhook_verification is True
         assert secret.workflow == ""
+        assert secret.auto_packaging is True
 
     def test_secret_without_user_bucket_is_bucketless(self, mock_sm_client, valid_secret_data):
         """Test that user_bucket is optional for bucketless mode."""
@@ -117,6 +118,26 @@ class TestSecretValidation:
         secret = fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
 
         assert secret.workflow == "custom-workflow"
+
+    @pytest.mark.parametrize(
+        "value,expected", [("false", False), (False, False), ("0", False), ("true", True), (True, True)]
+    )
+    def test_auto_packaging_is_parsed(self, mock_sm_client, valid_secret_data, value, expected):
+        """auto_packaging accepts the same boolean spellings as enable_webhook_verification."""
+        valid_secret_data["auto_packaging"] = value
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
+
+        secret = fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
+
+        assert secret.auto_packaging is expected
+
+    def test_auto_packaging_rejects_garbage(self, mock_sm_client, valid_secret_data):
+        """An unparseable auto_packaging value is a configuration error, not silently on or off."""
+        valid_secret_data["auto_packaging"] = "maybe"
+        mock_sm_client.get_secret_value.return_value = {"SecretString": json.dumps(valid_secret_data)}
+
+        with pytest.raises(SecretsManagerError, match="auto_packaging"):
+            fetch_benchling_secret(mock_sm_client, "us-east-1", "test-secret")
 
     def test_tenant_is_normalized_from_hostname(self, mock_sm_client, valid_secret_data):
         """Test that tenant hostnames are normalized to the bare slug."""

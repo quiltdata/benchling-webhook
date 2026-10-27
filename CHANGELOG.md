@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.21.5] - 2026-10-26
+
+### Added
+
+- `auto_packaging` in the webhook secret (`packages.autoPackaging` in a profile config, synced by `sync-secrets`). When `"false"`, entry events and new Canvases no longer queue a packaging run: the Canvas is drawn from the entry's current package, or shows "Package Not Created", and an entry is packaged only when a user clicks **Update Package**. **Refresh Canvas** redraws without packaging. Defaults to `"true"`, so existing deployments are unchanged. The secret is re-read within about a minute, so no redeploy is needed. An unparseable value is a configuration error (#395, #392)
+- The setup wizard keeps an existing secret's `auto_packaging` value when it rebuilds a profile from the secret, so re-running the wizard does not turn automatic packaging back on
+
 ## [0.21.4] - 2026-10-13
 
 ### Changed

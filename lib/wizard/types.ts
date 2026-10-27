@@ -94,6 +94,7 @@ export interface BenchlingSecretDetails {
     pkgPrefix?: string;
     pkgKey?: string;
     workflow?: string;
+    autoPackaging?: boolean;
     logLevel?: string;
     webhookAllowList?: string;
     enableVerification?: boolean;

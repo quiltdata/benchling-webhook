@@ -27,6 +27,7 @@ class TestFastAPIApp:
         config.quilt_write_role_arn = ""
         config.pkg_key = "experiment_id"
         config.pkg_prefix = "benchling"
+        config.auto_packaging = True
         config.log_level = "INFO"
         return config
 
@@ -137,6 +138,23 @@ class TestFastAPIApp:
         assert data["mode"] == "bucketless"
         mock_publish.assert_not_called()
 
+    def test_webhook_endpoint_auto_packaging_off_skips_entry_event(self, client, mock_config, mock_publish):
+        """With auto_packaging off, entry events do not enqueue packaging."""
+        mock_config.auto_packaging = False
+        payload = {
+            "channel": "events",
+            "message": {"type": "v2.entry.created", "resourceId": "etr_123456"},
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        response = client.post("/event", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "SKIPPED"
+        assert data["mode"] == "manual"
+        mock_publish.assert_not_called()
+
     def test_webhook_endpoint_no_payload(self, client):
         """Test webhook endpoint with no JSON payload."""
         response = client.post("/event", data="", headers={"Content-Type": "application/json"})
@@ -205,6 +223,77 @@ class TestFastAPIApp:
         mock_publish.assert_not_called()
         updating_manager.send_updating_canvas.assert_called_once()
         final_manager.handle_async.assert_called_once()
+
+    def test_canvas_endpoint_auto_packaging_off_renders_without_enqueuing(self, client, mock_config, mock_publish):
+        """With auto_packaging off, Canvas creation renders the current package but enqueues nothing."""
+        mock_config.auto_packaging = False
+        payload = {
+            "channel": "events",
+            "message": {"type": "v2.canvas.created", "resourceId": "etr_123456"},
+            "baseURL": "https://tenant.benchling.com",
+            "context": {"canvasId": "canvas_123"},
+        }
+
+        with patch("src.app.CanvasManager") as mock_canvas_manager:
+            updating_manager = MagicMock()
+            final_manager = MagicMock()
+            mock_canvas_manager.side_effect = [updating_manager, final_manager]
+
+            response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "SKIPPED"
+        assert data["mode"] == "manual"
+        mock_publish.assert_not_called()
+        updating_manager.send_updating_canvas.assert_called_once()
+        final_manager.handle_async.assert_called_once()
+
+    def test_canvas_endpoint_auto_packaging_off_refresh_does_not_enqueue(self, client, mock_config, mock_publish):
+        """With auto_packaging off, Refresh Canvas re-renders instead of creating a package."""
+        mock_config.auto_packaging = False
+        payload = {
+            "channel": "events",
+            "message": {
+                "type": "v2.canvas.userInteracted",
+                "resourceId": "etr_123456",
+                "buttonId": "refresh-canvas-etr_123456",
+            },
+            "baseURL": "https://tenant.benchling.com",
+            "context": {"canvasId": "canvas_123"},
+        }
+
+        with patch("src.app.CanvasManager") as mock_canvas_manager:
+            updating_manager = MagicMock()
+            final_manager = MagicMock()
+            mock_canvas_manager.side_effect = [updating_manager, final_manager]
+
+            response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 202
+        mock_publish.assert_not_called()
+        final_manager.handle_async.assert_called_once()
+
+    def test_canvas_endpoint_auto_packaging_off_update_package_still_enqueues(self, client, mock_config, mock_publish):
+        """Update Package is the manual trigger, so it enqueues regardless of auto_packaging."""
+        mock_config.auto_packaging = False
+        payload = {
+            "channel": "events",
+            "message": {
+                "type": "v2.canvas.userInteracted",
+                "resourceId": "etr_123456",
+                "buttonId": "update-package-etr_123456",
+            },
+            "baseURL": "https://tenant.benchling.com",
+            "context": {"canvasId": "canvas_123"},
+        }
+
+        with patch("src.app.CanvasManager"):
+            response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 202
+        assert response.json()["status"] == "ACCEPTED"
+        mock_publish.assert_called_once()
 
     def test_canvas_endpoint_bucketless_refresh_canvas_button(self, client, mock_config, mock_publish):
         """Refresh Canvas should rerun the bucketless linked-package lookup."""
