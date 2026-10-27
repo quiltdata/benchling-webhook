@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.21.6] - 2026-10-27
+
+### Security
+
+- The webhook's Python HTTPS clients no longer trust eMudhra's emSign ECC Root CA - G3, whose intermediate CAs' private keys were compromised, nor emSign ECC Root CA - C3 and emSign Root CA - C1: certifi, the CA bundle they verify against, is upgraded from 2025.8.3 to 2026.10.23
+
 ## [0.21.5] - 2026-10-26
 
 ### Added
