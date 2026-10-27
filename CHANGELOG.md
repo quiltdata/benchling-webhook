@@ -9,8 +9,12 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- `auto_packaging` in the webhook secret (`packages.autoPackaging` in a profile config, synced by `sync-secrets`). The setup wizard asks "Package entries automatically on every entry event?" with the package settings; answering No turns it off. When `"false"`, entry events and new Canvases no longer queue a packaging run: the Canvas is drawn from the entry's current package, or shows "Package Not Created", and an entry is packaged only when a user clicks **Update Package**. **Refresh Canvas** redraws without packaging. Defaults to `"true"`, so existing deployments are unchanged. The secret is re-read within about a minute, so no redeploy is needed. An unparseable value is a configuration error (#395, #392)
+- `auto_packaging` in the webhook secret (`packages.autoPackaging` in a profile config, synced by `sync-secrets`). The setup wizard asks "Package entries automatically on every entry event?" with the package settings; answering No turns it off. When `"false"`, `entry.created` and `entry.updated.fields` events and new Canvases no longer queue a packaging run: the Canvas is drawn from the entry's current package, or shows "Package Not Created", with the time it was drawn in the footer, and an entry is packaged only when a user clicks **Update Package** or accepts its review. Review events still run so that acceptance seals the package and reopening unseals it. Defaults to `"true"`, so existing deployments are unchanged. The secret is re-read within about a minute, so no redeploy is needed. An unparseable value is a configuration error (#395, #392)
 - The setup wizard keeps an existing secret's `auto_packaging` value when it rebuilds a profile from the secret, so re-running the wizard does not turn automatic packaging back on
+
+### Fixed
+
+- The App Canvas says "Package Not Created" for an entry whose package does not exist yet, instead of showing catalog and sync links to a package that isn't there
 
 ## [0.21.4] - 2026-10-13
 

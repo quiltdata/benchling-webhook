@@ -51,10 +51,10 @@ That stores `packages.autoPackaging: false` in the profile config and syncs it t
 
 With automatic packaging off:
 
-- Entry events are acknowledged and skipped; nothing is queued.
-- A new Canvas shows the entry's current package if one exists, otherwise "Package Not Created", together with the linked packages. It never shows "Updating..." indefinitely.
-- **Update Package** on the Canvas still queues a packaging run, so it becomes the only way an entry is packaged.
-- **Refresh Canvas** redraws from the current package without queuing anything.
+- `v2.entry.created` and `v2.entry.updated.fields` events are acknowledged and skipped; nothing is queued.
+- `v2.entry.updated.reviewRecord` events still run, because accepting a review seals the package and reopening the review unseals it (see [Accepted Reviews](#accepted-reviews)). Accepting a review therefore still packages the entry.
+- A new Canvas shows the entry's current package if one exists, otherwise "Package Not Created", together with the linked packages, and its footer shows when it was drawn. It never waits on "Updating...".
+- **Update Package** on the Canvas still queues a packaging run, so it is the only other way an entry is packaged.
 
 The secret is re-read within about a minute, so the switch takes effect without a redeploy.
 Packages already created stay where they are. Turning it back on packages an entry the next time Benchling sends an event for it.

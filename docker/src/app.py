@@ -827,7 +827,9 @@ def create_app() -> FastAPI:
                     payload,
                     "Bucketless mode does not create a default package for entry events.",
                 )
-            if not config.auto_packaging:
+            # A review event seals the package on acceptance and unseals it when the
+            # review is reopened, so it must run even when automatic packaging is off.
+            if not config.auto_packaging and payload.event_type != "v2.entry.updated.reviewRecord":
                 return _manual_packaging_response(
                     payload,
                     "Automatic packaging is off; click Update Package on the entry's Canvas to package it.",

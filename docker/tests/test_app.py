@@ -155,6 +155,21 @@ class TestFastAPIApp:
         assert data["mode"] == "manual"
         mock_publish.assert_not_called()
 
+    def test_webhook_endpoint_auto_packaging_off_still_runs_review_events(self, client, mock_config, mock_publish):
+        """Review events seal and unseal the package, so they are queued even with auto_packaging off."""
+        mock_config.auto_packaging = False
+        payload = {
+            "channel": "events",
+            "message": {"type": "v2.entry.updated.reviewRecord", "resourceId": "etr_123456"},
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        response = client.post("/event", json=payload)
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "ACCEPTED"
+        mock_publish.assert_called_once()
+
     def test_webhook_endpoint_no_payload(self, client):
         """Test webhook endpoint with no JSON payload."""
         response = client.post("/event", data="", headers={"Content-Type": "application/json"})
