@@ -304,9 +304,7 @@ def create_related_package_link_buttons(
     for package in packages:
         if not writable_bucket or package.bucket != writable_bucket:
             continue
-        package_part = encode_related_button_value(package.package_name)
-        bucket_part = encode_related_button_value(package.bucket)
-        button_id = f"link-related-{entry_id}-pkg-{package_part}-bucket-{bucket_part}"
+        button_id = f"link-related-{entry_id}-pkg-{encode_related_button_value(package.package_name)}"
         buttons.append(create_button(button_id, f"Link {package.package_name}"))
     return [create_section("button-section-related-packages", buttons)] if buttons else []
 

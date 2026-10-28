@@ -198,26 +198,16 @@ def decode_related_button_value(encoded: str) -> str:
         raise ValueError(f"Invalid related-package button encoding: {encoded}") from exc
 
 
-def parse_related_package_button_id(button_id: str) -> tuple[str, str, str]:
-    """Parse ``link-related`` package context from a Canvas button ID."""
+def parse_related_package_button_id(button_id: str) -> tuple[str, str]:
+    """Parse the entry ID and package name from a ``link-related`` Canvas button ID."""
     prefix = "link-related-"
     if not button_id.startswith(prefix) or "-pkg-" not in button_id:
         raise ValueError(f"Invalid link-related button ID: {button_id}")
     entry_id, encoded_package = button_id[len(prefix) :].split("-pkg-", 1)
-    if not entry_id or not encoded_package:
+    package_name = decode_related_button_value(encoded_package) if encoded_package else ""
+    if not entry_id or not package_name:
         raise ValueError(f"Invalid link-related button ID: {button_id}")
-
-    if "-bucket-" not in encoded_package:
-        raise ValueError(f"Missing '-bucket-' separator in button ID: {button_id}")
-    encoded_package, encoded_bucket = encoded_package.split("-bucket-", 1)
-    if not encoded_package or not encoded_bucket:
-        raise ValueError(f"Invalid package or bucket in button ID: {button_id}")
-
-    package_name = decode_related_button_value(encoded_package)
-    bucket_name = decode_related_button_value(encoded_bucket)
-    if not package_name or not _BUCKET_NAME_RE.match(bucket_name):
-        raise ValueError(f"Invalid package or bucket in button ID: {button_id}")
-    return entry_id, package_name, bucket_name
+    return entry_id, package_name
 
 
 @dataclass

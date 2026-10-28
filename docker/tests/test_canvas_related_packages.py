@@ -98,11 +98,7 @@ def test_related_view_renders_links_buttons_paging_and_partial_failures():
         for child in block["children"]
         if child["text"].startswith("Link ")
     ]
-    assert parse_related_package_button_id(link_buttons[0]["id"]) == (
-        "etr_1",
-        "ale/sample-bucket-raw",
-        "lab-bucket",
-    )
+    assert parse_related_package_button_id(link_buttons[0]["id"]) == ("etr_1", "ale/sample-bucket-raw")
     assert all("ale/raw-5" not in child["text"] for child in link_buttons)
 
 

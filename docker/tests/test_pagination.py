@@ -36,19 +36,11 @@ class TestParseBrowseLinkedButtonIdWithBucket:
 class TestParseRelatedPackageButtonId:
     """Related-package IDs always carry an unambiguous final bucket field."""
 
-    def test_package_name_with_bucket_literal_and_double_dash_round_trips(self):
-        package_name = "benchling/raw--bucket-test-bucket"
-        bucket = "test-bucket"
-        button_id = (
-            "link-related-etr_123-pkg-"
-            f"{encode_related_button_value(package_name)}-bucket-{encode_related_button_value(bucket)}"
-        )
+    def test_package_name_with_separator_literals_round_trips(self):
+        package_name = "benchling/raw--bucket-test-pkg-bucket"
+        button_id = f"link-related-etr_123-pkg-{encode_related_button_value(package_name)}"
 
-        assert parse_related_package_button_id(button_id) == ("etr_123", package_name, bucket)
-
-    def test_bucket_field_is_required(self):
-        with pytest.raises(ValueError, match="Missing '-bucket-'"):
-            parse_related_package_button_id("link-related-etr_123-pkg-benchling--sample")
+        assert parse_related_package_button_id(button_id) == ("etr_123", package_name)
 
 
 class TestPageState:

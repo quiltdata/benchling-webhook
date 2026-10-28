@@ -1161,12 +1161,15 @@ def create_app() -> FastAPI:
         from .pagination import parse_related_package_button_id
 
         try:
-            entry_id, package_name, bucket = parse_related_package_button_id(button_id)
+            entry_id, package_name = parse_related_package_button_id(button_id)
             if entry_id != payload.entry_id:
                 return JSONResponse({"error": "Button entry does not match Canvas entry"}, status_code=400)
         except ValueError as exc:
             logger.warning("Invalid link-related button ID", button_id=button_id, error=str(exc))
             return JSONResponse({"error": "Invalid button ID"}, status_code=400)
+        bucket = config.s3_bucket_name
+        if not bucket:
+            return _bucketless_response(payload, "No writable package bucket is configured.")
 
         canvas_manager = CanvasManager(benchling, config, payload)
 
