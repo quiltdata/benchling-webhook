@@ -900,3 +900,122 @@ def test_pinned_search_carries_top_hash(mock_role_manager_class, bucket, iceberg
     assert query.find_unique_packages("experiment_id", "EXP-1", pinned=True)["packages"][0].top_hash == "abc123"
     assert "top_hash" in query._execute_query.call_args.args[0].split("FROM")[0]
     assert query.find_unique_packages("experiment_id", "EXP-1")["packages"][0].top_hash is None
+
+
+class TestRelatedPackageQuery:
+    """Newest-first same-prefix discovery stays bounded and reports failures."""
+
+    @staticmethod
+    def _query():
+        query = object.__new__(PackageQuery)
+        query.database = "test_db"
+        query.catalog_url = "catalog.example.com"
+        query.iceberg_database = ""
+        query.bucket = ""
+        query.logger = Mock()
+        return query
+
+    def test_bucket_query_filters_prefix_linkage_and_uses_lookahead_limit(self):
+        query = self._query()
+        query._execute_query = Mock(
+            return_value=[
+                {
+                    "pkg_name": "ale_team/raw-1",
+                    "top_hash": "abc",
+                    "message": "instrument output",
+                    "user_meta": '{"creator": "A"}',
+                    "modified_at": "1793181000",
+                }
+            ]
+        )
+
+        result = query._find_related_packages_in_bucket(
+            "lab-bucket",
+            "ale_team",
+            "ale_team/EXP1",
+            "experiment_id",
+            "EXP1",
+            6,
+            ELN_ENTRY_KEY,
+        )
+
+        sql = query._execute_query.call_args.args[0]
+        assert "pkg_name LIKE 'ale\\_team/%' ESCAPE '\\'" in sql
+        assert "pkg_name <> 'ale_team/EXP1'" in sql
+        assert "NOT COALESCE" in sql
+        assert "json_extract_scalar(latest.user_meta, '$.experiment_id') = 'EXP1'" in sql
+        assert "json_array_contains(json_extract(latest.user_meta, '$.eln_entry'), 'EXP1')" in sql
+        assert "ORDER BY revision_times.modified_epoch DESC NULLS LAST" in sql
+        assert "LIMIT 6" in sql
+        package = result["packages"][0]
+        assert package.modified_at == "1793181000"
+        assert package.message == "instrument output"
+        assert package.metadata == {"creator": "A"}
+
+    def test_public_query_returns_requested_page_and_lookahead_state(self):
+        query = self._query()
+        candidates = [
+            Package("catalog.example.com", "lab-bucket", f"ale/pkg-{index}", modified_at=str(20 - index))
+            for index in range(11)
+        ]
+        query._find_related_packages_in_all_buckets = Mock(
+            return_value={"packages": candidates, "results": {"errors": {}}}
+        )
+
+        result = query.find_related_packages(
+            "ale",
+            "ale/EXP1",
+            "experiment_id",
+            "EXP1",
+            page_number=1,
+            page_size=5,
+            array_key=ELN_ENTRY_KEY,
+        )
+
+        assert [package.package_name for package in result["packages"]] == [
+            f"ale/pkg-{index}" for index in range(5, 10)
+        ]
+        assert result["has_previous"] is True
+        assert result["has_next"] is True
+
+    def test_all_bucket_failures_raise_instead_of_looking_empty(self):
+        query = self._query()
+        query._list_package_view_buckets = Mock(return_value=["bucket-a", "bucket-b"])
+        query._bucketless_worker_count = Mock(return_value=1)
+        query._find_related_packages_in_bucket = Mock(side_effect=RuntimeError("Athena denied"))
+
+        with pytest.raises(RuntimeError, match="Every related-package bucket query failed"):
+            query._find_related_packages_in_all_buckets(
+                "ale",
+                "ale/EXP1",
+                "experiment_id",
+                "EXP1",
+                6,
+                ELN_ENTRY_KEY,
+            )
+
+    def test_partial_bucket_failure_is_returned_with_accessible_rows(self):
+        query = self._query()
+        query._list_package_view_buckets = Mock(return_value=["bucket-a", "bucket-b"])
+        query._bucketless_worker_count = Mock(return_value=1)
+
+        def find(bucket, *_args, **_kwargs):
+            if bucket == "bucket-a":
+                raise RuntimeError("Athena denied")
+            return {
+                "packages": [Package("catalog.example.com", bucket, "ale/raw-1", modified_at="20")],
+                "results": {"rows": [{"pkg_name": "ale/raw-1"}]},
+            }
+
+        query._find_related_packages_in_bucket = Mock(side_effect=find)
+        result = query._find_related_packages_in_all_buckets(
+            "ale",
+            "ale/EXP1",
+            "experiment_id",
+            "EXP1",
+            6,
+            ELN_ENTRY_KEY,
+        )
+
+        assert [package.package_name for package in result["packages"]] == ["ale/raw-1"]
+        assert result["results"]["errors"] == {"bucket-a": "Athena denied"}

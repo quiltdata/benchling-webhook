@@ -4,6 +4,7 @@ import pytest
 import requests
 
 from src.package_event import RefreshOutcome, refresh_canvas_for_package_event
+from src.packages import Package
 
 
 @pytest.fixture
@@ -120,3 +121,49 @@ def test_refresh_canvas_for_package_event_classifies_unexpected_error_as_transie
 
     assert result.outcome == RefreshOutcome.TRANSIENT_ERROR
     assert result.error_type == "RuntimeError"
+
+
+def test_related_revision_resolves_nested_link_target_by_display_id(mock_config):
+    """A nested related package refreshes the actual indexed entry package Canvas."""
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+    benchling_client = Mock()
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        fetcher = Mock()
+        fetcher.get_package_top_hash.return_value = "abc123"
+        fetcher.get_package_metadata.return_value = {}
+        fetcher.get_package_user_metadata.return_value = {"experiment_id": "EXP1"}
+        mock_fetcher_class.return_value = fetcher
+
+        entry_package = Package(
+            "test.quiltdata.com",
+            "test-bucket",
+            "ale/EXP1",
+            metadata={"entry_id": "etr_target", "canvas_id": "cnvs_target", "display_id": "EXP1"},
+        )
+        query = Mock()
+        query.find_unique_packages.return_value = {"packages": [entry_package]}
+        mock_query_class.return_value = query
+
+        manager = Mock()
+        manager.update_canvas.return_value = {"success": True, "canvas_id": "cnvs_target"}
+        mock_canvas_manager.return_value = manager
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=lambda: benchling_client,
+        )
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    query.find_unique_packages.assert_called_once_with(key="display_id", value="EXP1")
+    payload = mock_canvas_manager.call_args.args[2]
+    assert payload.entry_id == "etr_target"
+    assert payload.canvas_id == "cnvs_target"
+    manager.update_canvas.assert_called_once()

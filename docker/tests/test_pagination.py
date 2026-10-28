@@ -7,6 +7,7 @@ from src.pagination import (
     paginate_items,
     parse_browse_linked_button_id_with_bucket,
     parse_button_id,
+    parse_related_package_button_id,
 )
 
 
@@ -29,6 +30,20 @@ class TestParseBrowseLinkedButtonIdWithBucket:
         # Trailing "x" is too short to be a valid bucket name (min 3 chars).
         result = parse_browse_linked_button_id_with_bucket("browse-linked-etr_789-pkg-foo--my-bucket-x-p1-s20")
         assert result == ("etr_789", "foo/my-bucket-x", None, 1, 20)
+
+
+class TestParseRelatedPackageButtonId:
+    """Related-package IDs always carry an unambiguous final bucket field."""
+
+    def test_package_name_with_bucket_literal_round_trips(self):
+        result = parse_related_package_button_id(
+            "link-related-etr_123-pkg-benchling--sample-bucket-raw-bucket-lab-bucket"
+        )
+        assert result == ("etr_123", "benchling/sample-bucket-raw", "lab-bucket")
+
+    def test_bucket_field_is_required(self):
+        with pytest.raises(ValueError, match="Missing '-bucket-'"):
+            parse_related_package_button_id("link-related-etr_123-pkg-benchling--sample")
 
 
 class TestPageState:

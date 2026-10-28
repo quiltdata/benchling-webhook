@@ -708,13 +708,24 @@ class CanvasManager:
             self.config.s3_bucket_name,
             error=error,
         )
-        canvas_blocks = [blocks.create_markdown_block(markdown, "md-related")]
+        search_errors = result.get("results", {}).get("errors", {})
+        if isinstance(search_errors, dict):
+            markdown += fmt.format_related_search_errors(search_errors)
+        else:
+            search_errors = {}
+        canvas_blocks: List = [blocks.create_markdown_block(markdown, "md-related")]
+        if search_errors:
+            canvas_blocks.append(
+                blocks.create_button_block(
+                    f"view-related-{self.entry_id}-p{page_number}-s5",
+                    "Retry Search",
+                )
+            )
         canvas_blocks.extend(
             blocks.create_related_package_link_buttons(
                 self.entry_id,
                 packages,
                 self.config.s3_bucket_name,
-                include_bucket=not bool(self.config.s3_bucket_name),
             )
         )
         canvas_blocks.extend(blocks.create_related_navigation_buttons(self.entry_id, page_state))

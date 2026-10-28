@@ -291,14 +291,17 @@ def create_related_package_link_buttons(
     entry_id: str,
     packages: List[Package],
     writable_bucket: Optional[str],
-    include_bucket: bool = False,
 ) -> List:
-    """Create one Link button for each related package the webhook may revise."""
+    """Create one Link button for each related package the webhook may revise.
+
+    The bucket suffix is always present, even in bucketed mode, so a package name
+    ending in ``-bucket-<valid-bucket-name>`` can never be misparsed as context.
+    """
     buttons = []
     for package in packages:
         if not writable_bucket or package.bucket != writable_bucket:
             continue
-        bucket_part = f"-bucket-{encode_bucket_name(package.bucket)}" if include_bucket else ""
+        bucket_part = f"-bucket-{encode_bucket_name(package.bucket)}"
         button_id = f"link-related-{entry_id}-pkg-{encode_package_name(package.package_name)}{bucket_part}"
         buttons.append(create_button(button_id, f"Link {package.package_name}"))
     return [create_section("button-section-related-packages", buttons)] if buttons else []

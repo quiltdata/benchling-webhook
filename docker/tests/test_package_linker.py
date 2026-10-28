@@ -1,0 +1,173 @@
+"""Regression tests for metadata-only related-package revisions."""
+
+import io
+import json
+from unittest.mock import Mock, patch
+
+import pytest
+from botocore.exceptions import ClientError
+
+from src.config import Config
+from src.package_linker import PackageLinker, RelatedPackageWorkflowError
+
+BUCKET = "lab-bucket"
+PACKAGE_NAME = "ale/raw-data"
+LATEST_KEY = f".quilt/named_packages/{PACKAGE_NAME}/latest"
+OLD_HASH = "0" * 64
+
+ENTRY = {
+    "logical_key": "nested/data.txt",
+    "physical_keys": [f"s3://{BUCKET}/raw/data.txt"],
+    "size": 3,
+    "hash": {"type": "SHA256", "value": "abc"},
+    "meta": {"user_meta": {"kind": "raw"}},
+}
+
+
+def _manifest(metadata=None, message="before") -> bytes:
+    header = {"user_meta": metadata or {"owner": "lab"}, "message": message}
+    return (json.dumps(header) + "\n" + json.dumps(ENTRY) + "\n").encode()
+
+
+def _config():
+    config = Mock(spec=Config)
+    config.package_key = "experiment_id"
+    config.s3_bucket_name = BUCKET
+    config.workflow = ""
+    config.quilt_write_role_arn = None
+    config.aws_region = "us-east-1"
+    return config
+
+
+class FakeS3:
+    """Minimal conditional S3 object store used by PackageLinker."""
+
+    def __init__(self, manifest=None):
+        self.objects = {
+            LATEST_KEY: OLD_HASH.encode(),
+            f".quilt/packages/{OLD_HASH}": manifest or _manifest(),
+        }
+        self.etags = {}
+        self._etag_counter = 0
+        self.latest_conflicts_remaining = 0
+        self.concurrent_hash = "1" * 64
+        self.latest_puts = 0
+        self.deleted = []
+        for key in self.objects:
+            self._set_etag(key)
+
+    def _set_etag(self, key):
+        self._etag_counter += 1
+        self.etags[key] = f'"etag-{self._etag_counter}"'
+
+    @staticmethod
+    def _client_error(code, operation, status=404):
+        return ClientError(
+            {"Error": {"Code": code}, "ResponseMetadata": {"HTTPStatusCode": status}},
+            operation,
+        )
+
+    def get_object(self, Bucket, Key):
+        assert Bucket == BUCKET
+        if Key not in self.objects:
+            raise self._client_error("NoSuchKey", "GetObject")
+        return {"Body": io.BytesIO(self.objects[Key]), "ETag": self.etags[Key]}
+
+    def put_object(self, Bucket, Key, Body, IfMatch=None, IfNoneMatch=None, **_kwargs):
+        assert Bucket == BUCKET
+        if IfNoneMatch == "*" and Key in self.objects:
+            raise self._client_error("PreconditionFailed", "PutObject", 412)
+        if IfMatch is not None and self.etags.get(Key) != IfMatch:
+            raise self._client_error("PreconditionFailed", "PutObject", 412)
+        if Key == LATEST_KEY and IfMatch is not None:
+            self.latest_puts += 1
+            if self.latest_conflicts_remaining:
+                self.latest_conflicts_remaining -= 1
+                self.objects[LATEST_KEY] = self.concurrent_hash.encode()
+                self._set_etag(LATEST_KEY)
+                self.objects[f".quilt/packages/{self.concurrent_hash}"] = _manifest(
+                    {"owner": "lab", "concurrent": True},
+                    "concurrent update",
+                )
+                self._set_etag(f".quilt/packages/{self.concurrent_hash}")
+                raise self._client_error("PreconditionFailed", "PutObject", 412)
+        self.objects[Key] = Body if isinstance(Body, bytes) else Body.read()
+        self._set_etag(Key)
+        return {"ETag": self.etags[Key]}
+
+    def delete_object(self, Bucket, Key, IfMatch=None):
+        assert Bucket == BUCKET
+        if IfMatch is not None and self.etags.get(Key) != IfMatch:
+            raise self._client_error("PreconditionFailed", "DeleteObject", 412)
+        self.deleted.append(Key)
+        self.objects.pop(Key, None)
+        self.etags.pop(Key, None)
+        return {}
+
+    def history(self):
+        prefix = f".quilt/named_packages/{PACKAGE_NAME}/"
+        return {key: value for key, value in self.objects.items() if key.startswith(prefix) and key != LATEST_KEY}
+
+
+def _revision_rows(s3, top_hash):
+    return [json.loads(line) for line in s3.objects[f".quilt/packages/{top_hash}"].decode().splitlines()]
+
+
+def test_link_preserves_entries_and_adds_metadata_only_revision():
+    s3 = FakeS3()
+
+    result = PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP26000030")
+
+    rows = _revision_rows(s3, result.top_hash)
+    assert result.changed is True
+    assert rows[0]["user_meta"] == {"owner": "lab", "experiment_id": "EXP26000030"}
+    assert rows[0]["message"] == "Linked to EXP26000030 from Benchling"
+    assert rows[1:] == [ENTRY]
+    assert s3.objects[LATEST_KEY].decode() == result.top_hash
+
+
+def test_two_links_in_same_second_keep_distinct_history_pointers():
+    s3 = FakeS3()
+    linker = PackageLinker(_config(), s3_client=s3)
+
+    with patch("src.package_linker.time.time", return_value=1_000):
+        first = linker.link(PACKAGE_NAME, BUCKET, "EXP1")
+        second = linker.link(PACKAGE_NAME, BUCKET, "EXP2")
+
+    assert s3.history() == {
+        f".quilt/named_packages/{PACKAGE_NAME}/1000": first.top_hash.encode(),
+        f".quilt/named_packages/{PACKAGE_NAME}/1001": second.top_hash.encode(),
+    }
+    assert _revision_rows(s3, second.top_hash)[0]["user_meta"] == {
+        "owner": "lab",
+        "experiment_id": "EXP1",
+        "eln_entry": ["EXP2"],
+    }
+
+
+def test_latest_conflict_discards_history_pointer_and_retries_from_new_revision():
+    s3 = FakeS3()
+    s3.latest_conflicts_remaining = 1
+
+    with patch("src.package_linker.time.time", return_value=2_000):
+        result = PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
+
+    assert s3.latest_puts == 2
+    assert s3.deleted == [f".quilt/named_packages/{PACKAGE_NAME}/2000"]
+    assert list(s3.history()) == [f".quilt/named_packages/{PACKAGE_NAME}/2000"]
+    assert _revision_rows(s3, result.top_hash)[0]["user_meta"] == {
+        "owner": "lab",
+        "concurrent": True,
+        "experiment_id": "EXP1",
+    }
+
+
+def test_workflow_rejection_publishes_nothing():
+    s3 = FakeS3()
+    before = dict(s3.objects)
+
+    with patch("src.package_linker.check_workflow", return_value="metadata failed schema"):
+        with pytest.raises(RelatedPackageWorkflowError, match="metadata failed schema"):
+            PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
+
+    assert s3.objects == before

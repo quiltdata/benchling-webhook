@@ -12,8 +12,8 @@ from botocore.exceptions import ClientError
 
 from .canvas import CanvasManager
 from .config import Config
-from .package_files import PackageFileFetcher, is_not_found
-from .package_query import ELN_ENTRY_KEY
+from .package_files import PackageFileFetcher
+from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .payload import Payload
 
 logger = structlog.get_logger(__name__)
@@ -112,9 +112,10 @@ def refresh_canvas_for_package_event(
 
     A normal entry-package revision carries its own ``entry_id`` and
     ``canvas_id``. A metadata-only related-package revision additionally carries
-    ``experiment_id`` or ``eln_entry``. For those links, the target entry package
-    lives under the same prefix, and its unchanged metadata supplies the Canvas
-    target. This keeps redraws on the existing package-revision event path.
+    ``experiment_id`` or ``eln_entry``. For those links, the existing package
+    index resolves the entry package by its ``display_id`` metadata, so nested
+    related package names and older resolved prefixes still reach the correct
+    Canvas. This keeps redraws on the existing package-revision event path.
     """
     try:
         active_benchling = benchling_factory()
@@ -150,26 +151,32 @@ def refresh_canvas_for_package_event(
         package_key = getattr(config, "package_key", None)
         if not isinstance(package_key, str) or not package_key:
             package_key = "experiment_id"
-        prefix, separator, _ = package_name.rpartition("/")
-        if separator:
-            for display_id in _linked_display_ids(manifest_metadata, package_key):
-                target_package_name = f"{prefix}/{display_id}"
-                if target_package_name == package_name and direct_target:
-                    continue
-                try:
-                    target_metadata = package_fetcher.get_package_metadata(target_package_name)
-                except ClientError as exc:
-                    if is_not_found(exc):
-                        logger.info(
-                            "Linked entry package not found for Canvas refresh",
-                            package_name=package_name,
-                            target_package_name=target_package_name,
-                        )
-                        continue
-                    raise
-                target = _canvas_target(target_metadata)
-                if target:
-                    targets.add(target)
+        linked_display_ids = _linked_display_ids(manifest_metadata, package_key)
+        if linked_display_ids:
+            package_query = PackageQuery(
+                bucket=package_bucket or "",
+                catalog_url=config.quilt_catalog,
+                database=config.quilt_database,
+                config=config,
+            )
+            for display_id in linked_display_ids:
+                linked_entry_packages = package_query.find_unique_packages(
+                    key="display_id",
+                    value=display_id,
+                )["packages"]
+                if not linked_entry_packages:
+                    logger.info(
+                        "Linked entry package not found for Canvas refresh",
+                        package_name=package_name,
+                        display_id=display_id,
+                    )
+                for entry_package in linked_entry_packages:
+                    target = _canvas_target(entry_package.metadata)
+                    if not target:
+                        target_metadata = package_fetcher.get_package_metadata(entry_package.package_name)
+                        target = _canvas_target(target_metadata)
+                    if target:
+                        targets.add(target)
 
         if not targets:
             logger.info(

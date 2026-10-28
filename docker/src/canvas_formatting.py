@@ -223,6 +223,18 @@ def format_related_packages(
     return content
 
 
+def format_related_search_errors(errors: Dict[str, str]) -> str:
+    """Explain partial related-package lookup failures without hiding good rows."""
+    if not errors:
+        return ""
+    content = "\n> **⚠️ Results are incomplete.** These package buckets could not be searched:\n>\n"
+    for bucket, error in sorted(errors.items()):
+        shown_error = escape_markdown(" ".join(str(error).split())[:300])
+        content += f"> * `{escape_markdown(bucket)}`: {shown_error}\n"
+    content += ">\n> Use **Retry Search** to try the failed buckets again.\n"
+    return content
+
+
 def format_file_list_header(package_name: str, page_num: int, total_pages: int) -> str:
     """Format file list header.
 

@@ -927,6 +927,10 @@ class PackageQuery:
                 packages.extend(result["packages"])
                 rows.extend(result["results"]["rows"])
 
+        if errors and len(errors) == len(buckets):
+            summary = "; ".join(f"{bucket}: {message}" for bucket, message in sorted(errors.items()))
+            raise RuntimeError(f"Every related-package bucket query failed: {summary}")
+
         # Each view has one latest row per package, but de-duplicate defensively.
         unique = {(package.bucket, package.package_name): package for package in packages}
         ordered = sorted(unique.values(), key=lambda package: (package.bucket, package.package_name))

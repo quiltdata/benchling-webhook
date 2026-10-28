@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 MAX_LINK_ATTEMPTS = 3
+MAX_HISTORY_KEY_ATTEMPTS = 100
 
 
 class RelatedPackageLinkError(RuntimeError):
@@ -170,6 +171,37 @@ class PackageLinker:
         status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
         return code in {"PreconditionFailed", "ConditionalRequestConflict", "412"} or status == 412
 
+    def _reserve_history_pointer(self, registry, package_name: str, bucket: str, top_hash: str) -> tuple[str, str]:
+        """Write a unique Quilt v1 history pointer without replacing another revision."""
+        first_timestamp = int(time.time())
+        for offset in range(MAX_HISTORY_KEY_ATTEMPTS):
+            key = registry.pointer_pk(package_name, str(first_timestamp + offset)).path
+            try:
+                response = self.s3_client.put_object(
+                    Bucket=bucket,
+                    Key=key,
+                    Body=top_hash.encode("utf-8"),
+                    IfNoneMatch="*",
+                )
+            except ClientError as exc:
+                if self._is_conflict(exc):
+                    continue
+                raise RelatedPackageLinkError(f"Could not write package revision history: {exc}") from exc
+            etag = response.get("ETag")
+            if not etag:
+                raise RelatedPackageLinkError("S3 did not return an ETag for the package history pointer.")
+            return key, etag
+        raise RelatedPackageLinkError(
+            f"Could not allocate a unique package history timestamp after {MAX_HISTORY_KEY_ATTEMPTS} attempts."
+        )
+
+    def _discard_history_pointer(self, bucket: str, key: str, etag: str) -> None:
+        """Best-effort removal of a pointer reserved for a failed latest update."""
+        try:
+            self.s3_client.delete_object(Bucket=bucket, Key=key, IfMatch=etag)
+        except Exception as exc:  # noqa: BLE001 - preserve the original link conflict
+            logger.warning("Could not remove unused package history pointer", bucket=bucket, key=key, error=str(exc))
+
     def link(self, package_name: str, bucket: str, display_id: str) -> LinkResult:
         """Publish a metadata-only revision linking ``package_name`` to ``display_id``."""
         writable_bucket = self.config.s3_bucket_name
@@ -211,10 +243,15 @@ class PackageLinker:
                 ContentType="application/x-jsonlines",
             )
 
-            # Match Quilt's v1 registry history pointer, then atomically advance
-            # latest only if the revision we read is still current.
-            timestamp_key = registry.pointer_pk(package_name, str(int(time.time()))).path
-            self.s3_client.put_object(Bucket=bucket, Key=timestamp_key, Body=new_top_hash.encode("utf-8"))
+            # Reserve a unique Quilt v1 history key, then atomically advance
+            # latest only if the revision we read is still current. A failed
+            # compare-and-swap releases its history key before retrying.
+            history_key, history_etag = self._reserve_history_pointer(
+                registry,
+                package_name,
+                bucket,
+                new_top_hash,
+            )
             try:
                 self.s3_client.put_object(
                     Bucket=bucket,
@@ -223,6 +260,7 @@ class PackageLinker:
                     IfMatch=current_etag,
                 )
             except ClientError as exc:
+                self._discard_history_pointer(bucket, history_key, history_etag)
                 if not self._is_conflict(exc) or attempt == MAX_LINK_ATTEMPTS:
                     raise RelatedPackageLinkError(f"Could not advance the package revision: {exc}") from exc
                 logger.info(
@@ -232,6 +270,9 @@ class PackageLinker:
                     attempt=attempt,
                 )
                 continue
+            except Exception as exc:
+                self._discard_history_pointer(bucket, history_key, history_etag)
+                raise RelatedPackageLinkError(f"Could not advance the package revision: {exc}") from exc
 
             logger.info(
                 "Linked related package",
