@@ -172,7 +172,7 @@ class PackageLinker:
         if rejection:
             raise RelatedPackageWorkflowError(f"Quilt rejected this revision: {rejection}")
 
-        top_hash = package._calculate_top_hash(package._meta, package.walk())
+        top_hash = package.top_hash
         output = io.BytesIO()
         package._dump(output)
         return output.getvalue(), top_hash

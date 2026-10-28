@@ -292,6 +292,63 @@ def test_link_to_entry_without_package_is_skipped_not_retried(mock_config):
     mock_canvas_manager.assert_not_called()
 
 
+def test_failed_linked_canvas_refresh_does_not_fail_the_event(mock_config):
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        source_fetcher = Mock()
+        source_fetcher.get_package_top_hash.return_value = "abc123"
+        source_fetcher.get_package_metadata.return_value = {}
+        source_fetcher.get_package_user_metadata.return_value = {"eln_entry": ["GONE", "LIVE"]}
+        mock_fetcher_class.return_value = source_fetcher
+
+        query = Mock()
+        query.find_unique_packages.side_effect = [
+            {
+                "packages": [
+                    Package(
+                        "test.quiltdata.com",
+                        "test-bucket",
+                        "ale/GONE",
+                        metadata={"entry_id": "etr_a", "canvas_id": "cnvs_a"},
+                    )
+                ],
+                "results": {"errors": {}},
+            },
+            {
+                "packages": [
+                    Package(
+                        "test.quiltdata.com",
+                        "test-bucket",
+                        "ale/LIVE",
+                        metadata={"entry_id": "etr_b", "canvas_id": "cnvs_b"},
+                    )
+                ],
+                "results": {"errors": {}},
+            },
+        ]
+        mock_query_class.return_value = query
+
+        manager = Mock()
+        manager.update_canvas.side_effect = [RuntimeError("canvas archived"), {"success": True}]
+        mock_canvas_manager.return_value = manager
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=Mock,
+        )
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    assert manager.update_canvas.call_count == 2
+
+
 def test_failed_old_link_lookup_does_not_block_resolvable_new_canvas(mock_config):
     mock_config.quilt_database = "athena-db"
     mock_config.package_key = "experiment_id"

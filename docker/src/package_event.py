@@ -142,10 +142,8 @@ def refresh_canvas_for_package_event(
 
         display_metadata = package_fetcher.get_package_metadata(package_name)
         manifest_metadata = package_fetcher.get_package_user_metadata(package_name)
-        targets: set[tuple[str, str]] = set()
+        linked_targets: set[tuple[str, str]] = set()
         direct_target = _canvas_target(display_metadata) or _canvas_target(manifest_metadata)
-        if direct_target:
-            targets.add(direct_target)
 
         package_key = getattr(config, "package_key", None)
         if not isinstance(package_key, str) or not package_key:
@@ -160,8 +158,9 @@ def refresh_canvas_for_package_event(
                 config=config,
             )
             for display_id in linked_display_ids:
-                # Logged, not retried: a lookup that fails for good would retry into the
-                # dead-letter queue, and the entry's next redraw repairs a missed one.
+                # Linked entries are refreshed best-effort, failures logged and not retried:
+                # one that fails for good would retry the event into the dead-letter queue,
+                # and the entry's next redraw repairs a missed refresh.
                 try:
                     lookup = package_query.find_unique_packages(key="display_id", value=display_id)
                     lookup_errors = lookup.get("results", {}).get("errors")
@@ -182,7 +181,7 @@ def refresh_canvas_for_package_event(
                             )
                             target = _canvas_target(target_fetcher.get_package_metadata(entry_package.package_name))
                         if target:
-                            targets.add(target)
+                            linked_targets.add(target)
                 except Exception as exc:  # noqa: BLE001 - see above
                     logger.warning(
                         "Linked entry lookup failed",
@@ -191,7 +190,9 @@ def refresh_canvas_for_package_event(
                         error=str(exc),
                     )
 
-        if not targets:
+        if direct_target:
+            linked_targets.discard(direct_target)
+        elif not linked_targets:
             logger.info(
                 "Package event skipped - package metadata missing canvas target",
                 package_name=package_name,
@@ -199,38 +200,58 @@ def refresh_canvas_for_package_event(
             )
             return RefreshResult(RefreshOutcome.SKIPPED_NO_CANVAS)
 
-        failures: list[str] = []
         updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        for entry_id, canvas_id in sorted(targets):
-            payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
-            result = CanvasManager(active_benchling, config, payload).update_canvas(updated_at=updated_at)
-            if result.get("success"):
-                logger.info(
-                    "Package event canvas refresh completed",
-                    package_name=package_name,
-                    canvas_id=canvas_id,
-                    entry_id=entry_id,
-                    top_hash=top_hash,
-                    success=True,
-                )
-            else:
-                failures.append(str(result.get("error") or "Canvas update failed"))
 
-        if failures:
-            error_message = _truncate_error_message("; ".join(failures))
-            logger.error(
-                "Package event canvas refresh returned unsuccessful result",
+        def refresh(target: tuple[str, str]) -> dict:
+            entry_id, canvas_id = target
+            payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
+            return CanvasManager(active_benchling, config, payload).update_canvas(updated_at=updated_at)
+
+        for linked_target in sorted(linked_targets):
+            try:
+                linked_result = refresh(linked_target)
+                linked_error = None if linked_result.get("success") else linked_result.get("error")
+            except Exception as exc:  # noqa: BLE001 - best-effort, as above
+                linked_error = str(exc)
+            if linked_error is not None:
+                logger.warning(
+                    "Linked entry canvas refresh failed",
+                    package_name=package_name,
+                    entry_id=linked_target[0],
+                    canvas_id=linked_target[1],
+                    error=str(linked_error),
+                )
+
+        if not direct_target:
+            return RefreshResult(RefreshOutcome.SUCCESS)
+
+        entry_id, canvas_id = direct_target
+        result = refresh(direct_target)
+        if result.get("success"):
+            logger.info(
+                "Package event canvas refresh completed",
                 package_name=package_name,
+                canvas_id=canvas_id,
+                entry_id=entry_id,
                 top_hash=top_hash,
-                target_count=len(targets),
-                error=error_message,
+                success=True,
             )
-            return RefreshResult(
-                RefreshOutcome.TRANSIENT_ERROR,
-                error_type="CanvasUpdateFailed",
-                error_message=error_message,
-            )
-        return RefreshResult(RefreshOutcome.SUCCESS)
+            return RefreshResult(RefreshOutcome.SUCCESS)
+
+        error_message = _truncate_error_message(str(result.get("error") or "Canvas update failed"))
+        logger.error(
+            "Package event canvas refresh returned unsuccessful result",
+            package_name=package_name,
+            canvas_id=canvas_id,
+            entry_id=entry_id,
+            top_hash=top_hash,
+            error=error_message,
+        )
+        return RefreshResult(
+            RefreshOutcome.TRANSIENT_ERROR,
+            error_type="CanvasUpdateFailed",
+            error_message=error_message,
+        )
     except asyncio.CancelledError:
         raise
     except (KeyboardInterrupt, SystemExit):
