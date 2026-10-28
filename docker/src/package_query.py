@@ -791,6 +791,7 @@ class PackageQuery:
                 AND source.pkg_name LIKE {prefix_pattern} ESCAPE '\\'
                 AND source.pkg_name <> {own_literal}
                 AND NOT COALESCE({linked}, FALSE)
+                AND json_extract_scalar(source.user_meta, '$.entry_id') IS NULL
         ),
         revision_times AS (
             SELECT pkg_name, top_hash, max(try_cast(timestamp AS BIGINT)) AS modified_epoch
@@ -852,6 +853,7 @@ class PackageQuery:
                 WHERE r.pkg_name LIKE {prefix_pattern} ESCAPE '\\'
                     AND r.pkg_name <> {own_literal}
                     AND NOT COALESCE({linked}, FALSE)
+                    AND json_extract_scalar(m.metadata, '$.entry_id') IS NULL
                 GROUP BY r.pkg_name, r.top_hash
                 """)
         union = "\nUNION ALL\n".join(branches)
@@ -996,6 +998,7 @@ class PackageQuery:
     ) -> Dict[str, Any]:
         """Find newest packages under ``prefix`` that are not linked to ``value``.
 
+        Entry packages are left out, since each export rewrites their metadata.
         Searches every accessible package bucket so read-only raw packages can be
         shown alongside writable packages. The query remains bounded: it fetches
         only enough candidates to fill the requested page plus one look-ahead row.

@@ -106,22 +106,6 @@ def test_related_view_renders_links_buttons_paging_and_partial_failures():
     assert all("ale/raw-5" not in child["text"] for child in link_buttons)
 
 
-def test_another_entrys_package_is_listed_without_link_button():
-    entry_package = Package(
-        "catalog.example.com",
-        "lab-bucket",
-        "ale/EXP26000031",
-        metadata={"entry_id": "etr_2", "display_id": "EXP26000031"},
-    )
-    manager, _query = _manager([entry_package])
-
-    blocks = blocks_to_dict(manager.get_related_package_blocks())
-
-    assert "ale/EXP26000031" in blocks[0]["value"]
-    assert "another Benchling entry's package" in blocks[0]["value"]
-    assert "link-related-" not in json.dumps(blocks)
-
-
 def test_out_of_range_revision_time_is_shown_as_written():
     manager, _query = _manager([Package("catalog.example.com", "lab-bucket", "ale/raw-1", modified_at="1e20")])
 

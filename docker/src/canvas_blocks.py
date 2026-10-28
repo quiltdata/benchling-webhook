@@ -14,7 +14,7 @@ from benchling_api_client.v2.stable.models.markdown_ui_block_update import Markd
 from benchling_api_client.v2.stable.models.section_ui_block_type import SectionUiBlockType
 from benchling_api_client.v2.stable.models.section_ui_block_update import SectionUiBlockUpdate
 
-from .packages import Package, is_entry_package
+from .packages import Package
 from .pagination import PageState, encode_bucket_name, encode_package_name, encode_related_button_value
 
 RELATED_PAGE_SIZE = 5
@@ -302,7 +302,7 @@ def create_related_package_link_buttons(
     """Create one Link button for each related package the webhook may revise."""
     buttons = []
     for package in packages:
-        if not writable_bucket or package.bucket != writable_bucket or is_entry_package(package.metadata):
+        if not writable_bucket or package.bucket != writable_bucket:
             continue
         package_part = encode_related_button_value(package.package_name)
         bucket_part = encode_related_button_value(package.bucket)

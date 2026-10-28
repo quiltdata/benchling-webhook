@@ -15,7 +15,6 @@ from quilt3.util import validate_package_name
 from .auth.role_manager import RoleManager
 from .package_files import SEAL_FILE, has_staged_seal
 from .package_query import ELN_ENTRY_KEY
-from .packages import ENTRY_PACKAGE_NOTE, is_entry_package
 from .packaging_status import check_workflow
 
 if TYPE_CHECKING:
@@ -144,8 +143,10 @@ class PackageLinker:
         metadata = package.meta
         if not isinstance(metadata, dict):
             raise RelatedPackageLinkError(f"Package metadata must be an object, not {type(metadata).__name__}.")
-        if is_entry_package(metadata):
-            raise RelatedPackageLinkError(f"Package {package_name!r} {ENTRY_PACKAGE_NOTE}")
+        if metadata.get("entry_id"):
+            raise RelatedPackageLinkError(
+                f"Package {package_name!r} is another Benchling entry's package; its next export would drop the link."
+            )
 
         package_key = self.config.package_key
         updated_metadata, changed = self._updated_metadata(metadata, package_key, display_id)

@@ -945,6 +945,7 @@ class TestRelatedPackageQuery:
         assert "NOT COALESCE" in sql
         assert "json_extract_scalar(source.user_meta, '$.experiment_id') = 'EXP1'" in sql
         assert "json_array_contains(json_extract(source.user_meta, '$.eln_entry'), 'EXP1')" in sql
+        assert "json_extract_scalar(source.user_meta, '$.entry_id') IS NULL" in sql
         assert "SELECT DISTINCT source.pkg_name" in sql
         assert "ORDER BY revision_times.modified_epoch DESC NULLS LAST" in sql
         assert "LIMIT 6" in sql
@@ -1075,6 +1076,7 @@ def test_related_iceberg_query_deduplicates_before_global_limit():
 
     # Structural: Athena is out of reach, so this pins one row per package before the limit.
     assert "max(r.timestamp) AS modified_at" in sql
+    assert "json_extract_scalar(m.metadata, '$.entry_id') IS NULL" in sql
     assert "GROUP BY r.pkg_name, r.top_hash" in sql
     assert sql.index("GROUP BY r.pkg_name, r.top_hash") < sql.index("LIMIT 6")
 
