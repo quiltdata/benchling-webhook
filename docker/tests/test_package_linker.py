@@ -52,6 +52,7 @@ class FakeS3:
         self.latest_conflicts_remaining = 0
         self.ambiguous_latest_commits_remaining = 0
         self.ambiguous_latest_superseded_remaining = 0
+        self.committed_then_412_remaining = 0
         self.concurrent_hash = "1" * 64
         self.latest_puts = 0
         self.deleted = []
@@ -89,6 +90,11 @@ class FakeS3:
             raise self._client_error("PreconditionFailed", "PutObject", 412)
         if Key == LATEST_KEY and IfMatch is not None:
             self.latest_puts += 1
+            if self.committed_then_412_remaining:
+                self.committed_then_412_remaining -= 1
+                self.objects[Key] = Body if isinstance(Body, bytes) else Body.read()
+                self._set_etag(Key)
+                raise self._client_error("PreconditionFailed", "PutObject", 412)
             if self.latest_conflicts_remaining:
                 self.latest_conflicts_remaining -= 1
                 self.objects[LATEST_KEY] = self.concurrent_hash.encode()
@@ -168,7 +174,7 @@ def test_two_links_in_same_second_keep_distinct_history_pointers():
     }
 
 
-def test_latest_conflict_discards_history_pointer_and_retries_from_new_revision():
+def test_latest_conflict_retains_ambiguous_history_and_retries_from_new_revision():
     s3 = FakeS3()
     s3.latest_conflicts_remaining = 1
 
@@ -176,8 +182,12 @@ def test_latest_conflict_discards_history_pointer_and_retries_from_new_revision(
         result = PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
 
     assert s3.latest_puts == 2
-    assert s3.deleted == [f".quilt/named_packages/{PACKAGE_NAME}/2000"]
-    assert list(s3.history()) == [f".quilt/named_packages/{PACKAGE_NAME}/2000"]
+    assert s3.deleted == []
+    assert list(s3.history()) == [
+        f".quilt/named_packages/{PACKAGE_NAME}/2000",
+        f".quilt/named_packages/{PACKAGE_NAME}/2001",
+    ]
+    assert s3.history()[f".quilt/named_packages/{PACKAGE_NAME}/2001"] == result.top_hash.encode()
     assert _revision_rows(s3, result.top_hash)[0]["user_meta"] == {
         "owner": "lab",
         "concurrent": True,
@@ -253,3 +263,17 @@ def test_ambiguous_superseded_latest_failure_retains_possible_committed_history(
     assert list(s3.history()) == [history_key]
     assert history_key not in s3.deleted
     assert s3.objects[LATEST_KEY] == s3.concurrent_hash.encode()
+
+
+def test_sdk_retry_412_after_commit_preserves_history_and_returns_success():
+    s3 = FakeS3()
+    s3.committed_then_412_remaining = 1
+
+    with patch("src.package_linker.time.time", return_value=5_000):
+        result = PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
+
+    history_key = f".quilt/named_packages/{PACKAGE_NAME}/5000"
+    assert s3.latest_puts == 1
+    assert s3.objects[LATEST_KEY] == result.top_hash.encode()
+    assert s3.history() == {history_key: result.top_hash.encode()}
+    assert history_key not in s3.deleted

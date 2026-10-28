@@ -312,27 +312,29 @@ class PackageLinker:
                 self._discard_history_pointer(bucket, history_key, history_etag)
                 raise
             except ClientError as exc:
-                if self._is_conflict(exc):
+                # A surfaced 412 is not always a definite failed write: the SDK
+                # may have retried after the first request committed but its
+                # response was lost. Reconcile every ClientError before touching
+                # history, including conditional conflicts.
+                reconciliation = self._reconcile_latest(
+                    bucket,
+                    latest_key,
+                    new_top_hash,
+                    current_etag,
+                )
+                if reconciliation == "committed":
+                    return LinkResult(package_name, bucket, new_top_hash, True)
+                if reconciliation == "unchanged":
                     self._discard_history_pointer(bucket, history_key, history_etag)
-                    if attempt < MAX_LINK_ATTEMPTS:
-                        logger.info(
-                            "Related package changed while linking; retrying",
-                            package_name=package_name,
-                            bucket=bucket,
-                            attempt=attempt,
-                        )
-                        continue
-                else:
-                    reconciliation = self._reconcile_latest(
-                        bucket,
-                        latest_key,
-                        new_top_hash,
-                        current_etag,
+                if self._is_conflict(exc) and attempt < MAX_LINK_ATTEMPTS:
+                    logger.info(
+                        "Related package changed while linking; retrying",
+                        package_name=package_name,
+                        bucket=bucket,
+                        attempt=attempt,
+                        reconciliation=reconciliation,
                     )
-                    if reconciliation == "committed":
-                        return LinkResult(package_name, bucket, new_top_hash, True)
-                    if reconciliation == "unchanged":
-                        self._discard_history_pointer(bucket, history_key, history_etag)
+                    continue
                 raise RelatedPackageLinkError(f"Could not advance the package revision: {exc}") from exc
             except Exception as exc:
                 reconciliation = self._reconcile_latest(
