@@ -292,6 +292,52 @@ def test_link_to_entry_without_package_is_skipped_not_retried(mock_config):
     mock_canvas_manager.assert_not_called()
 
 
+def test_unreadable_match_does_not_hide_a_readable_one(mock_config):
+    mock_config.s3_bucket_name = ""
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        source_fetcher = Mock()
+        source_fetcher.get_package_top_hash.return_value = "abc123"
+        source_fetcher.get_package_metadata.return_value = {}
+        source_fetcher.get_package_user_metadata.return_value = {"experiment_id": "EXP1"}
+        denied_fetcher = Mock()
+        denied_fetcher.get_package_metadata.side_effect = RuntimeError("Access denied")
+        readable_fetcher = Mock()
+        readable_fetcher.get_package_metadata.return_value = {"entry_id": "etr_1", "canvas_id": "cnvs_1"}
+        mock_fetcher_class.side_effect = [source_fetcher, denied_fetcher, readable_fetcher]
+
+        query = Mock()
+        query.find_unique_packages.return_value = {
+            "packages": [
+                Package("test.quiltdata.com", "denied-bucket", "ale/EXP1"),
+                Package("test.quiltdata.com", "readable-bucket", "ale/EXP1"),
+            ],
+            "results": {"errors": {}},
+        }
+        mock_query_class.return_value = query
+
+        manager = Mock()
+        manager.update_canvas.return_value = {"success": True}
+        mock_canvas_manager.return_value = manager
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=Mock,
+            bucket="source-bucket",
+        )
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    manager.update_canvas.assert_called_once()
+
+
 def test_failed_linked_canvas_refresh_does_not_fail_the_event(mock_config):
     mock_config.quilt_database = "athena-db"
     mock_config.package_key = "experiment_id"

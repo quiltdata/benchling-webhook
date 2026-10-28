@@ -76,7 +76,7 @@ def check_workflow(
         if e.response.get("Error", {}).get("Code") not in {"NoSuchKey", "404"}:
             logger.warning("Workflow pre-check skipped: config unreadable", bucket=bucket, error=str(e))
             return f"Could not read the bucket workflow configuration: {e}" if strict else None
-        if workflow_arg is ...:
+        if workflow_arg in (None, ...):
             return None
         return f"{workflow!r} workflow is specified, but no workflows config exist."
     except Exception as e:  # noqa: BLE001 - malformed or transient read error

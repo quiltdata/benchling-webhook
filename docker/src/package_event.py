@@ -163,32 +163,38 @@ def refresh_canvas_for_package_event(
                 # and the entry's next redraw repairs a missed refresh.
                 try:
                     lookup = package_query.find_unique_packages(key="display_id", value=display_id)
-                    lookup_errors = lookup.get("results", {}).get("errors")
-                    if lookup_errors:
-                        logger.warning(
-                            "Linked entry lookup incomplete",
-                            package_name=package_name,
-                            display_id=display_id,
-                            errors=lookup_errors,
-                        )
-                    for entry_package in lookup["packages"]:
-                        target = _canvas_target(entry_package.metadata)
-                        if not target:
-                            target_fetcher = (
-                                package_fetcher
-                                if entry_package.bucket == package_bucket
-                                else fetcher_for(entry_package.bucket)
-                            )
-                            target = _canvas_target(target_fetcher.get_package_metadata(entry_package.package_name))
-                        if target:
-                            linked_targets.add(target)
                 except Exception as exc:  # noqa: BLE001 - see above
                     logger.warning(
-                        "Linked entry lookup failed",
+                        "Linked entry lookup failed", package_name=package_name, display_id=display_id, error=str(exc)
+                    )
+                    continue
+                lookup_errors = lookup.get("results", {}).get("errors")
+                if lookup_errors:
+                    logger.warning(
+                        "Linked entry lookup incomplete",
                         package_name=package_name,
                         display_id=display_id,
-                        error=str(exc),
+                        errors=lookup_errors,
                     )
+                for entry_package in lookup["packages"]:
+                    target = _canvas_target(entry_package.metadata)
+                    if not target:
+                        target_fetcher = (
+                            package_fetcher
+                            if entry_package.bucket == package_bucket
+                            else fetcher_for(entry_package.bucket)
+                        )
+                        try:
+                            target = _canvas_target(target_fetcher.get_package_metadata(entry_package.package_name))
+                        except Exception as exc:  # noqa: BLE001 - see above
+                            logger.warning(
+                                "Linked entry metadata unreadable",
+                                package_name=entry_package.package_name,
+                                bucket=entry_package.bucket,
+                                error=str(exc),
+                            )
+                    if target:
+                        linked_targets.add(target)
 
         if direct_target:
             linked_targets.discard(direct_target)
