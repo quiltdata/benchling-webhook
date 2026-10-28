@@ -175,11 +175,15 @@ def refresh_canvas_for_package_event(
                     raise RuntimeError(f"Linked Canvas target lookup was incomplete: {summary}")
                 linked_entry_packages = lookup["packages"]
                 if not linked_entry_packages:
-                    logger.info(
+                    message = (
+                        f"Linked entry package for {display_id!r} is not indexed yet; " "retrying Canvas refresh."
+                    )
+                    logger.warning(
                         "Linked entry package not found for Canvas refresh",
                         package_name=package_name,
                         display_id=display_id,
                     )
+                    raise RuntimeError(message)
                 for entry_package in linked_entry_packages:
                     target = _canvas_target(entry_package.metadata)
                     if not target:
