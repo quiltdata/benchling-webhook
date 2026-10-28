@@ -143,7 +143,6 @@ def refresh_canvas_for_package_event(
         display_metadata = package_fetcher.get_package_metadata(package_name)
         manifest_metadata = package_fetcher.get_package_user_metadata(package_name)
         targets: set[tuple[str, str]] = set()
-        lookup_failures: list[str] = []
         direct_target = _canvas_target(display_metadata) or _canvas_target(manifest_metadata)
         if direct_target:
             targets.add(direct_target)
@@ -161,15 +160,18 @@ def refresh_canvas_for_package_event(
                 config=config,
             )
             for display_id in linked_display_ids:
-                # A failed lookup is retried, but must not hold back the Canvases that resolve.
+                # Logged, not retried: a lookup that fails for good would retry into the
+                # dead-letter queue, and the entry's next redraw repairs a missed one.
                 try:
                     lookup = package_query.find_unique_packages(key="display_id", value=display_id)
-                    lookup_errors = lookup.get("results", {}).get("errors", {})
+                    lookup_errors = lookup.get("results", {}).get("errors")
                     if lookup_errors:
-                        summary = "; ".join(
-                            f"{failed_bucket}: {message}" for failed_bucket, message in sorted(lookup_errors.items())
+                        logger.warning(
+                            "Linked entry lookup incomplete",
+                            package_name=package_name,
+                            display_id=display_id,
+                            errors=lookup_errors,
                         )
-                        lookup_failures.append(f"{display_id}: incomplete target lookup ({summary})")
                     for entry_package in lookup["packages"]:
                         target = _canvas_target(entry_package.metadata)
                         if not target:
@@ -181,23 +183,15 @@ def refresh_canvas_for_package_event(
                             target = _canvas_target(target_fetcher.get_package_metadata(entry_package.package_name))
                         if target:
                             targets.add(target)
-                except Exception as exc:  # noqa: BLE001 - retried after the other Canvases refresh
-                    lookup_failures.append(f"{display_id}: {exc}")
+                except Exception as exc:  # noqa: BLE001 - see above
+                    logger.warning(
+                        "Linked entry lookup failed",
+                        package_name=package_name,
+                        display_id=display_id,
+                        error=str(exc),
+                    )
 
         if not targets:
-            if lookup_failures:
-                error_message = _truncate_error_message("; ".join(lookup_failures))
-                logger.warning(
-                    "Package event Canvas targets are not ready",
-                    package_name=package_name,
-                    top_hash=top_hash,
-                    error=error_message,
-                )
-                return RefreshResult(
-                    RefreshOutcome.TRANSIENT_ERROR,
-                    error_type="CanvasTargetLookupIncomplete",
-                    error_message=error_message,
-                )
             logger.info(
                 "Package event skipped - package metadata missing canvas target",
                 package_name=package_name,
@@ -205,7 +199,7 @@ def refresh_canvas_for_package_event(
             )
             return RefreshResult(RefreshOutcome.SKIPPED_NO_CANVAS)
 
-        failures = list(lookup_failures)
+        failures: list[str] = []
         updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         for entry_id, canvas_id in sorted(targets):
             payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
@@ -233,7 +227,7 @@ def refresh_canvas_for_package_event(
             )
             return RefreshResult(
                 RefreshOutcome.TRANSIENT_ERROR,
-                error_type="CanvasRefreshIncomplete" if lookup_failures else "CanvasUpdateFailed",
+                error_type="CanvasUpdateFailed",
                 error_message=error_message,
             )
         return RefreshResult(RefreshOutcome.SUCCESS)

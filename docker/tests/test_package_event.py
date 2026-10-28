@@ -214,7 +214,7 @@ def test_bucketless_related_revision_searches_globally_and_reads_target_bucket(m
     target_fetcher.get_package_metadata.assert_called_once_with("ale/EXP1")
 
 
-def test_bucketless_partial_target_lookup_refreshes_found_canvas_and_is_retryable(mock_config):
+def test_bucketless_partial_target_lookup_still_refreshes_found_canvas(mock_config):
     mock_config.s3_bucket_name = ""
     mock_config.quilt_database = "athena-db"
     mock_config.package_key = "experiment_id"
@@ -255,8 +255,7 @@ def test_bucketless_partial_target_lookup_refreshes_found_canvas_and_is_retryabl
             bucket="bucket-a",
         )
 
-    assert result.outcome == RefreshOutcome.TRANSIENT_ERROR
-    assert "incomplete" in (result.error_message or "")
+    assert result.outcome == RefreshOutcome.SUCCESS
     manager.update_canvas.assert_called_once()
 
 
@@ -335,9 +334,7 @@ def test_failed_old_link_lookup_does_not_block_resolvable_new_canvas(mock_config
             benchling_factory=Mock,
         )
 
-    assert result.outcome == RefreshOutcome.TRANSIENT_ERROR
-    assert result.error_type == "CanvasRefreshIncomplete"
-    assert "OLD" in (result.error_message or "")
+    assert result.outcome == RefreshOutcome.SUCCESS
     assert query.find_unique_packages.call_args_list == [
         call(key="display_id", value="OLD"),
         call(key="display_id", value="NEW"),
