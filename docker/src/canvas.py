@@ -654,18 +654,24 @@ class CanvasManager:
             )
         raise ValueError(f"Unknown context: {context}")
 
+    @property
+    def related_prefix(self) -> Optional[str]:
+        """The prefix of the entry's own package name, which its related packages share."""
+        name = self.own_package_name
+        return name.rsplit("/", 1)[0] if name else None
+
     def get_related_package_blocks(self, page_number: int = 0, error: Optional[str] = None) -> List:
         """Generate the paged same-prefix package list and Link controls."""
         page_size = blocks.RELATED_PAGE_SIZE
         own_package_name = self.own_package_name
-        if not own_package_name or not self._package_exists():
+        prefix = self.related_prefix
+        if not own_package_name or not prefix or not self._package_exists():
             markdown = "## Related Packages\n\nCreate this entry's package before viewing related packages.\n"
             return [
                 blocks.create_markdown_block(markdown, "md-related"),
                 blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
             ]
 
-        prefix = own_package_name.rsplit("/", 1)[0]
         try:
             result = self._package_query.find_related_packages(
                 prefix=prefix,

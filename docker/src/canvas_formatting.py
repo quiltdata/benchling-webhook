@@ -177,6 +177,8 @@ def _format_related_timestamp(value: Optional[str]) -> str:
         return ""
     try:
         parsed = datetime.fromtimestamp(float(text), tz=timezone.utc)
+    except (OverflowError, OSError):
+        return escape_markdown(text)
     except ValueError:
         try:
             parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))

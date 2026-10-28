@@ -122,6 +122,14 @@ def test_another_entrys_package_is_listed_without_link_button():
     assert "link-related-" not in json.dumps(blocks)
 
 
+def test_out_of_range_revision_time_is_shown_as_written():
+    manager, _query = _manager([Package("catalog.example.com", "lab-bucket", "ale/raw-1", modified_at="1e20")])
+
+    markdown = blocks_to_dict(manager.get_related_package_blocks())[0]["value"]
+
+    assert "ale/raw-1" in markdown and "1e20" in markdown
+
+
 def test_related_view_requires_existing_entry_package():
     manager, query = _manager([], package_exists=False)
 

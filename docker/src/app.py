@@ -1178,8 +1178,9 @@ def create_app() -> FastAPI:
                     raise RelatedPackageLinkError("Create this entry's package before linking related packages.")
                 if canvas_manager.is_sealed_or_staged():
                     raise RelatedPackageLinkError("This entry was sealed while linking; no package was changed.")
-                related_prefix = own_package_name.rsplit("/", 1)[0] + "/"
-                if package_name == own_package_name or not package_name.startswith(related_prefix):
+                if package_name == own_package_name or not package_name.startswith(
+                    f"{canvas_manager.related_prefix}/"
+                ):
                     raise RelatedPackageLinkError(f"Package {package_name!r} is not related to {own_package_name!r}.")
                 result = PackageLinker(config).link(package_name, bucket, display_id)
                 if not result.changed and not canvas_manager.is_sealed_or_staged():

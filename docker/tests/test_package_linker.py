@@ -219,6 +219,20 @@ def test_revision_must_pass_the_workflow_the_package_was_stamped_with():
     assert s3.objects == before
 
 
+def test_package_pushed_without_workflow_is_not_held_to_bucket_default():
+    s3 = FakeS3(_manifest(workflow={"id": None, "config": f"s3://{BUCKET}/.quilt/workflows/config.yml"}))
+    s3.objects[".quilt/workflows/config.yml"] = (
+        b'version: "1"\nis_workflow_required: false\ndefault_workflow: strict\n'
+        b"workflows:\n  strict:\n    name: Strict\n    handle_pattern: ^nomatch/\n"
+    )
+    s3._set_etag(".quilt/workflows/config.yml")
+
+    result = PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
+
+    assert result.changed is True
+    assert s3.objects[LATEST_KEY].decode() == result.top_hash
+
+
 def test_another_entrys_package_is_not_linked():
     s3 = FakeS3(_manifest({"entry_id": "etr_2", "display_id": "EXP2"}))
     before = dict(s3.objects)

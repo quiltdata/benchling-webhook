@@ -51,7 +51,7 @@ class _S3WorkflowConfig(WorkflowConfig):
 def check_workflow(
     s3_client: Any,
     bucket: str,
-    workflow: str,
+    workflow: Optional[str],
     package_name: str,
     message: str,
     metadata: dict,
@@ -61,13 +61,14 @@ def check_workflow(
 ) -> Optional[str]:
     """Return why a package revision would be rejected, or ``None`` when valid.
 
-    ``workflow`` follows the packager message: ``""`` means the bucket default.
+    ``workflow`` follows the packager message: ``""`` means the bucket default, and
+    ``None`` no workflow.
     ``adds`` names files that will be under the source prefix by the time a normal
     package is queued. ``manifest_entries`` supplies the exact entries for a
     metadata-only revision. With ``strict=True``, an unreadable workflow is a
     rejection because no downstream packager will perform a second validation.
     """
-    workflow_arg: Any = workflow or ...
+    workflow_arg: Any = ... if workflow == "" else workflow
     conf_pk = get_package_registry(f"s3://{bucket}").workflow_conf_pk
     try:
         data = yaml.safe_load(_read(s3_client, conf_pk))

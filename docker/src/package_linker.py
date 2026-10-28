@@ -158,7 +158,7 @@ class PackageLinker:
 
         # The revision keeps the package's workflow stamp, so it must pass that workflow.
         stamp = package._workflow
-        workflow = (stamp.get("id") if isinstance(stamp, dict) else None) or ""
+        workflow = stamp.get("id") if isinstance(stamp, dict) else ""
         rejection = check_workflow(
             self.s3_client,
             self.config.s3_bucket_name,
