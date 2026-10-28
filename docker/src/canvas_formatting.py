@@ -189,6 +189,13 @@ def _format_related_timestamp(value: Optional[str]) -> str:
     return parsed.strftime("%Y-%m-%d %H:%M UTC")
 
 
+def format_link_error(error: Optional[str]) -> str:
+    """Explain why a Link failed, or nothing when it did not."""
+    if not error:
+        return ""
+    return f"> **⚠️ Unable to link package.** {escape_markdown(' '.join(error.split()))}\n\n"
+
+
 def format_related_packages(
     packages: List[Package],
     prefix: str,
@@ -201,8 +208,7 @@ def format_related_packages(
         f"## Related Packages - Page {page_number + 1}\n\n"
         f"Newest packages under `{prefix}/` that are not linked to this entry.\n\n"
     )
-    if error:
-        content += f"> **⚠️ Unable to link package.** {escape_markdown(' '.join(error.split()))}\n\n"
+    content += format_link_error(error)
     if not packages:
         return content + "*No unlinked related packages found.*\n"
 

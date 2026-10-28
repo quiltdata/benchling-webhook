@@ -129,6 +129,16 @@ def test_out_of_range_revision_time_is_shown_as_written():
     assert "ale/raw-1" in markdown and "1e20" in markdown
 
 
+def test_link_error_survives_a_failed_related_query():
+    manager, query = _manager([])
+    query.find_related_packages.side_effect = RuntimeError("Athena timed out")
+
+    markdown = blocks_to_dict(manager.get_related_package_blocks(error="metadata failed schema"))[0]["value"]
+
+    assert "Unable to link package" in markdown and "metadata failed schema" in markdown
+    assert "Athena timed out" in markdown
+
+
 def test_related_view_requires_existing_entry_package():
     manager, query = _manager([], package_exists=False)
 

@@ -692,6 +692,7 @@ class CanvasManager:
             )
             markdown = (
                 "## Error Loading Related Packages\n\n"
+                f"{fmt.format_link_error(error)}"
                 f"Unable to find packages under `{prefix}/`.\n\n"
                 f"Error: {fmt.escape_markdown(str(exc))}\n"
             )
