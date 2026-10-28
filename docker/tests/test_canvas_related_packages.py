@@ -111,6 +111,16 @@ def test_prefix_is_shown_as_written():
     assert "`ale_team/`" in markdown
 
 
+def test_athena_timestamp_with_zone_is_shown_in_the_common_format():
+    manager, _query = _manager(
+        [Package("catalog.example.com", "lab-bucket", "ale/raw-1", modified_at="2026-10-28 09:50:12.345 UTC")]
+    )
+
+    markdown = blocks_to_dict(manager.get_related_package_blocks())[0]["value"]
+
+    assert "2026-10-28 09:50 UTC" in markdown
+
+
 def test_out_of_range_revision_time_is_shown_as_written():
     manager, _query = _manager([Package("catalog.example.com", "lab-bucket", "ale/raw-1", modified_at="1e20")])
 

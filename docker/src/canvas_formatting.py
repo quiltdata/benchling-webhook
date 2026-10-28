@@ -181,7 +181,7 @@ def _format_related_timestamp(value: Optional[str]) -> str:
         return escape_markdown(text)
     except ValueError:
         try:
-            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(text.removesuffix(" UTC").replace("Z", "+00:00"))
         except ValueError:
             return escape_markdown(" ".join(text.split()))
         parsed = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
