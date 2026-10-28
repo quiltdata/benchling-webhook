@@ -154,7 +154,10 @@ def refresh_canvas_for_package_event(
         linked_display_ids = _linked_display_ids(manifest_metadata, package_key)
         if linked_display_ids:
             package_query = PackageQuery(
-                bucket=package_bucket or "",
+                # A configured deployment intentionally scopes lookup to its
+                # package bucket. Bucketless mode must preserve global fanout,
+                # even though this event itself came from one concrete bucket.
+                bucket=config.s3_bucket_name or "",
                 catalog_url=config.quilt_catalog,
                 database=config.quilt_database,
                 config=config,
@@ -173,7 +176,15 @@ def refresh_canvas_for_package_event(
                 for entry_package in linked_entry_packages:
                     target = _canvas_target(entry_package.metadata)
                     if not target:
-                        target_metadata = package_fetcher.get_package_metadata(entry_package.package_name)
+                        target_fetcher = package_fetcher
+                        if entry_package.bucket != package_bucket:
+                            target_fetcher = PackageFileFetcher(
+                                catalog_url=config.quilt_catalog,
+                                bucket=entry_package.bucket,
+                                role_arn=config.quilt_write_role_arn or None,
+                                region=config.aws_region,
+                            )
+                        target_metadata = target_fetcher.get_package_metadata(entry_package.package_name)
                         target = _canvas_target(target_metadata)
                     if target:
                         targets.add(target)

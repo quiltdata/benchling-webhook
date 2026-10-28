@@ -13,6 +13,7 @@ from quilt3.backends import get_package_registry
 from quilt3.util import validate_package_name
 
 from .auth.role_manager import RoleManager
+from .package_files import SEAL_FILE, is_not_found
 from .package_query import ELN_ENTRY_KEY
 from .packaging_status import check_workflow
 
@@ -133,6 +134,11 @@ class PackageLinker:
         except Exception as exc:
             raise RelatedPackageLinkError(f"Could not read the current package manifest: {exc}") from exc
 
+        if any(logical_key == SEAL_FILE for logical_key, _entry in package.walk()):
+            raise RelatedPackageLinkError(
+                f"Package {package_name!r} is sealed by an accepted review and cannot be linked."
+            )
+
         metadata = package.meta
         if not isinstance(metadata, dict):
             raise RelatedPackageLinkError(f"Package metadata must be an object, not {type(metadata).__name__}.")
@@ -170,6 +176,38 @@ class PackageLinker:
         code = exc.response.get("Error", {}).get("Code")
         status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
         return code in {"PreconditionFailed", "ConditionalRequestConflict", "412"} or status == 412
+
+    def _has_staged_seal(self, package_name: str, bucket: str) -> bool:
+        """Whether the package source prefix already contains an acceptance seal."""
+        try:
+            self.s3_client.head_object(Bucket=bucket, Key=f"{package_name}/{SEAL_FILE}")
+            return True
+        except ClientError as exc:
+            if is_not_found(exc):
+                return False
+            raise RelatedPackageLinkError(f"Could not verify whether {package_name!r} is sealed: {exc}") from exc
+
+    def _reconcile_latest(
+        self,
+        bucket: str,
+        latest_key: str,
+        top_hash: str,
+        previous_etag: str,
+    ) -> str:
+        """Classify an ambiguous latest write as committed, unchanged, or unknown."""
+        try:
+            response = self.s3_client.get_object(Bucket=bucket, Key=latest_key)
+            current_hash = self._read_body(response).decode("utf-8").strip()
+            if current_hash == top_hash:
+                return "committed"
+            if response.get("ETag") == previous_etag:
+                return "unchanged"
+            # Another revision won after the request. This write may have been
+            # committed and immediately superseded, so its history must remain.
+            return "unknown"
+        except Exception as exc:  # noqa: BLE001 - caller must retain history when outcome is unknown
+            logger.warning("Could not reconcile package latest pointer", bucket=bucket, key=latest_key, error=str(exc))
+            return "unknown"
 
     def _reserve_history_pointer(self, registry, package_name: str, bucket: str, top_hash: str) -> tuple[str, str]:
         """Write a unique Quilt v1 history pointer without replacing another revision."""
@@ -215,6 +253,11 @@ class PackageLinker:
         except Exception as exc:
             raise RelatedPackageLinkError(f"Invalid related package name {package_name!r}: {exc}") from exc
 
+        if self._has_staged_seal(package_name, bucket):
+            raise RelatedPackageLinkError(
+                f"Package {package_name!r} is sealed by an accepted review and cannot be linked."
+            )
+
         registry = get_package_registry(f"s3://{bucket}")
         latest_key = registry.pointer_latest_pk(package_name).path
 
@@ -253,25 +296,55 @@ class PackageLinker:
                 new_top_hash,
             )
             try:
+                # Acceptance can race the initial check. Recheck the source seal
+                # immediately before advancing latest and fail closed.
+                if self._has_staged_seal(package_name, bucket):
+                    raise RelatedPackageLinkError(
+                        f"Package {package_name!r} was sealed while linking and cannot be revised."
+                    )
                 self.s3_client.put_object(
                     Bucket=bucket,
                     Key=latest_key,
                     Body=new_top_hash.encode("utf-8"),
                     IfMatch=current_etag,
                 )
+            except RelatedPackageLinkError:
+                self._discard_history_pointer(bucket, history_key, history_etag)
+                raise
             except ClientError as exc:
-                self._discard_history_pointer(bucket, history_key, history_etag)
-                if not self._is_conflict(exc) or attempt == MAX_LINK_ATTEMPTS:
-                    raise RelatedPackageLinkError(f"Could not advance the package revision: {exc}") from exc
-                logger.info(
-                    "Related package changed while linking; retrying",
-                    package_name=package_name,
-                    bucket=bucket,
-                    attempt=attempt,
-                )
-                continue
+                if self._is_conflict(exc):
+                    self._discard_history_pointer(bucket, history_key, history_etag)
+                    if attempt < MAX_LINK_ATTEMPTS:
+                        logger.info(
+                            "Related package changed while linking; retrying",
+                            package_name=package_name,
+                            bucket=bucket,
+                            attempt=attempt,
+                        )
+                        continue
+                else:
+                    reconciliation = self._reconcile_latest(
+                        bucket,
+                        latest_key,
+                        new_top_hash,
+                        current_etag,
+                    )
+                    if reconciliation == "committed":
+                        return LinkResult(package_name, bucket, new_top_hash, True)
+                    if reconciliation == "unchanged":
+                        self._discard_history_pointer(bucket, history_key, history_etag)
+                raise RelatedPackageLinkError(f"Could not advance the package revision: {exc}") from exc
             except Exception as exc:
-                self._discard_history_pointer(bucket, history_key, history_etag)
+                reconciliation = self._reconcile_latest(
+                    bucket,
+                    latest_key,
+                    new_top_hash,
+                    current_etag,
+                )
+                if reconciliation == "committed":
+                    return LinkResult(package_name, bucket, new_top_hash, True)
+                if reconciliation == "unchanged":
+                    self._discard_history_pointer(bucket, history_key, history_etag)
                 raise RelatedPackageLinkError(f"Could not advance the package revision: {exc}") from exc
 
             logger.info(

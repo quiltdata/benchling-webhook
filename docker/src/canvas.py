@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError
 from . import canvas_blocks as blocks
 from . import canvas_formatting as fmt
 from .config import Config
-from .package_files import PackageFile, PackageFileFetcher, is_not_found
+from .package_files import SEAL_FILE, PackageFile, PackageFileFetcher, is_not_found
 from .package_naming import MissingPlaceholderError, entry_package_name
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packages import Package
@@ -366,6 +366,31 @@ class CanvasManager:
         if not self.own_package_name:
             return None
         return self._package_file_fetcher.get_seal(self.own_package_name)
+
+    def is_sealed_or_staged(self) -> bool:
+        """Recheck whether acceptance blocks related-package UI or writes.
+
+        The published manifest is authoritative once available. During the gap
+        before the packager publishes it, ``EntryPackager`` has already staged
+        the same seal under the entry package source prefix; checking both closes
+        the asynchronous View Related race.
+        """
+        if self._load_seal() is not None:
+            return True
+        package_name = self.own_package_name
+        bucket = self.config.s3_bucket_name
+        if not package_name or not bucket:
+            return False
+        try:
+            self._package_file_fetcher.role_manager.get_s3_client().head_object(
+                Bucket=bucket,
+                Key=f"{package_name}/{SEAL_FILE}",
+            )
+            return True
+        except ClientError as exc:
+            if is_not_found(exc):
+                return False
+            raise
 
     def _make_sealed_markdown(self, top_hash: str, seal: dict) -> str:
         """Render the sealed revision and the linked packages frozen at acceptance."""
@@ -730,6 +755,28 @@ class CanvasManager:
         )
         canvas_blocks.extend(blocks.create_related_navigation_buttons(self.entry_id, page_state))
         return canvas_blocks
+
+    def update_related_canvas(
+        self,
+        page_number: int = 0,
+        page_size: int = 5,
+        error: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Publish a related view only if acceptance has not sealed the entry.
+
+        The seal check intentionally happens after the potentially slow Athena
+        query, immediately before the Canvas update, so late query results cannot
+        replace a locked, pinned summary.
+        """
+        related_blocks = self.get_related_package_blocks(page_number, page_size, error=error)
+        if self.is_sealed_or_staged():
+            logger.info(
+                "Skipped stale related-package Canvas update after entry seal",
+                entry_id=self.entry_id,
+                canvas_id=self.canvas_id,
+            )
+            return {"success": False, "skipped": "sealed"}
+        return self.update_canvas_with_blocks(related_blocks)
 
     def get_package_browser_blocks(
         self,

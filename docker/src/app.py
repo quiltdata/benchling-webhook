@@ -1142,8 +1142,7 @@ def create_app() -> FastAPI:
 
             def async_update():
                 try:
-                    related_blocks = canvas_manager.get_related_package_blocks(page_number, 5)
-                    canvas_manager.update_canvas_with_blocks(related_blocks)
+                    canvas_manager.update_related_canvas(page_number, 5)
                     logger.info(
                         "Canvas updated with related packages",
                         canvas_id=payload.canvas_id,
@@ -1182,11 +1181,13 @@ def create_app() -> FastAPI:
                 own_package_name = canvas_manager.own_package_name
                 if not own_package_name or not canvas_manager._package_exists():
                     raise RelatedPackageLinkError("Create this entry's package before linking related packages.")
+                if canvas_manager.is_sealed_or_staged():
+                    raise RelatedPackageLinkError("This entry was sealed while linking; no package was changed.")
                 related_prefix = own_package_name.rsplit("/", 1)[0] + "/"
                 if package_name == own_package_name or not package_name.startswith(related_prefix):
                     raise RelatedPackageLinkError(f"Package {package_name!r} is not related to {own_package_name!r}.")
                 result = PackageLinker(config).link(package_name, bucket, display_id)
-                if not result.changed:
+                if not result.changed and not canvas_manager.is_sealed_or_staged():
                     # An idempotent click creates no package event, so return to
                     # the main view directly to clear a catalog-lagged row.
                     canvas_manager.update_canvas_with_blocks(canvas_manager._make_blocks())
@@ -1207,8 +1208,7 @@ def create_app() -> FastAPI:
                     bucket=bucket,
                     error=str(exc),
                 )
-                error_blocks = canvas_manager.get_related_package_blocks(0, 5, error=str(exc))
-                canvas_manager.update_canvas_with_blocks(error_blocks)
+                canvas_manager.update_related_canvas(0, 5, error=str(exc))
             except Exception as exc:
                 logger.error(
                     "Related package link failed",
@@ -1218,8 +1218,7 @@ def create_app() -> FastAPI:
                     error=str(exc),
                     exc_info=True,
                 )
-                error_blocks = canvas_manager.get_related_package_blocks(0, 5, error=str(exc))
-                canvas_manager.update_canvas_with_blocks(error_blocks)
+                canvas_manager.update_related_canvas(0, 5, error=str(exc))
 
         threading.Thread(target=async_link, daemon=True).start()
         return JSONResponse({"status": "ACCEPTED", "message": "Linking package..."}, status_code=202)

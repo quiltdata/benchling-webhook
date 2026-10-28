@@ -8,7 +8,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from src.config import Config
-from src.package_linker import PackageLinker, RelatedPackageWorkflowError
+from src.package_linker import PackageLinker, RelatedPackageLinkError, RelatedPackageWorkflowError
 
 BUCKET = "lab-bucket"
 PACKAGE_NAME = "ale/raw-data"
@@ -50,6 +50,8 @@ class FakeS3:
         self.etags = {}
         self._etag_counter = 0
         self.latest_conflicts_remaining = 0
+        self.ambiguous_latest_commits_remaining = 0
+        self.ambiguous_latest_superseded_remaining = 0
         self.concurrent_hash = "1" * 64
         self.latest_puts = 0
         self.deleted = []
@@ -73,6 +75,12 @@ class FakeS3:
             raise self._client_error("NoSuchKey", "GetObject")
         return {"Body": io.BytesIO(self.objects[Key]), "ETag": self.etags[Key]}
 
+    def head_object(self, Bucket, Key):
+        assert Bucket == BUCKET
+        if Key not in self.objects:
+            raise self._client_error("NoSuchKey", "HeadObject")
+        return {"ETag": self.etags[Key]}
+
     def put_object(self, Bucket, Key, Body, IfMatch=None, IfNoneMatch=None, **_kwargs):
         assert Bucket == BUCKET
         if IfNoneMatch == "*" and Key in self.objects:
@@ -91,6 +99,21 @@ class FakeS3:
                 )
                 self._set_etag(f".quilt/packages/{self.concurrent_hash}")
                 raise self._client_error("PreconditionFailed", "PutObject", 412)
+            if self.ambiguous_latest_superseded_remaining:
+                self.ambiguous_latest_superseded_remaining -= 1
+                self.objects[LATEST_KEY] = self.concurrent_hash.encode()
+                self._set_etag(LATEST_KEY)
+                self.objects[f".quilt/packages/{self.concurrent_hash}"] = _manifest(
+                    {"owner": "lab", "concurrent": True},
+                    "concurrent update",
+                )
+                self._set_etag(f".quilt/packages/{self.concurrent_hash}")
+                raise ConnectionError("connection reset after an ambiguously superseded write")
+            if self.ambiguous_latest_commits_remaining:
+                self.ambiguous_latest_commits_remaining -= 1
+                self.objects[Key] = Body if isinstance(Body, bytes) else Body.read()
+                self._set_etag(Key)
+                raise ConnectionError("connection reset after write")
         self.objects[Key] = Body if isinstance(Body, bytes) else Body.read()
         self._set_etag(Key)
         return {"ETag": self.etags[Key]}
@@ -171,3 +194,62 @@ def test_workflow_rejection_publishes_nothing():
             PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
 
     assert s3.objects == before
+
+
+def test_ambiguous_latest_failure_keeps_committed_history_pointer():
+    s3 = FakeS3()
+    s3.ambiguous_latest_commits_remaining = 1
+
+    with patch("src.package_linker.time.time", return_value=3_000):
+        result = PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
+
+    history_key = f".quilt/named_packages/{PACKAGE_NAME}/3000"
+    assert result.changed is True
+    assert s3.objects[LATEST_KEY].decode() == result.top_hash
+    assert s3.history() == {history_key: result.top_hash.encode()}
+    assert history_key not in s3.deleted
+
+
+def test_published_seal_rejects_related_package_revision():
+    seal_entry = {
+        "logical_key": "linked_packages.json",
+        "physical_keys": [f"s3://{BUCKET}/{PACKAGE_NAME}/linked_packages.json"],
+        "size": 2,
+        "hash": {"type": "SHA256", "value": "sealed"},
+        "meta": {},
+    }
+    sealed_manifest = _manifest() + (json.dumps(seal_entry) + "\n").encode()
+    s3 = FakeS3(sealed_manifest)
+
+    with pytest.raises(RelatedPackageLinkError, match="sealed by an accepted review"):
+        PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
+
+    assert s3.objects[LATEST_KEY] == OLD_HASH.encode()
+    assert not s3.history()
+
+
+def test_staged_seal_rejects_related_package_revision():
+    s3 = FakeS3()
+    seal_key = f"{PACKAGE_NAME}/linked_packages.json"
+    s3.objects[seal_key] = b"{}"
+    s3._set_etag(seal_key)
+
+    with pytest.raises(RelatedPackageLinkError, match="sealed by an accepted review"):
+        PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
+
+    assert s3.objects[LATEST_KEY] == OLD_HASH.encode()
+    assert not s3.history()
+
+
+def test_ambiguous_superseded_latest_failure_retains_possible_committed_history():
+    s3 = FakeS3()
+    s3.ambiguous_latest_superseded_remaining = 1
+
+    with patch("src.package_linker.time.time", return_value=4_000):
+        with pytest.raises(RelatedPackageLinkError, match="ambiguously superseded"):
+            PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
+
+    history_key = f".quilt/named_packages/{PACKAGE_NAME}/4000"
+    assert list(s3.history()) == [history_key]
+    assert history_key not in s3.deleted
+    assert s3.objects[LATEST_KEY] == s3.concurrent_hash.encode()

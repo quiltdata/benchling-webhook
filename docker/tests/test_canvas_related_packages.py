@@ -40,6 +40,10 @@ def _manager(packages, *, has_next=False, errors=None, package_exists=True):
     }
 
     fetcher = Mock()
+    fetcher.get_seal.return_value = None
+    fetcher.role_manager.get_s3_client.return_value.head_object.side_effect = ClientError(
+        {"Error": {"Code": "404"}}, "HeadObject"
+    )
     if package_exists:
         fetcher.get_package_top_hash.return_value = "abc"
     else:
@@ -109,3 +113,17 @@ def test_related_view_requires_existing_entry_package():
 
     assert "Create this entry's package" in rendered
     query.find_related_packages.assert_not_called()
+
+
+def test_late_related_search_cannot_overwrite_sealed_canvas():
+    package = Package("catalog.example.com", "lab-bucket", "ale/raw-1")
+    manager, query = _manager([package])
+    manager.is_sealed_or_staged = Mock(return_value=True)
+    manager.update_canvas_with_blocks = Mock()
+
+    result = manager.update_related_canvas()
+
+    query.find_related_packages.assert_called_once()
+    manager.is_sealed_or_staged.assert_called_once()
+    manager.update_canvas_with_blocks.assert_not_called()
+    assert result == {"success": False, "skipped": "sealed"}

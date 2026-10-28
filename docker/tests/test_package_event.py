@@ -167,3 +167,48 @@ def test_related_revision_resolves_nested_link_target_by_display_id(mock_config)
     assert payload.entry_id == "etr_target"
     assert payload.canvas_id == "cnvs_target"
     manager.update_canvas.assert_called_once()
+
+
+def test_bucketless_related_revision_searches_globally_and_reads_target_bucket(mock_config):
+    mock_config.s3_bucket_name = ""
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        source_fetcher = Mock()
+        source_fetcher.get_package_top_hash.return_value = "abc123"
+        source_fetcher.get_package_metadata.return_value = {}
+        source_fetcher.get_package_user_metadata.return_value = {"experiment_id": "EXP1"}
+        target_fetcher = Mock()
+        target_fetcher.get_package_metadata.return_value = {
+            "entry_id": "etr_target",
+            "canvas_id": "cnvs_target",
+        }
+        mock_fetcher_class.side_effect = [source_fetcher, target_fetcher]
+
+        entry_package = Package("test.quiltdata.com", "bucket-b", "ale/EXP1", metadata={})
+        query = Mock()
+        query.find_unique_packages.return_value = {"packages": [entry_package]}
+        mock_query_class.return_value = query
+
+        manager = Mock()
+        manager.update_canvas.return_value = {"success": True, "canvas_id": "cnvs_target"}
+        mock_canvas_manager.return_value = manager
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=Mock,
+            bucket="bucket-a",
+        )
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    assert mock_query_class.call_args.kwargs["bucket"] == ""
+    assert mock_fetcher_class.call_args_list[0].kwargs["bucket"] == "bucket-a"
+    assert mock_fetcher_class.call_args_list[1].kwargs["bucket"] == "bucket-b"
+    target_fetcher.get_package_metadata.assert_called_once_with("ale/EXP1")
