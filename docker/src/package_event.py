@@ -144,6 +144,7 @@ def refresh_canvas_for_package_event(
         display_metadata = package_fetcher.get_package_metadata(package_name)
         manifest_metadata = package_fetcher.get_package_user_metadata(package_name)
         targets: set[tuple[str, str]] = set()
+        lookup_failures: list[str] = []
         direct_target = _canvas_target(display_metadata) or _canvas_target(manifest_metadata)
         if direct_target:
             targets.add(direct_target)
@@ -172,18 +173,17 @@ def refresh_canvas_for_package_event(
                     summary = "; ".join(
                         f"{failed_bucket}: {message}" for failed_bucket, message in sorted(lookup_errors.items())
                     )
-                    raise RuntimeError(f"Linked Canvas target lookup was incomplete: {summary}")
+                    lookup_failures.append(f"{display_id}: incomplete target lookup ({summary})")
+                    continue
                 linked_entry_packages = lookup["packages"]
                 if not linked_entry_packages:
-                    message = (
-                        f"Linked entry package for {display_id!r} is not indexed yet; " "retrying Canvas refresh."
-                    )
                     logger.warning(
                         "Linked entry package not found for Canvas refresh",
                         package_name=package_name,
                         display_id=display_id,
                     )
-                    raise RuntimeError(message)
+                    lookup_failures.append(f"{display_id}: linked entry package is not indexed yet")
+                    continue
                 for entry_package in linked_entry_packages:
                     target = _canvas_target(entry_package.metadata)
                     if not target:
@@ -201,6 +201,19 @@ def refresh_canvas_for_package_event(
                         targets.add(target)
 
         if not targets:
+            if lookup_failures:
+                error_message = _truncate_error_message("; ".join(lookup_failures))
+                logger.warning(
+                    "Package event Canvas targets are not ready",
+                    package_name=package_name,
+                    top_hash=top_hash,
+                    error=error_message,
+                )
+                return RefreshResult(
+                    RefreshOutcome.TRANSIENT_ERROR,
+                    error_type="CanvasTargetLookupIncomplete",
+                    error_message=error_message,
+                )
             logger.info(
                 "Package event skipped - package metadata missing canvas target",
                 package_name=package_name,
@@ -208,7 +221,7 @@ def refresh_canvas_for_package_event(
             )
             return RefreshResult(RefreshOutcome.SKIPPED_NO_CANVAS)
 
-        failures = []
+        failures = list(lookup_failures)
         updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         for entry_id, canvas_id in sorted(targets):
             payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
@@ -236,7 +249,7 @@ def refresh_canvas_for_package_event(
             )
             return RefreshResult(
                 RefreshOutcome.TRANSIENT_ERROR,
-                error_type="CanvasUpdateFailed",
+                error_type="CanvasRefreshIncomplete" if lookup_failures else "CanvasUpdateFailed",
                 error_message=error_message,
             )
         return RefreshResult(RefreshOutcome.SUCCESS)
