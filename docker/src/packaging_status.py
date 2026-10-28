@@ -94,7 +94,7 @@ def check_workflow(
             # Entries for not-yet-written files carry placeholder sizes, so an error about one of them,
             # or about the array as a whole, may be false: let the packager decide (the stall backstop
             # covers a real one). An error about an existing file is a real rejection.
-            unwritten = {i for i, entry in enumerate(entries) if entry["logical_key"] in adds}
+            unwritten = {i for i, e in enumerate(entries) if e["logical_key"] in adds}
             doubtful = None
             for error in validator.entries_validator.iter_errors(entries):
                 if not adds or (error.absolute_path and error.absolute_path[0] not in unwritten):

@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError
 from . import canvas_blocks as blocks
 from . import canvas_formatting as fmt
 from .config import Config
-from .package_files import SEAL_FILE, PackageFile, PackageFileFetcher, is_not_found
+from .package_files import PackageFile, PackageFileFetcher, has_staged_seal, is_not_found
 from .package_naming import MissingPlaceholderError, entry_package_name
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packages import Package
@@ -368,29 +368,14 @@ class CanvasManager:
         return self._package_file_fetcher.get_seal(self.own_package_name)
 
     def is_sealed_or_staged(self) -> bool:
-        """Recheck whether acceptance blocks related-package UI or writes.
-
-        The published manifest is authoritative once available. During the gap
-        before the packager publishes it, ``EntryPackager`` has already staged
-        the same seal under the entry package source prefix; checking both closes
-        the asynchronous View Related race.
-        """
+        """Whether acceptance has sealed the entry, published or only staged."""
         if self._load_seal() is not None:
             return True
         package_name = self.own_package_name
         bucket = self.config.s3_bucket_name
         if not package_name or not bucket:
             return False
-        try:
-            self._package_file_fetcher.role_manager.get_s3_client().head_object(
-                Bucket=bucket,
-                Key=f"{package_name}/{SEAL_FILE}",
-            )
-            return True
-        except ClientError as exc:
-            if is_not_found(exc):
-                return False
-            raise
+        return has_staged_seal(self._package_file_fetcher.role_manager.get_s3_client(), bucket, package_name)
 
     def _make_sealed_markdown(self, top_hash: str, seal: dict) -> str:
         """Render the sealed revision and the linked packages frozen at acceptance."""
@@ -669,14 +654,9 @@ class CanvasManager:
             )
         raise ValueError(f"Unknown context: {context}")
 
-    def get_related_package_blocks(
-        self,
-        page_number: int = 0,
-        page_size: int = 5,
-        error: Optional[str] = None,
-    ) -> List:
+    def get_related_package_blocks(self, page_number: int = 0, error: Optional[str] = None) -> List:
         """Generate the paged same-prefix package list and Link controls."""
-        page_size = 5  # The Canvas contract deliberately fixes related pages at five rows.
+        page_size = blocks.RELATED_PAGE_SIZE
         own_package_name = self.own_package_name
         if not own_package_name or not self._package_exists():
             markdown = "## Related Packages\n\nCreate this entry's package before viewing related packages.\n"
@@ -711,15 +691,13 @@ class CanvasManager:
             )
             return [
                 blocks.create_markdown_block(markdown, "md-related-error"),
-                blocks.create_button_block(f"view-related-{self.entry_id}-p{page_number}-s5", "Retry"),
+                blocks.create_button_block(blocks.related_view_button_id(self.entry_id, page_number), "Retry"),
                 blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
             ]
 
         packages = result["packages"]
         has_next = bool(result.get("has_next"))
-        # PageState needs a total, while the bounded query intentionally does
-        # not count every package. One look-ahead row is enough to encode the
-        # exact Previous/Next state without an unbounded count query.
+        # The query does not count the prefix; one look-ahead row stands in for the total.
         visible_through = page_number * page_size + len(packages)
         page_state = PageState(
             page_number=page_number,
@@ -733,18 +711,12 @@ class CanvasManager:
             self.config.s3_bucket_name,
             error=error,
         )
-        search_errors = result.get("results", {}).get("errors", {})
-        if isinstance(search_errors, dict):
-            markdown += fmt.format_related_search_errors(search_errors)
-        else:
-            search_errors = {}
+        search_errors = result["results"]["errors"]
+        markdown += fmt.format_related_search_errors(search_errors)
         canvas_blocks: List = [blocks.create_markdown_block(markdown, "md-related")]
         if search_errors:
             canvas_blocks.append(
-                blocks.create_button_block(
-                    f"view-related-{self.entry_id}-p{page_number}-s5",
-                    "Retry Search",
-                )
+                blocks.create_button_block(blocks.related_view_button_id(self.entry_id, page_number), "Retry Search")
             )
         canvas_blocks.extend(
             blocks.create_related_package_link_buttons(
@@ -756,19 +728,12 @@ class CanvasManager:
         canvas_blocks.extend(blocks.create_related_navigation_buttons(self.entry_id, page_state))
         return canvas_blocks
 
-    def update_related_canvas(
-        self,
-        page_number: int = 0,
-        page_size: int = 5,
-        error: Optional[str] = None,
-    ) -> dict[str, Any]:
+    def update_related_canvas(self, page_number: int = 0, error: Optional[str] = None) -> dict[str, Any]:
         """Publish a related view only if acceptance has not sealed the entry.
 
-        The seal check intentionally happens after the potentially slow Athena
-        query, immediately before the Canvas update, so late query results cannot
-        replace a locked, pinned summary.
+        The seal is checked after the slow query, so a late result cannot replace a sealed Canvas.
         """
-        related_blocks = self.get_related_package_blocks(page_number, page_size, error=error)
+        related_blocks = self.get_related_package_blocks(page_number, error=error)
         if self.is_sealed_or_staged():
             logger.info(
                 "Skipped stale related-package Canvas update after entry seal",

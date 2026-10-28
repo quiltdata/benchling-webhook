@@ -960,12 +960,10 @@ def create_app() -> FastAPI:
                     return handle_browse_files(payload, button_id, benchling, config)
                 if button_id.startswith("browse-linked-"):
                     return handle_browse_linked(payload, button_id, benchling, config)
-                if button_id.startswith("view-related-"):
+                if button_id.startswith(("view-related-", "next-page-related-", "prev-page-related-")):
                     return handle_view_related(payload, button_id, benchling, config)
                 if button_id.startswith("link-related-"):
                     return handle_link_related(payload, button_id, benchling, config)
-                if button_id.startswith("next-page-related-") or button_id.startswith("prev-page-related-"):
-                    return handle_view_related(payload, button_id, benchling, config)
                 if button_id.startswith("next-page-linked-") or button_id.startswith("prev-page-linked-"):
                     return handle_page_navigation_linked(payload, button_id, benchling, config)
                 if button_id.startswith("next-page-") or button_id.startswith("prev-page-"):
@@ -1142,7 +1140,7 @@ def create_app() -> FastAPI:
 
             def async_update():
                 try:
-                    canvas_manager.update_related_canvas(page_number, 5)
+                    canvas_manager.update_related_canvas(page_number)
                     logger.info(
                         "Canvas updated with related packages",
                         canvas_id=payload.canvas_id,
@@ -1163,12 +1161,9 @@ def create_app() -> FastAPI:
         from .pagination import parse_related_package_button_id
 
         try:
-            entry_id, package_name, button_bucket = parse_related_package_button_id(button_id)
+            entry_id, package_name, bucket = parse_related_package_button_id(button_id)
             if entry_id != payload.entry_id:
                 return JSONResponse({"error": "Button entry does not match Canvas entry"}, status_code=400)
-            bucket = button_bucket or config.s3_bucket_name
-            if not bucket:
-                return _bucketless_response(payload, "No writable package bucket is configured.")
         except ValueError as exc:
             logger.warning("Invalid link-related button ID", button_id=button_id, error=str(exc))
             return JSONResponse({"error": "Invalid button ID"}, status_code=400)
@@ -1200,25 +1195,18 @@ def create_app() -> FastAPI:
                     changed=result.changed,
                     top_hash=result.top_hash,
                 )
-            except RelatedPackageLinkError as exc:
-                logger.warning(
-                    "Related package link rejected",
-                    entry_id=entry_id,
-                    package_name=package_name,
-                    bucket=bucket,
-                    error=str(exc),
-                )
-                canvas_manager.update_related_canvas(0, 5, error=str(exc))
             except Exception as exc:
-                logger.error(
-                    "Related package link failed",
+                rejected = isinstance(exc, RelatedPackageLinkError)
+                log = logger.warning if rejected else logger.error
+                log(
+                    "Related package link rejected" if rejected else "Related package link failed",
                     entry_id=entry_id,
                     package_name=package_name,
                     bucket=bucket,
                     error=str(exc),
-                    exc_info=True,
+                    exc_info=not rejected,
                 )
-                canvas_manager.update_related_canvas(0, 5, error=str(exc))
+                canvas_manager.update_related_canvas(error=str(exc))
 
         threading.Thread(target=async_link, daemon=True).start()
         return JSONResponse({"status": "ACCEPTED", "message": "Linking package..."}, status_code=202)

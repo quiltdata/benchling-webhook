@@ -110,25 +110,24 @@ def refresh_canvas_for_package_event(
 ) -> RefreshResult:
     """Refresh every Canvas affected by a newly published package revision.
 
-    A normal entry-package revision carries its own ``entry_id`` and
-    ``canvas_id``. A metadata-only related-package revision additionally carries
-    ``experiment_id`` or ``eln_entry``. For those links, the existing package
-    index resolves the entry package by its ``display_id`` metadata, so nested
-    related package names and older resolved prefixes still reach the correct
-    Canvas. This keeps redraws on the existing package-revision event path.
+    Besides the package's own Canvas, each entry it links to is resolved by its
+    entry package's ``display_id``, not by the linked package's name or prefix.
     """
     try:
         active_benchling = benchling_factory()
         if active_benchling is None:
             raise RuntimeError("Benchling client unavailable")
 
+        def fetcher_for(fetch_bucket: str) -> PackageFileFetcher:
+            return PackageFileFetcher(
+                catalog_url=config.quilt_catalog,
+                bucket=fetch_bucket,
+                role_arn=config.quilt_write_role_arn or None,
+                region=config.aws_region,
+            )
+
         package_bucket = bucket or config.s3_bucket_name
-        package_fetcher = PackageFileFetcher(
-            catalog_url=config.quilt_catalog,
-            bucket=package_bucket,
-            role_arn=config.quilt_write_role_arn or None,
-            region=config.aws_region,
-        )
+        package_fetcher = fetcher_for(package_bucket)
 
         if top_hash:
             latest_top_hash = package_fetcher.get_package_top_hash(package_name)
@@ -155,9 +154,7 @@ def refresh_canvas_for_package_event(
         linked_display_ids = _linked_display_ids(manifest_metadata, package_key)
         if linked_display_ids:
             package_query = PackageQuery(
-                # A configured deployment intentionally scopes lookup to its
-                # package bucket. Bucketless mode must preserve global fanout,
-                # even though this event itself came from one concrete bucket.
+                # Not the event's bucket: bucketless mode must search every bucket.
                 bucket=config.s3_bucket_name or "",
                 catalog_url=config.quilt_catalog,
                 database=config.quilt_database,
@@ -187,14 +184,11 @@ def refresh_canvas_for_package_event(
                 for entry_package in linked_entry_packages:
                     target = _canvas_target(entry_package.metadata)
                     if not target:
-                        target_fetcher = package_fetcher
-                        if entry_package.bucket != package_bucket:
-                            target_fetcher = PackageFileFetcher(
-                                catalog_url=config.quilt_catalog,
-                                bucket=entry_package.bucket,
-                                role_arn=config.quilt_write_role_arn or None,
-                                region=config.aws_region,
-                            )
+                        target_fetcher = (
+                            package_fetcher
+                            if entry_package.bucket == package_bucket
+                            else fetcher_for(entry_package.bucket)
+                        )
                         target_metadata = target_fetcher.get_package_metadata(entry_package.package_name)
                         target = _canvas_target(target_metadata)
                     if target:

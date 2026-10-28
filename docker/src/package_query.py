@@ -206,8 +206,7 @@ class PackageQuery:
 
             time.sleep(0.5)
 
-        # Consume every Athena result page. Related queries are bounded by SQL
-        # LIMIT, but Athena returns at most 1,000 rows per API response.
+        # Athena returns at most 1,000 rows per response.
         data_rows: List[Dict[str, Any]] = []
         headers: Optional[List[str]] = None
         next_token: Optional[str] = None
@@ -291,7 +290,7 @@ class PackageQuery:
             Parenthesized SQL boolean expression.
         """
         self._validate_metadata_key(key)
-        literal = "'" + value.replace("'", "''") + "'"
+        literal = self._sql_string_literal(value)
         predicate = f"json_extract_scalar({column}, '$.{key}') = {literal}"
         if array_key:
             self._validate_metadata_key(array_key)
@@ -301,10 +300,13 @@ class PackageQuery:
             )
         return f"({predicate})"
 
-    def _parse_user_meta(self, raw_meta: Optional[str], *, pkg_name: str, key: str, value: str) -> Dict[str, Any]:
-        """Parse metadata returned from Athena, falling back to the matched key/value."""
+    def _parse_user_meta(
+        self, raw_meta: Optional[str], *, pkg_name: str, key: Optional[str] = None, value: str = ""
+    ) -> Dict[str, Any]:
+        """Parse metadata returned from Athena, falling back to the matched key/value, if any."""
+        fallback = {key: value} if key else {}
         if not raw_meta:
-            return {key: value}
+            return fallback
 
         try:
             parsed = json.loads(raw_meta)
@@ -325,7 +327,7 @@ class PackageQuery:
         except json.JSONDecodeError:
             self.logger.warning("Failed to parse user_meta JSON", pkg_name=pkg_name)
 
-        return {key: value}
+        return fallback
 
     def _format_aws_error(self, error: Exception) -> str:
         """Return an actionable error message for common AWS query failures."""
@@ -724,28 +726,9 @@ class PackageQuery:
 
     @classmethod
     def _package_prefix_pattern(cls, prefix: str) -> str:
-        """Return an escaped SQL LIKE pattern for packages directly under a prefix."""
+        """Return an escaped SQL LIKE pattern for packages under a prefix."""
         escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         return cls._sql_string_literal(f"{escaped}/%")
-
-    def _parse_related_metadata(self, raw_meta: Optional[str], *, pkg_name: str) -> Dict[str, Any]:
-        """Parse metadata for a prefix match, falling back to an empty object."""
-        if not raw_meta:
-            return {}
-        try:
-            parsed = json.loads(raw_meta)
-            if isinstance(parsed, str):
-                parsed = json.loads(parsed)
-            if isinstance(parsed, dict):
-                return parsed
-            self.logger.warning(
-                "Related package metadata JSON was not an object",
-                pkg_name=pkg_name,
-                metadata_type=type(parsed).__name__,
-            )
-        except (json.JSONDecodeError, TypeError):
-            self.logger.warning("Failed to parse related package user_meta JSON", pkg_name=pkg_name)
-        return {}
 
     def _related_package_from_row(self, row: Dict[str, Any], default_bucket: str = "") -> Package:
         bucket = row.get("_src_bucket") or default_bucket
@@ -754,8 +737,8 @@ class PackageQuery:
             catalog_base_url=self.catalog_url,
             bucket=bucket,
             package_name=package_name,
-            metadata=self._parse_related_metadata(row.get("user_meta"), pkg_name=package_name),
-            modified_at=row.get("modified_at") or row.get("modified_epoch"),
+            metadata=self._parse_user_meta(row.get("user_meta"), pkg_name=package_name),
+            modified_at=row.get("modified_at"),
             message=row.get("message"),
         )
 
@@ -794,7 +777,6 @@ class PackageQuery:
         value: str,
         fetch_limit: int,
         array_key: Optional[str] = None,
-        timeout: int = 30,
     ) -> Dict[str, Any]:
         """Fetch a bounded newest-first related-package candidate list from one package view."""
         view_name = f'"{self.database}"."{bucket}_packages-view"'
@@ -829,7 +811,7 @@ class PackageQuery:
         ORDER BY revision_times.modified_epoch DESC NULLS LAST, latest.pkg_name
         LIMIT {fetch_limit}
         """
-        rows = self._execute_query(query, timeout=timeout)
+        rows = self._execute_query(query, timeout=30)
         return {
             "packages": [self._related_package_from_row(row, bucket) for row in rows],
             "results": {"rows": rows, "errors": {}},
@@ -906,9 +888,7 @@ class PackageQuery:
                 timeout=60,
             )
         except Exception as union_error:
-            # A UNION fails as a whole when one bucket table is inaccessible.
-            # Retry isolated branches so readable buckets remain useful and the
-            # Canvas can name the failed buckets instead of appearing empty.
+            # One inaccessible bucket table fails the whole UNION; retry each bucket alone.
             self.logger.warning(
                 "Global Iceberg related-package query failed; retrying per bucket",
                 bucket_count=len(buckets),
@@ -960,10 +940,7 @@ class PackageQuery:
         fetch_limit: int,
         array_key: Optional[str] = None,
     ) -> Dict[str, Any]:
-        buckets = self._list_package_view_buckets()
-        if self.bucket and self.bucket not in buckets:
-            buckets.append(self.bucket)
-        buckets = sorted(set(buckets))
+        buckets = sorted(set(self._list_package_view_buckets()) | ({self.bucket} if self.bucket else set()))
         if not buckets:
             return {"packages": [], "results": {"rows": [], "errors": {}}}
 
@@ -982,7 +959,6 @@ class PackageQuery:
                     value,
                     fetch_limit,
                     array_key,
-                    30,
                 ): bucket
                 for bucket in buckets
             }
@@ -997,7 +973,7 @@ class PackageQuery:
                 packages.extend(result["packages"])
                 rows.extend(result["results"]["rows"])
 
-        if errors and len(errors) == len(buckets):
+        if len(errors) == len(buckets):
             summary = "; ".join(f"{bucket}: {message}" for bucket, message in sorted(errors.items()))
             raise RuntimeError(f"Every related-package bucket query failed: {summary}")
 

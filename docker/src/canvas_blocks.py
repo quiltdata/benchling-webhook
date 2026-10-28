@@ -17,6 +17,13 @@ from benchling_api_client.v2.stable.models.section_ui_block_update import Sectio
 from .packages import Package
 from .pagination import PageState, encode_bucket_name, encode_package_name, encode_related_button_value
 
+RELATED_PAGE_SIZE = 5
+
+
+def related_view_button_id(entry_id: str, page_number: int = 0) -> str:
+    """Button ID that opens the related-package list at ``page_number``."""
+    return f"view-related-{entry_id}-p{page_number}-s{RELATED_PAGE_SIZE}"
+
 
 def create_markdown_block(content: str, block_id: str = "md1") -> MarkdownUiBlockUpdate:
     """Create a markdown UI block.
@@ -135,7 +142,7 @@ def create_main_navigation_buttons(
                 enabled=update_enabled,
             ),
             create_button(
-                button_id=f"view-related-{entry_id}-p0-s5",
+                button_id=related_view_button_id(entry_id),
                 text="View Related",
                 enabled=related_enabled,
             ),
@@ -292,17 +299,14 @@ def create_related_package_link_buttons(
     packages: List[Package],
     writable_bucket: Optional[str],
 ) -> List:
-    """Create one Link button for each related package the webhook may revise.
-
-    The bucket suffix is always present, even in bucketed mode, so a package name
-    ending in ``-bucket-<valid-bucket-name>`` can never be misparsed as context.
-    """
+    """Create one Link button for each related package the webhook may revise."""
     buttons = []
     for package in packages:
         if not writable_bucket or package.bucket != writable_bucket:
             continue
-        bucket_part = f"-bucket-{encode_related_button_value(package.bucket)}"
-        button_id = f"link-related-{entry_id}-pkg-{encode_related_button_value(package.package_name)}{bucket_part}"
+        package_part = encode_related_button_value(package.package_name)
+        bucket_part = encode_related_button_value(package.bucket)
+        button_id = f"link-related-{entry_id}-pkg-{package_part}-bucket-{bucket_part}"
         buttons.append(create_button(button_id, f"Link {package.package_name}"))
     return [create_section("button-section-related-packages", buttons)] if buttons else []
 

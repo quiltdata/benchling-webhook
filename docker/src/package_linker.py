@@ -13,7 +13,7 @@ from quilt3.backends import get_package_registry
 from quilt3.util import validate_package_name
 
 from .auth.role_manager import RoleManager
-from .package_files import SEAL_FILE, is_not_found
+from .package_files import SEAL_FILE, has_staged_seal
 from .package_query import ELN_ENTRY_KEY
 from .packaging_status import check_workflow
 
@@ -128,13 +128,14 @@ class PackageLinker:
         manifest: bytes,
         package_name: str,
         display_id: str,
-    ) -> tuple[bytes, str, bool]:
+    ) -> Optional[tuple[bytes, str]]:
+        """Return the linked manifest and its top hash, or None if already linked."""
         try:
             package = QuiltPackage._load(io.StringIO(manifest.decode("utf-8")))
         except Exception as exc:
             raise RelatedPackageLinkError(f"Could not read the current package manifest: {exc}") from exc
 
-        if any(logical_key == SEAL_FILE for logical_key, _entry in package.walk()):
+        if SEAL_FILE in package:
             raise RelatedPackageLinkError(
                 f"Package {package_name!r} is sealed by an accepted review and cannot be linked."
             )
@@ -146,8 +147,7 @@ class PackageLinker:
         package_key = self.config.package_key
         updated_metadata, changed = self._updated_metadata(metadata, package_key, display_id)
         if not changed:
-            # The caller returns the existing top hash without publishing a duplicate revision.
-            return manifest, "", False
+            return None
 
         message = f"Linked to {display_id} from Benchling"
         package.set_meta(updated_metadata)
@@ -156,7 +156,7 @@ class PackageLinker:
         rejection = check_workflow(
             self.s3_client,
             self.config.s3_bucket_name,
-            getattr(self.config, "workflow", "") or "",
+            self.config.workflow,
             package_name,
             message,
             updated_metadata,
@@ -169,7 +169,7 @@ class PackageLinker:
         top_hash = package._calculate_top_hash(package._meta, package.walk())
         output = io.BytesIO()
         package._dump(output)
-        return output.getvalue(), top_hash, True
+        return output.getvalue(), top_hash
 
     @staticmethod
     def _is_conflict(exc: ClientError) -> bool:
@@ -178,13 +178,9 @@ class PackageLinker:
         return code in {"PreconditionFailed", "ConditionalRequestConflict", "412"} or status == 412
 
     def _has_staged_seal(self, package_name: str, bucket: str) -> bool:
-        """Whether the package source prefix already contains an acceptance seal."""
         try:
-            self.s3_client.head_object(Bucket=bucket, Key=f"{package_name}/{SEAL_FILE}")
-            return True
+            return has_staged_seal(self.s3_client, bucket, package_name)
         except ClientError as exc:
-            if is_not_found(exc):
-                return False
             raise RelatedPackageLinkError(f"Could not verify whether {package_name!r} is sealed: {exc}") from exc
 
     def _reconcile_latest(
@@ -270,13 +266,10 @@ class PackageLinker:
 
             manifest_key = registry.manifest_pk(package_name, current_top_hash).path
             manifest_response = self.s3_client.get_object(Bucket=bucket, Key=manifest_key)
-            revision, new_top_hash, changed = self._build_revision(
-                self._read_body(manifest_response),
-                package_name,
-                display_id,
-            )
-            if not changed:
+            built = self._build_revision(self._read_body(manifest_response), package_name, display_id)
+            if built is None:
                 return LinkResult(package_name, bucket, current_top_hash, False)
+            revision, new_top_hash = built
 
             new_manifest_key = registry.manifest_pk(package_name, new_top_hash).path
             self.s3_client.put_object(
@@ -286,18 +279,10 @@ class PackageLinker:
                 ContentType="application/x-jsonlines",
             )
 
-            # Reserve a unique Quilt v1 history key, then atomically advance
-            # latest only if the revision we read is still current. A failed
-            # compare-and-swap releases its history key before retrying.
-            history_key, history_etag = self._reserve_history_pointer(
-                registry,
-                package_name,
-                bucket,
-                new_top_hash,
-            )
+            # Advance latest only if it still names the revision read above.
+            history_key, history_etag = self._reserve_history_pointer(registry, package_name, bucket, new_top_hash)
             try:
-                # Acceptance can race the initial check. Recheck the source seal
-                # immediately before advancing latest and fail closed.
+                # Acceptance can race the first check.
                 if self._has_staged_seal(package_name, bucket):
                     raise RelatedPackageLinkError(
                         f"Package {package_name!r} was sealed while linking and cannot be revised."
@@ -311,22 +296,14 @@ class PackageLinker:
             except RelatedPackageLinkError:
                 self._discard_history_pointer(bucket, history_key, history_etag)
                 raise
-            except ClientError as exc:
-                # A surfaced 412 is not always a definite failed write: the SDK
-                # may have retried after the first request committed but its
-                # response was lost. Reconcile every ClientError before touching
-                # history, including conditional conflicts.
-                reconciliation = self._reconcile_latest(
-                    bucket,
-                    latest_key,
-                    new_top_hash,
-                    current_etag,
-                )
+            except Exception as exc:
+                # Even a 412 may follow an SDK retry of a write that committed.
+                reconciliation = self._reconcile_latest(bucket, latest_key, new_top_hash, current_etag)
                 if reconciliation == "committed":
                     return LinkResult(package_name, bucket, new_top_hash, True)
                 if reconciliation == "unchanged":
                     self._discard_history_pointer(bucket, history_key, history_etag)
-                if self._is_conflict(exc) and attempt < MAX_LINK_ATTEMPTS:
+                if isinstance(exc, ClientError) and self._is_conflict(exc) and attempt < MAX_LINK_ATTEMPTS:
                     logger.info(
                         "Related package changed while linking; retrying",
                         package_name=package_name,
@@ -335,18 +312,6 @@ class PackageLinker:
                         reconciliation=reconciliation,
                     )
                     continue
-                raise RelatedPackageLinkError(f"Could not advance the package revision: {exc}") from exc
-            except Exception as exc:
-                reconciliation = self._reconcile_latest(
-                    bucket,
-                    latest_key,
-                    new_top_hash,
-                    current_etag,
-                )
-                if reconciliation == "committed":
-                    return LinkResult(package_name, bucket, new_top_hash, True)
-                if reconciliation == "unchanged":
-                    self._discard_history_pointer(bucket, history_key, history_etag)
                 raise RelatedPackageLinkError(f"Could not advance the package revision: {exc}") from exc
 
             logger.info(

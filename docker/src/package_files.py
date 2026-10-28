@@ -19,7 +19,7 @@ Does NOT handle:
 import io
 import json
 import os
-from typing import Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import jsonlines
 import structlog
@@ -41,6 +41,20 @@ SEAL_FILE = "linked_packages.json"
 def is_not_found(exc: ClientError) -> bool:
     """Whether an S3 error means the object does not exist."""
     return exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404"}
+
+
+def has_staged_seal(s3_client: Any, bucket: str, package_name: str) -> bool:
+    """Whether the package's source prefix holds a seal not necessarily published yet.
+
+    Errors other than a missing seal raise.
+    """
+    try:
+        s3_client.head_object(Bucket=bucket, Key=f"{package_name}/{SEAL_FILE}")
+        return True
+    except ClientError as exc:
+        if is_not_found(exc):
+            return False
+        raise
 
 
 class PackageFile(Package):
