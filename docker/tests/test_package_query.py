@@ -1115,3 +1115,25 @@ def test_related_iceberg_union_failure_falls_back_per_bucket():
     assert [(package.bucket, package.package_name) for package in result["packages"]] == [("bucket-b", "ale/raw-1")]
     assert result["results"]["errors"] == {"bucket-a": "Access denied"}
     assert query._execute_query.call_count == 3
+
+
+def test_related_python_order_matches_sql_tiebreaks_across_page_limits():
+    packages = [
+        Package("catalog.example.com", "bucket-z", "ale/beta", modified_at="20"),
+        Package("catalog.example.com", "bucket-z", "ale/alpha", modified_at="20"),
+        Package("catalog.example.com", "bucket-a", "ale/alpha", modified_at="20"),
+        Package("catalog.example.com", "bucket-a", "ale/newest", modified_at="21"),
+        # Duplicate rows must not consume a result slot.
+        Package("catalog.example.com", "bucket-a", "ale/alpha", modified_at="20"),
+    ]
+
+    first_limit = PackageQuery._ordered_related_packages(packages, 3)
+    next_limit = PackageQuery._ordered_related_packages(packages, 4)
+
+    assert [(package.package_name, package.bucket) for package in first_limit] == [
+        ("ale/newest", "bucket-a"),
+        ("ale/alpha", "bucket-a"),
+        ("ale/alpha", "bucket-z"),
+    ]
+    assert next_limit[:3] == first_limit
+    assert (next_limit[3].package_name, next_limit[3].bucket) == ("ale/beta", "bucket-z")

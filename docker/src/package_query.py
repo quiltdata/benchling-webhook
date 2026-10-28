@@ -768,6 +768,15 @@ class PackageQuery:
             # Athena renders ISO timestamps in a lexically sortable form.
             return (0, 0.0, value)
 
+    @classmethod
+    def _ordered_related_packages(cls, packages: List[Package], limit: int) -> List[Package]:
+        """De-duplicate and match SQL order: timestamp DESC, name ASC, bucket ASC."""
+        unique = {(package.bucket, package.package_name): package for package in packages}
+        ordered = sorted(unique.values(), key=lambda package: (package.package_name, package.bucket))
+        # Python sort is stable, so equal timestamps retain the SQL tie-break order above.
+        ordered.sort(key=cls._related_timestamp_key, reverse=True)
+        return ordered[:limit]
+
     @staticmethod
     def _related_fetch_limit(page_number: int, page_size: int) -> int:
         if page_number < 0:
@@ -937,11 +946,8 @@ class PackageQuery:
                 raise RuntimeError(f"Every Iceberg related-package bucket query failed: {summary}") from union_error
 
         packages = [self._related_package_from_row(row) for row in rows]
-        unique = {(package.bucket, package.package_name): package for package in packages}
-        ordered = sorted(unique.values(), key=lambda package: (package.bucket, package.package_name))
-        ordered.sort(key=self._related_timestamp_key, reverse=True)
         return {
-            "packages": ordered[:fetch_limit],
+            "packages": self._ordered_related_packages(packages, fetch_limit),
             "results": {"rows": rows, "errors": errors},
         }
 
@@ -995,11 +1001,10 @@ class PackageQuery:
             summary = "; ".join(f"{bucket}: {message}" for bucket, message in sorted(errors.items()))
             raise RuntimeError(f"Every related-package bucket query failed: {summary}")
 
-        # Each view has one latest row per package, but de-duplicate defensively.
-        unique = {(package.bucket, package.package_name): package for package in packages}
-        ordered = sorted(unique.values(), key=lambda package: (package.bucket, package.package_name))
-        ordered.sort(key=self._related_timestamp_key, reverse=True)
-        return {"packages": ordered[:fetch_limit], "results": {"rows": rows, "errors": errors}}
+        return {
+            "packages": self._ordered_related_packages(packages, fetch_limit),
+            "results": {"rows": rows, "errors": errors},
+        }
 
     def find_related_packages(
         self,
