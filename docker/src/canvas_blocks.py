@@ -15,7 +15,7 @@ from benchling_api_client.v2.stable.models.section_ui_block_type import SectionU
 from benchling_api_client.v2.stable.models.section_ui_block_update import SectionUiBlockUpdate
 
 from .packages import Package
-from .pagination import PageState, encode_bucket_name, encode_package_name
+from .pagination import PageState, encode_bucket_name, encode_package_name, encode_related_button_value
 
 
 def create_markdown_block(content: str, block_id: str = "md1") -> MarkdownUiBlockUpdate:
@@ -301,8 +301,8 @@ def create_related_package_link_buttons(
     for package in packages:
         if not writable_bucket or package.bucket != writable_bucket:
             continue
-        bucket_part = f"-bucket-{encode_bucket_name(package.bucket)}"
-        button_id = f"link-related-{entry_id}-pkg-{encode_package_name(package.package_name)}{bucket_part}"
+        bucket_part = f"-bucket-{encode_related_button_value(package.bucket)}"
+        button_id = f"link-related-{entry_id}-pkg-{encode_related_button_value(package.package_name)}{bucket_part}"
         buttons.append(create_button(button_id, f"Link {package.package_name}"))
     return [create_section("button-section-related-packages", buttons)] if buttons else []
 

@@ -10,6 +10,7 @@ from src.canvas_blocks import blocks_to_dict
 from src.config import Config
 from src.package_query import ELN_ENTRY_KEY
 from src.packages import Package
+from src.pagination import parse_related_package_button_id
 from src.payload import Payload
 
 
@@ -86,8 +87,19 @@ def test_related_view_renders_links_buttons_paging_and_partial_failures():
     assert "denied-bucket" in markdown and "Results are incomplete" in markdown
     assert "Retry Search" in rendered
     assert "next-page-related-etr_1-p1-s5" in rendered
-    assert "link-related-etr_1-pkg-ale--sample-bucket-raw-bucket-lab-bucket" in rendered
-    assert "link-related-etr_1-pkg-ale--raw-5" not in rendered
+    link_buttons = [
+        child
+        for block in blocks
+        if block["type"] == "SECTION"
+        for child in block["children"]
+        if child["text"].startswith("Link ")
+    ]
+    assert parse_related_package_button_id(link_buttons[0]["id"]) == (
+        "etr_1",
+        "ale/sample-bucket-raw",
+        "lab-bucket",
+    )
+    assert all("ale/raw-5" not in child["text"] for child in link_buttons)
 
 
 def test_related_view_requires_existing_entry_package():

@@ -1,5 +1,7 @@
 """Pagination management for Package Entry Browser."""
 
+import base64
+import binascii
 import math
 import re
 from dataclasses import dataclass
@@ -182,6 +184,20 @@ def parse_browse_linked_button_id(button_id: str) -> tuple[str, str, int, int]:
     return (entry_id, package_name, page_number, page_size)
 
 
+def encode_related_button_value(value: str) -> str:
+    """Encode a related-package button field reversibly without delimiter characters."""
+    return base64.b32encode(value.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def decode_related_button_value(encoded: str) -> str:
+    """Decode a Base32 related-package button field."""
+    padding = "=" * (-len(encoded) % 8)
+    try:
+        return base64.b32decode(encoded + padding, casefold=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError) as exc:
+        raise ValueError(f"Invalid related-package button encoding: {encoded}") from exc
+
+
 def parse_related_package_button_id(button_id: str) -> tuple[str, str, str]:
     """Parse ``link-related`` package context from a Canvas button ID."""
     prefix = "link-related-"
@@ -193,15 +209,15 @@ def parse_related_package_button_id(button_id: str) -> tuple[str, str, str]:
 
     if "-bucket-" not in encoded_package:
         raise ValueError(f"Missing '-bucket-' separator in button ID: {button_id}")
-    encoded_package, encoded_bucket = encoded_package.rsplit("-bucket-", 1)
-    if not encoded_package or not _BUCKET_NAME_RE.match(encoded_bucket):
+    encoded_package, encoded_bucket = encoded_package.split("-bucket-", 1)
+    if not encoded_package or not encoded_bucket:
         raise ValueError(f"Invalid package or bucket in button ID: {button_id}")
 
-    return (
-        entry_id,
-        decode_package_name(encoded_package),
-        decode_bucket_name(encoded_bucket),
-    )
+    package_name = decode_related_button_value(encoded_package)
+    bucket_name = decode_related_button_value(encoded_bucket)
+    if not package_name or not _BUCKET_NAME_RE.match(bucket_name):
+        raise ValueError(f"Invalid package or bucket in button ID: {button_id}")
+    return entry_id, package_name, bucket_name
 
 
 @dataclass

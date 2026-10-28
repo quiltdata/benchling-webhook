@@ -4,6 +4,7 @@ import pytest
 
 from src.pagination import (
     PageState,
+    encode_related_button_value,
     paginate_items,
     parse_browse_linked_button_id_with_bucket,
     parse_button_id,
@@ -35,11 +36,15 @@ class TestParseBrowseLinkedButtonIdWithBucket:
 class TestParseRelatedPackageButtonId:
     """Related-package IDs always carry an unambiguous final bucket field."""
 
-    def test_package_name_with_bucket_literal_round_trips(self):
-        result = parse_related_package_button_id(
-            "link-related-etr_123-pkg-benchling--sample-bucket-raw-bucket-lab-bucket"
+    def test_package_name_with_bucket_literal_and_double_dash_round_trips(self):
+        package_name = "benchling/raw--bucket-test-bucket"
+        bucket = "test-bucket"
+        button_id = (
+            "link-related-etr_123-pkg-"
+            f"{encode_related_button_value(package_name)}-bucket-{encode_related_button_value(bucket)}"
         )
-        assert result == ("etr_123", "benchling/sample-bucket-raw", "lab-bucket")
+
+        assert parse_related_package_button_id(button_id) == ("etr_123", package_name, bucket)
 
     def test_bucket_field_is_required(self):
         with pytest.raises(ValueError, match="Missing '-bucket-'"):

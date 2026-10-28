@@ -943,8 +943,9 @@ class TestRelatedPackageQuery:
         assert "pkg_name LIKE 'ale\\_team/%' ESCAPE '\\'" in sql
         assert "pkg_name <> 'ale_team/EXP1'" in sql
         assert "NOT COALESCE" in sql
-        assert "json_extract_scalar(latest.user_meta, '$.experiment_id') = 'EXP1'" in sql
-        assert "json_array_contains(json_extract(latest.user_meta, '$.eln_entry'), 'EXP1')" in sql
+        assert "json_extract_scalar(source.user_meta, '$.experiment_id') = 'EXP1'" in sql
+        assert "json_array_contains(json_extract(source.user_meta, '$.eln_entry'), 'EXP1')" in sql
+        assert "SELECT DISTINCT source.pkg_name" in sql
         assert "ORDER BY revision_times.modified_epoch DESC NULLS LAST" in sql
         assert "LIMIT 6" in sql
         package = result["packages"][0]
@@ -1019,3 +1020,58 @@ class TestRelatedPackageQuery:
 
         assert [package.package_name for package in result["packages"]] == ["ale/raw-1"]
         assert result["results"]["errors"] == {"bucket-a": "Athena denied"}
+
+
+@patch("src.package_query.RoleManager")
+def test_execute_query_consumes_all_athena_result_pages(mock_role_manager_class):
+    athena = Mock()
+    athena.start_query_execution.return_value = {"QueryExecutionId": "q-related"}
+    athena.get_query_execution.return_value = {"QueryExecution": {"Status": {"State": "SUCCEEDED"}}}
+    athena.get_query_results.side_effect = [
+        {
+            "ResultSet": {
+                "Rows": [
+                    {"Data": [{"VarCharValue": "pkg_name"}, {"VarCharValue": "message"}]},
+                    {"Data": [{"VarCharValue": "ale/pkg-1"}, {"VarCharValue": "one"}]},
+                ]
+            },
+            "NextToken": "page-2",
+        },
+        {
+            "ResultSet": {
+                "Rows": [
+                    {"Data": [{"VarCharValue": "ale/pkg-2"}, {"VarCharValue": "two"}]},
+                ]
+            }
+        },
+    ]
+    query = _make_query(mock_role_manager_class, bucket="lab-bucket", athena=athena)
+
+    rows = query._execute_query("SELECT pkg_name, message FROM related")
+
+    assert rows == [
+        {"pkg_name": "ale/pkg-1", "message": "one"},
+        {"pkg_name": "ale/pkg-2", "message": "two"},
+    ]
+    assert athena.get_query_results.call_args_list == [
+        call(QueryExecutionId="q-related"),
+        call(QueryExecutionId="q-related", NextToken="page-2"),
+    ]
+
+
+def test_related_iceberg_query_deduplicates_before_global_limit():
+    query = object.__new__(PackageQuery)
+    query.iceberg_database = "iceberg_db"
+
+    sql = query._build_related_iceberg_query(
+        ["lab-bucket"],
+        "ale",
+        "ale/EXP1",
+        "experiment_id",
+        "EXP1",
+        6,
+        ELN_ENTRY_KEY,
+    )
+
+    assert "SELECT DISTINCT" in sql
+    assert sql.index("SELECT DISTINCT") < sql.index("LIMIT 6")

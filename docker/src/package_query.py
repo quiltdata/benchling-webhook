@@ -206,29 +206,46 @@ class PackageQuery:
 
             time.sleep(0.5)
 
-        # Get results
-        results = self.athena.get_query_results(QueryExecutionId=query_execution_id)
+        # Consume every Athena result page. Related queries are bounded by SQL
+        # LIMIT, but Athena returns at most 1,000 rows per API response.
+        data_rows: List[Dict[str, Any]] = []
+        headers: Optional[List[str]] = None
+        next_token: Optional[str] = None
+        first_page = True
+        while True:
+            request: Dict[str, Any] = {"QueryExecutionId": query_execution_id}
+            if next_token:
+                request["NextToken"] = next_token
+            results = self.athena.get_query_results(**request)
+            rows = results.get("ResultSet", {}).get("Rows", [])
+
+            if headers is None:
+                column_info = results.get("ResultSet", {}).get("ResultSetMetadata", {}).get("ColumnInfo", [])
+                if column_info:
+                    headers = [column.get("Name", "") for column in column_info]
+                elif rows:
+                    headers = [column.get("VarCharValue", "") for column in rows[0].get("Data", [])]
+
+            page_rows = rows[1:] if first_page and rows else rows
+            if headers:
+                for row in page_rows:
+                    row_dict = {}
+                    for index, cell in enumerate(row.get("Data", [])):
+                        if index >= len(headers):
+                            break
+                        row_dict[headers[index]] = cell.get("VarCharValue")
+                    data_rows.append(row_dict)
+
+            next_token = results.get("NextToken")
+            if not next_token:
+                break
+            first_page = False
+
         self.logger.debug(
-            "Query succeeded", execution_id=query_execution_id, row_count=len(results["ResultSet"]["Rows"])
+            "Query succeeded",
+            execution_id=query_execution_id,
+            row_count=len(data_rows),
         )
-
-        # Parse results into list of dicts
-        rows = results["ResultSet"]["Rows"]
-        if not rows:
-            return []
-
-        # Extract column names from header row
-        headers = [col.get("VarCharValue", "") for col in rows[0]["Data"]]
-
-        # Convert data rows to dictionaries
-        data_rows = []
-        for row in rows[1:]:  # Skip header row
-            row_dict = {}
-            for i, cell in enumerate(row["Data"]):
-                value = cell.get("VarCharValue")
-                row_dict[headers[i]] = value
-            data_rows.append(row_dict)
-
         return data_rows
 
     def _validate_metadata_key(self, key: str) -> str:
@@ -772,16 +789,16 @@ class PackageQuery:
     ) -> Dict[str, Any]:
         """Fetch a bounded newest-first related-package candidate list from one package view."""
         view_name = f'"{self.database}"."{bucket}_packages-view"'
-        linked = self._metadata_match_predicate("latest.user_meta", key, value, array_key)
+        linked = self._metadata_match_predicate("source.user_meta", key, value, array_key)
         prefix_pattern = self._package_prefix_pattern(prefix)
         own_literal = self._sql_string_literal(own_package_name)
         query = f"""
         WITH latest AS (
-            SELECT pkg_name, top_hash, message, user_meta
-            FROM {view_name}
-            WHERE timestamp = 'latest'
-                AND pkg_name LIKE {prefix_pattern} ESCAPE '\\'
-                AND pkg_name <> {own_literal}
+            SELECT DISTINCT source.pkg_name, source.top_hash, source.message, source.user_meta
+            FROM {view_name} AS source
+            WHERE source.timestamp = 'latest'
+                AND source.pkg_name LIKE {prefix_pattern} ESCAPE '\\'
+                AND source.pkg_name <> {own_literal}
                 AND NOT COALESCE({linked}, FALSE)
         ),
         revision_times AS (
@@ -826,7 +843,7 @@ class PackageQuery:
         branches = []
         for bucket in buckets:
             branches.append(f"""
-                SELECT
+                SELECT DISTINCT
                     r.pkg_name,
                     r.top_hash,
                     r.timestamp AS modified_at,
