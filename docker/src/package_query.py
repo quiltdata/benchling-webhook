@@ -881,21 +881,68 @@ class PackageQuery:
         buckets = self._list_iceberg_manifest_buckets()
         if not buckets:
             return {"packages": [], "results": {"rows": [], "errors": {}}}
-        rows = self._execute_query(
-            self._build_related_iceberg_query(
-                buckets,
-                prefix,
-                own_package_name,
-                key,
-                value,
-                fetch_limit,
-                array_key=array_key,
-            ),
-            timeout=60,
-        )
+
+        errors: Dict[str, str] = {}
+        try:
+            rows = self._execute_query(
+                self._build_related_iceberg_query(
+                    buckets,
+                    prefix,
+                    own_package_name,
+                    key,
+                    value,
+                    fetch_limit,
+                    array_key=array_key,
+                ),
+                timeout=60,
+            )
+        except Exception as union_error:
+            # A UNION fails as a whole when one bucket table is inaccessible.
+            # Retry isolated branches so readable buckets remain useful and the
+            # Canvas can name the failed buckets instead of appearing empty.
+            self.logger.warning(
+                "Global Iceberg related-package query failed; retrying per bucket",
+                bucket_count=len(buckets),
+                error=str(union_error),
+            )
+            rows = []
+            workers = self._bucketless_worker_count(len(buckets))
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {
+                    executor.submit(
+                        self._execute_query,
+                        self._build_related_iceberg_query(
+                            [bucket],
+                            prefix,
+                            own_package_name,
+                            key,
+                            value,
+                            fetch_limit,
+                            array_key=array_key,
+                        ),
+                        60,
+                    ): bucket
+                    for bucket in buckets
+                }
+                for future in as_completed(futures):
+                    bucket = futures[future]
+                    try:
+                        rows.extend(future.result())
+                    except Exception as exc:
+                        errors[bucket] = str(exc)
+                        self.logger.warning("Iceberg related-package lookup failed", bucket=bucket, error=str(exc))
+
+            if len(errors) == len(buckets):
+                summary = "; ".join(f"{bucket}: {message}" for bucket, message in sorted(errors.items()))
+                raise RuntimeError(f"Every Iceberg related-package bucket query failed: {summary}") from union_error
+
+        packages = [self._related_package_from_row(row) for row in rows]
+        unique = {(package.bucket, package.package_name): package for package in packages}
+        ordered = sorted(unique.values(), key=lambda package: (package.bucket, package.package_name))
+        ordered.sort(key=self._related_timestamp_key, reverse=True)
         return {
-            "packages": [self._related_package_from_row(row) for row in rows],
-            "results": {"rows": rows, "errors": {}},
+            "packages": ordered[:fetch_limit],
+            "results": {"rows": rows, "errors": errors},
         }
 
     def _find_related_packages_in_all_buckets(

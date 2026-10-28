@@ -1075,3 +1075,43 @@ def test_related_iceberg_query_deduplicates_before_global_limit():
 
     assert "SELECT DISTINCT" in sql
     assert sql.index("SELECT DISTINCT") < sql.index("LIMIT 6")
+
+
+def test_related_iceberg_union_failure_falls_back_per_bucket():
+    query = object.__new__(PackageQuery)
+    query.iceberg_database = "iceberg_db"
+    query.catalog_url = "catalog.example.com"
+    query.logger = Mock()
+    query._list_iceberg_manifest_buckets = Mock(return_value=["bucket-a", "bucket-b"])
+    query._bucketless_worker_count = Mock(return_value=1)
+
+    def execute(sql, timeout=30):
+        assert timeout == 60
+        if "UNION ALL" in sql:
+            raise RuntimeError("bucket-a table denied")
+        if '"bucket-a_package_revision"' in sql:
+            raise RuntimeError("Access denied")
+        return [
+            {
+                "pkg_name": "ale/raw-1",
+                "top_hash": "abc",
+                "modified_at": "2026-10-28 12:00:00.000",
+                "message": "raw output",
+                "user_meta": "{}",
+                "_src_bucket": "bucket-b",
+            }
+        ]
+
+    query._execute_query = Mock(side_effect=execute)
+    result = query._find_related_packages_in_iceberg(
+        "ale",
+        "ale/EXP1",
+        "experiment_id",
+        "EXP1",
+        6,
+        ELN_ENTRY_KEY,
+    )
+
+    assert [(package.bucket, package.package_name) for package in result["packages"]] == [("bucket-b", "ale/raw-1")]
+    assert result["results"]["errors"] == {"bucket-a": "Access denied"}
+    assert query._execute_query.call_count == 3

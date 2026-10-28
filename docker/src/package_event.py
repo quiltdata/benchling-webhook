@@ -163,10 +163,17 @@ def refresh_canvas_for_package_event(
                 config=config,
             )
             for display_id in linked_display_ids:
-                linked_entry_packages = package_query.find_unique_packages(
+                lookup = package_query.find_unique_packages(
                     key="display_id",
                     value=display_id,
-                )["packages"]
+                )
+                lookup_errors = lookup.get("results", {}).get("errors", {})
+                if lookup_errors:
+                    summary = "; ".join(
+                        f"{failed_bucket}: {message}" for failed_bucket, message in sorted(lookup_errors.items())
+                    )
+                    raise RuntimeError(f"Linked Canvas target lookup was incomplete: {summary}")
+                linked_entry_packages = lookup["packages"]
                 if not linked_entry_packages:
                     logger.info(
                         "Linked entry package not found for Canvas refresh",
