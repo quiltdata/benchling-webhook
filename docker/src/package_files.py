@@ -277,6 +277,19 @@ class PackageFileFetcher:
             )
             raise
 
+    def get_package_user_metadata(self, package_name: str) -> dict:
+        """Fetch only the latest manifest's package-level ``user_meta`` object.
+
+        Unlike :meth:`get_package_metadata`, this never substitutes the contents
+        of ``entry.json``. Package-revision routing uses it so metadata added by a
+        metadata-only revision is visible even though package files are unchanged.
+        """
+        manifest_meta, _ = self._load_manifest_data(package_name)
+        metadata = manifest_meta.get("user_meta") or {}
+        if not isinstance(metadata, dict):
+            raise ValueError(f"Package {package_name!r} metadata is not an object")
+        return metadata
+
     def get_package_metadata(self, package_name: str) -> dict:
         """
         Fetch package-level user metadata.

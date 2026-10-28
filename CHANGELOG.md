@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-28
+
+### Added
+
+- **View Related** on an unlocked entry Canvas lists five newest-first packages under the entry package's resolved prefix that are not linked to the current entry, with catalog links, revision times, commit messages, and Previous/Next paging. Packages in other accessible buckets are shown as read-only.
+- A **Link** action for related packages in the configured package bucket publishes a metadata-only revision with the current entry's `experiment_id`, or appends it to `eln_entry` for multi-entry packages. The revision preserves all package entries, hashes, and physical keys; validates the bucket workflow first; reports rejections on the Canvas; uses an optimistic latest-pointer update to avoid overwriting concurrent revisions; and relies on the package-revision event path to redraw affected Canvases.
+
 ## [0.21.6] - 2026-10-28
 
 ### Security

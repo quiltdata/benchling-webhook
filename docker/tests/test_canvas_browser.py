@@ -145,10 +145,12 @@ class TestCanvasBrowser:
 
         # Check the buttons within the section
         buttons = section.children
-        assert len(buttons) == 2
+        assert len(buttons) == 3
         assert buttons[0].text == "Browse Package"
         assert buttons[0].id.startswith("browse-files-")
         assert buttons[1].text == "Update Package"
+        assert buttons[2].text == "View Related"
+        assert buttons[2].id == "view-related-etr_test123-p0-s5"
 
     def test_navigation_buttons_browser(self, canvas_manager):
         """Test navigation buttons for browser view."""

@@ -700,6 +700,299 @@ class PackageQuery:
             },
         }
 
+    @staticmethod
+    def _sql_string_literal(value: str) -> str:
+        """Quote a value for use as an Athena string literal."""
+        return "'" + value.replace("'", "''") + "'"
+
+    @classmethod
+    def _package_prefix_pattern(cls, prefix: str) -> str:
+        """Return an escaped SQL LIKE pattern for packages directly under a prefix."""
+        escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        return cls._sql_string_literal(f"{escaped}/%")
+
+    def _parse_related_metadata(self, raw_meta: Optional[str], *, pkg_name: str) -> Dict[str, Any]:
+        """Parse metadata for a prefix match, falling back to an empty object."""
+        if not raw_meta:
+            return {}
+        try:
+            parsed = json.loads(raw_meta)
+            if isinstance(parsed, str):
+                parsed = json.loads(parsed)
+            if isinstance(parsed, dict):
+                return parsed
+            self.logger.warning(
+                "Related package metadata JSON was not an object",
+                pkg_name=pkg_name,
+                metadata_type=type(parsed).__name__,
+            )
+        except (json.JSONDecodeError, TypeError):
+            self.logger.warning("Failed to parse related package user_meta JSON", pkg_name=pkg_name)
+        return {}
+
+    def _related_package_from_row(self, row: Dict[str, Any], default_bucket: str = "") -> Package:
+        bucket = row.get("_src_bucket") or default_bucket
+        package_name = row["pkg_name"]
+        return Package(
+            catalog_base_url=self.catalog_url,
+            bucket=bucket,
+            package_name=package_name,
+            metadata=self._parse_related_metadata(row.get("user_meta"), pkg_name=package_name),
+            modified_at=row.get("modified_at") or row.get("modified_epoch"),
+            message=row.get("message"),
+        )
+
+    @staticmethod
+    def _related_timestamp_key(package: Package) -> tuple[int, float, str]:
+        value = str(package.modified_at or "")
+        try:
+            return (1, float(value), "")
+        except ValueError:
+            # Athena renders ISO timestamps in a lexically sortable form.
+            return (0, 0.0, value)
+
+    @staticmethod
+    def _related_fetch_limit(page_number: int, page_size: int) -> int:
+        if page_number < 0:
+            raise ValueError(f"page_number must be >= 0, got {page_number}")
+        if page_size < 1:
+            raise ValueError(f"page_size must be >= 1, got {page_size}")
+        return (page_number + 1) * page_size + 1
+
+    def _find_related_packages_in_bucket(
+        self,
+        bucket: str,
+        prefix: str,
+        own_package_name: str,
+        key: str,
+        value: str,
+        fetch_limit: int,
+        array_key: Optional[str] = None,
+        timeout: int = 30,
+    ) -> Dict[str, Any]:
+        """Fetch a bounded newest-first related-package candidate list from one package view."""
+        view_name = f'"{self.database}"."{bucket}_packages-view"'
+        linked = self._metadata_match_predicate("latest.user_meta", key, value, array_key)
+        prefix_pattern = self._package_prefix_pattern(prefix)
+        own_literal = self._sql_string_literal(own_package_name)
+        query = f"""
+        WITH latest AS (
+            SELECT pkg_name, top_hash, message, user_meta
+            FROM {view_name}
+            WHERE timestamp = 'latest'
+                AND pkg_name LIKE {prefix_pattern} ESCAPE '\\'
+                AND pkg_name <> {own_literal}
+                AND NOT COALESCE({linked}, FALSE)
+        ),
+        revision_times AS (
+            SELECT pkg_name, top_hash, max(try_cast(timestamp AS BIGINT)) AS modified_epoch
+            FROM {view_name}
+            WHERE timestamp <> 'latest'
+            GROUP BY pkg_name, top_hash
+        )
+        SELECT
+            latest.pkg_name,
+            latest.top_hash,
+            latest.message,
+            latest.user_meta,
+            CAST(revision_times.modified_epoch AS VARCHAR) AS modified_at
+        FROM latest
+        LEFT JOIN revision_times
+            ON latest.pkg_name = revision_times.pkg_name
+            AND latest.top_hash = revision_times.top_hash
+        ORDER BY revision_times.modified_epoch DESC NULLS LAST, latest.pkg_name
+        LIMIT {fetch_limit}
+        """
+        rows = self._execute_query(query, timeout=timeout)
+        return {
+            "packages": [self._related_package_from_row(row, bucket) for row in rows],
+            "results": {"rows": rows, "errors": {}},
+        }
+
+    def _build_related_iceberg_query(
+        self,
+        buckets: List[str],
+        prefix: str,
+        own_package_name: str,
+        key: str,
+        value: str,
+        fetch_limit: int,
+        array_key: Optional[str] = None,
+    ) -> str:
+        """Build a bounded global newest-first related-package query over Iceberg tables."""
+        linked = self._metadata_match_predicate("m.metadata", key, value, array_key)
+        prefix_pattern = self._package_prefix_pattern(prefix)
+        own_literal = self._sql_string_literal(own_package_name)
+        branches = []
+        for bucket in buckets:
+            branches.append(f"""
+                SELECT
+                    r.pkg_name,
+                    r.top_hash,
+                    r.timestamp AS modified_at,
+                    m.message,
+                    m.metadata AS user_meta,
+                    '{bucket}' AS _src_bucket
+                FROM "{self.iceberg_database}"."{bucket}_package_revision" r
+                JOIN "{self.iceberg_database}"."{bucket}_package_manifest" m
+                    ON r.top_hash = m.top_hash
+                JOIN "{self.iceberg_database}"."{bucket}_package_tag" t
+                    ON r.pkg_name = t.pkg_name
+                    AND r.top_hash = t.top_hash
+                    AND t.tag_name = 'latest'
+                WHERE r.pkg_name LIKE {prefix_pattern} ESCAPE '\\'
+                    AND r.pkg_name <> {own_literal}
+                    AND NOT COALESCE({linked}, FALSE)
+                """)
+        union = "\nUNION ALL\n".join(branches)
+        return f"""
+        SELECT *
+        FROM ({union}) related
+        ORDER BY modified_at DESC NULLS LAST, pkg_name, _src_bucket
+        LIMIT {fetch_limit}
+        """
+
+    def _find_related_packages_in_iceberg(
+        self,
+        prefix: str,
+        own_package_name: str,
+        key: str,
+        value: str,
+        fetch_limit: int,
+        array_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        buckets = self._list_iceberg_manifest_buckets()
+        if not buckets:
+            return {"packages": [], "results": {"rows": [], "errors": {}}}
+        rows = self._execute_query(
+            self._build_related_iceberg_query(
+                buckets,
+                prefix,
+                own_package_name,
+                key,
+                value,
+                fetch_limit,
+                array_key=array_key,
+            ),
+            timeout=60,
+        )
+        return {
+            "packages": [self._related_package_from_row(row) for row in rows],
+            "results": {"rows": rows, "errors": {}},
+        }
+
+    def _find_related_packages_in_all_buckets(
+        self,
+        prefix: str,
+        own_package_name: str,
+        key: str,
+        value: str,
+        fetch_limit: int,
+        array_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        buckets = self._list_package_view_buckets()
+        if self.bucket and self.bucket not in buckets:
+            buckets.append(self.bucket)
+        buckets = sorted(set(buckets))
+        if not buckets:
+            return {"packages": [], "results": {"rows": [], "errors": {}}}
+
+        packages: List[Package] = []
+        rows: List[Dict[str, Any]] = []
+        errors: Dict[str, str] = {}
+        workers = self._bucketless_worker_count(len(buckets))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(
+                    self._find_related_packages_in_bucket,
+                    bucket,
+                    prefix,
+                    own_package_name,
+                    key,
+                    value,
+                    fetch_limit,
+                    array_key,
+                    30,
+                ): bucket
+                for bucket in buckets
+            }
+            for future in as_completed(futures):
+                bucket = futures[future]
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    errors[bucket] = str(exc)
+                    self.logger.warning("Related package lookup failed", bucket=bucket, error=str(exc))
+                    continue
+                packages.extend(result["packages"])
+                rows.extend(result["results"]["rows"])
+
+        # Each view has one latest row per package, but de-duplicate defensively.
+        unique = {(package.bucket, package.package_name): package for package in packages}
+        ordered = sorted(unique.values(), key=lambda package: (package.bucket, package.package_name))
+        ordered.sort(key=self._related_timestamp_key, reverse=True)
+        return {"packages": ordered[:fetch_limit], "results": {"rows": rows, "errors": errors}}
+
+    def find_related_packages(
+        self,
+        prefix: str,
+        own_package_name: str,
+        key: str,
+        value: str,
+        page_number: int = 0,
+        page_size: int = 5,
+        array_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Find newest packages under ``prefix`` that are not linked to ``value``.
+
+        Searches every accessible package bucket so read-only raw packages can be
+        shown alongside writable packages. The query remains bounded: it fetches
+        only enough candidates to fill the requested page plus one look-ahead row.
+        """
+        try:
+            self._validate_metadata_key(key)
+            if array_key:
+                self._validate_metadata_key(array_key)
+            fetch_limit = self._related_fetch_limit(page_number, page_size)
+            if self.iceberg_database:
+                result = self._find_related_packages_in_iceberg(
+                    prefix,
+                    own_package_name,
+                    key,
+                    value,
+                    fetch_limit,
+                    array_key=array_key,
+                )
+            else:
+                result = self._find_related_packages_in_all_buckets(
+                    prefix,
+                    own_package_name,
+                    key,
+                    value,
+                    fetch_limit,
+                    array_key=array_key,
+                )
+
+            start = page_number * page_size
+            candidates = result["packages"]
+            page = candidates[start : start + page_size]
+            result["packages"] = page
+            result["page_number"] = page_number
+            result["page_size"] = page_size
+            result["has_previous"] = page_number > 0
+            result["has_next"] = len(candidates) > start + page_size
+            return result
+        except Exception as exc:
+            error_msg = self._format_aws_error(exc)
+            self.logger.error(
+                "Related package query failed",
+                prefix=prefix,
+                value=value,
+                error=error_msg,
+                error_type=type(exc).__name__,
+            )
+            raise RuntimeError(error_msg) from exc
+
     def find_unique_packages(
         self, key: str, value: str, array_key: Optional[str] = None, pinned: bool = False
     ) -> Dict[str, Any]:

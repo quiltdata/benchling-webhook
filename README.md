@@ -155,12 +155,15 @@ You can also set `eln_entry` yourself in the catalog's metadata editor, as eithe
 
 ![App Canvas - Home](imgs/benchling-canvas.png)
 
-The webhook includes a Benchling App Canvas, which allows Benchling users to view, browse, and sync the associated Quilt packages.
+The webhook includes a Benchling App Canvas, which allows Benchling users to view, browse, sync, and link associated Quilt packages.
 
 - Clicking the package name opens it in the Quilt Catalog
 - Linked packages built from an RO-Crate also show the crate's creator, producer, and instrument
-- The `sync` button will open the package or file in [QuiltSync](https://www.quilt.bio/quiltsync), if you have it installed.
-- The `Update` button refreshes the package, as Benchling only notifies Quilt of changes when the metadata fields are modified.
+- The `sync` button opens the package or file in [QuiltSync](https://www.quilt.bio/quiltsync), if installed
+- **Update Package** refreshes the entry package, as Benchling only notifies Quilt of changes when metadata fields are modified
+- **View Related** lists the five newest, not-yet-linked packages under the entry package's prefix; Previous and Next page through the rest
+
+From **View Related**, **Link _package-name_** creates a metadata-only revision: it sets the configured package link key (normally `experiment_id`) to this entry's display ID, or appends the display ID to an existing `eln_entry` list. Every package entry, object hash, and physical key remains unchanged. The bucket workflow is validated before the revision is published; a rejection is shown on the Canvas. Packages found in another accessible bucket remain visible as catalog links but are read-only, because the webhook only revises packages in its configured package bucket. Related controls are unavailable until the entry package exists and disappear when an accepted review locks the Canvas.
 
 The canvas also allows you to browse package contents:
 

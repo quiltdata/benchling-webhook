@@ -182,6 +182,28 @@ def parse_browse_linked_button_id(button_id: str) -> tuple[str, str, int, int]:
     return (entry_id, package_name, page_number, page_size)
 
 
+def parse_related_package_button_id(button_id: str) -> tuple[str, str, Optional[str]]:
+    """Parse ``link-related`` package context from a Canvas button ID."""
+    prefix = "link-related-"
+    if not button_id.startswith(prefix) or "-pkg-" not in button_id:
+        raise ValueError(f"Invalid link-related button ID: {button_id}")
+    entry_id, encoded_package = button_id[len(prefix) :].split("-pkg-", 1)
+    if not entry_id or not encoded_package:
+        raise ValueError(f"Invalid link-related button ID: {button_id}")
+
+    encoded_bucket = None
+    if "-bucket-" in encoded_package:
+        candidate_package, candidate_bucket = encoded_package.rsplit("-bucket-", 1)
+        if _BUCKET_NAME_RE.match(candidate_bucket):
+            encoded_package, encoded_bucket = candidate_package, candidate_bucket
+
+    return (
+        entry_id,
+        decode_package_name(encoded_package),
+        decode_bucket_name(encoded_bucket) if encoded_bucket else None,
+    )
+
+
 @dataclass
 class PageState:
     """Encapsulates pagination state."""

@@ -69,6 +69,7 @@ class CanvasManager:
         self._errors: List[str] = []  # Track errors to display in notification section
         self._linked_packages: List[Package] = []  # Track linked packages for use in blocks
         self._sealed = False  # Set once the package is found sealed
+        self._package_exists_cache: Optional[bool] = None
         self._package_file_fetcher_injected = package_file_fetcher is not None
 
         # Dependency injection with fallback to default instances
@@ -336,12 +337,16 @@ class CanvasManager:
         """Whether the entry's package has a latest revision.
 
         Only a definite not-found says no. Any other error is logged and the
-        package is rendered as existing, as it was before this check.
+        package is rendered as existing, as it was before this check. The result
+        is cached because both the markdown and View Related button need it.
         """
+        if self._package_exists_cache is not None:
+            return self._package_exists_cache
         try:
             self._package_file_fetcher.get_package_top_hash(self.package_name)
         except ClientError as exc:
             if is_not_found(exc):
+                self._package_exists_cache = False
                 return False
             logger.warning(
                 "Could not check whether the package exists", package_name=self.package_name, error=str(exc)
@@ -350,6 +355,7 @@ class CanvasManager:
             logger.warning(
                 "Could not check whether the package exists", package_name=self.package_name, error=str(exc)
             )
+        self._package_exists_cache = True
         return True
 
     def _load_seal(self) -> Optional[Tuple[str, dict]]:
@@ -422,6 +428,7 @@ class CanvasManager:
                 self.entry_id,
                 update_enabled=not is_updating or not bool(self.config.s3_bucket_name),
                 browse_enabled=bool(self.own_package_name),
+                related_enabled=bool(self.own_package_name and self._package_exists()),
                 bucketless=not bool(self.config.s3_bucket_name),
             )
         )
@@ -612,6 +619,7 @@ class CanvasManager:
                 self.entry_id,
                 update_enabled=True,
                 browse_enabled=bool(self.own_package_name),
+                related_enabled=bool(self.own_package_name and self._package_exists()),
                 bucketless=not bool(self.config.s3_bucket_name),
             )
         if context == "browser":
@@ -635,6 +643,82 @@ class CanvasManager:
                 bucketless=not bool(self.config.s3_bucket_name),
             )
         raise ValueError(f"Unknown context: {context}")
+
+    def get_related_package_blocks(
+        self,
+        page_number: int = 0,
+        page_size: int = 5,
+        error: Optional[str] = None,
+    ) -> List:
+        """Generate the paged same-prefix package list and Link controls."""
+        page_size = 5  # The Canvas contract deliberately fixes related pages at five rows.
+        own_package_name = self.own_package_name
+        if not own_package_name or not self._package_exists():
+            markdown = "## Related Packages\n\nCreate this entry's package before viewing related packages.\n"
+            return [
+                blocks.create_markdown_block(markdown, "md-related"),
+                blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
+            ]
+
+        prefix = own_package_name.rsplit("/", 1)[0]
+        try:
+            result = self._package_query.find_related_packages(
+                prefix=prefix,
+                own_package_name=own_package_name,
+                key=self.config.package_key,
+                value=self.entry.display_id,
+                page_number=page_number,
+                page_size=page_size,
+                array_key=ELN_ENTRY_KEY,
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed to load related packages",
+                entry_id=self.entry_id,
+                prefix=prefix,
+                error=str(exc),
+                exc_info=True,
+            )
+            markdown = (
+                "## Error Loading Related Packages\n\n"
+                f"Unable to find packages under `{prefix}/`.\n\n"
+                f"Error: {fmt.escape_markdown(str(exc))}\n"
+            )
+            return [
+                blocks.create_markdown_block(markdown, "md-related-error"),
+                blocks.create_button_block(f"view-related-{self.entry_id}-p{page_number}-s5", "Retry"),
+                blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
+            ]
+
+        packages = result["packages"]
+        has_next = bool(result.get("has_next"))
+        # PageState needs a total, while the bounded query intentionally does
+        # not count every package. One look-ahead row is enough to encode the
+        # exact Previous/Next state without an unbounded count query.
+        visible_through = page_number * page_size + len(packages)
+        page_state = PageState(
+            page_number=page_number,
+            page_size=page_size,
+            total_items=visible_through + (1 if has_next else 0),
+        )
+        markdown = fmt.format_related_packages(
+            packages,
+            prefix,
+            page_number,
+            self.config.s3_bucket_name,
+            error=error,
+        )
+        canvas_blocks = [blocks.create_markdown_block(markdown, "md-related")]
+        canvas_blocks.extend(
+            blocks.create_related_package_link_buttons(
+                self.entry_id,
+                packages,
+                self.config.s3_bucket_name,
+                include_bucket=not bool(self.config.s3_bucket_name),
+            )
+        )
+        canvas_blocks.extend(blocks.create_related_navigation_buttons(self.entry_id, page_state))
+        return canvas_blocks
 
     def get_package_browser_blocks(
         self,

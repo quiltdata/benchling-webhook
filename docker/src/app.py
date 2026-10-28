@@ -18,6 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .canvas import CanvasManager
 from .config import Config, get_config
 from .entry_packager import EntryPackager
+from .package_linker import PackageLinker, RelatedPackageLinkError
 from .packaging_publisher import (
     PackagingQueueNotConfiguredError,
     get_packaging_queue_url,
@@ -959,6 +960,12 @@ def create_app() -> FastAPI:
                     return handle_browse_files(payload, button_id, benchling, config)
                 if button_id.startswith("browse-linked-"):
                     return handle_browse_linked(payload, button_id, benchling, config)
+                if button_id.startswith("view-related-"):
+                    return handle_view_related(payload, button_id, benchling, config)
+                if button_id.startswith("link-related-"):
+                    return handle_link_related(payload, button_id, benchling, config)
+                if button_id.startswith("next-page-related-") or button_id.startswith("prev-page-related-"):
+                    return handle_view_related(payload, button_id, benchling, config)
                 if button_id.startswith("next-page-linked-") or button_id.startswith("prev-page-linked-"):
                     return handle_page_navigation_linked(payload, button_id, benchling, config)
                 if button_id.startswith("next-page-") or button_id.startswith("prev-page-"):
@@ -1117,6 +1124,105 @@ def create_app() -> FastAPI:
         thread.start()
 
         return JSONResponse({"status": "processing"}, status_code=202)
+
+    def handle_view_related(payload, button_id, benchling, config):
+        """Handle View Related and its Previous/Next controls."""
+        from .pagination import parse_button_id
+
+        try:
+            if not config.s3_bucket_name:
+                return _bucketless_response(
+                    payload,
+                    "View Related requires an existing default entry package.",
+                )
+            _, entry_id, page_state = parse_button_id(button_id)
+            page_number = page_state.page_number if page_state else 0
+            logger.info("Related packages requested", entry_id=entry_id, page=page_number)
+            canvas_manager = CanvasManager(benchling, config, payload)
+
+            def async_update():
+                try:
+                    related_blocks = canvas_manager.get_related_package_blocks(page_number, 5)
+                    canvas_manager.update_canvas_with_blocks(related_blocks)
+                    logger.info(
+                        "Canvas updated with related packages",
+                        canvas_id=payload.canvas_id,
+                        entry_id=entry_id,
+                        page=page_number,
+                    )
+                except Exception as exc:
+                    logger.error("Failed to update related package view", error=str(exc), exc_info=True)
+
+            threading.Thread(target=async_update, daemon=True).start()
+            return JSONResponse({"status": "ACCEPTED", "message": "Loading related packages..."}, status_code=202)
+        except Exception as exc:
+            logger.error("View related packages failed", error=str(exc))
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    def handle_link_related(payload, button_id, benchling, config):
+        """Publish a metadata-only revision linking a related package to this entry."""
+        from .pagination import parse_related_package_button_id
+
+        try:
+            entry_id, package_name, button_bucket = parse_related_package_button_id(button_id)
+            if entry_id != payload.entry_id:
+                return JSONResponse({"error": "Button entry does not match Canvas entry"}, status_code=400)
+            bucket = button_bucket or config.s3_bucket_name
+            if not bucket:
+                return _bucketless_response(payload, "No writable package bucket is configured.")
+        except ValueError as exc:
+            logger.warning("Invalid link-related button ID", button_id=button_id, error=str(exc))
+            return JSONResponse({"error": "Invalid button ID"}, status_code=400)
+
+        canvas_manager = CanvasManager(benchling, config, payload)
+
+        def async_link():
+            try:
+                display_id = canvas_manager.entry.display_id
+                own_package_name = canvas_manager.own_package_name
+                if not own_package_name or not canvas_manager._package_exists():
+                    raise RelatedPackageLinkError("Create this entry's package before linking related packages.")
+                related_prefix = own_package_name.rsplit("/", 1)[0] + "/"
+                if package_name == own_package_name or not package_name.startswith(related_prefix):
+                    raise RelatedPackageLinkError(f"Package {package_name!r} is not related to {own_package_name!r}.")
+                result = PackageLinker(config).link(package_name, bucket, display_id)
+                if not result.changed:
+                    # An idempotent click creates no package event, so return to
+                    # the main view directly to clear a catalog-lagged row.
+                    canvas_manager.update_canvas_with_blocks(canvas_manager._make_blocks())
+                logger.info(
+                    "Related package link completed",
+                    entry_id=entry_id,
+                    display_id=display_id,
+                    package_name=package_name,
+                    bucket=bucket,
+                    changed=result.changed,
+                    top_hash=result.top_hash,
+                )
+            except RelatedPackageLinkError as exc:
+                logger.warning(
+                    "Related package link rejected",
+                    entry_id=entry_id,
+                    package_name=package_name,
+                    bucket=bucket,
+                    error=str(exc),
+                )
+                error_blocks = canvas_manager.get_related_package_blocks(0, 5, error=str(exc))
+                canvas_manager.update_canvas_with_blocks(error_blocks)
+            except Exception as exc:
+                logger.error(
+                    "Related package link failed",
+                    entry_id=entry_id,
+                    package_name=package_name,
+                    bucket=bucket,
+                    error=str(exc),
+                    exc_info=True,
+                )
+                error_blocks = canvas_manager.get_related_package_blocks(0, 5, error=str(exc))
+                canvas_manager.update_canvas_with_blocks(error_blocks)
+
+        threading.Thread(target=async_link, daemon=True).start()
+        return JSONResponse({"status": "ACCEPTED", "message": "Linking package..."}, status_code=202)
 
     def handle_page_navigation(payload, button_id, benchling, config):
         """Handle Next/Previous page button clicks for primary package."""

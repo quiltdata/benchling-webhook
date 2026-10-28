@@ -3,7 +3,7 @@ import socket
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Callable
+from typing import Any, Callable
 
 import requests
 import structlog
@@ -12,7 +12,8 @@ from botocore.exceptions import ClientError
 
 from .canvas import CanvasManager
 from .config import Config
-from .package_files import PackageFileFetcher
+from .package_files import PackageFileFetcher, is_not_found
+from .package_query import ELN_ENTRY_KEY
 from .payload import Payload
 
 logger = structlog.get_logger(__name__)
@@ -74,6 +75,31 @@ def _classify_exception(exc: Exception) -> RefreshOutcome:
     return RefreshOutcome.TRANSIENT_ERROR
 
 
+def _canvas_target(metadata: Any) -> tuple[str, str] | None:
+    """Extract an internal entry ID and Canvas ID from package metadata."""
+    if not isinstance(metadata, dict):
+        return None
+    canvas_id = metadata.get("canvas_id")
+    entry_id = metadata.get("entry_id")
+    if isinstance(canvas_id, str) and canvas_id and isinstance(entry_id, str) and entry_id:
+        return entry_id, canvas_id
+    return None
+
+
+def _linked_display_ids(metadata: Any, package_key: str) -> list[str]:
+    """Return display IDs named by the configured key or ``eln_entry``."""
+    if not isinstance(metadata, dict):
+        return []
+    values = []
+    for key in dict.fromkeys((package_key, ELN_ENTRY_KEY)):
+        value = metadata.get(key)
+        candidates = value if isinstance(value, list) else [value]
+        for candidate in candidates:
+            if isinstance(candidate, str) and candidate and candidate not in values:
+                values.append(candidate)
+    return values
+
+
 def refresh_canvas_for_package_event(
     package_name: str,
     top_hash: str | None,
@@ -82,15 +108,23 @@ def refresh_canvas_for_package_event(
     benchling_factory: Callable[[], Benchling],
     bucket: str | None = None,
 ) -> RefreshResult:
-    """Refresh a canvas after Quilt publishes a package revision event."""
+    """Refresh every Canvas affected by a newly published package revision.
+
+    A normal entry-package revision carries its own ``entry_id`` and
+    ``canvas_id``. A metadata-only related-package revision additionally carries
+    ``experiment_id`` or ``eln_entry``. For those links, the target entry package
+    lives under the same prefix, and its unchanged metadata supplies the Canvas
+    target. This keeps redraws on the existing package-revision event path.
+    """
     try:
         active_benchling = benchling_factory()
         if active_benchling is None:
             raise RuntimeError("Benchling client unavailable")
 
+        package_bucket = bucket or config.s3_bucket_name
         package_fetcher = PackageFileFetcher(
             catalog_url=config.quilt_catalog,
-            bucket=bucket or config.s3_bucket_name,
+            bucket=package_bucket,
             role_arn=config.quilt_write_role_arn or None,
             region=config.aws_region,
         )
@@ -106,49 +140,77 @@ def refresh_canvas_for_package_event(
                 )
                 return RefreshResult(RefreshOutcome.SKIPPED_STALE)
 
-        metadata = package_fetcher.get_package_metadata(package_name)
-        canvas_id = metadata.get("canvas_id")
-        entry_id = metadata.get("entry_id")
+        display_metadata = package_fetcher.get_package_metadata(package_name)
+        manifest_metadata = package_fetcher.get_package_user_metadata(package_name)
+        targets: set[tuple[str, str]] = set()
+        direct_target = _canvas_target(display_metadata) or _canvas_target(manifest_metadata)
+        if direct_target:
+            targets.add(direct_target)
 
-        if not canvas_id or not entry_id:
+        package_key = getattr(config, "package_key", None)
+        if not isinstance(package_key, str) or not package_key:
+            package_key = "experiment_id"
+        prefix, separator, _ = package_name.rpartition("/")
+        if separator:
+            for display_id in _linked_display_ids(manifest_metadata, package_key):
+                target_package_name = f"{prefix}/{display_id}"
+                if target_package_name == package_name and direct_target:
+                    continue
+                try:
+                    target_metadata = package_fetcher.get_package_metadata(target_package_name)
+                except ClientError as exc:
+                    if is_not_found(exc):
+                        logger.info(
+                            "Linked entry package not found for Canvas refresh",
+                            package_name=package_name,
+                            target_package_name=target_package_name,
+                        )
+                        continue
+                    raise
+                target = _canvas_target(target_metadata)
+                if target:
+                    targets.add(target)
+
+        if not targets:
             logger.info(
                 "Package event skipped - package metadata missing canvas target",
                 package_name=package_name,
-                has_canvas_id=bool(canvas_id),
-                has_entry_id=bool(entry_id),
                 top_hash=top_hash,
             )
             return RefreshResult(RefreshOutcome.SKIPPED_NO_CANVAS)
 
+        failures = []
         updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
-        result = CanvasManager(active_benchling, config, payload).update_canvas(updated_at=updated_at)
+        for entry_id, canvas_id in sorted(targets):
+            payload = Payload({"message": {"canvasId": canvas_id, "resourceId": entry_id}})
+            result = CanvasManager(active_benchling, config, payload).update_canvas(updated_at=updated_at)
+            if result.get("success"):
+                logger.info(
+                    "Package event canvas refresh completed",
+                    package_name=package_name,
+                    canvas_id=canvas_id,
+                    entry_id=entry_id,
+                    top_hash=top_hash,
+                    success=True,
+                )
+            else:
+                failures.append(str(result.get("error") or "Canvas update failed"))
 
-        if result.get("success"):
-            logger.info(
-                "Package event canvas refresh completed",
+        if failures:
+            error_message = _truncate_error_message("; ".join(failures))
+            logger.error(
+                "Package event canvas refresh returned unsuccessful result",
                 package_name=package_name,
-                canvas_id=canvas_id,
-                entry_id=entry_id,
                 top_hash=top_hash,
-                success=True,
+                target_count=len(targets),
+                error=error_message,
             )
-            return RefreshResult(RefreshOutcome.SUCCESS)
-
-        error_message = _truncate_error_message(str(result.get("error") or "Canvas update failed"))
-        logger.error(
-            "Package event canvas refresh returned unsuccessful result",
-            package_name=package_name,
-            canvas_id=canvas_id,
-            entry_id=entry_id,
-            top_hash=top_hash,
-            error=error_message,
-        )
-        return RefreshResult(
-            RefreshOutcome.TRANSIENT_ERROR,
-            error_type="CanvasUpdateFailed",
-            error_message=error_message,
-        )
+            return RefreshResult(
+                RefreshOutcome.TRANSIENT_ERROR,
+                error_type="CanvasUpdateFailed",
+                error_message=error_message,
+            )
+        return RefreshResult(RefreshOutcome.SUCCESS)
     except asyncio.CancelledError:
         raise
     except (KeyboardInterrupt, SystemExit):

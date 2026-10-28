@@ -168,6 +168,61 @@ def format_linked_packages(packages: List[Package]) -> str:
     return content
 
 
+def _format_related_timestamp(value: Optional[str]) -> str:
+    """Render an Athena revision timestamp consistently in UTC."""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromtimestamp(float(text), tz=timezone.utc)
+    except ValueError:
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return escape_markdown(" ".join(text.split()))
+        parsed = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.astimezone(timezone.utc)
+    return parsed.strftime("%Y-%m-%d %H:%M UTC")
+
+
+def format_related_packages(
+    packages: List[Package],
+    prefix: str,
+    page_number: int,
+    writable_bucket: Optional[str],
+    error: Optional[str] = None,
+) -> str:
+    """Format the paged list of same-prefix packages that are not yet linked."""
+    content = (
+        f"## Related Packages - Page {page_number + 1}\n\n"
+        f"Newest packages under `{escape_markdown(prefix)}/` that are not linked to this entry.\n\n"
+    )
+    if error:
+        content += f"> **⚠️ Unable to link package.** {escape_markdown(' '.join(error.split()))}\n\n"
+    if not packages:
+        return content + "*No unlinked related packages found.*\n"
+
+    for package in packages:
+        details = []
+        modified = _format_related_timestamp(package.modified_at)
+        if modified:
+            details.append(modified)
+        if package.message:
+            message = escape_markdown(" ".join(str(package.message).split()))
+            if message:
+                details.append(message)
+        suffix = f" — {' — '.join(details)}" if details else ""
+        content += f"* [{escape_markdown(package.package_name)}]({package.catalog_url}){suffix}\n"
+        if not writable_bucket or package.bucket != writable_bucket:
+            content += (
+                f"  * Read-only: `{escape_markdown(package.bucket)}` is not the webhook's package bucket; "
+                "open the package in Quilt to link it manually.\n"
+            )
+    return content
+
+
 def format_file_list_header(package_name: str, page_num: int, total_pages: int) -> str:
     """Format file list header.
 
