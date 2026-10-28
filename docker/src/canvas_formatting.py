@@ -199,7 +199,7 @@ def format_related_packages(
     """Format the paged list of same-prefix packages that are not yet linked."""
     content = (
         f"## Related Packages - Page {page_number + 1}\n\n"
-        f"Newest packages under `{escape_markdown(prefix)}/` that are not linked to this entry.\n\n"
+        f"Newest packages under `{prefix}/` that are not linked to this entry.\n\n"
     )
     if error:
         content += f"> **⚠️ Unable to link package.** {escape_markdown(' '.join(error.split()))}\n\n"
@@ -219,7 +219,7 @@ def format_related_packages(
         content += f"* [{escape_markdown(package.package_name)}]({package.catalog_url}){suffix}\n"
         if not writable_bucket or package.bucket != writable_bucket:
             content += (
-                f"  * Read-only: `{escape_markdown(package.bucket)}` is not the webhook's package bucket; "
+                f"  * Read-only: `{package.bucket}` is not the webhook's package bucket; "
                 "open the package in Quilt to link it manually.\n"
             )
     return content
@@ -232,7 +232,7 @@ def format_related_search_errors(errors: Dict[str, str]) -> str:
     content = "\n> **⚠️ Results are incomplete.** These package buckets could not be searched:\n>\n"
     for bucket, error in sorted(errors.items()):
         shown_error = escape_markdown(" ".join(str(error).split())[:300])
-        content += f"> * `{escape_markdown(bucket)}`: {shown_error}\n"
+        content += f"> * `{bucket}`: {shown_error}\n"
     content += ">\n> Use **Retry Search** to try the failed buckets again.\n"
     return content
 
