@@ -9,7 +9,7 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 
-- The webhook's Python HTTPS clients no longer trust eMudhra's emSign ECC Root CA - G3, whose intermediate CAs' private keys were compromised, or emSign ECC Root CA - C3 and emSign Root CA - C1: certifi is upgraded to 2026.10.23. The upgrade also drops the 31 other roots certifi has removed since 2025.8.3, among them DigiCert Global Root CA and the Entrust roots, so a server whose chain ends at one of them is now rejected (#422)
+- certifi is upgraded to 2026.10.23, so the webhook's Python HTTPS clients no longer trust the eMudhra roots emSign ECC Root CA - G3, emSign ECC Root CA - C3 and emSign Root CA - C1 (#422)
 
 ## [0.21.5] - 2026-10-26
 
