@@ -1073,8 +1073,10 @@ def test_related_iceberg_query_deduplicates_before_global_limit():
         ELN_ENTRY_KEY,
     )
 
-    assert "SELECT DISTINCT" in sql
-    assert sql.index("SELECT DISTINCT") < sql.index("LIMIT 6")
+    # Structural: Athena is out of reach, so this pins one row per package before the limit.
+    assert "max(r.timestamp) AS modified_at" in sql
+    assert "GROUP BY r.pkg_name, r.top_hash" in sql
+    assert sql.index("GROUP BY r.pkg_name, r.top_hash") < sql.index("LIMIT 6")
 
 
 def test_related_iceberg_union_failure_falls_back_per_bucket():

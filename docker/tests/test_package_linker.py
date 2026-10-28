@@ -24,8 +24,10 @@ ENTRY = {
 }
 
 
-def _manifest(metadata=None, message="before") -> bytes:
+def _manifest(metadata=None, message="before", workflow=None) -> bytes:
     header = {"user_meta": metadata or {"owner": "lab"}, "message": message}
+    if workflow:
+        header["workflow"] = workflow
     return (json.dumps(header) + "\n" + json.dumps(ENTRY) + "\n").encode()
 
 
@@ -202,6 +204,27 @@ def test_workflow_rejection_publishes_nothing():
     with patch("src.package_linker.check_workflow", return_value="metadata failed schema"):
         with pytest.raises(RelatedPackageWorkflowError, match="metadata failed schema"):
             PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
+
+    assert s3.objects == before
+
+
+def test_revision_must_pass_the_workflow_the_package_was_stamped_with():
+    stamped = _manifest(workflow={"id": "raw-data", "config": f"s3://{BUCKET}/.quilt/workflows/config.yml"})
+    s3 = FakeS3(stamped)
+    before = dict(s3.objects)
+
+    with pytest.raises(RelatedPackageWorkflowError, match="'raw-data' workflow is specified"):
+        PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
+
+    assert s3.objects == before
+
+
+def test_another_entrys_package_is_not_linked():
+    s3 = FakeS3(_manifest({"entry_id": "etr_2", "display_id": "EXP2"}))
+    before = dict(s3.objects)
+
+    with pytest.raises(RelatedPackageLinkError, match="another Benchling entry's package"):
+        PackageLinker(_config(), s3_client=s3).link(PACKAGE_NAME, BUCKET, "EXP1")
 
     assert s3.objects == before
 

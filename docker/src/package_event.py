@@ -161,38 +161,28 @@ def refresh_canvas_for_package_event(
                 config=config,
             )
             for display_id in linked_display_ids:
-                lookup = package_query.find_unique_packages(
-                    key="display_id",
-                    value=display_id,
-                )
-                lookup_errors = lookup.get("results", {}).get("errors", {})
-                if lookup_errors:
-                    summary = "; ".join(
-                        f"{failed_bucket}: {message}" for failed_bucket, message in sorted(lookup_errors.items())
-                    )
-                    lookup_failures.append(f"{display_id}: incomplete target lookup ({summary})")
-                    continue
-                linked_entry_packages = lookup["packages"]
-                if not linked_entry_packages:
-                    logger.warning(
-                        "Linked entry package not found for Canvas refresh",
-                        package_name=package_name,
-                        display_id=display_id,
-                    )
-                    lookup_failures.append(f"{display_id}: linked entry package is not indexed yet")
-                    continue
-                for entry_package in linked_entry_packages:
-                    target = _canvas_target(entry_package.metadata)
-                    if not target:
-                        target_fetcher = (
-                            package_fetcher
-                            if entry_package.bucket == package_bucket
-                            else fetcher_for(entry_package.bucket)
+                # A failed lookup is retried, but must not hold back the Canvases that resolve.
+                try:
+                    lookup = package_query.find_unique_packages(key="display_id", value=display_id)
+                    lookup_errors = lookup.get("results", {}).get("errors", {})
+                    if lookup_errors:
+                        summary = "; ".join(
+                            f"{failed_bucket}: {message}" for failed_bucket, message in sorted(lookup_errors.items())
                         )
-                        target_metadata = target_fetcher.get_package_metadata(entry_package.package_name)
-                        target = _canvas_target(target_metadata)
-                    if target:
-                        targets.add(target)
+                        lookup_failures.append(f"{display_id}: incomplete target lookup ({summary})")
+                    for entry_package in lookup["packages"]:
+                        target = _canvas_target(entry_package.metadata)
+                        if not target:
+                            target_fetcher = (
+                                package_fetcher
+                                if entry_package.bucket == package_bucket
+                                else fetcher_for(entry_package.bucket)
+                            )
+                            target = _canvas_target(target_fetcher.get_package_metadata(entry_package.package_name))
+                        if target:
+                            targets.add(target)
+                except Exception as exc:  # noqa: BLE001 - retried after the other Canvases refresh
+                    lookup_failures.append(f"{display_id}: {exc}")
 
         if not targets:
             if lookup_failures:

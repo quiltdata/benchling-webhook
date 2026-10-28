@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .package_query import ELN_ENTRY_KEY
-from .packages import Package
+from .packages import ENTRY_PACKAGE_NOTE, Package, is_entry_package
 
 # URL pattern for detecting URLs in text
 URL_PATTERN = re.compile(
@@ -220,6 +220,8 @@ def format_related_packages(
                 f"  * Read-only: `{escape_markdown(package.bucket)}` is not the webhook's package bucket; "
                 "open the package in Quilt to link it manually.\n"
             )
+        elif is_entry_package(package.metadata):
+            content += f"  * Not linkable: this {ENTRY_PACKAGE_NOTE}\n"
     return content
 
 

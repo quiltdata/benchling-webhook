@@ -22,6 +22,13 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
+ENTRY_PACKAGE_NOTE = "is another Benchling entry's package; its next export would drop the link."
+
+
+def is_entry_package(metadata: Any) -> bool:
+    """Whether metadata is an entry package's, which each export rewrites from ``entry.json``."""
+    return isinstance(metadata, dict) and bool(metadata.get("entry_id"))
+
 
 class Package:
     """Represents a Quilt package with URL generation capabilities.

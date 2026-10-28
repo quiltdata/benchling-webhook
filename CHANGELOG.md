@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - **View Related** on an entry's App Canvas lists the packages under the entry package's prefix that are not linked to the entry, newest first and five to a page, with Previous and Next; packages in other buckets are listed read-only (#424)
-- **Link** on a related package links it to the entry with a revision that changes only its metadata, setting `experiment_id` to the entry's display ID, or adding the display ID to `eln_entry` when the package already lists entries there or names another entry. The bucket's workflow is checked first, a package sealed by an accepted review is refused, and the Canvas says why a link failed (#424)
+- **Link** on a related package links it to the entry with a revision that changes only its metadata, setting `experiment_id` to the entry's display ID, or adding the display ID to `eln_entry` when the package already lists entries there or names another entry. The package's workflow is checked first, another entry's own package or one sealed by an accepted review is refused, and the Canvas says why a link failed (#424)
 
 ## [0.21.6] - 2026-10-28
 

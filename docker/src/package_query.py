@@ -796,6 +796,7 @@ class PackageQuery:
             SELECT pkg_name, top_hash, max(try_cast(timestamp AS BIGINT)) AS modified_epoch
             FROM {view_name}
             WHERE timestamp <> 'latest'
+                AND pkg_name LIKE {prefix_pattern} ESCAPE '\\'
             GROUP BY pkg_name, top_hash
         )
         SELECT
@@ -834,12 +835,12 @@ class PackageQuery:
         branches = []
         for bucket in buckets:
             branches.append(f"""
-                SELECT DISTINCT
+                SELECT
                     r.pkg_name,
                     r.top_hash,
-                    r.timestamp AS modified_at,
-                    m.message,
-                    m.metadata AS user_meta,
+                    max(r.timestamp) AS modified_at,
+                    arbitrary(m.message) AS message,
+                    arbitrary(m.metadata) AS user_meta,
                     '{bucket}' AS _src_bucket
                 FROM "{self.iceberg_database}"."{bucket}_package_revision" r
                 JOIN "{self.iceberg_database}"."{bucket}_package_manifest" m
@@ -851,6 +852,7 @@ class PackageQuery:
                 WHERE r.pkg_name LIKE {prefix_pattern} ESCAPE '\\'
                     AND r.pkg_name <> {own_literal}
                     AND NOT COALESCE({linked}, FALSE)
+                GROUP BY r.pkg_name, r.top_hash
                 """)
         union = "\nUNION ALL\n".join(branches)
         return f"""
