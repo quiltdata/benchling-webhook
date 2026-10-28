@@ -106,8 +106,6 @@ def check_workflow(
             if doubtful:
                 logger.warning("Workflow pre-check skipped: entries depend on unwritten files", error=doubtful.message)
                 return None
-        elif strict and validator.entries_validator is not None:
-            return "Could not read package entries required by the bucket workflow."
     except ConfigurationError as e:
         logger.warning("Workflow pre-check skipped", bucket=bucket, error=str(e))
         return f"Could not validate the bucket workflow: {e}" if strict else None
