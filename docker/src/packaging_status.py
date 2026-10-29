@@ -51,38 +51,46 @@ class _S3WorkflowConfig(WorkflowConfig):
 def check_workflow(
     s3_client: Any,
     bucket: str,
-    workflow: str,
+    workflow: Optional[str],
     package_name: str,
     message: str,
     metadata: dict,
     adds: tuple[str, ...] = (),
+    manifest_entries: Optional[list[dict]] = None,
+    strict: bool = False,
 ) -> Optional[str]:
-    """Return why the packager would reject this package, or None if it would accept it or we can't tell.
+    """Return why a package revision would be rejected, or ``None`` when valid.
 
-    `workflow` follows the packager message: "" means the bucket default.
-    `adds` names files that will be under the prefix by the time the package is queued (e.g. a seal).
+    ``workflow`` follows the packager message: ``""`` means the bucket default, and
+    ``None`` no workflow.
+    ``adds`` names files that will be under the source prefix by the time a normal
+    package is queued. ``manifest_entries`` supplies the exact entries for a
+    metadata-only revision. With ``strict=True``, an unreadable workflow is a
+    rejection because no downstream packager will perform a second validation.
     """
-    workflow_arg: Any = workflow or ...
+    workflow_arg: Any = ... if workflow == "" else workflow
     conf_pk = get_package_registry(f"s3://{bucket}").workflow_conf_pk
     try:
         data = yaml.safe_load(_read(s3_client, conf_pk))
     except ClientError as e:
         if e.response.get("Error", {}).get("Code") not in {"NoSuchKey", "404"}:
             logger.warning("Workflow pre-check skipped: config unreadable", bucket=bucket, error=str(e))
-            return None
-        if workflow_arg is ...:
+            return f"Could not read the bucket workflow configuration: {e}" if strict else None
+        if workflow_arg in (None, ...):
             return None
         return f"{workflow!r} workflow is specified, but no workflows config exist."
-    except Exception as e:  # noqa: BLE001 - not YAML, or a transient read error: let the packager decide
+    except Exception as e:  # noqa: BLE001 - malformed or transient read error
         logger.warning("Workflow pre-check skipped: config unreadable", bucket=bucket, error=str(e))
-        return None
+        return f"Could not read the bucket workflow configuration: {e}" if strict else None
 
     try:
         validator = _S3WorkflowConfig(data, conf_pk, s3_client).get_workflow_validator(workflow_arg)
         validator.validate_message(message)
         validator.validate_name(package_name)
         validator.validate_metadata(metadata)
-        entries = None if validator.entries_validator is None else list_entries(s3_client, bucket, package_name, adds)
+        entries = manifest_entries
+        if entries is None and validator.entries_validator is not None:
+            entries = list_entries(s3_client, bucket, package_name, adds)
         if validator.entries_validator is not None and entries is not None:
             # Entries for not-yet-written files carry placeholder sizes, so an error about one of them,
             # or about the array as a whole, may be false: let the packager decide (the stall backstop
@@ -99,14 +107,13 @@ def check_workflow(
                 logger.warning("Workflow pre-check skipped: entries depend on unwritten files", error=doubtful.message)
                 return None
     except ConfigurationError as e:
-        # A config or schema we can't load: let the packager decide; the stall backstop covers it.
         logger.warning("Workflow pre-check skipped", bucket=bucket, error=str(e))
-        return None
+        return f"Could not validate the bucket workflow: {e}" if strict else None
     except QuiltException as e:
         return e.message
-    except Exception as e:  # noqa: BLE001 - a broken config must never block packaging
+    except Exception as e:  # noqa: BLE001 - preserve normal packager behavior unless strict
         logger.warning("Workflow pre-check skipped", bucket=bucket, error=str(e))
-        return None
+        return f"Could not validate the bucket workflow: {e}" if strict else None
     return None
 
 

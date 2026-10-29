@@ -18,6 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .canvas import CanvasManager
 from .config import Config, get_config
 from .entry_packager import EntryPackager
+from .package_linker import PackageLinker, RelatedPackageLinkError
 from .packaging_publisher import (
     PackagingQueueNotConfiguredError,
     get_packaging_queue_url,
@@ -959,6 +960,10 @@ def create_app() -> FastAPI:
                     return handle_browse_files(payload, button_id, benchling, config)
                 if button_id.startswith("browse-linked-"):
                     return handle_browse_linked(payload, button_id, benchling, config)
+                if button_id.startswith(("view-related-", "next-page-related-", "prev-page-related-")):
+                    return handle_view_related(payload, button_id, benchling, config)
+                if button_id.startswith("link-related-"):
+                    return handle_link_related(payload, button_id, benchling, config)
                 if button_id.startswith("next-page-linked-") or button_id.startswith("prev-page-linked-"):
                     return handle_page_navigation_linked(payload, button_id, benchling, config)
                 if button_id.startswith("next-page-") or button_id.startswith("prev-page-"):
@@ -1117,6 +1122,92 @@ def create_app() -> FastAPI:
         thread.start()
 
         return JSONResponse({"status": "processing"}, status_code=202)
+
+    def handle_view_related(payload, button_id, benchling, config):
+        """Handle View Related and its Previous/Next controls."""
+        from .pagination import parse_button_id
+
+        try:
+            if not config.s3_bucket_name:
+                return _bucketless_response(
+                    payload,
+                    "View Related requires an existing default entry package.",
+                )
+            _, entry_id, page_state = parse_button_id(button_id)
+            page_number = page_state.page_number if page_state else 0
+            logger.info("Related packages requested", entry_id=entry_id, page=page_number)
+            canvas_manager = CanvasManager(benchling, config, payload)
+
+            def async_update():
+                try:
+                    canvas_manager.update_related_canvas(page_number)
+                    logger.info(
+                        "Canvas updated with related packages",
+                        canvas_id=payload.canvas_id,
+                        entry_id=entry_id,
+                        page=page_number,
+                    )
+                except Exception as exc:
+                    logger.error("Failed to update related package view", error=str(exc), exc_info=True)
+
+            threading.Thread(target=async_update, daemon=True).start()
+            return JSONResponse({"status": "ACCEPTED", "message": "Loading related packages..."}, status_code=202)
+        except Exception as exc:
+            logger.error("View related packages failed", error=str(exc))
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    def handle_link_related(payload, button_id, benchling, config):
+        """Publish a metadata-only revision linking a related package to this entry."""
+        from .pagination import parse_related_package_button_id
+
+        entry_id, package_name = parse_related_package_button_id(button_id)
+        bucket = config.s3_bucket_name
+        if not bucket:
+            return _bucketless_response(payload, "No writable package bucket is configured.")
+
+        canvas_manager = CanvasManager(benchling, config, payload)
+
+        def async_link():
+            try:
+                display_id = canvas_manager.entry.display_id
+                own_package_name = canvas_manager.own_package_name
+                if not own_package_name or not canvas_manager._package_exists():
+                    raise RelatedPackageLinkError("Create this entry's package before linking related packages.")
+                if canvas_manager.is_sealed_or_staged():
+                    raise RelatedPackageLinkError("This entry was sealed while linking; no package was changed.")
+                if package_name == own_package_name or not package_name.startswith(
+                    f"{canvas_manager.related_prefix}/"
+                ):
+                    raise RelatedPackageLinkError(f"Package {package_name!r} is not related to {own_package_name!r}.")
+                result = PackageLinker(config).link(package_name, bucket, display_id)
+                if not result.changed and not canvas_manager.is_sealed_or_staged():
+                    # An idempotent click creates no package event, so return to
+                    # the main view directly to clear a catalog-lagged row.
+                    canvas_manager.update_canvas_with_blocks(canvas_manager._make_blocks())
+                logger.info(
+                    "Related package link completed",
+                    entry_id=entry_id,
+                    display_id=display_id,
+                    package_name=package_name,
+                    bucket=bucket,
+                    changed=result.changed,
+                    top_hash=result.top_hash,
+                )
+            except Exception as exc:
+                rejected = isinstance(exc, RelatedPackageLinkError)
+                log = logger.warning if rejected else logger.error
+                log(
+                    "Related package link rejected" if rejected else "Related package link failed",
+                    entry_id=entry_id,
+                    package_name=package_name,
+                    bucket=bucket,
+                    error=str(exc),
+                    exc_info=not rejected,
+                )
+                canvas_manager.update_related_canvas(error=str(exc))
+
+        threading.Thread(target=async_link, daemon=True).start()
+        return JSONResponse({"status": "ACCEPTED", "message": "Linking package..."}, status_code=202)
 
     def handle_page_navigation(payload, button_id, benchling, config):
         """Handle Next/Previous page button clicks for primary package."""

@@ -435,6 +435,86 @@ class TestFastAPIApp:
                 assert isinstance(blocks[0], MarkdownUiBlockUpdate)
                 assert "test.txt" in blocks[0].value
 
+    @staticmethod
+    def _button_payload(button_id):
+        return {
+            "channel": "events",
+            "message": {"type": "v2.canvas.userInteracted", "resourceId": "etr_123456", "buttonId": button_id},
+            "baseURL": "https://tenant.benchling.com",
+            "context": {"canvasId": "canvas_123"},
+        }
+
+    @staticmethod
+    def _related_manager():
+        manager = MagicMock()
+        manager.entry.display_id = "EXP1"
+        manager.own_package_name = "benchling/EXP1"
+        manager.related_prefix = "benchling"
+        manager._package_exists.return_value = True
+        manager.is_sealed_or_staged.return_value = False
+        return manager
+
+    def _click_link(self, client, package_name, manager, link_result=None):
+        from src.package_linker import LinkResult
+        from src.pagination import encode_related_button_value
+
+        button_id = f"link-related-etr_123456-pkg-{encode_related_button_value(package_name)}"
+        run_now = Mock()
+        run_now.Thread.side_effect = lambda target, daemon: Mock(start=target)
+        with (
+            patch("src.app.threading", run_now),
+            patch("src.app.CanvasManager", return_value=manager),
+            patch("src.app.PackageLinker") as linker_class,
+        ):
+            linker_class.return_value.link.return_value = link_result or LinkResult(
+                package_name, "test-bucket", "h", True
+            )
+            response = client.post("/canvas", json=self._button_payload(button_id))
+        return response, linker_class.return_value.link
+
+    def test_link_related_rejects_a_malformed_button(self, client):
+        with patch("src.app.PackageLinker") as linker_class:
+            response = client.post("/canvas", json=self._button_payload("link-related-etr_123456-pkg-!!"))
+
+        assert response.status_code == 400
+        linker_class.return_value.link.assert_not_called()
+
+    def test_link_related_links_into_the_configured_bucket(self, client):
+        manager = self._related_manager()
+
+        response, link = self._click_link(client, "benchling/raw-1", manager)
+
+        assert response.status_code == 202
+        link.assert_called_once_with("benchling/raw-1", "test-bucket", "EXP1")
+        manager.update_related_canvas.assert_not_called()
+
+    def test_link_related_refuses_a_package_outside_the_entry_prefix(self, client):
+        manager = self._related_manager()
+
+        _response, link = self._click_link(client, "other/raw-1", manager)
+
+        link.assert_not_called()
+        assert "is not related to" in manager.update_related_canvas.call_args.kwargs["error"]
+
+    def test_link_related_returns_to_main_view_when_already_linked(self, client):
+        from src.package_linker import LinkResult
+
+        manager = self._related_manager()
+
+        self._click_link(client, "benchling/raw-1", manager, LinkResult("benchling/raw-1", "test-bucket", "h", False))
+
+        manager.update_canvas_with_blocks.assert_called_once_with(manager._make_blocks.return_value)
+
+    def test_related_page_buttons_open_the_requested_page(self, client):
+        manager = self._related_manager()
+        run_now = Mock()
+        run_now.Thread.side_effect = lambda target, daemon: Mock(start=target)
+        with patch("src.app.threading", run_now), patch("src.app.CanvasManager", return_value=manager):
+            response = client.post("/canvas", json=self._button_payload("next-page-related-etr_123456-p2-s5"))
+
+        assert response.status_code == 202
+        manager.update_related_canvas.assert_called_once_with(2)
+
     def test_webhook_verification_enabled(self, mock_config):
         """Test webhook verification is enabled when configured."""
         mock_config.enable_webhook_verification = True

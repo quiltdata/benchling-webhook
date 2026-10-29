@@ -23,7 +23,7 @@ from botocore.exceptions import ClientError
 from .auth import RoleManager
 from .config import get_config
 from .entry_references import link_metadata, summarize_references
-from .package_files import SEAL_FILE, is_not_found
+from .package_files import SEAL_FILE, has_staged_seal, is_not_found
 from .package_naming import MissingPlaceholderError, entry_package_name, entry_to_dict
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packaging_status import check_workflow, write_status
@@ -942,15 +942,7 @@ For questions about the data, refer to the original Benchling entry.
         Every revision is built from this prefix, so this also covers a seal
         that Quilt has not published yet. Errors other than a missing seal raise.
         """
-        try:
-            self.role_manager.get_s3_client().head_object(
-                Bucket=self.config.s3_bucket_name, Key=f"{package_name}/{SEAL_FILE}"
-            )
-            return True
-        except ClientError as exc:
-            if is_not_found(exc):
-                return False
-            raise
+        return has_staged_seal(self.role_manager.get_s3_client(), self.config.s3_bucket_name, package_name)
 
     def _unseal(self, package_name: str) -> None:
         """Remove the seal from the package's source prefix, if there is one."""

@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError
 from . import canvas_blocks as blocks
 from . import canvas_formatting as fmt
 from .config import Config
-from .package_files import PackageFile, PackageFileFetcher, is_not_found
+from .package_files import PackageFile, PackageFileFetcher, has_staged_seal, is_not_found
 from .package_naming import MissingPlaceholderError, entry_package_name
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packages import Package
@@ -69,6 +69,7 @@ class CanvasManager:
         self._errors: List[str] = []  # Track errors to display in notification section
         self._linked_packages: List[Package] = []  # Track linked packages for use in blocks
         self._sealed = False  # Set once the package is found sealed
+        self._package_exists_cache: Optional[bool] = None
         self._package_file_fetcher_injected = package_file_fetcher is not None
 
         # Dependency injection with fallback to default instances
@@ -336,12 +337,16 @@ class CanvasManager:
         """Whether the entry's package has a latest revision.
 
         Only a definite not-found says no. Any other error is logged and the
-        package is rendered as existing, as it was before this check.
+        package is rendered as existing, as it was before this check. The result
+        is cached because both the markdown and View Related button need it.
         """
+        if self._package_exists_cache is not None:
+            return self._package_exists_cache
         try:
             self._package_file_fetcher.get_package_top_hash(self.package_name)
         except ClientError as exc:
             if is_not_found(exc):
+                self._package_exists_cache = False
                 return False
             logger.warning(
                 "Could not check whether the package exists", package_name=self.package_name, error=str(exc)
@@ -350,6 +355,7 @@ class CanvasManager:
             logger.warning(
                 "Could not check whether the package exists", package_name=self.package_name, error=str(exc)
             )
+        self._package_exists_cache = True
         return True
 
     def _load_seal(self) -> Optional[Tuple[str, dict]]:
@@ -360,6 +366,16 @@ class CanvasManager:
         if not self.own_package_name:
             return None
         return self._package_file_fetcher.get_seal(self.own_package_name)
+
+    def is_sealed_or_staged(self) -> bool:
+        """Whether acceptance has sealed the entry, published or only staged."""
+        if self._load_seal() is not None:
+            return True
+        package_name = self.own_package_name
+        bucket = self.config.s3_bucket_name
+        if not package_name or not bucket:
+            return False
+        return has_staged_seal(self._package_file_fetcher.role_manager.get_s3_client(), bucket, package_name)
 
     def _make_sealed_markdown(self, top_hash: str, seal: dict) -> str:
         """Render the sealed revision and the linked packages frozen at acceptance."""
@@ -422,6 +438,7 @@ class CanvasManager:
                 self.entry_id,
                 update_enabled=not is_updating or not bool(self.config.s3_bucket_name),
                 browse_enabled=bool(self.own_package_name),
+                related_enabled=bool(self.own_package_name and self._package_exists()),
                 bucketless=not bool(self.config.s3_bucket_name),
             )
         )
@@ -612,6 +629,7 @@ class CanvasManager:
                 self.entry_id,
                 update_enabled=True,
                 browse_enabled=bool(self.own_package_name),
+                related_enabled=bool(self.own_package_name and self._package_exists()),
                 bucketless=not bool(self.config.s3_bucket_name),
             )
         if context == "browser":
@@ -635,6 +653,102 @@ class CanvasManager:
                 bucketless=not bool(self.config.s3_bucket_name),
             )
         raise ValueError(f"Unknown context: {context}")
+
+    @property
+    def related_prefix(self) -> Optional[str]:
+        """The prefix of the entry's own package name, which its related packages share."""
+        name = self.own_package_name
+        return name.rsplit("/", 1)[0] if name else None
+
+    def get_related_package_blocks(self, page_number: int = 0, error: Optional[str] = None) -> List:
+        """Generate the paged same-prefix package list and Link controls."""
+        page_size = blocks.RELATED_PAGE_SIZE
+        own_package_name = self.own_package_name
+        prefix = self.related_prefix
+        if not own_package_name or not prefix or not self._package_exists():
+            markdown = "## Related Packages\n\nCreate this entry's package before viewing related packages.\n"
+            return [
+                blocks.create_markdown_block(markdown, "md-related"),
+                blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
+            ]
+
+        try:
+            result = self._package_query.find_related_packages(
+                prefix=prefix,
+                own_package_name=own_package_name,
+                key=self.config.package_key,
+                value=self.entry.display_id,
+                page_number=page_number,
+                page_size=page_size,
+                array_key=ELN_ENTRY_KEY,
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed to load related packages",
+                entry_id=self.entry_id,
+                prefix=prefix,
+                error=str(exc),
+                exc_info=True,
+            )
+            markdown = (
+                "## Error Loading Related Packages\n\n"
+                f"{fmt.format_link_error(error)}"
+                f"Unable to find packages under `{prefix}/`.\n\n"
+                f"Error: {fmt.escape_markdown(str(exc))}\n"
+            )
+            return [
+                blocks.create_markdown_block(markdown, "md-related-error"),
+                blocks.create_button_block(blocks.related_view_button_id(self.entry_id, page_number), "Retry"),
+                blocks.create_button_block(f"back-to-package-{self.entry_id}", "Back to Package"),
+            ]
+
+        packages = result["packages"]
+        has_next = bool(result.get("has_next"))
+        # The query does not count the prefix; one look-ahead row stands in for the total.
+        visible_through = page_number * page_size + len(packages)
+        page_state = PageState(
+            page_number=page_number,
+            page_size=page_size,
+            total_items=visible_through + (1 if has_next else 0),
+        )
+        markdown = fmt.format_related_packages(
+            packages,
+            prefix,
+            page_number,
+            self.config.s3_bucket_name,
+            error=error,
+        )
+        search_errors = result["results"]["errors"]
+        markdown += fmt.format_related_search_errors(search_errors)
+        canvas_blocks: List = [blocks.create_markdown_block(markdown, "md-related")]
+        if search_errors:
+            canvas_blocks.append(
+                blocks.create_button_block(blocks.related_view_button_id(self.entry_id, page_number), "Retry Search")
+            )
+        canvas_blocks.extend(
+            blocks.create_related_package_link_buttons(
+                self.entry_id,
+                packages,
+                self.config.s3_bucket_name,
+            )
+        )
+        canvas_blocks.extend(blocks.create_related_navigation_buttons(self.entry_id, page_state))
+        return canvas_blocks
+
+    def update_related_canvas(self, page_number: int = 0, error: Optional[str] = None) -> dict[str, Any]:
+        """Publish a related view only if acceptance has not sealed the entry.
+
+        The seal is checked after the slow query, so a late result cannot replace a sealed Canvas.
+        """
+        related_blocks = self.get_related_package_blocks(page_number, error=error)
+        if self.is_sealed_or_staged():
+            logger.info(
+                "Skipped stale related-package Canvas update after entry seal",
+                entry_id=self.entry_id,
+                canvas_id=self.canvas_id,
+            )
+            return {"success": False, "skipped": "sealed"}
+        return self.update_canvas_with_blocks(related_blocks)
 
     def get_package_browser_blocks(
         self,

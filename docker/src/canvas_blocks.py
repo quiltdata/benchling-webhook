@@ -15,7 +15,14 @@ from benchling_api_client.v2.stable.models.section_ui_block_type import SectionU
 from benchling_api_client.v2.stable.models.section_ui_block_update import SectionUiBlockUpdate
 
 from .packages import Package
-from .pagination import PageState, encode_bucket_name, encode_package_name
+from .pagination import PageState, encode_bucket_name, encode_package_name, encode_related_button_value
+
+RELATED_PAGE_SIZE = 5
+
+
+def related_view_button_id(entry_id: str, page_number: int = 0) -> str:
+    """Button ID that opens the related-package list at ``page_number``."""
+    return f"view-related-{entry_id}-p{page_number}-s{RELATED_PAGE_SIZE}"
 
 
 def create_markdown_block(content: str, block_id: str = "md1") -> MarkdownUiBlockUpdate:
@@ -94,6 +101,7 @@ def create_main_navigation_buttons(
     entry_id: str,
     update_enabled: bool = True,
     browse_enabled: bool = True,
+    related_enabled: bool = False,
     bucketless: bool = False,
 ) -> List:
     """Create main view navigation buttons.
@@ -105,6 +113,8 @@ def create_main_navigation_buttons(
             spawn a concurrent export workflow. Browse stays enabled — on a
             re-export the previous package version is still valid.
         browse_enabled: Whether the primary package browse button is enabled.
+        related_enabled: Whether same-prefix related packages can be viewed.
+            Requires an existing primary package, whose name supplies the prefix.
         bucketless: If True, render bucketless controls instead of primary-package
             controls. Bucketless mode has no default package to browse or update.
 
@@ -130,6 +140,11 @@ def create_main_navigation_buttons(
                 button_id=f"update-package-{entry_id}",
                 text="Update Package",
                 enabled=update_enabled,
+            ),
+            create_button(
+                button_id=related_view_button_id(entry_id),
+                text="View Related",
+                enabled=related_enabled,
             ),
         ]
 
@@ -277,6 +292,41 @@ def create_linked_package_browse_buttons(entry_id: str, packages: List[Package],
     section = create_section("button-section-linked-packages", buttons)
 
     return [section]
+
+
+def create_related_package_link_buttons(
+    entry_id: str,
+    packages: List[Package],
+    writable_bucket: Optional[str],
+) -> List:
+    """Create one Link button for each related package the webhook may revise."""
+    buttons = []
+    for package in packages:
+        if not writable_bucket or package.bucket != writable_bucket:
+            continue
+        button_id = f"link-related-{entry_id}-pkg-{encode_related_button_value(package.package_name)}"
+        buttons.append(create_button(button_id, f"Link {package.package_name}"))
+    return [create_section("button-section-related-packages", buttons)] if buttons else []
+
+
+def create_related_navigation_buttons(entry_id: str, page_state: PageState) -> List:
+    """Create fixed-size Previous/Next controls for the related-package list."""
+    previous_page = page_state.page_number - 1 if page_state.has_previous else 0
+    next_page = page_state.page_number + 1 if page_state.has_next else page_state.page_number
+    buttons = [
+        create_button(
+            f"prev-page-related-{entry_id}-p{previous_page}-s{page_state.page_size}",
+            "← Previous",
+            enabled=page_state.has_previous,
+        ),
+        create_button(
+            f"next-page-related-{entry_id}-p{next_page}-s{page_state.page_size}",
+            "Next →",
+            enabled=page_state.has_next,
+        ),
+        create_button(f"back-to-package-{entry_id}", "Back to Package"),
+    ]
+    return [create_section("button-section-related-navigation", buttons)]
 
 
 def blocks_to_dict(blocks: List) -> List[Dict[str, Any]]:

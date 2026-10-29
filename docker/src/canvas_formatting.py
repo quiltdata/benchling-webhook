@@ -168,6 +168,81 @@ def format_linked_packages(packages: List[Package]) -> str:
     return content
 
 
+def _format_related_timestamp(value: Optional[str]) -> str:
+    """Render an Athena revision timestamp consistently in UTC."""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromtimestamp(float(text), tz=timezone.utc)
+    except (OverflowError, OSError):
+        return escape_markdown(text)
+    except ValueError:
+        try:
+            parsed = datetime.fromisoformat(text.removesuffix(" UTC").replace("Z", "+00:00"))
+        except ValueError:
+            return escape_markdown(" ".join(text.split()))
+        parsed = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.astimezone(timezone.utc)
+    return parsed.strftime("%Y-%m-%d %H:%M UTC")
+
+
+def format_link_error(error: Optional[str]) -> str:
+    """Explain why a Link failed, or nothing when it did not."""
+    if not error:
+        return ""
+    return f"> **⚠️ Unable to link package.** {escape_markdown(' '.join(error.split()))}\n\n"
+
+
+def format_related_packages(
+    packages: List[Package],
+    prefix: str,
+    page_number: int,
+    writable_bucket: Optional[str],
+    error: Optional[str] = None,
+) -> str:
+    """Format the paged list of same-prefix packages that are not yet linked."""
+    content = (
+        f"## Related Packages - Page {page_number + 1}\n\n"
+        f"Newest packages under `{prefix}/` that are not linked to this entry.\n\n"
+    )
+    content += format_link_error(error)
+    if not packages:
+        return content + "*No unlinked related packages found.*\n"
+
+    for package in packages:
+        details = []
+        modified = _format_related_timestamp(package.modified_at)
+        if modified:
+            details.append(modified)
+        if package.message:
+            message = escape_markdown(" ".join(str(package.message).split()))
+            if message:
+                details.append(message)
+        suffix = f" — {' — '.join(details)}" if details else ""
+        content += f"* [{escape_markdown(package.package_name)}]({package.catalog_url}){suffix}\n"
+        if not writable_bucket or package.bucket != writable_bucket:
+            content += (
+                f"  * Read-only: `{package.bucket}` is not the webhook's package bucket; "
+                "open the package in Quilt to link it manually.\n"
+            )
+    return content
+
+
+def format_related_search_errors(errors: Dict[str, str]) -> str:
+    """Explain partial related-package lookup failures without hiding good rows."""
+    if not errors:
+        return ""
+    content = "\n> **⚠️ Results are incomplete.** These package buckets could not be searched:\n>\n"
+    for bucket, error in sorted(errors.items()):
+        shown_error = escape_markdown(" ".join(str(error).split())[:300])
+        content += f"> * `{bucket}`: {shown_error}\n"
+    content += ">\n> Use **Retry Search** to try the failed buckets again.\n"
+    return content
+
+
 def format_file_list_header(package_name: str, page_num: int, total_pages: int) -> str:
     """Format file list header.
 

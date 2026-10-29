@@ -128,15 +128,17 @@ class TestUpdatingCanvasBlocks:
         version is still valid."""
         updating = canvas_manager._make_blocks(is_updating=True)
 
-        # The first block is the main-nav section with two buttons: [Browse, Update]
+        # The first block is the main-nav section: [Browse, Update, View Related]
         nav_section = updating[0]
-        browse_btn, update_btn = nav_section.children
+        browse_btn, update_btn, related_btn = nav_section.children
 
         assert browse_btn.text == "Browse Package"
         assert browse_btn.enabled is True, "Browse stays enabled during updating"
 
         assert update_btn.text == "Update Package"
         assert update_btn.enabled is False, "Update is disabled during updating"
+        assert related_btn.text == "View Related"
+        assert related_btn.enabled is True, "Existing packages can show related packages while updating"
 
     def test_update_button_reenabled_on_final_canvas(self, canvas_manager):
         """When the background workflow delivers the real update, both buttons
@@ -147,10 +149,11 @@ class TestUpdatingCanvasBlocks:
         canvas_manager._package_query.find_unique_packages.return_value = {"packages": []}
 
         final = canvas_manager._make_blocks(updated_at="2026-04-15 12:00 UTC")
-        browse_btn, update_btn = final[0].children
+        browse_btn, update_btn, related_btn = final[0].children
 
         assert browse_btn.enabled is True
         assert update_btn.enabled is True, "Update is re-enabled once updated_at is set"
+        assert related_btn.enabled is True
 
     def test_updating_blocks_match_regular_layout(self, canvas_manager):
         """The 'Updating...' canvas has the same block types in the same order

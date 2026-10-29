@@ -206,29 +206,45 @@ class PackageQuery:
 
             time.sleep(0.5)
 
-        # Get results
-        results = self.athena.get_query_results(QueryExecutionId=query_execution_id)
+        # Athena returns at most 1,000 rows per response.
+        data_rows: List[Dict[str, Any]] = []
+        headers: Optional[List[str]] = None
+        next_token: Optional[str] = None
+        first_page = True
+        while True:
+            request: Dict[str, Any] = {"QueryExecutionId": query_execution_id}
+            if next_token:
+                request["NextToken"] = next_token
+            results = self.athena.get_query_results(**request)
+            rows = results.get("ResultSet", {}).get("Rows", [])
+
+            if headers is None:
+                column_info = results.get("ResultSet", {}).get("ResultSetMetadata", {}).get("ColumnInfo", [])
+                if column_info:
+                    headers = [column.get("Name", "") for column in column_info]
+                elif rows:
+                    headers = [column.get("VarCharValue", "") for column in rows[0].get("Data", [])]
+
+            page_rows = rows[1:] if first_page and rows else rows
+            if headers:
+                for row in page_rows:
+                    row_dict = {}
+                    for index, cell in enumerate(row.get("Data", [])):
+                        if index >= len(headers):
+                            break
+                        row_dict[headers[index]] = cell.get("VarCharValue")
+                    data_rows.append(row_dict)
+
+            next_token = results.get("NextToken")
+            if not next_token:
+                break
+            first_page = False
+
         self.logger.debug(
-            "Query succeeded", execution_id=query_execution_id, row_count=len(results["ResultSet"]["Rows"])
+            "Query succeeded",
+            execution_id=query_execution_id,
+            row_count=len(data_rows),
         )
-
-        # Parse results into list of dicts
-        rows = results["ResultSet"]["Rows"]
-        if not rows:
-            return []
-
-        # Extract column names from header row
-        headers = [col.get("VarCharValue", "") for col in rows[0]["Data"]]
-
-        # Convert data rows to dictionaries
-        data_rows = []
-        for row in rows[1:]:  # Skip header row
-            row_dict = {}
-            for i, cell in enumerate(row["Data"]):
-                value = cell.get("VarCharValue")
-                row_dict[headers[i]] = value
-            data_rows.append(row_dict)
-
         return data_rows
 
     def _validate_metadata_key(self, key: str) -> str:
@@ -274,7 +290,7 @@ class PackageQuery:
             Parenthesized SQL boolean expression.
         """
         self._validate_metadata_key(key)
-        literal = "'" + value.replace("'", "''") + "'"
+        literal = self._sql_string_literal(value)
         predicate = f"json_extract_scalar({column}, '$.{key}') = {literal}"
         if array_key:
             self._validate_metadata_key(array_key)
@@ -284,10 +300,13 @@ class PackageQuery:
             )
         return f"({predicate})"
 
-    def _parse_user_meta(self, raw_meta: Optional[str], *, pkg_name: str, key: str, value: str) -> Dict[str, Any]:
-        """Parse metadata returned from Athena, falling back to the matched key/value."""
+    def _parse_user_meta(
+        self, raw_meta: Optional[str], *, pkg_name: str, key: Optional[str] = None, value: str = ""
+    ) -> Dict[str, Any]:
+        """Parse metadata returned from Athena, falling back to the matched key/value, if any."""
+        fallback = {key: value} if key else {}
         if not raw_meta:
-            return {key: value}
+            return fallback
 
         try:
             parsed = json.loads(raw_meta)
@@ -308,7 +327,7 @@ class PackageQuery:
         except json.JSONDecodeError:
             self.logger.warning("Failed to parse user_meta JSON", pkg_name=pkg_name)
 
-        return {key: value}
+        return fallback
 
     def _format_aws_error(self, error: Exception) -> str:
         """Return an actionable error message for common AWS query failures."""
@@ -699,6 +718,334 @@ class PackageQuery:
                 "errors": errors,
             },
         }
+
+    @staticmethod
+    def _sql_string_literal(value: str) -> str:
+        """Quote a value for use as an Athena string literal."""
+        return "'" + value.replace("'", "''") + "'"
+
+    @classmethod
+    def _package_prefix_pattern(cls, prefix: str) -> str:
+        """Return an escaped SQL LIKE pattern for packages under a prefix."""
+        escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        return cls._sql_string_literal(f"{escaped}/%")
+
+    def _related_package_from_row(self, row: Dict[str, Any], default_bucket: str = "") -> Package:
+        bucket = row.get("_src_bucket") or default_bucket
+        package_name = row["pkg_name"]
+        return Package(
+            catalog_base_url=self.catalog_url,
+            bucket=bucket,
+            package_name=package_name,
+            metadata=self._parse_user_meta(row.get("user_meta"), pkg_name=package_name),
+            modified_at=row.get("modified_at"),
+            message=row.get("message"),
+        )
+
+    @staticmethod
+    def _related_timestamp_key(package: Package) -> tuple[int, float, str]:
+        value = str(package.modified_at or "")
+        try:
+            return (1, float(value), "")
+        except ValueError:
+            # Athena renders ISO timestamps in a lexically sortable form.
+            return (0, 0.0, value)
+
+    @classmethod
+    def _ordered_related_packages(cls, packages: List[Package], limit: int) -> List[Package]:
+        """De-duplicate and match SQL order: timestamp DESC, name ASC, bucket ASC."""
+        unique = {(package.bucket, package.package_name): package for package in packages}
+        ordered = sorted(unique.values(), key=lambda package: (package.package_name, package.bucket))
+        # Python sort is stable, so equal timestamps retain the SQL tie-break order above.
+        ordered.sort(key=cls._related_timestamp_key, reverse=True)
+        return ordered[:limit]
+
+    @staticmethod
+    def _related_fetch_limit(page_number: int, page_size: int) -> int:
+        if page_number < 0:
+            raise ValueError(f"page_number must be >= 0, got {page_number}")
+        if page_size < 1:
+            raise ValueError(f"page_size must be >= 1, got {page_size}")
+        return (page_number + 1) * page_size + 1
+
+    def _find_related_packages_in_bucket(
+        self,
+        bucket: str,
+        prefix: str,
+        own_package_name: str,
+        key: str,
+        value: str,
+        fetch_limit: int,
+        array_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Fetch a bounded newest-first related-package candidate list from one package view."""
+        view_name = f'"{self.database}"."{bucket}_packages-view"'
+        linked = self._metadata_match_predicate("source.user_meta", key, value, array_key)
+        prefix_pattern = self._package_prefix_pattern(prefix)
+        own_literal = self._sql_string_literal(own_package_name)
+        query = f"""
+        WITH latest AS (
+            SELECT DISTINCT source.pkg_name, source.top_hash, source.message, source.user_meta
+            FROM {view_name} AS source
+            WHERE source.timestamp = 'latest'
+                AND source.pkg_name LIKE {prefix_pattern} ESCAPE '\\'
+                AND source.pkg_name <> {own_literal}
+                AND NOT COALESCE({linked}, FALSE)
+                AND json_extract_scalar(source.user_meta, '$.entry_id') IS NULL
+        ),
+        revision_times AS (
+            SELECT pkg_name, top_hash, max(try_cast(timestamp AS BIGINT)) AS modified_epoch
+            FROM {view_name}
+            WHERE timestamp <> 'latest'
+                AND pkg_name LIKE {prefix_pattern} ESCAPE '\\'
+            GROUP BY pkg_name, top_hash
+        )
+        SELECT
+            latest.pkg_name,
+            latest.top_hash,
+            latest.message,
+            latest.user_meta,
+            CAST(revision_times.modified_epoch AS VARCHAR) AS modified_at
+        FROM latest
+        LEFT JOIN revision_times
+            ON latest.pkg_name = revision_times.pkg_name
+            AND latest.top_hash = revision_times.top_hash
+        ORDER BY revision_times.modified_epoch DESC NULLS LAST, latest.pkg_name
+        LIMIT {fetch_limit}
+        """
+        rows = self._execute_query(query, timeout=30)
+        return {
+            "packages": [self._related_package_from_row(row, bucket) for row in rows],
+            "results": {"rows": rows, "errors": {}},
+        }
+
+    def _build_related_iceberg_query(
+        self,
+        buckets: List[str],
+        prefix: str,
+        own_package_name: str,
+        key: str,
+        value: str,
+        fetch_limit: int,
+        array_key: Optional[str] = None,
+    ) -> str:
+        """Build a bounded global newest-first related-package query over Iceberg tables."""
+        linked = self._metadata_match_predicate("m.metadata", key, value, array_key)
+        prefix_pattern = self._package_prefix_pattern(prefix)
+        own_literal = self._sql_string_literal(own_package_name)
+        branches = []
+        for bucket in buckets:
+            branches.append(f"""
+                SELECT
+                    r.pkg_name,
+                    r.top_hash,
+                    max(r.timestamp) AS modified_at,
+                    arbitrary(m.message) AS message,
+                    arbitrary(m.metadata) AS user_meta,
+                    '{bucket}' AS _src_bucket
+                FROM "{self.iceberg_database}"."{bucket}_package_revision" r
+                JOIN "{self.iceberg_database}"."{bucket}_package_manifest" m
+                    ON r.top_hash = m.top_hash
+                JOIN "{self.iceberg_database}"."{bucket}_package_tag" t
+                    ON r.pkg_name = t.pkg_name
+                    AND r.top_hash = t.top_hash
+                    AND t.tag_name = 'latest'
+                WHERE r.pkg_name LIKE {prefix_pattern} ESCAPE '\\'
+                    AND r.pkg_name <> {own_literal}
+                    AND NOT COALESCE({linked}, FALSE)
+                    AND json_extract_scalar(m.metadata, '$.entry_id') IS NULL
+                GROUP BY r.pkg_name, r.top_hash
+                """)
+        union = "\nUNION ALL\n".join(branches)
+        return f"""
+        SELECT *
+        FROM ({union}) related
+        ORDER BY modified_at DESC NULLS LAST, pkg_name, _src_bucket
+        LIMIT {fetch_limit}
+        """
+
+    def _find_related_packages_in_iceberg(
+        self,
+        prefix: str,
+        own_package_name: str,
+        key: str,
+        value: str,
+        fetch_limit: int,
+        array_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        buckets = self._list_iceberg_manifest_buckets()
+        if not buckets:
+            return {"packages": [], "results": {"rows": [], "errors": {}}}
+
+        errors: Dict[str, str] = {}
+        try:
+            rows = self._execute_query(
+                self._build_related_iceberg_query(
+                    buckets,
+                    prefix,
+                    own_package_name,
+                    key,
+                    value,
+                    fetch_limit,
+                    array_key=array_key,
+                ),
+                timeout=60,
+            )
+        except Exception as union_error:
+            # One inaccessible bucket table fails the whole UNION; retry each bucket alone.
+            self.logger.warning(
+                "Global Iceberg related-package query failed; retrying per bucket",
+                bucket_count=len(buckets),
+                error=str(union_error),
+            )
+            rows = []
+            workers = self._bucketless_worker_count(len(buckets))
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {
+                    executor.submit(
+                        self._execute_query,
+                        self._build_related_iceberg_query(
+                            [bucket],
+                            prefix,
+                            own_package_name,
+                            key,
+                            value,
+                            fetch_limit,
+                            array_key=array_key,
+                        ),
+                        60,
+                    ): bucket
+                    for bucket in buckets
+                }
+                for future in as_completed(futures):
+                    bucket = futures[future]
+                    try:
+                        rows.extend(future.result())
+                    except Exception as exc:
+                        errors[bucket] = str(exc)
+                        self.logger.warning("Iceberg related-package lookup failed", bucket=bucket, error=str(exc))
+
+            if len(errors) == len(buckets):
+                summary = "; ".join(f"{bucket}: {message}" for bucket, message in sorted(errors.items()))
+                raise RuntimeError(f"Every Iceberg related-package bucket query failed: {summary}") from union_error
+
+        packages = [self._related_package_from_row(row) for row in rows]
+        return {
+            "packages": self._ordered_related_packages(packages, fetch_limit),
+            "results": {"rows": rows, "errors": errors},
+        }
+
+    def _find_related_packages_in_all_buckets(
+        self,
+        prefix: str,
+        own_package_name: str,
+        key: str,
+        value: str,
+        fetch_limit: int,
+        array_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        buckets = sorted(set(self._list_package_view_buckets()) | ({self.bucket} if self.bucket else set()))
+        if not buckets:
+            return {"packages": [], "results": {"rows": [], "errors": {}}}
+
+        packages: List[Package] = []
+        rows: List[Dict[str, Any]] = []
+        errors: Dict[str, str] = {}
+        workers = self._bucketless_worker_count(len(buckets))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(
+                    self._find_related_packages_in_bucket,
+                    bucket,
+                    prefix,
+                    own_package_name,
+                    key,
+                    value,
+                    fetch_limit,
+                    array_key,
+                ): bucket
+                for bucket in buckets
+            }
+            for future in as_completed(futures):
+                bucket = futures[future]
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    errors[bucket] = str(exc)
+                    self.logger.warning("Related package lookup failed", bucket=bucket, error=str(exc))
+                    continue
+                packages.extend(result["packages"])
+                rows.extend(result["results"]["rows"])
+
+        if len(errors) == len(buckets):
+            summary = "; ".join(f"{bucket}: {message}" for bucket, message in sorted(errors.items()))
+            raise RuntimeError(f"Every related-package bucket query failed: {summary}")
+
+        return {
+            "packages": self._ordered_related_packages(packages, fetch_limit),
+            "results": {"rows": rows, "errors": errors},
+        }
+
+    def find_related_packages(
+        self,
+        prefix: str,
+        own_package_name: str,
+        key: str,
+        value: str,
+        page_number: int = 0,
+        page_size: int = 5,
+        array_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Find newest packages under ``prefix`` that are not linked to ``value``.
+
+        Entry packages are left out, since each export rewrites their metadata.
+        Searches every accessible package bucket so read-only raw packages can be
+        shown alongside writable packages. The query remains bounded: it fetches
+        only enough candidates to fill the requested page plus one look-ahead row.
+        """
+        try:
+            self._validate_metadata_key(key)
+            if array_key:
+                self._validate_metadata_key(array_key)
+            fetch_limit = self._related_fetch_limit(page_number, page_size)
+            if self.iceberg_database:
+                result = self._find_related_packages_in_iceberg(
+                    prefix,
+                    own_package_name,
+                    key,
+                    value,
+                    fetch_limit,
+                    array_key=array_key,
+                )
+            else:
+                result = self._find_related_packages_in_all_buckets(
+                    prefix,
+                    own_package_name,
+                    key,
+                    value,
+                    fetch_limit,
+                    array_key=array_key,
+                )
+
+            start = page_number * page_size
+            candidates = result["packages"]
+            page = candidates[start : start + page_size]
+            result["packages"] = page
+            result["page_number"] = page_number
+            result["page_size"] = page_size
+            result["has_previous"] = page_number > 0
+            result["has_next"] = len(candidates) > start + page_size
+            return result
+        except Exception as exc:
+            error_msg = self._format_aws_error(exc)
+            self.logger.error(
+                "Related package query failed",
+                prefix=prefix,
+                value=value,
+                error=error_msg,
+                error_type=type(exc).__name__,
+            )
+            raise RuntimeError(error_msg) from exc
 
     def find_unique_packages(
         self, key: str, value: str, array_key: Optional[str] = None, pinned: bool = False
