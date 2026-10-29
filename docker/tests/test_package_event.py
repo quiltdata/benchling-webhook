@@ -1,9 +1,10 @@
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
 import requests
 
 from src.package_event import RefreshOutcome, refresh_canvas_for_package_event
+from src.packages import Package
 
 
 @pytest.fixture
@@ -120,3 +121,325 @@ def test_refresh_canvas_for_package_event_classifies_unexpected_error_as_transie
 
     assert result.outcome == RefreshOutcome.TRANSIENT_ERROR
     assert result.error_type == "RuntimeError"
+
+
+def test_related_revision_resolves_nested_link_target_by_display_id(mock_config):
+    """A nested related package refreshes the actual indexed entry package Canvas."""
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+    benchling_client = Mock()
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        fetcher = Mock()
+        fetcher.get_package_top_hash.return_value = "abc123"
+        fetcher.get_package_metadata.return_value = {}
+        fetcher.get_package_user_metadata.return_value = {"experiment_id": "EXP1"}
+        mock_fetcher_class.return_value = fetcher
+
+        entry_package = Package(
+            "test.quiltdata.com",
+            "test-bucket",
+            "ale/EXP1",
+            metadata={"entry_id": "etr_target", "canvas_id": "cnvs_target", "display_id": "EXP1"},
+        )
+        query = Mock()
+        query.find_unique_packages.return_value = {"packages": [entry_package]}
+        mock_query_class.return_value = query
+
+        manager = Mock()
+        manager.update_canvas.return_value = {"success": True, "canvas_id": "cnvs_target"}
+        mock_canvas_manager.return_value = manager
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=lambda: benchling_client,
+        )
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    query.find_unique_packages.assert_called_once_with(key="display_id", value="EXP1")
+    payload = mock_canvas_manager.call_args.args[2]
+    assert payload.entry_id == "etr_target"
+    assert payload.canvas_id == "cnvs_target"
+    manager.update_canvas.assert_called_once()
+
+
+def test_bucketless_related_revision_searches_globally_and_reads_target_bucket(mock_config):
+    mock_config.s3_bucket_name = ""
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        source_fetcher = Mock()
+        source_fetcher.get_package_top_hash.return_value = "abc123"
+        source_fetcher.get_package_metadata.return_value = {}
+        source_fetcher.get_package_user_metadata.return_value = {"experiment_id": "EXP1"}
+        target_fetcher = Mock()
+        target_fetcher.get_package_metadata.return_value = {
+            "entry_id": "etr_target",
+            "canvas_id": "cnvs_target",
+        }
+        mock_fetcher_class.side_effect = [source_fetcher, target_fetcher]
+
+        entry_package = Package("test.quiltdata.com", "bucket-b", "ale/EXP1", metadata={})
+        query = Mock()
+        query.find_unique_packages.return_value = {"packages": [entry_package]}
+        mock_query_class.return_value = query
+
+        manager = Mock()
+        manager.update_canvas.return_value = {"success": True, "canvas_id": "cnvs_target"}
+        mock_canvas_manager.return_value = manager
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=Mock,
+            bucket="bucket-a",
+        )
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    assert mock_query_class.call_args.kwargs["bucket"] == ""
+    assert mock_fetcher_class.call_args_list[0].kwargs["bucket"] == "bucket-a"
+    assert mock_fetcher_class.call_args_list[1].kwargs["bucket"] == "bucket-b"
+    target_fetcher.get_package_metadata.assert_called_once_with("ale/EXP1")
+
+
+def test_bucketless_partial_target_lookup_still_refreshes_found_canvas(mock_config):
+    mock_config.s3_bucket_name = ""
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        source_fetcher = Mock()
+        source_fetcher.get_package_top_hash.return_value = "abc123"
+        source_fetcher.get_package_metadata.return_value = {}
+        source_fetcher.get_package_user_metadata.return_value = {"experiment_id": "EXP1"}
+        mock_fetcher_class.return_value = source_fetcher
+
+        found = Package(
+            "test.quiltdata.com",
+            "bucket-a",
+            "ale/EXP1",
+            metadata={"entry_id": "etr_1", "canvas_id": "cnvs_1"},
+        )
+        query = Mock()
+        query.find_unique_packages.return_value = {
+            "packages": [found],
+            "results": {"errors": {"bucket-b": "Access denied"}},
+        }
+        mock_query_class.return_value = query
+
+        manager = Mock()
+        manager.update_canvas.return_value = {"success": True, "canvas_id": "cnvs_1"}
+        mock_canvas_manager.return_value = manager
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=Mock,
+            bucket="bucket-a",
+        )
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    manager.update_canvas.assert_called_once()
+
+
+def test_link_to_entry_without_package_is_skipped_not_retried(mock_config):
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        source_fetcher = Mock()
+        source_fetcher.get_package_top_hash.return_value = "abc123"
+        source_fetcher.get_package_metadata.return_value = {}
+        source_fetcher.get_package_user_metadata.return_value = {"experiment_id": "EXP1"}
+        mock_fetcher_class.return_value = source_fetcher
+
+        query = Mock()
+        query.find_unique_packages.return_value = {
+            "packages": [],
+            "results": {"errors": {}},
+        }
+        mock_query_class.return_value = query
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=Mock,
+        )
+
+    assert result.outcome == RefreshOutcome.SKIPPED_NO_CANVAS
+    mock_canvas_manager.assert_not_called()
+
+
+def test_unreadable_match_does_not_hide_a_readable_one(mock_config):
+    mock_config.s3_bucket_name = ""
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        source_fetcher = Mock()
+        source_fetcher.get_package_top_hash.return_value = "abc123"
+        source_fetcher.get_package_metadata.return_value = {}
+        source_fetcher.get_package_user_metadata.return_value = {"experiment_id": "EXP1"}
+        denied_fetcher = Mock()
+        denied_fetcher.get_package_metadata.side_effect = RuntimeError("Access denied")
+        readable_fetcher = Mock()
+        readable_fetcher.get_package_metadata.return_value = {"entry_id": "etr_1", "canvas_id": "cnvs_1"}
+        mock_fetcher_class.side_effect = [source_fetcher, denied_fetcher, readable_fetcher]
+
+        query = Mock()
+        query.find_unique_packages.return_value = {
+            "packages": [
+                Package("test.quiltdata.com", "denied-bucket", "ale/EXP1"),
+                Package("test.quiltdata.com", "readable-bucket", "ale/EXP1"),
+            ],
+            "results": {"errors": {}},
+        }
+        mock_query_class.return_value = query
+
+        manager = Mock()
+        manager.update_canvas.return_value = {"success": True}
+        mock_canvas_manager.return_value = manager
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=Mock,
+            bucket="source-bucket",
+        )
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    manager.update_canvas.assert_called_once()
+
+
+def test_failed_linked_canvas_refresh_does_not_fail_the_event(mock_config):
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        source_fetcher = Mock()
+        source_fetcher.get_package_top_hash.return_value = "abc123"
+        source_fetcher.get_package_metadata.return_value = {}
+        source_fetcher.get_package_user_metadata.return_value = {"eln_entry": ["GONE", "LIVE"]}
+        mock_fetcher_class.return_value = source_fetcher
+
+        query = Mock()
+        query.find_unique_packages.side_effect = [
+            {
+                "packages": [
+                    Package(
+                        "test.quiltdata.com",
+                        "test-bucket",
+                        "ale/GONE",
+                        metadata={"entry_id": "etr_a", "canvas_id": "cnvs_a"},
+                    )
+                ],
+                "results": {"errors": {}},
+            },
+            {
+                "packages": [
+                    Package(
+                        "test.quiltdata.com",
+                        "test-bucket",
+                        "ale/LIVE",
+                        metadata={"entry_id": "etr_b", "canvas_id": "cnvs_b"},
+                    )
+                ],
+                "results": {"errors": {}},
+            },
+        ]
+        mock_query_class.return_value = query
+
+        manager = Mock()
+        manager.update_canvas.side_effect = [RuntimeError("canvas archived"), {"success": True}]
+        mock_canvas_manager.return_value = manager
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=Mock,
+        )
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    assert manager.update_canvas.call_count == 2
+
+
+def test_failed_old_link_lookup_does_not_block_resolvable_new_canvas(mock_config):
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        source_fetcher = Mock()
+        source_fetcher.get_package_top_hash.return_value = "abc123"
+        source_fetcher.get_package_metadata.return_value = {}
+        source_fetcher.get_package_user_metadata.return_value = {
+            "experiment_id": "OLD",
+            "eln_entry": ["NEW"],
+        }
+        mock_fetcher_class.return_value = source_fetcher
+
+        target_package = Package(
+            "test.quiltdata.com",
+            "test-bucket",
+            "ale/NEW",
+            metadata={"entry_id": "etr_new", "canvas_id": "cnvs_new"},
+        )
+        query = Mock()
+        query.find_unique_packages.side_effect = [
+            RuntimeError("Athena throttled"),
+            {"packages": [target_package], "results": {"errors": {}}},
+        ]
+        mock_query_class.return_value = query
+
+        manager = Mock()
+        manager.update_canvas.return_value = {"success": True, "canvas_id": "cnvs_new"}
+        mock_canvas_manager.return_value = manager
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=Mock,
+        )
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    assert query.find_unique_packages.call_args_list == [
+        call(key="display_id", value="OLD"),
+        call(key="display_id", value="NEW"),
+    ]
+    manager.update_canvas.assert_called_once()

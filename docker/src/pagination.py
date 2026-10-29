@@ -1,5 +1,7 @@
 """Pagination management for Package Entry Browser."""
 
+import base64
+import binascii
 import math
 import re
 from dataclasses import dataclass
@@ -180,6 +182,32 @@ def parse_browse_linked_button_id_with_bucket(button_id: str) -> tuple[str, str,
 def parse_browse_linked_button_id(button_id: str) -> tuple[str, str, int, int]:
     entry_id, package_name, _bucket_name, page_number, page_size = parse_browse_linked_button_id_with_bucket(button_id)
     return (entry_id, package_name, page_number, page_size)
+
+
+def encode_related_button_value(value: str) -> str:
+    """Encode a related-package button field reversibly without delimiter characters."""
+    return base64.b32encode(value.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def decode_related_button_value(encoded: str) -> str:
+    """Decode a Base32 related-package button field."""
+    padding = "=" * (-len(encoded) % 8)
+    try:
+        return base64.b32decode(encoded + padding, casefold=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError) as exc:
+        raise ValueError(f"Invalid related-package button encoding: {encoded}") from exc
+
+
+def parse_related_package_button_id(button_id: str) -> tuple[str, str]:
+    """Parse the entry ID and package name from a ``link-related`` Canvas button ID."""
+    prefix = "link-related-"
+    if not button_id.startswith(prefix) or "-pkg-" not in button_id:
+        raise ValueError(f"Invalid link-related button ID: {button_id}")
+    entry_id, encoded_package = button_id[len(prefix) :].split("-pkg-", 1)
+    package_name = decode_related_button_value(encoded_package) if encoded_package else ""
+    if not entry_id or not package_name:
+        raise ValueError(f"Invalid link-related button ID: {button_id}")
+    return entry_id, package_name
 
 
 @dataclass

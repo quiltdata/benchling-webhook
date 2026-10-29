@@ -43,6 +43,8 @@ class Package:
         package_name: str,
         metadata: Optional[Dict[str, Any]] = None,
         top_hash: Optional[str] = None,
+        modified_at: Optional[str] = None,
+        message: Optional[str] = None,
     ):
         """Initialize a Package.
 
@@ -53,12 +55,16 @@ class Package:
             metadata: Package-level user metadata, when the caller already has it
                 (e.g., from a PackageQuery match). Defaults to an empty dict.
             top_hash: Revision to pin catalog and sync URLs to. Defaults to latest.
+            modified_at: Latest revision timestamp, when supplied by a query.
+            message: Latest revision commit message, when supplied by a query.
         """
         self.catalog_base_url = catalog_base_url
         self.bucket = bucket
         self.package_name = package_name
         self.metadata: Dict[str, Any] = metadata or {}
         self.top_hash = top_hash
+        self.modified_at = modified_at
+        self.message = message
 
     @property
     def catalog_url(self) -> str:
