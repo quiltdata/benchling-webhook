@@ -18,6 +18,12 @@
       "allowedVersions": "<0.6.0"
     },
     {
+      "description": "Python 3.15 is blocked until locked native dependencies support it",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["python"],
+      "allowedVersions": "<3.15"
+    },
+    {
       "description": "inquirer v13+ is ESM-only; project compiles to CJS for aws-cdk-lib compatibility",
       "matchPackageNames": ["inquirer", "@types/inquirer"],
       "allowedVersions": "<13.0.0"
