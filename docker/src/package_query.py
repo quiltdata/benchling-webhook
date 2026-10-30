@@ -873,7 +873,7 @@ class PackageQuery:
         fetch_limit: int,
         array_key: Optional[str] = None,
     ) -> Dict[str, Any]:
-        buckets = self._list_iceberg_manifest_buckets()
+        buckets = [self.bucket] if self.bucket else self._list_iceberg_manifest_buckets()
         if not buckets:
             return {"packages": [], "results": {"rows": [], "errors": {}}}
 
@@ -999,9 +999,9 @@ class PackageQuery:
         """Find newest packages under ``prefix`` that are not linked to ``value``.
 
         Entry packages are left out, since each export rewrites their metadata.
-        Searches every accessible package bucket so read-only raw packages can be
-        shown alongside writable packages. The query remains bounded: it fetches
-        only enough candidates to fill the requested page plus one look-ahead row.
+        With a configured bucket, only that bucket's editable packages are offered.
+        Bucketless callers can search accessible buckets. The query fetches only
+        enough candidates to fill the requested page plus one look-ahead row.
         """
         try:
             self._validate_metadata_key(key)
@@ -1010,6 +1010,16 @@ class PackageQuery:
             fetch_limit = self._related_fetch_limit(page_number, page_size)
             if self.iceberg_database:
                 result = self._find_related_packages_in_iceberg(
+                    prefix,
+                    own_package_name,
+                    key,
+                    value,
+                    fetch_limit,
+                    array_key=array_key,
+                )
+            elif self.bucket:
+                result = self._find_related_packages_in_bucket(
+                    self.bucket,
                     prefix,
                     own_package_name,
                     key,

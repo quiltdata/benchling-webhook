@@ -437,7 +437,7 @@ class CanvasManager:
             else blocks.create_main_navigation_buttons(
                 self.entry_id,
                 update_enabled=not is_updating or not bool(self.config.s3_bucket_name),
-                browse_enabled=bool(self.own_package_name),
+                browse_enabled=bool(self.own_package_name and self._package_exists()),
                 related_enabled=bool(self.own_package_name and self._package_exists()),
                 bucketless=not bool(self.config.s3_bucket_name),
             )
@@ -628,7 +628,7 @@ class CanvasManager:
             return blocks.create_main_navigation_buttons(
                 self.entry_id,
                 update_enabled=True,
-                browse_enabled=bool(self.own_package_name),
+                browse_enabled=bool(self.own_package_name and self._package_exists()),
                 related_enabled=bool(self.own_package_name and self._package_exists()),
                 bucketless=not bool(self.config.s3_bucket_name),
             )
