@@ -137,7 +137,7 @@ class TestUpdatingCanvasBlocks:
 
         assert update_btn.text == "Update Package"
         assert update_btn.enabled is False, "Update is disabled during updating"
-        assert related_btn.text == "View Related"
+        assert related_btn.text == "Link Packages"
         assert related_btn.enabled is True, "Existing packages can show related packages while updating"
 
     def test_update_button_reenabled_on_final_canvas(self, canvas_manager):

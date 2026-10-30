@@ -143,7 +143,7 @@ def create_main_navigation_buttons(
             ),
             create_button(
                 button_id=related_view_button_id(entry_id),
-                text="View Related",
+                text="Link Packages",
                 enabled=related_enabled,
             ),
         ]

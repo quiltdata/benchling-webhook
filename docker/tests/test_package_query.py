@@ -1086,6 +1086,7 @@ def test_related_iceberg_union_failure_falls_back_per_bucket():
     query.iceberg_database = "iceberg_db"
     query.catalog_url = "catalog.example.com"
     query.logger = Mock()
+    query.bucket = ""
     query._list_iceberg_manifest_buckets = Mock(return_value=["bucket-a", "bucket-b"])
     query._bucketless_worker_count = Mock(return_value=1)
 
@@ -1141,3 +1142,38 @@ def test_related_python_order_matches_sql_tiebreaks_across_page_limits():
     ]
     assert next_limit[:3] == first_limit
     assert (next_limit[3].package_name, next_limit[3].bucket) == ("ale/beta", "bucket-z")
+
+
+def test_related_candidates_use_only_configured_bucket_before_pagination():
+    query = object.__new__(PackageQuery)
+    query.bucket = "editable-bucket"
+    query.iceberg_database = ""
+    query.logger = Mock()
+    candidates = [Package("catalog.example.com", "editable-bucket", f"ale/raw-{i}") for i in range(11)]
+    query._find_related_packages_in_bucket = Mock(return_value={"packages": candidates, "results": {"errors": {}}})
+    query._find_related_packages_in_all_buckets = Mock(side_effect=AssertionError("must not search other buckets"))
+
+    result = query.find_related_packages("ale", "ale/EXP1", "experiment_id", "EXP1", page_number=1)
+
+    assert [p.package_name for p in result["packages"]] == [f"ale/raw-{i}" for i in range(5, 10)]
+    assert result["has_next"] is True
+    query._find_related_packages_in_bucket.assert_called_once_with(
+        "editable-bucket", "ale", "ale/EXP1", "experiment_id", "EXP1", 11, array_key=None
+    )
+
+
+def test_related_iceberg_candidates_use_only_configured_bucket():
+    query = object.__new__(PackageQuery)
+    query.bucket = "editable-bucket"
+    query.iceberg_database = "iceberg_db"
+    query.catalog_url = "catalog.example.com"
+    query.logger = Mock()
+    query._list_iceberg_manifest_buckets = Mock(side_effect=AssertionError("must not search other buckets"))
+    query._execute_query = Mock(return_value=[])
+
+    result = query.find_related_packages("ale", "ale/EXP1", "experiment_id", "EXP1")
+
+    assert result["packages"] == []
+    sql = query._execute_query.call_args.args[0]
+    assert '"editable-bucket_package_revision"' in sql
+    assert "UNION ALL" not in sql
