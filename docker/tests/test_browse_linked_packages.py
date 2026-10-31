@@ -288,7 +288,7 @@ class TestLinkedPackageBrowseButtons:
         # Should return list with one section
         assert len(result) == 1
         assert result[0].type == "SECTION"
-        assert result[0].id == "button-section-linked-packages"
+        assert result[0].id == "button-section-linked-packages-0"
 
         # Section should contain one button
         buttons = result[0].children
@@ -308,13 +308,10 @@ class TestLinkedPackageBrowseButtons:
 
         result = create_linked_package_browse_buttons("etr_abc", packages)
 
-        # Should return list with one section
-        assert len(result) == 1
-        assert result[0].type == "SECTION"
-
-        # Section should contain three buttons
-        buttons = result[0].children
-        assert len(buttons) == 3
+        # Each package has its own row to avoid horizontal overflow.
+        assert len(result) == 3
+        assert all(row.type == "SECTION" and len(row.children) == 1 for row in result)
+        buttons = [row.children[0] for row in result]
 
         # Check button IDs
         assert buttons[0].id == "browse-linked-etr_abc-pkg-benchling--exp-001-p0-s15"
@@ -388,12 +385,11 @@ class TestLinkedPackageBrowseButtons:
 
         result = create_linked_package_browse_buttons("etr_test", packages)
 
-        # Should still be one section with all buttons
-        assert len(result) == 1
-        assert len(result[0].children) == 20
+        assert len(result) == 20
+        assert all(len(row.children) == 1 for row in result)
 
         # Verify all button IDs are unique
-        button_ids = [btn.id for btn in result[0].children]
+        button_ids = [row.children[0].id for row in result]
         assert len(button_ids) == len(set(button_ids))
 
     def test_create_buttons_preserves_package_order(self):
@@ -405,7 +401,7 @@ class TestLinkedPackageBrowseButtons:
         ]
 
         result = create_linked_package_browse_buttons("etr_order", packages)
-        buttons = result[0].children
+        buttons = [row.children[0] for row in result]
 
         # Order should match input, not alphabetical
         assert buttons[0].id == "browse-linked-etr_order-pkg-benchling--z-last-p0-s15"
@@ -419,7 +415,7 @@ class TestLinkedPackageBrowseButtons:
 
         section = result[0]
         assert section.type == "SECTION"
-        assert section.id == "button-section-linked-packages"
+        assert section.id == "button-section-linked-packages-0"
         assert hasattr(section, "children")
         assert isinstance(section.children, list)
 
