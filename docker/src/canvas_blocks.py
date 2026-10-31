@@ -288,10 +288,10 @@ def create_linked_package_browse_buttons(entry_id: str, packages: List[Package],
         button = create_button(button_id, f"Browse {pkg.package_name}")
         buttons.append(button)
 
-    # Create a section with all browse buttons in horizontal layout
-    section = create_section("button-section-linked-packages", buttons)
-
-    return [section]
+    # Package names are variable-width; each control needs its own row.
+    return [
+        create_section(f"button-section-linked-packages-{index}", [button]) for index, button in enumerate(buttons)
+    ]
 
 
 def create_related_package_link_buttons(
@@ -306,7 +306,9 @@ def create_related_package_link_buttons(
             continue
         button_id = f"link-related-{entry_id}-pkg-{encode_related_button_value(package.package_name)}"
         buttons.append(create_button(button_id, f"Link {package.package_name}"))
-    return [create_section("button-section-related-packages", buttons)] if buttons else []
+    return [
+        create_section(f"button-section-related-packages-{index}", [button]) for index, button in enumerate(buttons)
+    ]
 
 
 def create_related_navigation_buttons(entry_id: str, page_state: PageState) -> List:
