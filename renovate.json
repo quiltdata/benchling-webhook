@@ -20,7 +20,7 @@
     {
       "description": "Python 3.15 is blocked until locked native dependencies support it",
       "matchManagers": ["github-actions"],
-      "matchPackageNames": ["python"],
+      "matchDepNames": ["python"],
       "allowedVersions": "<3.15"
     },
     {

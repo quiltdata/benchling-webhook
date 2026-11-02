@@ -497,7 +497,7 @@ def format_canvas_footer(
     elif updated_at:
         status = f"✅ *Updated at {updated_at}*"
     else:
-        status = "⏳ *Pending update*"
+        status = "*Ready*"
     return f"""
 
 ---

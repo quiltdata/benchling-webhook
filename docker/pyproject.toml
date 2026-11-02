@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "benchling-quilt-integration"
-version = "0.22.0"
+version = "0.22.2"
 description = "Benchling-Quilt Integration Webhook Service"
 license = {text = "Apache-2.0"}
 authors = [
@@ -47,7 +47,7 @@ dev = [
     "pytest-xdist==3.8.0",
     "httpx==0.28.1",
     "black==26.10.1",
-    "flake8==7.4.1",
+    "flake8==7.5.0",
     "isort==9.0.2",
     "pyright==1.1.414",
 ]

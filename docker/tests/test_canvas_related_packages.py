@@ -160,3 +160,28 @@ def test_late_related_search_cannot_overwrite_sealed_canvas():
     manager.is_sealed_or_staged.assert_called_once()
     manager.update_canvas_with_blocks.assert_not_called()
     assert result == {"success": False, "skipped": "sealed"}
+
+
+def test_missing_package_disables_browse_in_main_and_return_navigation():
+    manager, query = _manager([], package_exists=False)
+    query.find_unique_packages.return_value = {"packages": []}
+
+    for navigation in (manager._make_blocks()[0], manager._make_navigation_buttons("main")[0]):
+        browse, update, link = navigation.children
+        assert browse.enabled is False
+        assert update.enabled is True
+        assert link.enabled is False
+
+
+def test_linking_remains_available_after_a_package_is_linked():
+    linked = Package("catalog.example.com", "lab-bucket", "ale/raw-1")
+    manager, query = _manager([Package("catalog.example.com", "lab-bucket", "ale/raw-2")])
+    query.find_unique_packages.return_value = {"packages": [linked]}
+
+    main = blocks_to_dict(manager._make_blocks())
+    link_button = main[0]["children"][2]
+    assert link_button["text"] == "Link Packages"
+    assert link_button["enabled"] is True
+    assert "Browse ale/raw-1" in json.dumps(main)
+    related = json.dumps(blocks_to_dict(manager.get_related_package_blocks()))
+    assert "Link ale/raw-2" in related
