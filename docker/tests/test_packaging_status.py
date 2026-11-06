@@ -221,3 +221,103 @@ def test_rejected_markdown_names_workflow_and_reason():
     assert "`BZ_workflow`" in md and "'project' is required" in md and "Update Package" in md
     assert "default workflow" in format_package_rejected("", "x")
     assert "`a'b c`" in format_package_rejected("a`b\nc", "x")
+
+
+# Schemas kept in another bucket: the reason names the workflow only; the detail goes to the log.
+OTHER = "other-bkt"
+MARKERS = ("marker_field", "marker-alpha", "MARKER-CONST", "^MARKER-", "MARKER-META", "MARKER-TYPE", "other-bkt")
+MARKED_SCHEMA = {
+    "type": "object",
+    "required": ["marker_field"],
+    "properties": {
+        "tier": {"enum": ["marker-alpha", "marker-beta"]},
+        "code": {"const": "MARKER-CONST"},
+        "ident": {"pattern": "^MARKER-[0-9]+$"},
+    },
+}
+
+
+def split_s3(metadata_url, entries_url=None, objects=None):
+    """A config in BUCKET whose schemas may live elsewhere."""
+    workflow = {"name": "W", "metadata_schema": "m"}
+    schemas = {"m": {"url": metadata_url}}
+    if entries_url:
+        workflow["entries_schema"] = "e"
+        schemas["e"] = {"url": entries_url}
+    c = {"version": "1", "workflows": {"w": workflow}, "default_workflow": "w", "schemas": schemas}
+    return FakeS3({(BUCKET, ".quilt/workflows/config.yml"): yaml.safe_dump(c).encode(), **(objects or {})})
+
+
+def assert_unmarked(reason):
+    for marker in MARKERS:
+        assert marker not in reason
+
+
+@pytest.mark.parametrize("strict", [False, True])
+@pytest.mark.parametrize(
+    "meta",
+    [
+        META,  # required
+        {**META, "marker_field": 1, "tier": "nope"},  # enum
+        {**META, "marker_field": 1, "code": "nope"},  # const
+        {**META, "marker_field": 1, "ident": "nope"},  # pattern
+    ],
+)
+def test_foreign_metadata_schema_failure_names_only_the_workflow(meta, strict):
+    s3 = split_s3(f"s3://{OTHER}/s/m.json", objects={(OTHER, "s/m.json"): json.dumps(MARKED_SCHEMA).encode()})
+    reason = check_workflow(s3, BUCKET, "", NAME, "msg", meta, strict=strict) or ""
+    assert "'w' workflow" in reason
+    assert_unmarked(reason)
+
+
+def test_foreign_metadata_schema_still_lets_a_valid_package_through():
+    s3 = split_s3(f"s3://{OTHER}/s/m.json", objects={(OTHER, "s/m.json"): json.dumps(MARKED_SCHEMA).encode()})
+    assert check(s3, meta={**META, "marker_field": 1}) == ""
+
+
+FOREIGN_UNUSABLE = {
+    "missing": None,
+    "not json": b"MARKER-META not json",
+    "unsupported meta-schema": json.dumps({"$schema": "MARKER-META"}).encode(),
+    "empty meta-schema": json.dumps({"$schema": ""}).encode(),
+    "non-string meta-schema": json.dumps({"$schema": 5}).encode(),
+    "invalid schema": json.dumps({"type": "MARKER-TYPE"}).encode(),
+    "ref": json.dumps({"$ref": "MARKER-META"}).encode(),
+}
+
+
+@pytest.mark.parametrize("body", FOREIGN_UNUSABLE.values(), ids=FOREIGN_UNUSABLE.keys())
+def test_foreign_schema_that_cannot_be_used_gives_one_fixed_reason(body):
+    objects = {} if body is None else {(OTHER, "s/m.json"): body}
+    s3 = split_s3(f"s3://{OTHER}/s/m.json", objects=objects)
+    strict = check_workflow(s3, BUCKET, "", NAME, "msg", META, strict=True) or ""
+    assert "'w' workflow" in strict
+    assert_unmarked(strict)
+    # Every way of failing reads the same, so the reason doesn't tell them apart.
+    missing = split_s3(f"s3://{OTHER}/s/m.json")
+    assert strict == check_workflow(missing, BUCKET, "", NAME, "msg", META, strict=True)
+    # Outside strict mode an unusable schema is left to the packager, as before.
+    assert check(s3) == ""
+
+
+def test_foreign_entries_schema_failure_names_only_the_workflow():
+    entries_schema = {"type": "array", "contains": {"properties": {"logical_key": {"const": "MARKER-CONST"}}}}
+    s3 = split_s3(
+        f"s3://{BUCKET}/s/m.json",
+        f"s3://{OTHER}/s/e.json",
+        objects={
+            (BUCKET, "s/m.json"): json.dumps(SCHEMA).encode(),
+            (OTHER, "s/e.json"): json.dumps(entries_schema).encode(),
+            (BUCKET, f"{NAME}/entry.json"): b"{}",
+        },
+    )
+    reason = check(s3, meta={**META, "project": "p"})
+    assert "'w' workflow" in reason
+    assert_unmarked(reason)
+    # The same-bucket metadata schema keeps its detail.
+    assert "'project' is a required property" in check(s3)
+
+
+def test_same_bucket_schema_keeps_detail_in_strict_mode():
+    s3 = split_s3(f"s3://{BUCKET}/s/m.json", objects={(BUCKET, "s/m.json"): json.dumps({"$schema": "x"}).encode()})
+    assert "Unsupported meta-schema: x" in (check_workflow(s3, BUCKET, "", NAME, "msg", META, strict=True) or "")
