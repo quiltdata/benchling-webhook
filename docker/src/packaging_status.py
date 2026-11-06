@@ -66,8 +66,7 @@ class _S3WorkflowConfig(WorkflowConfig):
     def is_external(self, validator: Any) -> bool:
         """Whether ``validator`` was built from a schema outside the config's bucket."""
         return validator is not None and any(
-            self.loaded_schemas_by_id.get(schema_id, (None,))[0] is validator
-            for schema_id in self.external_schema_ids
+            self.loaded_schemas_by_id.get(schema_id, (None,))[0] is validator for schema_id in self.external_schema_ids
         )
 
     def load_schema(self, schema_pk: PhysicalKey) -> tuple[bytes, PhysicalKey]:
