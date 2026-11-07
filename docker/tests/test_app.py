@@ -36,6 +36,8 @@ class TestFastAPIApp:
         """Mock BenchlingClient."""
         client = Mock()
         client.entries.list_entries.return_value.first.return_value = None
+        # Benchling records every test canvas as etr_123456's canvas.
+        client.apps.get_canvas_by_id.return_value = Mock(resource_id="etr_123456")
         return client
 
     @pytest.fixture
@@ -309,6 +311,54 @@ class TestFastAPIApp:
         assert response.status_code == 202
         assert response.json()["status"] == "ACCEPTED"
         mock_publish.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "button_id",
+        [
+            "update-package-etr_other",
+            "refresh-canvas-etr_other",
+            "browse-files-etr_other-p0-s15",
+            "view-metadata-etr_other-p0-s15",
+            "view-related-etr_other-p0-s5",
+            "browse-linked-etr_other-pkg-benchling--exp-001-p0-s15",
+            "back-to-package-etr_other",
+        ],
+    )
+    def test_canvas_button_for_another_entry_is_refused(self, client, mock_publish, mock_benchling_client, button_id):
+        """A click acts only on the entry Benchling records for the clicked canvas."""
+        payload = {
+            "channel": "app_signals",
+            "message": {"type": "v2.canvas.userInteracted", "buttonId": button_id, "canvasId": "canvas_123"},
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        with patch("src.app.CanvasManager") as mock_canvas_manager:
+            response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 400
+        mock_publish.assert_not_called()
+        mock_canvas_manager.assert_not_called()
+        mock_benchling_client.apps.update_canvas.assert_not_called()
+        mock_benchling_client.apps.get_canvas_by_id.assert_called_with("canvas_123")
+
+    def test_canvas_click_refused_when_canvas_lookup_fails(self, client, mock_publish, mock_benchling_client):
+        mock_benchling_client.apps.get_canvas_by_id.side_effect = Exception("Benchling unavailable")
+        payload = {
+            "channel": "app_signals",
+            "message": {
+                "type": "v2.canvas.userInteracted",
+                "buttonId": "update-package-etr_123456",
+                "canvasId": "canvas_123",
+            },
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        with patch("src.app.CanvasManager") as mock_canvas_manager:
+            response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 400
+        mock_publish.assert_not_called()
+        mock_canvas_manager.assert_not_called()
 
     def test_canvas_endpoint_bucketless_refresh_canvas_button(self, client, mock_config, mock_publish):
         """Refresh Canvas should rerun the bucketless linked-package lookup."""

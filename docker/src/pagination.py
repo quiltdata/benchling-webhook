@@ -17,6 +17,9 @@ logger = structlog.get_logger(__name__)
 # to contain the literal substring "-bucket-".
 _BUCKET_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
 
+# Benchling ID prefixes that mark the entry segment of a Canvas button ID.
+ENTRY_ID_PREFIXES = ("etr_", "plt_", "seq_", "cus_", "dna_", "aa_", "rna_")
+
 
 def encode_package_name(package_name: str) -> str:
     """Encode package name for button ID.
@@ -384,10 +387,9 @@ def parse_button_id(button_id: str) -> Tuple[str, str, Optional[PageState]]:
         raise ValueError(f"Invalid button ID format: {button_id}")
 
     # Find entry_id (starts with known prefixes)
-    entry_prefixes = ("etr_", "plt_", "seq_", "cus_", "dna_", "aa_", "rna_")
     entry_idx = None
     for i, part in enumerate(parts):
-        if part.startswith(entry_prefixes):
+        if part.startswith(ENTRY_ID_PREFIXES):
             entry_idx = i
             break
 
@@ -428,3 +430,23 @@ def parse_button_id(button_id: str) -> Tuple[str, str, Optional[PageState]]:
     )
 
     return action, entry_id, page_state
+
+
+def button_entry_id(button_id: str) -> Optional[str]:
+    """Return the entry a Canvas button was rendered for, or None if it names none.
+
+    Uses the same parser the button's handler uses, so the result is the entry
+    that handler would act on.
+    """
+    if not button_id:
+        return None
+    try:
+        if button_id.startswith("link-related-"):
+            return parse_related_package_button_id(button_id)[0]
+        if "-linked-" in button_id and "-pkg-" in button_id:
+            return parse_browse_linked_button_id_with_bucket(button_id)[0]
+        if "-" not in button_id:
+            return button_id if button_id.startswith(ENTRY_ID_PREFIXES) else None
+        return parse_button_id(button_id)[1]
+    except ValueError:
+        return None

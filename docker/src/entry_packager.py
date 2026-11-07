@@ -27,7 +27,7 @@ from .package_files import SEAL_FILE, has_staged_seal, is_not_found
 from .package_naming import MissingPlaceholderError, entry_package_name, entry_to_dict
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packaging_status import check_workflow, write_status
-from .payload import Payload
+from .payload import Payload, canvas_belongs_to_entry
 from .retry_utils import LAMBDA_INVOKE_RETRY, REST_API_RETRY
 
 logger = structlog.get_logger(__name__)
@@ -1057,7 +1057,7 @@ For questions about the data, refer to the original Benchling entry.
         canvas_id = payload.canvas_id
         if not canvas_id and package_name:
             canvas_id = self._load_existing_canvas_id_from_entry_json(self.role_manager.get_s3_client(), package_name)
-        if canvas_id and self.benchling:
+        if canvas_id and self.benchling and canvas_belongs_to_entry(self.benchling, canvas_id, payload.entry_id):
             try:
                 from .canvas import CanvasManager
 
@@ -1115,7 +1115,7 @@ For questions about the data, refer to the original Benchling entry.
             accepted=accepted,
         )
         canvas_id = payload.canvas_id or self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
-        if canvas_id and self.benchling:
+        if canvas_id and self.benchling and canvas_belongs_to_entry(self.benchling, canvas_id, payload.entry_id):
             try:
                 from .canvas import CanvasManager
 

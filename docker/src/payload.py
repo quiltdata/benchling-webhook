@@ -15,6 +15,37 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
+CANVAS_INTERACTION_EVENT = "v2.canvas.userInteracted"
+
+
+def canvas_entry_id(benchling: Optional["Benchling"], canvas_id: Optional[str]) -> Optional[str]:
+    """Return the entry Benchling records for ``canvas_id``, or None if it can't be read."""
+    if not benchling or not canvas_id:
+        return None
+    try:
+        resource_id = benchling.apps.get_canvas_by_id(canvas_id).resource_id
+    except Exception as exc:  # noqa: BLE001 - callers treat an unreadable canvas as unresolved
+        logger.warning("Failed to read canvas", canvas_id=canvas_id, error=str(exc))
+        return None
+    return resource_id if isinstance(resource_id, str) and resource_id else None
+
+
+def canvas_belongs_to_entry(benchling: Optional["Benchling"], canvas_id: str, entry_id: str) -> bool:
+    """True when Benchling records ``canvas_id`` as ``entry_id``'s canvas.
+
+    Callers skip a redraw when this is False, including when the canvas can't be read.
+    """
+    resolved = canvas_entry_id(benchling, canvas_id)
+    if resolved == entry_id:
+        return True
+    logger.warning(
+        "Skipping canvas redraw: canvas belongs to a different entry",
+        canvas_id=canvas_id,
+        entry_id=entry_id,
+        canvas_entry_id=resolved,
+    )
+    return False
+
 
 class Payload:
     """Unified webhook payload parser for Benchling integration."""
@@ -92,7 +123,8 @@ class Payload:
 
         Handles multiple event types:
         - Standard events: uses resourceId or entryId from message
-        - Canvas userInteracted events: uses buttonId (which contains entry_id)
+        - Canvas userInteracted events: the entry Benchling records for the clicked
+          canvas; a button rendered for a different entry is refused
         - Canvas events: uses canvas API to get resource_id from canvas_id
 
         Returns:
@@ -116,28 +148,10 @@ class Payload:
             has_canvas_id="canvasId" in self._message,
         )
 
-        if event_type == "v2.canvas.userInteracted" and button_id:
-            if "-" in button_id:
-                try:
-                    from .pagination import parse_button_id
-
-                    _, entry_id, _ = parse_button_id(button_id)
-                    self._cached_entry_id = entry_id
-                    logger.info("Extracted entry_id from button_id", button_id=button_id, entry_id=entry_id)
-                    return entry_id
-                except (ValueError, Exception) as e:
-                    logger.debug(
-                        "Failed to parse button_id with pagination parser, using simple extraction",
-                        button_id=button_id,
-                        error=str(e),
-                    )
-                    entry_id = button_id.split("-")[-1]
-                    self._cached_entry_id = entry_id
-                    logger.info("Extracted entry_id from button_id (simple)", button_id=button_id, entry_id=entry_id)
-                    return entry_id
-            self._cached_entry_id = button_id
-            logger.info("Using button_id as entry_id", entry_id=button_id)
-            return button_id
+        if event_type == CANVAS_INTERACTION_EVENT:
+            entry_id = self._clicked_canvas_entry_id(button_id or "")
+            self._cached_entry_id = entry_id
+            return entry_id
 
         entry_id = self._message.get("resourceId") or self._message.get("entryId") or self._payload.get("resourceId")
 
@@ -148,16 +162,9 @@ class Payload:
 
         if not entry_id and self.canvas_id and self._benchling:
             logger.info("No entry_id in payload, fetching resource_id from canvas", canvas_id=self.canvas_id)
-            try:
-                canvas = self._benchling.apps.get_canvas_by_id(self.canvas_id)
-                if canvas.resource_id:
-                    entry_id = canvas.resource_id
-                    self._cached_entry_id = entry_id
-                    logger.info(
-                        "Retrieved entry_id from canvas resource_id", entry_id=entry_id, canvas_id=self.canvas_id
-                    )
-            except Exception as e:
-                logger.warning("Failed to fetch canvas", canvas_id=self.canvas_id, error=str(e))
+            entry_id = canvas_entry_id(self._benchling, self.canvas_id)
+            if entry_id:
+                logger.info("Retrieved entry_id from canvas resource_id", entry_id=entry_id, canvas_id=self.canvas_id)
 
         if not entry_id:
             logger.error(
@@ -168,6 +175,33 @@ class Payload:
             raise ValueError("entry_id is required and could not be extracted from payload")
 
         self._cached_entry_id = entry_id
+        return entry_id
+
+    def _clicked_canvas_entry_id(self, button_id: str) -> str:
+        """The entry a click acts on: the one Benchling records for the clicked canvas.
+
+        The button ID also names an entry (the one it was rendered for). When it
+        names a different one, the click is refused.
+        """
+        from .pagination import button_entry_id
+
+        entry_id = canvas_entry_id(self._benchling, self.canvas_id)
+        if not entry_id:
+            logger.error("Could not resolve the clicked canvas's entry", canvas_id=self.canvas_id, button_id=button_id)
+            raise ValueError("Could not resolve the entry for this canvas")
+
+        button_entry = button_entry_id(button_id)
+        if button_entry and button_entry != entry_id:
+            logger.warning(
+                "Refusing canvas action: button belongs to a different entry than the canvas",
+                canvas_id=self.canvas_id,
+                canvas_entry_id=entry_id,
+                button_entry_id=button_entry,
+                button_id=button_id,
+            )
+            raise ValueError("Canvas button belongs to a different entry than the canvas")
+
+        logger.info("Resolved entry_id from canvas", entry_id=entry_id, canvas_id=self.canvas_id)
         return entry_id
 
     @property

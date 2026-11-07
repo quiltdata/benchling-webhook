@@ -4,6 +4,7 @@ import pytest
 
 from src.pagination import (
     PageState,
+    button_entry_id,
     encode_related_button_value,
     paginate_items,
     parse_browse_linked_button_id_with_bucket,
@@ -313,3 +314,30 @@ class TestParseButtonId:
         assert page_state is not None
         assert page_state.page_number == 3
         assert page_state.page_size == 15
+
+
+class TestButtonEntryId:
+    """The entry a Canvas button was rendered for, as each handler parses it."""
+
+    @pytest.mark.parametrize(
+        ("button_id", "expected"),
+        [
+            ("update-package-etr_a", "etr_a"),
+            ("refresh-canvas-etr_a", "etr_a"),
+            ("back-to-package-etr_a", "etr_a"),
+            ("browse-files-etr_a-p2-s15", "etr_a"),
+            ("next-page-etr_a-p1-s15", "etr_a"),
+            ("view-related-etr_a-p0-s5", "etr_a"),
+            ("browse-linked-etr_a-pkg-benchling--exp-001-p0-s15", "etr_a"),
+            ("next-page-linked-etr_a-pkg-foo--bar-bucket-other-p1-s15", "etr_a"),
+            ("view-metadata-linked-etr_a-pkg-foo-p0-s15", "etr_a"),
+            ("link-related-etr_a-pkg-" + encode_related_button_value("benchling/EXP1"), "etr_a"),
+            ("etr_a", "etr_a"),
+        ],
+    )
+    def test_extracts_entry(self, button_id, expected):
+        assert button_entry_id(button_id) == expected
+
+    @pytest.mark.parametrize("button_id", ["", "unknown-button", "browse-files-p0-s15"])
+    def test_no_entry(self, button_id):
+        assert button_entry_id(button_id) is None

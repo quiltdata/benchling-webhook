@@ -138,3 +138,27 @@ async def test_consumer_dispatches_messages_in_arrival_order():
     await consumer.process_message(canvas_msg)
 
     assert seen == ["v2.entry.created", "v2.canvas.created"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(("canvas_entry", "runs"), [("etr_abc", True), ("etr_other", False)])
+async def test_consumer_resolves_a_queued_click_from_the_canvas_record(canvas_entry, runs):
+    """A queued Update Package click packages the entry Benchling records for its canvas."""
+    entry_packager = Mock()
+    entry_packager.benchling = Mock()
+    entry_packager.benchling.apps.get_canvas_by_id.return_value = Mock(resource_id=canvas_entry)
+    entry_packager.execute_workflow = Mock(return_value={"status": "SUCCESS"})
+
+    consumer, _ = _packaging_consumer(entry_packager)
+
+    body = {
+        "message": {
+            "type": "v2.canvas.userInteracted",
+            "buttonId": "update-package-etr_abc",
+            "canvasId": "cnvs_abc",
+        }
+    }
+    await consumer.process_message(_message(body))
+
+    entry_packager.benchling.apps.get_canvas_by_id.assert_called_once_with("cnvs_abc")
+    assert entry_packager.execute_workflow.called is runs

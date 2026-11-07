@@ -14,7 +14,7 @@ from .canvas import CanvasManager
 from .config import Config
 from .package_files import PackageFileFetcher
 from .package_query import ELN_ENTRY_KEY, PackageQuery
-from .payload import Payload
+from .payload import Payload, canvas_belongs_to_entry
 
 logger = structlog.get_logger(__name__)
 
@@ -34,6 +34,7 @@ class RefreshOutcome(str, Enum):
     SUCCESS = "success"
     SKIPPED_STALE = "skipped_stale"
     SKIPPED_NO_CANVAS = "skipped_no_canvas"
+    SKIPPED_CANVAS_MISMATCH = "skipped_canvas_mismatch"
     TRANSIENT_ERROR = "transient_error"
     PERMANENT_ERROR = "permanent_error"
 
@@ -214,6 +215,8 @@ def refresh_canvas_for_package_event(
             return CanvasManager(active_benchling, config, payload).update_canvas(updated_at=updated_at)
 
         for linked_target in sorted(linked_targets):
+            if not canvas_belongs_to_entry(active_benchling, linked_target[1], linked_target[0]):
+                continue
             try:
                 linked_result = refresh(linked_target)
                 linked_error = None if linked_result.get("success") else linked_result.get("error")
@@ -232,6 +235,8 @@ def refresh_canvas_for_package_event(
             return RefreshResult(RefreshOutcome.SUCCESS)
 
         entry_id, canvas_id = direct_target
+        if not canvas_belongs_to_entry(active_benchling, canvas_id, entry_id):
+            return RefreshResult(RefreshOutcome.SKIPPED_CANVAS_MISMATCH)
         result = refresh(direct_target)
         if result.get("success"):
             logger.info(
