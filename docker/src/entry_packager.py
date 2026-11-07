@@ -1053,14 +1053,15 @@ For questions about the data, refer to the original Benchling entry.
         """Redraw only a canvas Benchling records as this entry's.
 
         These redraws are best effort: on a mismatch or a failed lookup they're skipped.
-        A failed lookup is not a mismatch; the canvas is redrawn on the next refresh
-        (the package event the SQS consumer retries).
+        A failed lookup is logged apart from a mismatch, but nothing here schedules a
+        retry: the canvas stays as it is until a later refresh redraws it (a new package
+        revision's event, a Refresh click, or the canvas being reopened).
         """
         assert self.benchling is not None
         ownership = canvas_ownership(self.benchling, canvas_id, entry_id)
         if ownership is CanvasOwnership.UNKNOWN:
             self.logger.warning(
-                "Canvas redraw deferred: canvas lookup failed (SQS consumer will retry)",
+                "Canvas redraw skipped: canvas lookup failed; a later refresh will redraw it",
                 canvas_id=canvas_id,
                 entry_id=entry_id,
             )
