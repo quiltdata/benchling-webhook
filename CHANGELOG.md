@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.22.3] - 2026-11-06
+
+### Changed
+
+- The App Canvas reads a package's `entry.json` only from the package's own folder (`<bucket>/<package>/entry.json`, any version), where the webhook writes it. If the manifest points `entry.json` anywhere else, including a local file, it isn't read and the Canvas shows the package's metadata instead. The accepted-review seal (`linked_packages.json`) is read the same way; a seal outside the folder fails the Canvas update, as an unreadable seal already did
+- When the packaging pre-check rejects a package because of a schema kept outside the bucket of the workflows config, the reason shown on the Canvas, in the packaging status and by **Link** names only the workflow; the detail goes to the webhook's log. Schemas in the config's bucket still show the full validation message. In strict mode (**Link**), a schema outside the config's bucket that can't be loaded, parsed or checked gives the same fixed reason
+- The setup wizard, `create-secret`, `sync-secrets`, `validate` and `deploy` print a prominent warning when a profile or secret has no package bucket (bucketless mode) or has webhook signature verification turned off, explaining what each allows
+
 ## [0.22.0] - 2026-10-28
 
 ### Added

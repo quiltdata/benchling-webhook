@@ -195,21 +195,29 @@ class PackageFileFetcher:
 
         return bool(physical_keys)
 
-    def _read_json_entry(self, entries: List[Dict], logical_key: str) -> Optional[dict]:
-        """Load a JSON file from the manifest entries, or None if it is absent."""
+    def _read_json_entry(self, entries: List[Dict], package_name: str, logical_key: str) -> Optional[dict]:
+        """Load a JSON file the webhook writes into the package, or None if it is absent.
+
+        The webhook writes these files to ``<bucket>/<package_name>/<logical_key>``, so only that
+        object (at any version) is read. Raises ValueError if the manifest points anywhere else.
+        """
         entry = next((entry for entry in entries if entry.get("logical_key") == logical_key), None)
         physical_keys = (entry or {}).get("physical_keys") or []
         if not physical_keys:
             return None
-        data = self._fetch_physical_key_bytes(PhysicalKey.from_url(physical_keys[0]))
+        physical_key = PhysicalKey.from_url(physical_keys[0])
+        expected_path = f"{package_name}/{logical_key}"
+        if physical_key.is_local() or physical_key.bucket != self.bucket or physical_key.path != expected_path:
+            raise ValueError(f"{logical_key} is outside the package folder s3://{self.bucket}/{package_name}/")
+        data = self._fetch_physical_key_bytes(physical_key)
         return json.loads(data.decode("utf-8"))
 
-    def _parse_entry_json(self, entries: List[Dict]) -> Optional[dict]:
-        """Load entry.json contents if present."""
+    def _parse_entry_json(self, entries: List[Dict], package_name: str) -> Optional[dict]:
+        """Load entry.json contents if present and readable; otherwise None (callers fall back to user_meta)."""
         try:
-            return self._read_json_entry(entries, "entry.json")
-        except Exception as exc:  # pragma: no cover - defensive logging
-            self.logger.warning("Failed to load entry.json", error=str(exc))
+            return self._read_json_entry(entries, package_name, "entry.json")
+        except Exception as exc:  # noqa: BLE001 - unreadable or misplaced entry.json falls back to user_meta
+            self.logger.warning("Failed to load entry.json", package_name=package_name, error=str(exc))
             return None
 
     def get_seal(self, package_name: str) -> Optional[Tuple[str, dict]]:
@@ -224,7 +232,7 @@ class PackageFileFetcher:
                 return None
             raise
         _, entries = self._load_manifest_data(package_name, top_hash)
-        seal = self._read_json_entry(entries, SEAL_FILE)
+        seal = self._read_json_entry(entries, package_name, SEAL_FILE)
         return (top_hash, seal) if seal is not None else None
 
     def get_package_files(
@@ -319,7 +327,7 @@ class PackageFileFetcher:
         try:
             manifest_meta, entries = self._load_manifest_data(package_name)
 
-            entry_metadata = self._parse_entry_json(entries)
+            entry_metadata = self._parse_entry_json(entries, package_name)
             if entry_metadata is not None:
                 self.logger.info("Fetched entry.json metadata", package_name=package_name)
                 return entry_metadata

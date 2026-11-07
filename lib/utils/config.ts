@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { execSync } from "child_process";
 import { isQueueUrl } from "./sqs";
+import { VERIFICATION_OFF_WARNING } from "./risky-config-warnings";
 
 /**
  * Legacy Config interface
@@ -256,7 +257,7 @@ export function validateConfig(config: Partial<Config>): ValidationResult {
 
     // Security warnings
     if (config.enableWebhookVerification === "false") {
-        warnings.push("Webhook verification is disabled - this is NOT recommended for production use");
+        warnings.push(VERIFICATION_OFF_WARNING.join(" "));
     }
 
     return {

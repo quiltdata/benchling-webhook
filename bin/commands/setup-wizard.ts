@@ -39,6 +39,7 @@ import { syncSecretsToAWS } from "./sync-secrets";
 import { deployCommand } from "./deploy";
 import { CFN_PARAMS } from "../../lib/types/config";
 import { updateStackParameter } from "../../lib/utils/stack-parameter-update";
+import { printRiskyConfigWarnings } from "../../lib/utils/risky-config-warnings";
 
 /**
  * Setup wizard options
@@ -350,6 +351,10 @@ export async function runSetupWizard(options: SetupWizardOptions = {}): Promise<
     }
 
     const saveConfig = (config: ProfileConfig): void => {
+        printRiskyConfigWarnings({
+            bucket: config.packages?.bucket,
+            enableVerification: config.security?.enableVerification,
+        });
         console.log(`Saving configuration to profile: ${profile}...\n`);
         xdg.writeProfile(profile, config);
         console.log(chalk.green(`✓ Configuration saved to: ~/.config/benchling-webhook/${profile}/config.json\n`));

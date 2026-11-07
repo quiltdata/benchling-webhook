@@ -22,6 +22,7 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { fromIni } from "@aws-sdk/credential-providers";
 import { XDGConfig } from "../../lib/xdg-config";
+import { printRiskyConfigWarnings } from "../../lib/utils/risky-config-warnings";
 import type { XDGBase } from "../../lib/xdg-base";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { ProfileConfig, ProfileName } from "../../lib/types/config";
@@ -38,6 +39,8 @@ interface SyncSecretsOptions {
     dryRun?: boolean;
     force?: boolean;
     configStorage?: XDGBase; // Dependency injection for testing
+    /** Print the bucketless / verification-off warnings (default true). Callers that print them themselves pass false. */
+    printWarnings?: boolean;
 }
 
 /**
@@ -341,7 +344,15 @@ function maskSecretValue(secretValue: string): string {
  * @returns Array of sync results
  */
 export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<SyncResult[]> {
-    const { profile = "default", awsProfile, region, dryRun = false, force = false, configStorage } = options;
+    const {
+        profile = "default",
+        awsProfile,
+        region,
+        dryRun = false,
+        force = false,
+        configStorage,
+        printWarnings = true,
+    } = options;
 
     // Validate required parameters
     if (!region) {
@@ -406,6 +417,12 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
     }
 
     const secretValue = buildSecretValue(config, clientSecretValue);
+    if (printWarnings) {
+        printRiskyConfigWarnings({
+            bucket: config.packages.bucket,
+            enableVerification: config.security?.enableVerification,
+        });
+    }
 
     if (dryRun) {
         console.log("\n=== DRY RUN MODE ===");

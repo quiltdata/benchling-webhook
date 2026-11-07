@@ -191,7 +191,7 @@ class TestPackageFileFetcher:
         manifest_entries = [
             {
                 "logical_key": "entry.json",
-                "physical_keys": ["s3://bucket/path/to/entry.json"],
+                "physical_keys": ["s3://test-bucket/benchling/etr_123/entry.json?versionId=v1"],
                 "size": 42,
             },
         ]
@@ -237,7 +237,12 @@ class TestPackageFileFetcher:
         assert files[0].size == 0  # Default when size not available
 
     def test_get_seal(self, fetcher):
-        entries = [{"logical_key": "linked_packages.json", "physical_keys": ["s3://test-bucket/seal"]}]
+        entries = [
+            {
+                "logical_key": "linked_packages.json",
+                "physical_keys": ["s3://test-bucket/benchling/EXP1/linked_packages.json"],
+            }
+        ]
         seal = {"event_id": "evt_1", "linked_packages": []}
         with (
             patch.object(fetcher, "get_package_top_hash", return_value="abc123"),
@@ -262,3 +267,60 @@ class TestPackageFileFetcher:
         with patch.object(fetcher, "get_package_top_hash", side_effect=denied):
             with pytest.raises(ClientError):
                 fetcher.get_seal("benchling/EXP1")
+
+
+class TestJsonEntriesStayInThePackageFolder:
+    """entry.json and the seal are read only from ``<bucket>/<package>/``, where the webhook writes them."""
+
+    @pytest.fixture
+    def fetcher(self):
+        return PackageFileFetcher(catalog_url="nightly.quilttest.com", bucket="test-bucket")
+
+    @pytest.mark.parametrize(
+        "physical_key",
+        [
+            "s3://other-bucket/benchling/etr_123/entry.json",
+            "s3://test-bucket/benchling/etr_999/entry.json",
+            "s3://test-bucket/elsewhere/entry.json",
+            "s3://test-bucket/benchling/etr_123/sub/entry.json",
+            "file:///etc/entry.json",
+        ],
+    )
+    def test_entry_json_outside_the_package_folder_is_not_read(self, fetcher, physical_key):
+        manifest_meta = {"user_meta": {"fallback": True}}
+        entries = [{"logical_key": "entry.json", "physical_keys": [physical_key]}]
+        with (
+            patch.object(fetcher, "_load_manifest_data", return_value=(manifest_meta, entries)),
+            patch.object(fetcher, "_fetch_physical_key_bytes", return_value=b'{"read": true}') as fetch,
+        ):
+            assert fetcher.get_package_metadata("benchling/etr_123") == {"fallback": True}
+        fetch.assert_not_called()
+
+    def test_entry_json_in_the_package_folder_is_read_at_any_version(self, fetcher):
+        entries = [
+            {
+                "logical_key": "entry.json",
+                "physical_keys": ["s3://test-bucket/benchling/etr_123/entry.json?versionId=old"],
+            }
+        ]
+        with (
+            patch.object(fetcher, "_load_manifest_data", return_value=({"user_meta": {}}, entries)),
+            patch.object(fetcher, "_fetch_physical_key_bytes", return_value=b'{"read": true}') as fetch,
+        ):
+            assert fetcher.get_package_metadata("benchling/etr_123") == {"read": True}
+        assert fetch.call_args.args[0].version_id == "old"
+
+    @pytest.mark.parametrize(
+        "physical_key",
+        ["s3://other-bucket/benchling/EXP1/linked_packages.json", "s3://test-bucket/seal", "file:///tmp/seal.json"],
+    )
+    def test_seal_outside_the_package_folder_fails_closed(self, fetcher, physical_key):
+        entries = [{"logical_key": "linked_packages.json", "physical_keys": [physical_key]}]
+        with (
+            patch.object(fetcher, "get_package_top_hash", return_value="abc123"),
+            patch.object(fetcher, "_load_manifest_data", return_value=({}, entries)),
+            patch.object(fetcher, "_fetch_physical_key_bytes", return_value=b"{}") as fetch,
+        ):
+            with pytest.raises(ValueError, match="outside the package folder"):
+                fetcher.get_seal("benchling/EXP1")
+        fetch.assert_not_called()
