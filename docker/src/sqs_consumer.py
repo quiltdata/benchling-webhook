@@ -23,6 +23,7 @@ DELETE_OUTCOMES = {
     RefreshOutcome.SUCCESS.value,
     RefreshOutcome.SKIPPED_STALE.value,
     RefreshOutcome.SKIPPED_NO_CANVAS.value,
+    RefreshOutcome.SKIPPED_CANVAS_MISMATCH.value,
     "skipped_filtered",
 }
 

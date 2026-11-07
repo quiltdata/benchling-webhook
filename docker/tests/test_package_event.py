@@ -6,6 +6,24 @@ import requests
 from src.package_event import RefreshOutcome, refresh_canvas_for_package_event
 from src.packages import Package
 
+# Which entry Benchling records for each canvas used in these tests.
+CANVAS_ENTRIES = {
+    "canvas_123": "etr_123456",
+    "cnvs_target": "etr_target",
+    "cnvs_1": "etr_1",
+    "cnvs_a": "etr_a",
+    "cnvs_b": "etr_b",
+    "cnvs_new": "etr_new",
+    "cnvs_other": "etr_other",
+}
+
+
+def canvas_aware_benchling():
+    """Fake Benchling client whose canvas lookup follows ``CANVAS_ENTRIES``."""
+    client = Mock()
+    client.apps.get_canvas_by_id.side_effect = lambda canvas_id: Mock(resource_id=CANVAS_ENTRIES.get(canvas_id))
+    return client
+
 
 @pytest.fixture
 def mock_config():
@@ -18,7 +36,7 @@ def mock_config():
 
 
 def test_refresh_canvas_for_package_event_success(mock_config):
-    benchling_client = Mock()
+    benchling_client = canvas_aware_benchling()
 
     with (
         patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
@@ -127,7 +145,7 @@ def test_related_revision_resolves_nested_link_target_by_display_id(mock_config)
     """A nested related package refreshes the actual indexed entry package Canvas."""
     mock_config.quilt_database = "athena-db"
     mock_config.package_key = "experiment_id"
-    benchling_client = Mock()
+    benchling_client = canvas_aware_benchling()
 
     with (
         patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
@@ -203,7 +221,7 @@ def test_bucketless_related_revision_searches_globally_and_reads_target_bucket(m
             "ale/raw/data1",
             "abc123",
             config=mock_config,
-            benchling_factory=Mock,
+            benchling_factory=canvas_aware_benchling,
             bucket="bucket-a",
         )
 
@@ -251,7 +269,7 @@ def test_bucketless_partial_target_lookup_still_refreshes_found_canvas(mock_conf
             "ale/raw/data1",
             "abc123",
             config=mock_config,
-            benchling_factory=Mock,
+            benchling_factory=canvas_aware_benchling,
             bucket="bucket-a",
         )
 
@@ -285,7 +303,7 @@ def test_link_to_entry_without_package_is_skipped_not_retried(mock_config):
             "ale/raw/data1",
             "abc123",
             config=mock_config,
-            benchling_factory=Mock,
+            benchling_factory=canvas_aware_benchling,
         )
 
     assert result.outcome == RefreshOutcome.SKIPPED_NO_CANVAS
@@ -330,7 +348,7 @@ def test_unreadable_match_does_not_hide_a_readable_one(mock_config):
             "ale/raw/data1",
             "abc123",
             config=mock_config,
-            benchling_factory=Mock,
+            benchling_factory=canvas_aware_benchling,
             bucket="source-bucket",
         )
 
@@ -388,7 +406,7 @@ def test_failed_linked_canvas_refresh_does_not_fail_the_event(mock_config):
             "ale/raw/data1",
             "abc123",
             config=mock_config,
-            benchling_factory=Mock,
+            benchling_factory=canvas_aware_benchling,
         )
 
     assert result.outcome == RefreshOutcome.SUCCESS
@@ -434,7 +452,7 @@ def test_failed_old_link_lookup_does_not_block_resolvable_new_canvas(mock_config
             "ale/raw/data1",
             "abc123",
             config=mock_config,
-            benchling_factory=Mock,
+            benchling_factory=canvas_aware_benchling,
         )
 
     assert result.outcome == RefreshOutcome.SUCCESS
@@ -443,3 +461,174 @@ def test_failed_old_link_lookup_does_not_block_resolvable_new_canvas(mock_config
         call(key="display_id", value="NEW"),
     ]
     manager.update_canvas.assert_called_once()
+
+
+def test_direct_redraw_skipped_when_canvas_belongs_to_another_entry(mock_config):
+    benchling_client = canvas_aware_benchling()
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        mock_fetcher = Mock()
+        mock_fetcher.get_package_top_hash.return_value = "abc123"
+        mock_fetcher.get_package_metadata.return_value = {"canvas_id": "cnvs_other", "entry_id": "etr_123456"}
+        mock_fetcher_class.return_value = mock_fetcher
+
+        result = refresh_canvas_for_package_event(
+            "benchling/EXP0001",
+            "abc123",
+            config=mock_config,
+            benchling_factory=lambda: benchling_client,
+        )
+
+    assert result.outcome == RefreshOutcome.SKIPPED_CANVAS_MISMATCH
+    benchling_client.apps.get_canvas_by_id.assert_called_once_with("cnvs_other")
+    mock_canvas_manager.return_value.update_canvas.assert_not_called()
+
+
+def _benchling_error(status_code):
+    from benchling_sdk.errors import BenchlingError
+
+    return BenchlingError(status_code, {}, None, None, None)
+
+
+def _refresh_direct(mock_config, benchling_client):
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        mock_fetcher = Mock()
+        mock_fetcher.get_package_top_hash.return_value = "abc123"
+        mock_fetcher.get_package_metadata.return_value = {"canvas_id": "canvas_123", "entry_id": "etr_123456"}
+        mock_fetcher_class.return_value = mock_fetcher
+
+        result = refresh_canvas_for_package_event(
+            "benchling/EXP0001",
+            "abc123",
+            config=mock_config,
+            benchling_factory=lambda: benchling_client,
+        )
+    return result, mock_canvas_manager
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        Exception("Benchling unavailable"),
+        requests.exceptions.ConnectionError("connection reset"),
+        requests.exceptions.Timeout("timed out"),
+        "429",
+        "503",
+    ],
+)
+def test_direct_redraw_retried_when_canvas_lookup_fails_transiently(mock_config, failure):
+    """A lookup that couldn't be answered is retried, never taken as a confirmed mismatch."""
+    benchling_client = Mock()
+    side_effect = _benchling_error(int(failure)) if isinstance(failure, str) else failure
+    benchling_client.apps.get_canvas_by_id.side_effect = side_effect
+
+    result, mock_canvas_manager = _refresh_direct(mock_config, benchling_client)
+
+    assert result.outcome == RefreshOutcome.TRANSIENT_ERROR
+    assert result.error_type == "CanvasLookupFailed"
+    mock_canvas_manager.return_value.update_canvas.assert_not_called()
+
+
+@pytest.mark.parametrize("status_code", [404, 403])
+def test_direct_redraw_skipped_when_benchling_has_no_such_canvas_for_us(mock_config, status_code):
+    """A definitive answer (not found, or not ours to read) is a mismatch: skip, don't retry."""
+    benchling_client = Mock()
+    benchling_client.apps.get_canvas_by_id.side_effect = _benchling_error(status_code)
+
+    result, mock_canvas_manager = _refresh_direct(mock_config, benchling_client)
+
+    assert result.outcome == RefreshOutcome.SKIPPED_CANVAS_MISMATCH
+    mock_canvas_manager.return_value.update_canvas.assert_not_called()
+
+
+def test_direct_redraw_skipped_when_canvas_has_no_entry(mock_config):
+    benchling_client = Mock()
+    benchling_client.apps.get_canvas_by_id.return_value = Mock(resource_id=None)
+
+    result, mock_canvas_manager = _refresh_direct(mock_config, benchling_client)
+
+    assert result.outcome == RefreshOutcome.SKIPPED_CANVAS_MISMATCH
+    mock_canvas_manager.return_value.update_canvas.assert_not_called()
+
+
+def test_linked_redraw_skipped_when_its_canvas_lookup_fails(mock_config):
+    """Linked canvases are best effort: a failed lookup skips that redraw and the event still succeeds."""
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+    benchling_client = Mock()
+    benchling_client.apps.get_canvas_by_id.side_effect = _benchling_error(503)
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        fetcher = Mock()
+        fetcher.get_package_top_hash.return_value = "abc123"
+        fetcher.get_package_metadata.return_value = {}
+        fetcher.get_package_user_metadata.return_value = {"experiment_id": "EXP1"}
+        mock_fetcher_class.return_value = fetcher
+
+        entry_package = Package(
+            "test.quiltdata.com",
+            "test-bucket",
+            "ale/EXP1",
+            metadata={"entry_id": "etr_target", "canvas_id": "cnvs_target", "display_id": "EXP1"},
+        )
+        query = Mock()
+        query.find_unique_packages.return_value = {"packages": [entry_package]}
+        mock_query_class.return_value = query
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=lambda: benchling_client,
+        )
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    benchling_client.apps.get_canvas_by_id.assert_called_once_with("cnvs_target")
+    mock_canvas_manager.return_value.update_canvas.assert_not_called()
+
+
+def test_linked_redraw_skipped_when_canvas_belongs_to_another_entry(mock_config):
+    """A linked entry's metadata naming another entry's canvas does not redraw it."""
+    mock_config.quilt_database = "athena-db"
+    mock_config.package_key = "experiment_id"
+
+    with (
+        patch("src.package_event.PackageFileFetcher") as mock_fetcher_class,
+        patch("src.package_event.PackageQuery") as mock_query_class,
+        patch("src.package_event.CanvasManager") as mock_canvas_manager,
+    ):
+        fetcher = Mock()
+        fetcher.get_package_top_hash.return_value = "abc123"
+        fetcher.get_package_metadata.return_value = {}
+        fetcher.get_package_user_metadata.return_value = {"experiment_id": "EXP1"}
+        mock_fetcher_class.return_value = fetcher
+
+        entry_package = Package(
+            "test.quiltdata.com",
+            "test-bucket",
+            "ale/EXP1",
+            metadata={"entry_id": "etr_target", "canvas_id": "cnvs_other", "display_id": "EXP1"},
+        )
+        query = Mock()
+        query.find_unique_packages.return_value = {"packages": [entry_package]}
+        mock_query_class.return_value = query
+
+        result = refresh_canvas_for_package_event(
+            "ale/raw/data1",
+            "abc123",
+            config=mock_config,
+            benchling_factory=canvas_aware_benchling,
+        )
+
+    assert result.outcome == RefreshOutcome.SUCCESS
+    mock_canvas_manager.return_value.update_canvas.assert_not_called()

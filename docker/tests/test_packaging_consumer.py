@@ -1,5 +1,6 @@
 """Tests for the FIFO packaging-request consumer."""
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, Mock
 
@@ -138,3 +139,60 @@ async def test_consumer_dispatches_messages_in_arrival_order():
     await consumer.process_message(canvas_msg)
 
     assert seen == ["v2.entry.created", "v2.canvas.created"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(("canvas_entry", "runs"), [("etr_abc", True), ("etr_other", False)])
+async def test_consumer_resolves_a_queued_click_from_the_canvas_record(canvas_entry, runs):
+    """A queued Update Package click packages the entry Benchling records for its canvas."""
+    entry_packager = Mock()
+    entry_packager.benchling = Mock()
+    entry_packager.benchling.apps.get_canvas_by_id.return_value = Mock(resource_id=canvas_entry)
+    entry_packager.execute_workflow = Mock(return_value={"status": "SUCCESS"})
+
+    consumer, _ = _packaging_consumer(entry_packager)
+
+    body = {
+        "message": {
+            "type": "v2.canvas.userInteracted",
+            "buttonId": "update-package-etr_abc",
+            "canvasId": "cnvs_abc",
+        }
+    }
+    await consumer.process_message(_message(body))
+
+    entry_packager.benchling.apps.get_canvas_by_id.assert_called_once_with("cnvs_abc")
+    assert entry_packager.execute_workflow.called is runs
+
+
+@pytest.mark.anyio
+async def test_consumer_resolves_a_queued_click_off_the_event_loop():
+    """The canvas lookup is a blocking Benchling call; it must not stall the consumer's event loop."""
+    seen: list = []
+
+    def lookup(canvas_id):
+        try:
+            asyncio.get_running_loop()
+            seen.append("event loop")
+        except RuntimeError:
+            seen.append("worker thread")
+        return Mock(resource_id="etr_abc")
+
+    entry_packager = Mock()
+    entry_packager.benchling = Mock()
+    entry_packager.benchling.apps.get_canvas_by_id.side_effect = lookup
+    entry_packager.execute_workflow = Mock(return_value={"status": "SUCCESS"})
+
+    consumer, _ = _packaging_consumer(entry_packager)
+
+    body = {
+        "message": {
+            "type": "v2.canvas.userInteracted",
+            "buttonId": "update-package-etr_abc",
+            "canvasId": "cnvs_abc",
+        }
+    }
+    await consumer.process_message(_message(body))
+
+    assert seen == ["worker thread"]
+    entry_packager.execute_workflow.assert_called_once()

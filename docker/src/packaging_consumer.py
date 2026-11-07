@@ -80,7 +80,7 @@ class PackagingConsumer(BaseSqsConsumer):
                 return
 
             payload = Payload(raw, benchling=self.entry_packager.benchling)
-            entry_id = payload.entry_id
+            entry_id = await payload.resolve_entry_id()
 
             await asyncio.to_thread(self.entry_packager.execute_workflow, payload)
             outcome = "success"
