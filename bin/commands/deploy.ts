@@ -4,7 +4,11 @@ import ora from "ora";
 import boxen from "boxen";
 import { prompt } from "enquirer";
 import { maskArn } from "../../lib/utils/config";
-import { printRiskyConfigWarnings } from "../../lib/utils/risky-config-warnings";
+import {
+    isVerificationOff,
+    printRiskyConfigWarnings,
+    type RiskyConfigInput,
+} from "../../lib/utils/risky-config-warnings";
 import {
     QuiltServices,
     ServiceResolverError,
@@ -22,6 +26,22 @@ import { fetchBenchlingSecretDetails } from "../../lib/wizard/benchling-secret";
 /**
  * Helper function to display setup command suggestion
  */
+/**
+ * The bucket and verification settings the deployment will actually run with.
+ *
+ * The container reads them from the Benchling secret, and deploy doesn't overwrite an existing
+ * standalone secret, so the deployed secret wins over the local profile when it can be read.
+ */
+export function deployedRiskySettings(
+    config: ProfileConfig,
+    secretDetails: { userBucket?: string; enableVerification?: boolean } | null,
+): RiskyConfigInput {
+    if (secretDetails) {
+        return { bucket: secretDetails.userBucket, enableVerification: secretDetails.enableVerification };
+    }
+    return { bucket: config.packages.bucket, enableVerification: config.security?.enableVerification };
+}
+
 function suggestSetup(profileName: string, message: string): void {
     console.log(chalk.yellow(message));
     console.log();
@@ -374,6 +394,7 @@ export async function deploy(
                 profile: options.profileName,
                 region: deployRegion,
                 force: false, // Don't update existing secrets
+                printWarnings: false, // The deployment plan prints them, from the deployed secret
             });
         } finally {
             // Restore console.log
@@ -701,14 +722,12 @@ export async function deploy(
     console.log(`    ${chalk.bold("Full Image URI:")}          ${ecrImageUri}`);
     console.log();
     console.log(chalk.bold("  Security Settings:"));
-    const verificationEnabled = config.security?.enableVerification !== false;
+    const effectiveSettings = deployedRiskySettings(config, secretDetails);
+    const verificationEnabled = !isVerificationOff(effectiveSettings.enableVerification);
     console.log(
         `    ${chalk.bold("Webhook Verification:")}    ${verificationEnabled ? chalk.green("ENABLED") : chalk.red("DISABLED")}`,
     );
-    printRiskyConfigWarnings({
-        bucket: config.packages.bucket,
-        enableVerification: config.security?.enableVerification,
-    });
+    printRiskyConfigWarnings(effectiveSettings);
 
     // Parse and validate webhook allowlist (same logic as rest-api-gateway.ts)
     const webhookAllowList = config.security?.webhookAllowList || "";

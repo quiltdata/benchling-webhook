@@ -65,10 +65,6 @@ export async function validateCommand(options: ValidateOptions): Promise<void> {
         console.log(`  Prefix: ${config.packages.prefix}`);
         console.log(`  Metadata Key: ${config.packages.metadataKey}`);
         console.log();
-        printRiskyConfigWarnings({
-            bucket: config.packages.bucket,
-            enableVerification: config.security?.enableVerification,
-        });
 
         console.log(chalk.bold("Deployment:"));
         console.log(`  Region: ${config.deployment.region}`);
@@ -76,6 +72,12 @@ export async function validateCommand(options: ValidateOptions): Promise<void> {
         console.log(`  Mode: ${config.integratedStack ? "Integrated" : "Standalone"}`);
         console.log();
     }
+
+    // Always shown, verbose or not: these choices must never pass silently.
+    printRiskyConfigWarnings({
+        bucket: config.packages.bucket,
+        enableVerification: config.security?.enableVerification,
+    });
 
     // Run validation checks (using wizard validation logic)
     console.log(chalk.bold("Running validation checks..."));
