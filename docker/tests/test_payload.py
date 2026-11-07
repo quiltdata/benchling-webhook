@@ -5,8 +5,16 @@ Tests for Payload class.
 from unittest.mock import Mock
 
 import pytest
+import requests
 
-from src.payload import Payload
+from src.payload import CanvasLookupError, CanvasOwnership, Payload, canvas_ownership, read_canvas_entry_id
+
+
+def canvas_client(entry_id):
+    """Fake Benchling client whose canvas lookup returns ``entry_id``."""
+    client = Mock()
+    client.apps.get_canvas_by_id.return_value = Mock(resource_id=entry_id)
+    return client
 
 
 class TestPayload:
@@ -47,9 +55,9 @@ class TestPayload:
             "baseURL": "https://demo.benchling.com",
         }
 
-        payload = Payload(payload_dict)
+        payload = Payload(payload_dict, benchling=canvas_client("etr_xyz"))
 
-        # For canvas userInteracted events, buttonId is the entry_id
+        # The button names the same entry as the canvas
         assert payload.entry_id == "etr_xyz"
         assert payload.event_id == "evt_abc"
         assert payload.canvas_id == "canvas_123"
@@ -68,9 +76,8 @@ class TestPayload:
             "baseURL": "https://demo.benchling.com",
         }
 
-        payload = Payload(payload_dict)
+        payload = Payload(payload_dict, benchling=canvas_client("etr_abc123"))
 
-        # Should extract entry_id from after last dash
         assert payload.entry_id == "etr_abc123"
         assert payload.event_id == "evt_def"
         assert payload.canvas_id == "canvas_456"
@@ -277,10 +284,153 @@ class TestPayload:
             "baseURL": "https://demo.benchling.com",
         }
 
-        payload = Payload(payload_dict)
+        payload = Payload(payload_dict, benchling=canvas_client("etr_abc123"))
 
-        # Should correctly extract entry_id from pagination button format
         assert payload.entry_id == "etr_abc123"
         assert payload.event_id == "evt_pagination"
         assert payload.canvas_id == "canvas_789"
         assert payload.event_type == "v2.canvas.userInteracted"
+
+
+class TestCanvasClickEntry:
+    """A click acts on the entry Benchling records for the clicked canvas."""
+
+    @staticmethod
+    def _click(button_id, **message):
+        return {
+            "message": {"type": "v2.canvas.userInteracted", "buttonId": button_id, "canvasId": "cnvs_a", **message},
+            "baseURL": "https://demo.benchling.com",
+        }
+
+    def test_entry_comes_from_the_canvas_record(self):
+        client = canvas_client("etr_a")
+        payload = Payload(self._click("update-package-etr_a"), benchling=client)
+
+        assert payload.entry_id == "etr_a"
+        client.apps.get_canvas_by_id.assert_called_once_with("cnvs_a")
+
+    def test_lookup_runs_once_per_payload(self):
+        client = canvas_client("etr_a")
+        payload = Payload(self._click("refresh-canvas-etr_a"), benchling=client)
+
+        assert payload.entry_id == payload.entry_id == "etr_a"
+        client.apps.get_canvas_by_id.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "button_id",
+        [
+            "update-package-etr_b",
+            "refresh-canvas-etr_b",
+            "browse-files-etr_b-p0-s15",
+            "view-metadata-etr_b-p0-s15",
+            "next-page-related-etr_b-p1-s5",
+            "browse-linked-etr_b-pkg-benchling--exp-001-p0-s15",
+            "view-metadata-linked-etr_b-pkg-benchling--exp-001-bucket-other-p0-s15",
+            "link-related-etr_b-pkg-MJSW4Y3INRUW4ZZPIVMFAMI",
+            "browse-files-etr_b-linked-etr_a-pkg-foo-p0-s15",
+        ],
+    )
+    def test_button_for_another_entry_is_refused(self, button_id):
+        payload = Payload(self._click(button_id), benchling=canvas_client("etr_a"))
+
+        with pytest.raises(ValueError, match="different entry"):
+            _ = payload.entry_id
+
+    def test_payload_resource_id_is_ignored_for_clicks(self):
+        payload = Payload(self._click("update-package-etr_a", resourceId="etr_b"), benchling=canvas_client("etr_a"))
+
+        assert payload.entry_id == "etr_a"
+
+    @pytest.mark.parametrize("button_id", ["some-unknown-button", "etr_b", "unknown-etr_b"])
+    def test_button_no_action_handles_uses_the_canvas_entry(self, button_id):
+        """A button the dispatcher routes nowhere names no entry; the click acts on the canvas's own."""
+        payload = Payload(self._click(button_id), benchling=canvas_client("etr_a"))
+
+        assert payload.entry_id == "etr_a"
+
+    @pytest.mark.parametrize(
+        "button_id",
+        ["update-package-garbage", "update-package-", "refresh-canvas-etr_a-extra", "browse-files-p0-s15"],
+    )
+    def test_handled_button_without_a_readable_entry_is_refused(self, button_id):
+        payload = Payload(self._click(button_id), benchling=canvas_client("etr_a"))
+
+        with pytest.raises(ValueError, match="readable entry"):
+            _ = payload.entry_id
+
+    def test_lookup_failure_is_refused(self):
+        client = Mock()
+        client.apps.get_canvas_by_id.side_effect = Exception("Benchling unavailable")
+        payload = Payload(self._click("update-package-etr_a"), benchling=client)
+
+        with pytest.raises(ValueError, match="canvas"):
+            _ = payload.entry_id
+
+    def test_canvas_without_a_resource_is_refused(self):
+        payload = Payload(self._click("update-package-etr_a"), benchling=canvas_client(None))
+
+        with pytest.raises(ValueError, match="canvas"):
+            _ = payload.entry_id
+
+    def test_click_without_a_benchling_client_is_refused(self):
+        payload = Payload(self._click("update-package-etr_a"))
+
+        with pytest.raises(ValueError, match="canvas"):
+            _ = payload.entry_id
+
+    def test_click_without_a_canvas_id_is_refused(self):
+        raw = self._click("update-package-etr_a")
+        del raw["message"]["canvasId"]
+        payload = Payload(raw, benchling=canvas_client("etr_a"))
+
+        with pytest.raises(ValueError, match="canvas"):
+            _ = payload.entry_id
+
+
+class TestCanvasOwnership:
+    """A lookup Benchling answered is final; one it couldn't answer is never taken as a mismatch."""
+
+    @staticmethod
+    def _error(status_code):
+        from benchling_sdk.errors import BenchlingError
+
+        return BenchlingError(status_code, {}, None, None, None)
+
+    def _client(self, side_effect=None, resource_id="etr_a"):
+        client = Mock()
+        if side_effect is not None:
+            client.apps.get_canvas_by_id.side_effect = side_effect
+        else:
+            client.apps.get_canvas_by_id.return_value = Mock(resource_id=resource_id)
+        return client
+
+    def test_match(self):
+        assert canvas_ownership(self._client(), "cnvs_a", "etr_a") is CanvasOwnership.MATCH
+
+    @pytest.mark.parametrize("resource_id", ["etr_b", None, ""])
+    def test_answered_mismatch(self, resource_id):
+        client = self._client(resource_id=resource_id)
+        assert canvas_ownership(client, "cnvs_a", "etr_a") is CanvasOwnership.MISMATCH
+
+    @pytest.mark.parametrize("status_code", [400, 403, 404])
+    def test_client_error_is_an_answer(self, status_code):
+        client = self._client(side_effect=self._error(status_code))
+        assert canvas_ownership(client, "cnvs_a", "etr_a") is CanvasOwnership.MISMATCH
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            "429",
+            "500",
+            "503",
+            requests.exceptions.Timeout("t"),
+            requests.exceptions.ConnectionError("c"),
+            RuntimeError("x"),
+        ],
+    )
+    def test_unanswered_lookup_is_unknown(self, failure):
+        side_effect = self._error(int(failure)) if isinstance(failure, str) else failure
+        client = self._client(side_effect=side_effect)
+        assert canvas_ownership(client, "cnvs_a", "etr_a") is CanvasOwnership.UNKNOWN
+        with pytest.raises(CanvasLookupError):
+            read_canvas_entry_id(client, "cnvs_a")

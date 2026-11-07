@@ -1092,6 +1092,44 @@ class TestEntryPackager:
 
         get_s3_client.assert_not_called()
 
+    @pytest.mark.parametrize(("canvas_entry", "redrawn"), [("etr_123", True), ("etr_other", False), (None, False)])
+    def test_redraw_canvas_only_redraws_the_entrys_own_canvas(
+        self, orchestrator, mock_benchling, canvas_entry, redrawn
+    ):
+        """The workflow's redraw checks Benchling's record of the canvas first."""
+        mock_benchling.apps.get_canvas_by_id.return_value = Mock(resource_id=canvas_entry)
+        payload = Payload({"message": {"resourceId": "etr_123", "canvasId": "cnvs_x"}})
+
+        with patch("src.canvas.CanvasManager") as canvas_manager:
+            orchestrator._redraw_canvas(payload, None)
+
+        mock_benchling.apps.get_canvas_by_id.assert_called_once_with("cnvs_x")
+        assert canvas_manager.return_value.update_canvas.called is redrawn
+
+    def test_redraw_canvas_skips_when_the_canvas_lookup_fails(self, orchestrator, mock_benchling):
+        mock_benchling.apps.get_canvas_by_id.side_effect = Exception("Benchling unavailable")
+        payload = Payload({"message": {"resourceId": "etr_123", "canvasId": "cnvs_x"}})
+
+        with patch("src.canvas.CanvasManager") as canvas_manager:
+            orchestrator._redraw_canvas(payload, None)
+
+        canvas_manager.assert_not_called()
+
+    @pytest.mark.parametrize(("canvas_entry", "redrawn"), [("etr_123", True), ("etr_other", False)])
+    def test_rejection_only_redraws_the_entrys_own_canvas(self, orchestrator, mock_benchling, canvas_entry, redrawn):
+        """A rejection's canvas update checks Benchling's record of the canvas too."""
+        mock_benchling.apps.get_canvas_by_id.return_value = Mock(resource_id=canvas_entry)
+        payload = Payload({"message": {"resourceId": "etr_123", "canvasId": "cnvs_x"}})
+
+        with (
+            patch("src.entry_packager.write_status"),
+            patch("src.canvas.CanvasManager") as canvas_manager,
+        ):
+            result = orchestrator._reject(Mock(), "benchling/EXP0001", payload, "Metadata failed validation")
+
+        assert result["status"] == "REJECTED"
+        assert canvas_manager.return_value.update_canvas.called is redrawn
+
     def test_process_export_keeps_the_workflow_package_name(self, orchestrator, mock_benchling, mock_config):
         """Test uploads use the name execute_workflow resolved, even if the handle changed mid-export."""
         mock_config.s3_prefix = "{creator.handle}"

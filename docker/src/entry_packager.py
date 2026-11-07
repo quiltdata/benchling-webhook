@@ -27,7 +27,7 @@ from .package_files import SEAL_FILE, has_staged_seal, is_not_found
 from .package_naming import MissingPlaceholderError, entry_package_name, entry_to_dict
 from .package_query import ELN_ENTRY_KEY, PackageQuery
 from .packaging_status import check_workflow, write_status
-from .payload import Payload
+from .payload import CanvasOwnership, Payload, canvas_ownership
 from .retry_utils import LAMBDA_INVOKE_RETRY, REST_API_RETRY
 
 logger = structlog.get_logger(__name__)
@@ -1049,6 +1049,24 @@ For questions about the data, refer to the original Benchling entry.
         )
         self.logger.info("Sealed entry package", package_name=package_name, linked=len(seal["linked_packages"]))
 
+    def _owns_canvas(self, canvas_id: str, entry_id: str) -> bool:
+        """Redraw only a canvas Benchling records as this entry's.
+
+        These redraws are best effort: on a mismatch or a failed lookup they're skipped.
+        A failed lookup is logged apart from a mismatch, but nothing here schedules a
+        retry: the canvas stays as it is until a later refresh redraws it (a new package
+        revision's event, a Refresh click, or the canvas being reopened).
+        """
+        assert self.benchling is not None
+        ownership = canvas_ownership(self.benchling, canvas_id, entry_id)
+        if ownership is CanvasOwnership.UNKNOWN:
+            self.logger.warning(
+                "Canvas redraw skipped: canvas lookup failed; a later refresh will redraw it",
+                canvas_id=canvas_id,
+                entry_id=entry_id,
+            )
+        return ownership is CanvasOwnership.MATCH
+
     def _redraw_canvas(self, payload: Payload, package_name: Optional[str]) -> None:
         """Best-effort canvas update; failures are logged, never raised.
 
@@ -1057,7 +1075,7 @@ For questions about the data, refer to the original Benchling entry.
         canvas_id = payload.canvas_id
         if not canvas_id and package_name:
             canvas_id = self._load_existing_canvas_id_from_entry_json(self.role_manager.get_s3_client(), package_name)
-        if canvas_id and self.benchling:
+        if canvas_id and self.benchling and self._owns_canvas(canvas_id, payload.entry_id):
             try:
                 from .canvas import CanvasManager
 
@@ -1115,7 +1133,7 @@ For questions about the data, refer to the original Benchling entry.
             accepted=accepted,
         )
         canvas_id = payload.canvas_id or self._load_existing_canvas_id_from_entry_json(s3_client, package_name)
-        if canvas_id and self.benchling:
+        if canvas_id and self.benchling and self._owns_canvas(canvas_id, payload.entry_id):
             try:
                 from .canvas import CanvasManager
 

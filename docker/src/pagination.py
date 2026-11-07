@@ -17,6 +17,9 @@ logger = structlog.get_logger(__name__)
 # to contain the literal substring "-bucket-".
 _BUCKET_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
 
+# Benchling ID prefixes that mark the entry segment of a Canvas button ID.
+ENTRY_ID_PREFIXES = ("etr_", "plt_", "seq_", "cus_", "dna_", "aa_", "rna_")
+
 
 def encode_package_name(package_name: str) -> str:
     """Encode package name for button ID.
@@ -384,10 +387,9 @@ def parse_button_id(button_id: str) -> Tuple[str, str, Optional[PageState]]:
         raise ValueError(f"Invalid button ID format: {button_id}")
 
     # Find entry_id (starts with known prefixes)
-    entry_prefixes = ("etr_", "plt_", "seq_", "cus_", "dna_", "aa_", "rna_")
     entry_idx = None
     for i, part in enumerate(parts):
-        if part.startswith(entry_prefixes):
+        if part.startswith(ENTRY_ID_PREFIXES):
             entry_idx = i
             break
 
@@ -428,3 +430,85 @@ def parse_button_id(button_id: str) -> Tuple[str, str, Optional[PageState]]:
     )
 
     return action, entry_id, page_state
+
+
+# The Canvas button actions, in the order the /canvas dispatcher (app.py) matches them.
+# More specific prefixes come first: "next-page-linked-" before "next-page-",
+# "view-metadata-linked-" before "view-metadata-". The dispatcher and the click check
+# both use this table, so the entry checked is the entry the dispatched handler reads.
+CANVAS_BUTTON_ACTIONS: Tuple[Tuple[str, str], ...] = (
+    ("browse-files-", "browse_files"),
+    ("browse-linked-", "browse_linked"),
+    ("view-related-", "view_related"),
+    ("next-page-related-", "view_related"),
+    ("prev-page-related-", "view_related"),
+    ("link-related-", "link_related"),
+    ("next-page-linked-", "page_navigation_linked"),
+    ("prev-page-linked-", "page_navigation_linked"),
+    ("next-page-", "page_navigation"),
+    ("prev-page-", "page_navigation"),
+    ("back-to-package-", "back_to_main"),
+    ("view-metadata-linked-", "view_metadata_linked"),
+    ("view-metadata-", "view_metadata"),
+    ("refresh-canvas-", "refresh_canvas"),
+    ("update-package-", "update_package"),
+)
+
+
+def canvas_button_action(button_id: str) -> Optional[str]:
+    """The action the /canvas dispatcher routes ``button_id`` to, or None if it routes it nowhere."""
+    for prefix, action in CANVAS_BUTTON_ACTIONS:
+        if button_id.startswith(prefix):
+            return action
+    return None
+
+
+def _entry_after_prefix(button_id: str, prefix: str) -> str:
+    """Entry ID for buttons rendered as ``{prefix}{entry_id}`` with nothing after it."""
+    entry_id = button_id[len(prefix) :]
+    if not entry_id.startswith(ENTRY_ID_PREFIXES) or "-" in entry_id:
+        raise ValueError(f"Invalid button ID: {button_id}")
+    return entry_id
+
+
+def _linked_button_entry(button_id: str) -> str:
+    return parse_browse_linked_button_id_with_bucket(button_id)[0]
+
+
+def _paged_button_entry(button_id: str) -> str:
+    return parse_button_id(button_id)[1]
+
+
+def _related_button_entry(button_id: str) -> str:
+    return parse_related_package_button_id(button_id)[0]
+
+
+# How each action's handler reads the entry from its button ID.
+_BUTTON_ENTRY_PARSERS = {
+    "browse_files": _paged_button_entry,
+    "view_related": _paged_button_entry,
+    "page_navigation": _paged_button_entry,
+    "view_metadata": _paged_button_entry,
+    "browse_linked": _linked_button_entry,
+    "page_navigation_linked": _linked_button_entry,
+    "view_metadata_linked": _linked_button_entry,
+    "link_related": _related_button_entry,
+    "back_to_main": lambda button_id: _entry_after_prefix(button_id, "back-to-package-"),
+    "refresh_canvas": lambda button_id: _entry_after_prefix(button_id, "refresh-canvas-"),
+    "update_package": lambda button_id: _entry_after_prefix(button_id, "update-package-"),
+}
+
+
+def button_entry_id(button_id: str) -> Optional[str]:
+    """Return the entry a Canvas button was rendered for.
+
+    The action is chosen by prefix, in the dispatcher's order, and the entry is read
+    the way that action's handler reads it, so the result is the entry the handler acts on.
+
+    Returns None for a button the dispatcher routes nowhere: such a click acts on the
+    canvas's own entry. Raises ValueError for a routed button whose entry can't be read.
+    """
+    action = canvas_button_action(button_id or "")
+    if action is None:
+        return None
+    return _BUTTON_ENTRY_PARSERS[action](button_id)

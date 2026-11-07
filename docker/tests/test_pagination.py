@@ -3,7 +3,10 @@
 import pytest
 
 from src.pagination import (
+    CANVAS_BUTTON_ACTIONS,
     PageState,
+    button_entry_id,
+    canvas_button_action,
     encode_related_button_value,
     paginate_items,
     parse_browse_linked_button_id_with_bucket,
@@ -313,3 +316,92 @@ class TestParseButtonId:
         assert page_state is not None
         assert page_state.page_number == 3
         assert page_state.page_size == 15
+
+
+class TestButtonEntryId:
+    """The entry a Canvas button was rendered for, as each handler parses it."""
+
+    @pytest.mark.parametrize(
+        ("button_id", "expected"),
+        [
+            ("update-package-etr_a", "etr_a"),
+            ("refresh-canvas-etr_a", "etr_a"),
+            ("back-to-package-etr_a", "etr_a"),
+            ("browse-files-etr_a-p2-s15", "etr_a"),
+            ("next-page-etr_a-p1-s15", "etr_a"),
+            ("prev-page-etr_a-p1-s15", "etr_a"),
+            ("view-metadata-etr_a-p0-s15", "etr_a"),
+            ("view-related-etr_a-p0-s5", "etr_a"),
+            ("next-page-related-etr_a-p1-s5", "etr_a"),
+            ("prev-page-related-etr_a-p1-s5", "etr_a"),
+            ("browse-linked-etr_a-pkg-benchling--exp-001-p0-s15", "etr_a"),
+            ("next-page-linked-etr_a-pkg-foo--bar-bucket-other-p1-s15", "etr_a"),
+            ("prev-page-linked-etr_a-pkg-foo-p1-s15", "etr_a"),
+            ("view-metadata-linked-etr_a-pkg-foo-p0-s15", "etr_a"),
+            ("link-related-etr_a-pkg-" + encode_related_button_value("benchling/EXP1"), "etr_a"),
+        ],
+    )
+    def test_extracts_entry(self, button_id, expected):
+        assert button_entry_id(button_id) == expected
+
+    @pytest.mark.parametrize("button_id", ["", "unknown-button", "etr_a", "unknown-etr_a-p0-s15"])
+    def test_unrecognized_button_names_no_entry(self, button_id):
+        """Buttons the /canvas dispatcher doesn't route act on the canvas's own entry, so name none."""
+        assert canvas_button_action(button_id) is None
+        assert button_entry_id(button_id) is None
+
+    @pytest.mark.parametrize(
+        "button_id",
+        [
+            "update-package-garbage",
+            "update-package-",
+            "update-package-etr_a-extra",
+            "refresh-canvas-garbage",
+            "back-to-package-garbage",
+            "browse-files-p0-s15",
+            "view-metadata-garbage",
+            "browse-linked-etr_a-nopkg",
+            "link-related-garbage",
+        ],
+    )
+    def test_recognized_button_without_a_readable_entry_is_an_error(self, button_id):
+        """A dispatched action must name the entry it was rendered for; otherwise the click is refused."""
+        assert canvas_button_action(button_id) is not None
+        with pytest.raises(ValueError):
+            button_entry_id(button_id)
+
+    def test_action_is_chosen_by_prefix_not_by_substrings(self):
+        """The entry checked is the one the dispatched handler reads, whatever trails it."""
+        button_id = "browse-files-etr_b-linked-etr_a-pkg-foo-p0-s15"
+        assert canvas_button_action(button_id) == "browse_files"
+        assert button_entry_id(button_id) == "etr_b"
+        assert parse_button_id(button_id)[1] == "etr_b"
+
+
+class TestCanvasButtonActions:
+    """One ordered prefix table drives both the /canvas dispatcher and the click check."""
+
+    @pytest.mark.parametrize(
+        ("button_id", "action"),
+        [
+            ("next-page-linked-etr_a-pkg-foo-p1-s15", "page_navigation_linked"),
+            ("prev-page-linked-etr_a-pkg-foo-p1-s15", "page_navigation_linked"),
+            ("next-page-related-etr_a-p1-s5", "view_related"),
+            ("next-page-etr_a-p1-s15", "page_navigation"),
+            ("view-metadata-linked-etr_a-pkg-foo-p0-s15", "view_metadata_linked"),
+            ("view-metadata-etr_a-p0-s15", "view_metadata"),
+            ("update-package-etr_a", "update_package"),
+        ],
+    )
+    def test_more_specific_prefixes_win(self, button_id, action):
+        assert canvas_button_action(button_id) == action
+
+    def test_prefixes_are_unique(self):
+        prefixes = [prefix for prefix, _ in CANVAS_BUTTON_ACTIONS]
+        assert len(prefixes) == len(set(prefixes))
+
+    def test_no_prefix_is_shadowed_by_an_earlier_one(self):
+        prefixes = [prefix for prefix, _ in CANVAS_BUTTON_ACTIONS]
+        for i, later in enumerate(prefixes):
+            for earlier in prefixes[:i]:
+                assert not later.startswith(earlier), f"{later!r} is unreachable behind {earlier!r}"
