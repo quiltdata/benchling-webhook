@@ -14,7 +14,7 @@ from .canvas import CanvasManager
 from .config import Config
 from .package_files import PackageFileFetcher
 from .package_query import ELN_ENTRY_KEY, PackageQuery
-from .payload import Payload, canvas_belongs_to_entry
+from .payload import CanvasOwnership, Payload, canvas_ownership
 
 logger = structlog.get_logger(__name__)
 
@@ -215,7 +215,9 @@ def refresh_canvas_for_package_event(
             return CanvasManager(active_benchling, config, payload).update_canvas(updated_at=updated_at)
 
         for linked_target in sorted(linked_targets):
-            if not canvas_belongs_to_entry(active_benchling, linked_target[1], linked_target[0]):
+            # Linked canvases are best effort, like their redraws below: a canvas that belongs to
+            # another entry, or whose lookup failed, is skipped (and logged) without failing the event.
+            if canvas_ownership(active_benchling, linked_target[1], linked_target[0]) is not CanvasOwnership.MATCH:
                 continue
             try:
                 linked_result = refresh(linked_target)
@@ -235,8 +237,16 @@ def refresh_canvas_for_package_event(
             return RefreshResult(RefreshOutcome.SUCCESS)
 
         entry_id, canvas_id = direct_target
-        if not canvas_belongs_to_entry(active_benchling, canvas_id, entry_id):
+        ownership = canvas_ownership(active_benchling, canvas_id, entry_id)
+        if ownership is CanvasOwnership.MISMATCH:
             return RefreshResult(RefreshOutcome.SKIPPED_CANVAS_MISMATCH)
+        if ownership is CanvasOwnership.UNKNOWN:
+            # Retried through the consumer; an unanswered lookup is never taken as a mismatch.
+            return RefreshResult(
+                RefreshOutcome.TRANSIENT_ERROR,
+                error_type="CanvasLookupFailed",
+                error_message=f"Could not read canvas {canvas_id} to check its entry",
+            )
         result = refresh(direct_target)
         if result.get("success"):
             logger.info(

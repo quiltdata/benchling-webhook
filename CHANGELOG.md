@@ -10,7 +10,8 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - App Canvas buttons act on the entry Benchling records for the canvas they were clicked on, read with one canvas lookup per click. A button rendered for a different entry is refused, as is a click whose canvas can't be read, so nothing is queued or redrawn for it
-- Before redrawing a Canvas after a package event or a packaging run, the webhook checks that Benchling records the canvas as the entry's own, and skips the redraw when it doesn't or when the canvas can't be read. Package events skipped this way are logged as `skipped_canvas_mismatch` and not retried
+- A button for one of the Canvas actions must name the entry it was rendered for, read the way that action's handler reads it; a button that names none is refused. Clicks on buttons that no action handles act on the canvas's own entry
+- Before redrawing a Canvas after a package event or a packaging run, the webhook checks that Benchling records the canvas as the entry's own, and skips the redraw when it doesn't. Package events skipped this way are logged as `skipped_canvas_mismatch` and not retried. When the canvas lookup itself fails (a timeout, connection error, rate limit or server error), the package event is retried instead; a linked entry's canvas is skipped for that event
 
 ## [0.22.3] - 2026-11-06
 

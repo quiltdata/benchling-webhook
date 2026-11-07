@@ -6,8 +6,10 @@ Handles parsing of webhook payloads for both entry packaging and canvas operatio
 
 import asyncio
 import uuid
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+import requests
 import structlog
 from starlette.requests import Request
 
@@ -19,33 +21,76 @@ logger = structlog.get_logger(__name__)
 CANVAS_INTERACTION_EVENT = "v2.canvas.userInteracted"
 
 
-def canvas_entry_id(benchling: Optional["Benchling"], canvas_id: Optional[str]) -> Optional[str]:
-    """Return the entry Benchling records for ``canvas_id``, or None if it can't be read."""
-    if not benchling or not canvas_id:
-        return None
+class CanvasLookupError(Exception):
+    """Benchling couldn't say which entry a canvas belongs to; worth retrying."""
+
+
+class CanvasOwnership(Enum):
+    MATCH = "match"  # Benchling records the canvas as this entry's
+    MISMATCH = "mismatch"  # Benchling answered: another entry's, no entry, or no such canvas for this app
+    UNKNOWN = "unknown"  # the lookup failed in a way worth retrying
+
+
+def _is_retryable_lookup_error(exc: Exception) -> bool:
+    """429 and 5xx are retryable; other HTTP statuses are Benchling's answer. Anything else is retryable."""
+    status_code = getattr(exc, "status_code", None)
+    if status_code is None and isinstance(exc, requests.exceptions.HTTPError) and exc.response is not None:
+        status_code = exc.response.status_code
+    if isinstance(status_code, int):
+        return status_code == 429 or status_code >= 500
+    return True
+
+
+def read_canvas_entry_id(benchling: "Benchling", canvas_id: str) -> Optional[str]:
+    """The entry Benchling records for ``canvas_id``; None when Benchling says there is none.
+
+    Raises CanvasLookupError when the lookup fails in a way worth retrying (429, 5xx,
+    timeouts, connection errors, anything unexpected), so callers never mistake an
+    unanswered lookup for a canvas that belongs to another entry.
+    """
     try:
         resource_id = benchling.apps.get_canvas_by_id(canvas_id).resource_id
-    except Exception as exc:  # noqa: BLE001 - callers treat an unreadable canvas as unresolved
-        logger.warning("Failed to read canvas", canvas_id=canvas_id, error=str(exc))
+    except Exception as exc:  # noqa: BLE001 - classified below
+        if _is_retryable_lookup_error(exc):
+            raise CanvasLookupError(f"Could not read canvas {canvas_id}: {exc}") from exc
+        logger.warning("Benchling has no readable canvas", canvas_id=canvas_id, error=str(exc))
         return None
     return resource_id if isinstance(resource_id, str) and resource_id else None
 
 
-def canvas_belongs_to_entry(benchling: Optional["Benchling"], canvas_id: str, entry_id: str) -> bool:
-    """True when Benchling records ``canvas_id`` as ``entry_id``'s canvas.
+def canvas_entry_id(benchling: Optional["Benchling"], canvas_id: Optional[str]) -> Optional[str]:
+    """Return the entry Benchling records for ``canvas_id``, or None if it can't be read for any reason."""
+    if not benchling or not canvas_id:
+        return None
+    try:
+        return read_canvas_entry_id(benchling, canvas_id)
+    except CanvasLookupError as exc:
+        logger.warning("Failed to read canvas", canvas_id=canvas_id, error=str(exc))
+        return None
 
-    Callers skip a redraw when this is False, including when the canvas can't be read.
+
+def canvas_ownership(benchling: "Benchling", canvas_id: str, entry_id: str) -> CanvasOwnership:
+    """Whether Benchling records ``canvas_id`` as ``entry_id``'s canvas.
+
+    Callers redraw only on MATCH. MISMATCH is Benchling's answer and final; UNKNOWN
+    means the lookup failed and the caller decides whether to retry.
     """
-    resolved = canvas_entry_id(benchling, canvas_id)
+    try:
+        resolved = read_canvas_entry_id(benchling, canvas_id)
+    except CanvasLookupError as exc:
+        logger.warning(
+            "Canvas lookup failed; not redrawing it now", canvas_id=canvas_id, entry_id=entry_id, error=str(exc)
+        )
+        return CanvasOwnership.UNKNOWN
     if resolved == entry_id:
-        return True
+        return CanvasOwnership.MATCH
     logger.warning(
         "Skipping canvas redraw: canvas belongs to a different entry",
         canvas_id=canvas_id,
         entry_id=entry_id,
         canvas_entry_id=resolved,
     )
-    return False
+    return CanvasOwnership.MISMATCH
 
 
 class Payload:
@@ -191,8 +236,21 @@ class Payload:
             logger.error("Could not resolve the clicked canvas's entry", canvas_id=self.canvas_id, button_id=button_id)
             raise ValueError("Could not resolve the entry for this canvas")
 
-        button_entry = button_entry_id(button_id)
-        if button_entry and button_entry != entry_id:
+        try:
+            button_entry = button_entry_id(button_id)
+        except ValueError as exc:
+            logger.warning(
+                "Refusing canvas action: button does not name a readable entry",
+                canvas_id=self.canvas_id,
+                button_id=button_id,
+                error=str(exc),
+            )
+            raise ValueError("Canvas button does not name a readable entry") from exc
+
+        if button_entry is None:
+            # A button no action handles names no entry; the click acts on the canvas's own entry.
+            logger.info("Unrecognized canvas button; using the canvas's entry", button_id=button_id)
+        elif button_entry != entry_id:
             logger.warning(
                 "Refusing canvas action: button belongs to a different entry than the canvas",
                 canvas_id=self.canvas_id,

@@ -24,6 +24,7 @@ from .packaging_publisher import (
     get_packaging_queue_url,
     publish_packaging_request,
 )
+from .pagination import CANVAS_BUTTON_ACTIONS, canvas_button_action
 from .payload import Payload
 from .secrets_manager import SecretsManagerError
 from .version import __version__
@@ -934,6 +935,25 @@ def create_app() -> FastAPI:
         logger.info("App configuration updated", installation_id=payload.get("installationId"))
         return {"status": "success", "message": "Configuration updated successfully"}
 
+    # Routes each action in pagination.CANVAS_BUTTON_ACTIONS (the same table the click check uses)
+    # to its handler. Handlers are looked up when called, so they may be defined below.
+    canvas_button_handlers: Dict[str, Callable[[Payload, str], Any]] = {
+        "browse_files": lambda p, b: handle_browse_files(p, b, benchling, config),
+        "browse_linked": lambda p, b: handle_browse_linked(p, b, benchling, config),
+        "view_related": lambda p, b: handle_view_related(p, b, benchling, config),
+        "link_related": lambda p, b: handle_link_related(p, b, benchling, config),
+        "page_navigation_linked": lambda p, b: handle_page_navigation_linked(p, b, benchling, config),
+        "page_navigation": lambda p, b: handle_page_navigation(p, b, benchling, config),
+        "back_to_main": lambda p, b: handle_back_to_main(p, b, benchling, config),
+        "view_metadata_linked": lambda p, b: handle_view_metadata_linked(p, b, benchling, config),
+        "view_metadata": lambda p, b: handle_view_metadata(p, b, benchling, config),
+        "refresh_canvas": lambda p, b: handle_refresh_canvas(p, b, benchling, config),
+        "update_package": lambda p, b: handle_update_package(p, entry_packager, benchling, config),
+    }
+    missing_handlers = {action for _, action in CANVAS_BUTTON_ACTIONS} ^ set(canvas_button_handlers)
+    if missing_handlers:
+        raise RuntimeError(f"Canvas button actions and handlers differ: {sorted(missing_handlers)}")
+
     async def _handle_canvas_impl(request: Request, _verified: None = None):
         """Shared canvas webhook handling implementation."""
         try:
@@ -960,28 +980,9 @@ def create_app() -> FastAPI:
                 button_id = payload.raw_payload.get("message", {}).get("buttonId", "")
                 logger.info("Button interaction detected", button_id=button_id)
 
-                if button_id.startswith("browse-files-"):
-                    return handle_browse_files(payload, button_id, benchling, config)
-                if button_id.startswith("browse-linked-"):
-                    return handle_browse_linked(payload, button_id, benchling, config)
-                if button_id.startswith(("view-related-", "next-page-related-", "prev-page-related-")):
-                    return handle_view_related(payload, button_id, benchling, config)
-                if button_id.startswith("link-related-"):
-                    return handle_link_related(payload, button_id, benchling, config)
-                if button_id.startswith("next-page-linked-") or button_id.startswith("prev-page-linked-"):
-                    return handle_page_navigation_linked(payload, button_id, benchling, config)
-                if button_id.startswith("next-page-") or button_id.startswith("prev-page-"):
-                    return handle_page_navigation(payload, button_id, benchling, config)
-                if button_id.startswith("back-to-package-"):
-                    return handle_back_to_main(payload, button_id, benchling, config)
-                if button_id.startswith("view-metadata-linked-"):
-                    return handle_view_metadata_linked(payload, button_id, benchling, config)
-                if button_id.startswith("view-metadata-"):
-                    return handle_view_metadata(payload, button_id, benchling, config)
-                if button_id.startswith("refresh-canvas-"):
-                    return handle_refresh_canvas(payload, button_id, benchling, config)
-                if button_id.startswith("update-package-"):
-                    return handle_update_package(payload, entry_packager, benchling, config)
+                action = canvas_button_action(button_id)
+                if action is not None:
+                    return canvas_button_handlers[action](payload, button_id)
 
                 logger.warning("Unknown button action from /canvas", button_id=button_id)
 
