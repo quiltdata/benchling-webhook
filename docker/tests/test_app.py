@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -340,6 +341,52 @@ class TestFastAPIApp:
         mock_canvas_manager.assert_not_called()
         mock_benchling_client.apps.update_canvas.assert_not_called()
         mock_benchling_client.apps.get_canvas_by_id.assert_called_with("canvas_123")
+
+    @staticmethod
+    def _record_lookup_thread(mock_benchling_client) -> list:
+        """Make the canvas lookup record whether it ran on a thread with a running event loop."""
+        seen: list = []
+
+        def lookup(canvas_id):
+            try:
+                asyncio.get_running_loop()
+                seen.append("event loop")
+            except RuntimeError:
+                seen.append("worker thread")
+            return Mock(resource_id="etr_123456")
+
+        mock_benchling_client.apps.get_canvas_by_id.side_effect = lookup
+        return seen
+
+    def test_canvas_click_lookup_runs_off_the_event_loop(self, client, mock_publish, mock_benchling_client):
+        """The canvas lookup is a blocking Benchling call; it must not stall the event loop."""
+        seen = self._record_lookup_thread(mock_benchling_client)
+        payload = {
+            "channel": "app_signals",
+            "message": {
+                "type": "v2.canvas.userInteracted",
+                "buttonId": "update-package-etr_123456",
+                "canvasId": "canvas_123",
+            },
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        response = client.post("/canvas", json=payload)
+
+        assert response.status_code == 202
+        assert seen == ["worker thread"]
+
+    def test_event_endpoint_canvas_lookup_runs_off_the_event_loop(self, client, mock_publish, mock_benchling_client):
+        seen = self._record_lookup_thread(mock_benchling_client)
+        payload = {
+            "channel": "events",
+            "message": {"type": "v2.canvas.created", "canvasId": "canvas_123"},
+            "baseURL": "https://tenant.benchling.com",
+        }
+
+        client.post("/event", json=payload)
+
+        assert seen and set(seen) == {"worker thread"}
 
     def test_canvas_click_refused_when_canvas_lookup_fails(self, client, mock_publish, mock_benchling_client):
         mock_benchling_client.apps.get_canvas_by_id.side_effect = Exception("Benchling unavailable")

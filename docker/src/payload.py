@@ -4,6 +4,7 @@ Unified payload parsing for Benchling webhooks.
 Handles parsing of webhook payloads for both entry packaging and canvas operations.
 """
 
+import asyncio
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
@@ -203,6 +204,17 @@ class Payload:
 
         logger.info("Resolved entry_id from canvas", entry_id=entry_id, canvas_id=self.canvas_id)
         return entry_id
+
+    async def resolve_entry_id(self) -> str:
+        """Resolve and cache ``entry_id`` from async code without blocking the event loop.
+
+        Resolving may call Benchling's canvas API, a blocking request, so it runs
+        in a worker thread. Later reads of ``entry_id`` use the cached value.
+        Raises ValueError as ``entry_id`` does.
+        """
+        if self._cached_entry_id:
+            return self._cached_entry_id
+        return await asyncio.to_thread(lambda: self.entry_id)
 
     @property
     def event_id(self) -> str:

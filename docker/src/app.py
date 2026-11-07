@@ -775,6 +775,8 @@ def create_app() -> FastAPI:
 
             logger.info("Received /event", headers=dict(request.headers))
             payload = await Payload.from_request(request, benchling)
+            # May call Benchling's canvas API; resolve off the event loop, before any side effect.
+            await payload.resolve_entry_id()
 
             logger.info(
                 "Event webhook received - parsed",
@@ -944,6 +946,8 @@ def create_app() -> FastAPI:
 
             logger.info("Received /canvas", headers=dict(request.headers))
             payload = await Payload.from_request(request, benchling)
+            # May call Benchling's canvas API; resolve off the event loop, before any side effect.
+            await payload.resolve_entry_id()
 
             logger.info(
                 "Canvas webhook received - parsed",
