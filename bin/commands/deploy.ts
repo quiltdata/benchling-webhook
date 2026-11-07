@@ -4,6 +4,7 @@ import ora from "ora";
 import boxen from "boxen";
 import { prompt } from "enquirer";
 import { maskArn } from "../../lib/utils/config";
+import { printRiskyConfigWarnings } from "../../lib/utils/risky-config-warnings";
 import {
     QuiltServices,
     ServiceResolverError,
@@ -704,6 +705,10 @@ export async function deploy(
     console.log(
         `    ${chalk.bold("Webhook Verification:")}    ${verificationEnabled ? chalk.green("ENABLED") : chalk.red("DISABLED")}`,
     );
+    printRiskyConfigWarnings({
+        bucket: config.packages.bucket,
+        enableVerification: config.security?.enableVerification,
+    });
 
     // Parse and validate webhook allowlist (same logic as rest-api-gateway.ts)
     const webhookAllowList = config.security?.webhookAllowList || "";

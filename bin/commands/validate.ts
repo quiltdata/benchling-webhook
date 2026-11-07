@@ -13,6 +13,7 @@ import { execSync } from "child_process";
 import { runValidation } from "../../lib/wizard/phase4-validation";
 import { checkCdkBootstrap } from "../benchling-webhook";
 import type { ProfileConfig } from "../../lib/types/config";
+import { printRiskyConfigWarnings } from "../../lib/utils/risky-config-warnings";
 
 interface ValidateOptions {
     config: ProfileConfig;
@@ -64,6 +65,10 @@ export async function validateCommand(options: ValidateOptions): Promise<void> {
         console.log(`  Prefix: ${config.packages.prefix}`);
         console.log(`  Metadata Key: ${config.packages.metadataKey}`);
         console.log();
+        printRiskyConfigWarnings({
+            bucket: config.packages.bucket,
+            enableVerification: config.security?.enableVerification,
+        });
 
         console.log(chalk.bold("Deployment:"));
         console.log(`  Region: ${config.deployment.region}`);

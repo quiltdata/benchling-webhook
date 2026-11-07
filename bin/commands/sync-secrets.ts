@@ -22,6 +22,7 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { fromIni } from "@aws-sdk/credential-providers";
 import { XDGConfig } from "../../lib/xdg-config";
+import { printRiskyConfigWarnings } from "../../lib/utils/risky-config-warnings";
 import type { XDGBase } from "../../lib/xdg-base";
 import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { ProfileConfig, ProfileName } from "../../lib/types/config";
@@ -406,6 +407,10 @@ export async function syncSecretsToAWS(options: SyncSecretsOptions): Promise<Syn
     }
 
     const secretValue = buildSecretValue(config, clientSecretValue);
+    printRiskyConfigWarnings({
+        bucket: config.packages.bucket,
+        enableVerification: config.security?.enableVerification,
+    });
 
     if (dryRun) {
         console.log("\n=== DRY RUN MODE ===");
