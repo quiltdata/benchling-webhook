@@ -13,6 +13,7 @@ import { execSync } from "child_process";
 import { runValidation } from "../../lib/wizard/phase4-validation";
 import { checkCdkBootstrap } from "../benchling-webhook";
 import type { ProfileConfig } from "../../lib/types/config";
+import { printRiskyConfigWarnings } from "../../lib/utils/risky-config-warnings";
 
 interface ValidateOptions {
     config: ProfileConfig;
@@ -71,6 +72,12 @@ export async function validateCommand(options: ValidateOptions): Promise<void> {
         console.log(`  Mode: ${config.integratedStack ? "Integrated" : "Standalone"}`);
         console.log();
     }
+
+    // Always shown, verbose or not: these choices must never pass silently.
+    printRiskyConfigWarnings({
+        bucket: config.packages.bucket,
+        enableVerification: config.security?.enableVerification,
+    });
 
     // Run validation checks (using wizard validation logic)
     console.log(chalk.bold("Running validation checks..."));

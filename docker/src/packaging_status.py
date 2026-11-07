@@ -32,12 +32,42 @@ def _read(s3_client: Any, pk: PhysicalKey) -> bytes:
     return s3_client.get_object(**params)["Body"].read()
 
 
+class _ExternalSchemaError(Exception):
+    """A schema kept outside the config's bucket couldn't be loaded, parsed or checked."""
+
+
 class _S3WorkflowConfig(WorkflowConfig):
-    """quilt3's workflow config, reading schemas through the webhook's assumed role."""
+    """quilt3's workflow config, reading schemas through the webhook's assumed role.
+
+    Schemas may live in another bucket (a documented layout). Their content is used for
+    validation, but error text derived from it is kept out of the returned reason, which
+    is shown to anyone who can see the bucket or the entry; it goes to the log instead.
+    """
 
     def __init__(self, config: dict, physical_key: PhysicalKey, s3_client: Any):
         super().__init__(config, physical_key)
         self._s3_client = s3_client
+        self.external_schema_ids: set[str] = set()
+
+    def get_pk_for_schema_id(self, schema_id: str) -> PhysicalKey:
+        schema_pk = super().get_pk_for_schema_id(schema_id)
+        if not schema_pk.is_local() and schema_pk.bucket != self.physical_key.bucket:
+            self.external_schema_ids.add(schema_id)
+        return schema_pk
+
+    def make_validator_from_schema(self, schema_id):
+        try:
+            return super().make_validator_from_schema(schema_id)
+        except Exception as e:
+            if schema_id in self.external_schema_ids:
+                raise _ExternalSchemaError(schema_id) from e
+            raise
+
+    def is_external(self, validator: Any) -> bool:
+        """Whether ``validator`` was built from a schema outside the config's bucket."""
+        return validator is not None and any(
+            self.loaded_schemas_by_id.get(schema_id, (None,))[0] is validator for schema_id in self.external_schema_ids
+        )
 
     def load_schema(self, schema_pk: PhysicalKey) -> tuple[bytes, PhysicalKey]:
         if schema_pk.is_local():
@@ -83,11 +113,18 @@ def check_workflow(
         logger.warning("Workflow pre-check skipped: config unreadable", bucket=bucket, error=str(e))
         return f"Could not read the bucket workflow configuration: {e}" if strict else None
 
+    workflow_config: Optional[_S3WorkflowConfig] = None
     try:
-        validator = _S3WorkflowConfig(data, conf_pk, s3_client).get_workflow_validator(workflow_arg)
+        workflow_config = _S3WorkflowConfig(data, conf_pk, s3_client)
+        validator = workflow_config.get_workflow_validator(workflow_arg)
         validator.validate_message(message)
         validator.validate_name(package_name)
-        validator.validate_metadata(metadata)
+        try:
+            validator.validate_metadata(metadata)
+        except WorkflowValidationError as e:
+            if workflow_config.is_external(validator.metadata_validator):
+                return _external_rejection(bucket, workflow_config, workflow_arg, e)
+            raise
         entries = manifest_entries
         if entries is None and validator.entries_validator is not None:
             entries = list_entries(s3_client, bucket, package_name, adds)
@@ -99,13 +136,25 @@ def check_workflow(
             doubtful = None
             for error in validator.entries_validator.iter_errors(entries):
                 if not adds or (error.absolute_path and error.absolute_path[0] not in unwritten):
-                    raise WorkflowValidationError.from_schema_validation_error(
+                    rejection = WorkflowValidationError.from_schema_validation_error(
                         "Package entries failed validation", error
                     )
+                    if workflow_config.is_external(validator.entries_validator):
+                        return _external_rejection(bucket, workflow_config, workflow_arg, rejection)
+                    raise rejection
                 doubtful = doubtful or error
             if doubtful:
                 logger.warning("Workflow pre-check skipped: entries depend on unwritten files", error=doubtful.message)
                 return None
+    except _ExternalSchemaError as e:
+        cause = e.__cause__
+        logger.warning(
+            "Workflow pre-check: schema outside the config's bucket unusable",
+            bucket=bucket,
+            schema_id=str(e),
+            error=getattr(cause, "message", None) or str(cause),
+        )
+        return _workflow_reason(workflow_config, workflow_arg) if strict else None
     except ConfigurationError as e:
         logger.warning("Workflow pre-check skipped", bucket=bucket, error=str(e))
         return f"Could not validate the bucket workflow: {e}" if strict else None
@@ -115,6 +164,23 @@ def check_workflow(
         logger.warning("Workflow pre-check skipped", bucket=bucket, error=str(e))
         return f"Could not validate the bucket workflow: {e}" if strict else None
     return None
+
+
+def _workflow_reason(workflow_config: Optional[WorkflowConfig], workflow_arg: Any) -> str:
+    """The fixed reason used when the detail came from a schema outside the config's bucket."""
+    name = workflow_arg
+    if workflow_arg is ... and workflow_config is not None:
+        name = workflow_config.config.get("default_workflow")
+    return f"The package does not satisfy the {name!r} workflow. Details are in the integration's logs."
+
+
+def _external_rejection(
+    bucket: str, workflow_config: WorkflowConfig, workflow_arg: Any, error: WorkflowValidationError
+) -> str:
+    logger.warning(
+        "Workflow pre-check: rejected by a schema outside the config's bucket", bucket=bucket, error=error.message
+    )
+    return _workflow_reason(workflow_config, workflow_arg)
 
 
 def list_entries(s3_client: Any, bucket: str, package_name: str, adds: tuple[str, ...] = ()) -> Optional[list[dict]]:

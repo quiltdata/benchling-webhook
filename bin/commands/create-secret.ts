@@ -35,6 +35,7 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import * as fs from "fs";
 import chalk from "chalk";
+import { printRiskyConfigWarnings } from "../../lib/utils/risky-config-warnings";
 
 interface BenchlingSecretData {
   tenant: string;
@@ -232,6 +233,10 @@ async function main(): Promise<void> {
     console.log(chalk.gray(`  log_level: ${secretData.log_level}`));
     console.log(chalk.gray(`  enable_webhook_verification: ${secretData.enable_webhook_verification}`));
     console.log(chalk.gray(`  webhook_allow_list: ${secretData.webhook_allow_list || "(empty)"}`));
+    printRiskyConfigWarnings({
+        bucket: secretData.user_bucket,
+        enableVerification: secretData.enable_webhook_verification,
+    });
 
     // Create or update secret
     await createOrUpdateSecret(
