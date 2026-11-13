@@ -25,7 +25,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi==0.162.0",
     "uvicorn[standard]==0.54.0",
-    "gunicorn==26.2.0",
+    "gunicorn==27.0.1",
     "boto3==1.43.123",
     "dataclasses-json>=0.5.2,<0.6.0",
     "python-dotenv==1.2.4",
